@@ -1,0 +1,11 @@
+{
+  "_provenance": "SHAPE INFERRED, and marked so. fal's queue documentation says `error` and `error_type` are 'present only on failure' but does not print an example, so the field NAMES are documented and this arrangement of them is a guess. The provider treats any status carrying `error` as a 422 through classifyHttp, i.e. TERMINAL: a generation that failed will fail the same way again, and on some plans each attempt is billable.",
+  "_shape": "GET <status_url> -- 200 with an error, or a terminal state",
+  "status": 200,
+  "body": {
+    "status": "FAILED",
+    "request_id": "fixture-req-0000000000000001",
+    "error": "the request could not be completed",
+    "error_type": "InternalError"
+  }
+}

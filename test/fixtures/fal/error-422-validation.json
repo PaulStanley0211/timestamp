@@ -1,0 +1,10 @@
+{
+  "_provenance": "SHAPE from fal's FastAPI-style validation errors -- a `detail` array of `{loc, msg, type}` -- which is the documented format for a rejected request body. This exact example is the one to expect if the `seed` disagreement recorded in config/models.json resolves the wrong way: two of fal's own pages disagree about whether seedance takes a seed, fal.mjs sends it, and THIS is what the first live call would return if it should not. 422 is TERMINAL: the same body will be rejected the same way.",
+  "_shape": "POST submit -- 422",
+  "status": 422,
+  "body": {
+    "detail": [
+      { "loc": ["body", "seed"], "msg": "extra fields not permitted", "type": "value_error.extra" }
+    ]
+  }
+}

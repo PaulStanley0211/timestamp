@@ -1,0 +1,6 @@
+{
+  "_provenance": "SHAPE INFERRED, and this one earns its place for a product reason rather than a technical one. A service that takes photographs of strangers' faces WILL hit content refusals, and the user-facing wording for 'we cannot make this image' is nothing like the one for 'the request was malformed'. classifyHttp reads the body for refusal vocabulary and returns ModerationRefusedError -- still a TerminalError, so the documented 422 mapping holds; the subclass only carries the extra fact that the request was understood and declined.",
+  "_shape": "POST submit -- 422, refused on content grounds",
+  "status": 422,
+  "body": { "detail": "Request blocked by the content policy: the input image was flagged by the safety filter." }
+}

@@ -10,13 +10,23 @@
  * progress phases, identical cost block.
  *
  * SO THE BODY IS PARAMETERISED AND MUST STAY THAT WAY. `runProviderContract`
- * takes a list of cases; today it is given one. When fal lands, the change is
- * ONE ENTRY IN AN ARRAY -- in `test/fal-smoke.test.js`, which imports
- * `runProviderContract` from here, self-skips unless `TIMESTAMP_LIVE=1`, and
- * passes a case whose `makeCtx` supplies the real `fetchImpl`. If a fal case
- * requires this body to be edited, the edit is the bug report: it means the
- * two providers do not actually present the same interface, and the pipeline
- * has been branching on provider id somewhere without saying so.
+ * takes a list of cases, and fal landing WAS one entry in that array plus the
+ * import above it. The body below was not edited, which is the evidence the
+ * whole arrangement exists to produce: if a second provider had required a
+ * change here, the change would have been the bug report -- it would mean the
+ * two do not actually present the same interface and the pipeline has been
+ * branching on provider id somewhere without saying so.
+ *
+ * THE fal CASE HERE SPENDS NOTHING. Its transport is a fake queue built from
+ * the recorded shapes in `test/fixtures/fal/`, its key is injected, and the
+ * media it serves is rendered locally by ffmpeg at the size and duration the
+ * recorded request asked for -- so the pixel assertions below have something
+ * true to assert. `test/fal-smoke.test.js` is the live counterpart and it
+ * self-skips unless `TIMESTAMP_LIVE=1`; its header records why it does NOT run
+ * this body against the real endpoint (the body builds every video case as
+ * `Math.min(2, maxClipSeconds)` seconds and seedance's duration enum starts at
+ * 4, so a live run would spend a submit to be told 422 by a documented
+ * boundary).
  *
  * A NOTE ON IMPORTING THIS FILE. Importing it registers the fixture cases in
  * the importing file's process as well, so they run twice across a live suite.
@@ -55,6 +65,11 @@ import {
   CapabilityError,
 } from '../scripts/providers/errors.mjs';
 import { createProvider, loadModels, modelEntry, PROVIDER_IDS } from '../scripts/providers/index.mjs';
+// The fal case, transport fake and all, lives with the rest of fal's tests.
+// Importing it here is the ONLY change this file needed to cover a second
+// provider -- one import and one array entry, and the shared body below
+// untouched. If that ever stops being true, the edit is the bug report.
+import { falContractCase } from './provider-fal.test.js';
 import { loadPricing, assertPricingTable, estimateStill, estimateVideo, divergence, diverges } from '../scripts/providers/pricing.mjs';
 
 const cfg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config', 'render.json'), 'utf8'));
@@ -499,6 +514,13 @@ runProviderContract([
     create: () => createProvider('fixture', { latencyMs: 0 }),
     makeCtx: (base) => ({ ...base, sleepImpl: async () => {} }),
   },
+  // fal, against a fake queue built from the recorded shapes in
+  // test/fixtures/fal/. It spends nothing: the transport is injected, the key
+  // is injected, and the media it serves is rendered locally by ffmpeg at the
+  // size and duration the recorded request asked for -- which is what lets the
+  // pixel assertions above mean something. The LIVE version of this case is in
+  // test/fal-smoke.test.js and self-skips unless TIMESTAMP_LIVE=1.
+  falContractCase(),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -511,13 +533,14 @@ test('the registry refuses an unknown provider rather than falling back', () => 
   // Falling back to the fixture would mean a production run silently rendering
   // coloured rectangles instead of a person, surfacing as "the video looks
   // wrong" rather than as an error.
-  assert.throws(() => createProvider('fal'), (err) => {
+  assert.throws(() => createProvider('replicate'), (err) => {
     assert.ok(err instanceof TerminalError);
     assert.equal(err.code, 'unknown_provider');
     assert.match(err.message, /fixture/);
+    assert.match(err.message, /fal/);
     return true;
   });
-  assert.deepEqual(PROVIDER_IDS, ['fixture']);
+  assert.deepEqual(PROVIDER_IDS, ['fixture', 'fal']);
 });
 
 test('requireFetchImpl is a TypeError, not a ProviderError', () => {
@@ -598,18 +621,29 @@ test('config/models.json records an audio-off parameter for every usable video m
 });
 
 test('an UNVERIFIED fal model cannot be handed out', () => {
-  // Every fal entry today is a placeholder written from memory. The one thing
-  // that must not happen is a paid run against an endpoint id somebody guessed.
+  // The VIDEO model has been verified against fal's schema page; the STILL
+  // model has not been chosen and the fast video tier has not been read. The
+  // one thing that must not happen is a paid run against an endpoint id
+  // somebody guessed, so both are refused by name.
   const models = loadModels();
-  assert.throws(() => modelEntry(models, 'fal/UNVERIFIED-image-to-video'), (err) => {
-    assert.equal(err.code, 'unverified_model');
-    return true;
-  });
-  // And even with verification waived, it is refused for the second reason:
-  // nobody has recorded what its audio-off parameter is called.
-  assert.throws(() => modelEntry(models, 'fal/UNVERIFIED-image-to-video', { requireVerified: false }), (err) => {
+  for (const id of ['fal/UNVERIFIED-identity-still', 'bytedance/seedance-2.0/fast/image-to-video']) {
+    assert.throws(() => modelEntry(models, id), (err) => {
+      assert.equal(err.code, 'unverified_model', id);
+      return true;
+    });
+  }
+  // And even with verification waived, the fast tier is refused for the second
+  // reason: nobody has recorded what its audio-off parameter is called.
+  assert.throws(() => modelEntry(models, 'bytedance/seedance-2.0/fast/image-to-video', { requireVerified: false }), (err) => {
     assert.ok(err instanceof CapabilityError);
     assert.equal(err.code, 'no_audio_off_param');
     return true;
   });
+  // The video model that WAS verified names its parameter, and the name is the
+  // whole of layer 2: `generate_audio` defaults to TRUE at the vendor.
+  const video = modelEntry(models, 'bytedance/seedance-2.0/image-to-video');
+  assert.equal(video.nativeAudio, false);
+  assert.equal(video.audioOffParam.name, 'generate_audio');
+  assert.equal(video.audioOffParam.value, false);
+  assert.equal(video.capabilities.maxClipSeconds, 15, 'fifteen seconds in one call is why there is no seam');
 });

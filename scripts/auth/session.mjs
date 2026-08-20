@@ -25,9 +25,33 @@
  * once: if the web process and a worker both start on a fresh install and both
  * "generate a secret if missing", the second write silently invalidates every
  * cookie the first one signed, and the symptom is users being randomly logged
- * out with nothing in any log. `openSync(path, 'wx')` is the only primitive on
- * Windows that makes "exactly once" true rather than likely -- see the WINNER
- * SELECTION comment in scripts/queue/queue.mjs.
+ * out with nothing in any log. An exclusive create is the only thing on Windows
+ * that makes "exactly once" true rather than likely -- `rename` REPLACES its
+ * destination and `unlink` is not exclusive either, so neither of them can
+ * decide a winner; see the WINNER SELECTION comment in scripts/queue/queue.mjs.
+ *
+ * WHY THE CREATE GOES THROUGH A HARD LINK. Exclusive create alone is not
+ * enough, and this file learned that the expensive way. `openSync(path,'wx')`
+ * makes the NAME first and the CONTENT after, so between the two there is a
+ * file that exists and is empty. A peer scheduled into that gap read it, found
+ * nothing usable, concluded "present but corrupt" and DELETED it -- out from
+ * under the winner, mid-write -- then generated a second secret of its own. Two
+ * processes, two keys, and every cookie the first had already signed became
+ * unverifiable: every logged-in user thrown out at once, with nothing in any
+ * log. Nor is the window narrow; eight threads with no load at all disagreed in
+ * 5 rounds of 30. Writing the secret to a temporary file and hard-linking it
+ * into place closes it: `linkSync` fails EEXIST rather than replacing, so it
+ * still picks the winner, and it makes the name and the contents appear in the
+ * same instant. queue.mjs reached the same conclusion from the same
+ * measurements after the identical bug cost it ~3.5% of jobs in a stampede.
+ *
+ * WHY A ZERO-BYTE SECRET IS NOT AUTOMATICALLY A CORPSE. On a filesystem with no
+ * hard links the fallback is `wx` again and the gap comes back, so the reader
+ * side carries the second guard: a file of zero bytes whose timestamp is
+ * moments old is a peer between its create and its write, and it is waited for,
+ * not reaped. Only a file with unusable CONTENTS, or a zero-byte one old enough
+ * that nobody is coming, may be removed. "Unreadable" and "dead" are different
+ * facts, and collapsing them is precisely what caused the bug above.
  *
  * WHY THE COOKIE FLAGS ARE NOT NEGOTIABLE. `HttpOnly` keeps the id out of
  * `document.cookie`, so one injected script cannot walk off with everyone's
@@ -42,6 +66,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 export const REPO_ROOT = path
@@ -73,7 +98,24 @@ export const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 const SECRET_BYTES = 32;
 
+/** How long a zero-byte secret file may still be believed to be a write in
+ *  progress rather than a corpse. It has to cover the gap between the `wx`
+ *  create and the write that follows it, and it is only reachable at all on a
+ *  filesystem with no hard links -- everywhere else the two commit together.
+ *  Two seconds is orders of magnitude more than that gap has ever measured,
+ *  and it is paid only by a file that turns out to be genuinely dead. */
+const SECRET_NEWBORN_MS = 2_000;
+const SECRET_POLL_MS = 5;
+
 const TRANSIENT = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+/** A filesystem with no hard links: a network share, or FAT. */
+const NO_HARDLINK = new Set(['ENOSYS', 'EXDEV', 'EMLINK', 'ENOTSUP', 'EOPNOTSUPP', 'EINVAL']);
+
+/** Blocks the thread. `sessionSecret` is synchronous by design -- it is called
+ *  from the request path, where the caller needs the key in hand -- so waiting
+ *  for a peer's contents to land cannot be a promise. */
+const pause = (ms) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
 
 const defaultNow = () => new Date();
 const slash = (p) => p.replace(/\\/g, '/');
@@ -155,39 +197,155 @@ export function sessionSecret({ root = REPO_ROOT } = {}) {
     if (existing !== null) return existing;
 
     const generated = crypto.randomBytes(SECRET_BYTES).toString('hex');
-    let fd;
-    try {
-      fd = fs.openSync(secret, 'wx', 0o600);
-    } catch (err) {
-      if (err.code !== 'EEXIST' && !TRANSIENT.has(err.code)) throw err;
-      // Somebody else created it in the last microsecond. Theirs is the one
-      // that counts -- the loser of this race adopts the winner's secret rather
-      // than overwriting it, or every cookie the winner has already signed dies.
-      const after = readSecret(secret);
-      if (after !== null) return after;
-      // Present but unusable: an empty or truncated file, which is worse than a
-      // missing one because it would "work" while being guessable. Removing it
-      // is the fix, and the right to remove it is claimed by exclusive create
-      // for the same reason the account lock steals that way -- otherwise every
-      // caller deletes it at once and each of them then writes a different
-      // secret over the others.
-      claimAndRemove(secret);
-      continue;
-    }
-    try {
-      fs.writeFileSync(fd, `${generated}\n`);
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
-    return generated;
+    const outcome = publishSecret(secret, generated);
+    if (outcome === 'created') return generated;
+    // A name in delete-pending state answers EPERM to an exclusive create
+    // rather than EEXIST. Nothing has been decided either way; look again.
+    if (outcome === 'blocked') continue;
+
+    // Somebody else owns the name. Theirs is the one that counts -- the loser
+    // of this race adopts the winner's secret rather than overwriting it, or
+    // every cookie the winner has already signed dies.
+    const after = adoptOrCondemn(secret);
+    if (after !== null) return after;
+
+    // Condemned, which is a stronger statement than "did not parse": present,
+    // unusable, and provably not a write in progress. An empty or truncated
+    // secret is worse than a missing one because it would "work" while being
+    // guessable, so removing it is the fix -- and the right to remove it is
+    // claimed by exclusive create for the same reason the account lock steals
+    // that way, since otherwise every caller deletes it at once and each of
+    // them then writes a different secret over the others.
+    claimAndRemove(secret);
   }
   throw new SessionError(`could not establish a session secret at ${secret}`, { code: 'NO_SECRET' });
 }
 
+/**
+ * Put `value` at `file`, or lose the race trying.
+ *
+ * The create goes through a hard link, for the reason set out in the header:
+ * `openSync(file,'wx')` makes the NAME first and the CONTENT after, and a peer
+ * scheduled into that gap sees a file that exists and holds nothing. Writing
+ * the contents to a temporary file and linking that into place makes the name
+ * and the secret appear in the same instant, so there is no gap to be scheduled
+ * into. `linkSync` still decides the winner -- it fails EEXIST rather than
+ * replacing, which is exactly what `renameSync` does NOT do on NTFS -- and it
+ * commits the contents in the same operation.
+ *
+ * The `wx` fallback is for a filesystem with no hard links. It is exclusive
+ * too, so winner selection stays correct there; only the atomicity of the
+ * contents is lost, which is why `adoptOrCondemn` separately refuses to condemn
+ * a zero-byte file that is young.
+ *
+ * @returns {'created'} this call, and only this call, brought the file into being
+ * @returns {'exists'}  somebody else owns the name
+ * @returns {'blocked'} Windows would not let us try; nothing has been decided
+ */
+function publishSecret(file, value) {
+  const data = `${value}\n`;
+  const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  try {
+    let fd;
+    try {
+      fd = fs.openSync(tmp, 'wx', 0o600);
+    } catch (err) {
+      if (TRANSIENT.has(err.code)) return 'blocked';
+      throw err;
+    }
+    try {
+      fs.writeFileSync(fd, data);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    try {
+      fs.linkSync(tmp, file);
+      return 'created';
+    } catch (err) {
+      if (err.code === 'EEXIST') return 'exists'; // somebody else got there first
+      if (TRANSIENT.has(err.code)) return 'blocked';
+      if (!NO_HARDLINK.has(err.code)) throw err;
+    }
+  } finally {
+    // A leftover temporary is inert: it is not `_secret`, and every listing in
+    // this module filters on `.json`, so nothing can mistake it for a record.
+    try { fs.rmSync(tmp, { force: true }); } catch { /* the next call names a new one */ }
+  }
+
+  // No hard links on this filesystem. Exclusive still, so the winner is still
+  // decided here; the contents just arrive a moment after the name does.
+  let fd;
+  try {
+    fd = fs.openSync(file, 'wx', 0o600);
+  } catch (err) {
+    if (err.code === 'EEXIST') return 'exists';
+    if (TRANSIENT.has(err.code)) return 'blocked';
+    throw err;
+  }
+  try {
+    fs.writeFileSync(fd, data);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  return 'created';
+}
+
+/**
+ * Wait for a peer's secret to land, or establish that nothing is coming.
+ *
+ * The distinction drawn here is the whole point, and collapsing it is what this
+ * file got wrong: a file that exists and does not parse is not thereby dead. A
+ * ZERO-BYTE file whose timestamp is moments old is a peer sitting between its
+ * create and its write -- newborn, and emphatically alive -- and deleting it
+ * destroys the key that peer is about to start signing cookies with. The same
+ * file with contents in it is a corpse, because a writer that got as far as
+ * writing produced everything it was ever going to produce; and a zero-byte one
+ * that is old enough is a corpse too, because nobody is coming for it.
+ *
+ * THE STAT IS TAKEN BEFORE THE READ, and that order is load-bearing. Taken
+ * after, it reports a size that is NEWER than the bytes just read, so a peer
+ * whose write lands in between is condemned on the evidence of its own success:
+ * the read returns nothing, the stat then says 65 bytes, and "unusable
+ * contents" is concluded about contents that are perfectly good and were merely
+ * read a microsecond early. Measured under a loaded disk that lost 2 races in
+ * 12 -- the same shape of mistake as the bug this function exists to prevent,
+ * one level down. Statting first makes `size > 0` mean "it already had contents
+ * when we read it", which is the only reading that justifies condemning it.
+ *
+ * Bounded twice over: by our own elapsed wait, and by the file's age. The first
+ * is what stops a clock-skewed network share parking a request forever.
+ *
+ * @returns {string} the peer's secret, to be adopted
+ * @returns {null}   nothing usable at that name, and nothing on its way
+ */
+function adoptOrCondemn(file) {
+  const deadline = Date.now() + SECRET_NEWBORN_MS;
+  for (;;) {
+    let stat;
+    try {
+      stat = fs.statSync(file);
+    } catch {
+      return null; // it went away -- the emergency lever, or a peer reaping it
+    }
+
+    const value = readSecret(file);
+    if (value !== null) return value;
+    if (stat.size > 0) return null; // it had contents before we read, and they are unusable
+
+    const now = Date.now();
+    if (now >= deadline || now - stat.mtimeMs >= SECRET_NEWBORN_MS) return null;
+    pause(SECRET_POLL_MS);
+  }
+}
+
 /** Exclusive create of a token, then remove the file it names. The only
  *  mutual-exclusion primitive this repo trusts on Windows is `openSync(_,'wx')`
- *  -- see the WINNER SELECTION comment in scripts/queue/queue.mjs. */
+ *  -- see the WINNER SELECTION comment in scripts/queue/queue.mjs.
+ *
+ *  Only ever called on a file `adoptOrCondemn` has condemned. Reaching it for a
+ *  file that is merely young is the bug this module was carrying. */
 function claimAndRemove(file) {
   const token = `${file}.replace`;
   let fd;

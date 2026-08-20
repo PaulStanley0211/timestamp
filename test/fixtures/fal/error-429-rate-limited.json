@@ -1,0 +1,6 @@
+{
+  "_provenance": "SHAPE INFERRED; the classification is what matters and classifyHttp fixes it by table: 429 is RETRIABLE, and the 1/2/4/8 ladder in providers/errors.mjs is what spaces the attempts out. The spacing is not politeness -- a per-account throttle window has to actually roll over before the next attempt, and a tight retry loop is indistinguishable from the traffic that got you throttled.",
+  "_shape": "any request -- 429",
+  "status": 429,
+  "body": { "detail": "Rate limit exceeded" }
+}

@@ -1,0 +1,16 @@
+{
+  "_provenance": "SHAPE UNVERIFIED, and it is the most speculative file in this directory. THE STILL MODEL HAS NOT BEEN CHOSEN -- config/models.json lists three candidates, all `verified: false`, and modelEntry refuses to hand any of them out. `{ images: [{ url, width, height, content_type }], seed }` is the fal image convention shared by the candidates as far as their catalogue pages show, and `firstImage` in scripts/providers/fal.mjs also accepts a bare `image: { url }` because that is the other shape seen in the wild. Accepting both is not indecision: it is the difference between a model swap being a config edit and being a code change, on a decision that is Paul's and that nobody should pre-empt by hardcoding one vendor's field name.",
+  "_shape": "GET <response_url> -- 200, for whichever identity-preserving image model is eventually chosen",
+  "status": 200,
+  "body": {
+    "images": [
+      {
+        "url": "https://v3.fal.media/files/fixture/still-output.png",
+        "width": 640,
+        "height": 480,
+        "content_type": "image/png"
+      }
+    ],
+    "seed": 4242
+  }
+}

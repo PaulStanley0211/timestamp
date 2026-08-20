@@ -44,6 +44,14 @@
  * invocation, because two passes is a re-encode of a look whose entire subject
  * is generation loss.
  *
+ * THE RESOLUTION IS FROZEN AT compose AND NOWHERE ELSE. `job.input.resolution`
+ * is what the customer was charged for; `resolved.resolution` is the 4:3 raster
+ * that answer means, and `still` and `animate` both read it from there. Before
+ * this, both read `provider.capabilities.stillSizes[0]` and a job paid for at
+ * 720p rendered at whatever the provider listed first -- with the button, the
+ * ledger and the manifest all agreeing on a number that was not what arrived.
+ * See `resolveRaster`.
+ *
  * NOTHING HERE READS THE WALL CLOCK. Timestamps come from `job.nowImpl` through
  * `job.mjs`; seeds come from `deriveSeed(jobId, kind, index)`; the tape's date
  * comes from `deriveStamp(seed)`. Two runs of the same job id produce the same
@@ -77,7 +85,9 @@ import { composeStillPrompt, composeMotionPrompt, DEFAULT_ERA } from '../compose
 import { deriveSeed } from '../compose/seed.mjs';
 import { loadCatalog, getPlace, getOutfit, checkCompatibility } from '../catalog/catalog.mjs';
 import { resolveFont } from '../preflight/doctor.mjs';
-import { planSegments, describePlan } from '../animate/plan.mjs';
+import {
+  planSegments, describePlan, resolutionRaster, DEFAULT_RESOLUTION,
+} from '../animate/plan.mjs';
 import { lastFrameArgs, lastFrameName } from '../animate/lastframe.mjs';
 import { firstScorer, chooseStill } from '../select/select.mjs';
 import { writeContactSheet } from '../select/contact-sheet.mjs';
@@ -131,6 +141,63 @@ const shortHash = (value, bytes = 8) =>
   crypto.createHash('sha256').update(stableStringify(value)).digest('hex').slice(0, bytes * 2);
 
 const stepOutput = (job, name) => job.steps.find((s) => s.name === name)?.output ?? {};
+
+/**
+ * The raster every provider request in this job will use.
+ *
+ * THE BUG THIS FUNCTION IS. `job.input.resolution` reaches the manifest -- the
+ * web form collects it, `creditCost` charges for it, `normalizeInput` stores
+ * it -- and until now NOTHING READ IT AGAIN. A customer paid 152 credits for
+ * 720p and the pipeline asked the provider for `stillSizes[0]`, whatever that
+ * happened to be. The button, the ledger and the manifest all agreed on a
+ * number, the video was a different thing, and there was no error anywhere.
+ * That is a billing bug wearing a rendering bug's clothes, and it is invisible
+ * from both ends -- which is why the fix is an assertion (test/provider-fal.
+ * test.js: a job created at 720p produces a provider request for 960x720) and
+ * the code is just how the number gets there.
+ *
+ * WHAT A PROVIDER THAT DOES NOT OFFER THE RASTER GETS. A PAID one gets
+ * refused, loudly, before it spends: billing for 720p and rendering 1024x768
+ * is precisely the failure above with an extra step. A FREE one substitutes
+ * its own size and says so in the log -- the fixture offers exactly 1024x768,
+ * every pipeline test in this repo runs through it, and there is no invoice
+ * behind a local ffmpeg call to be wrong about.
+ */
+function resolveRaster({ resolution, provider, log = noop }) {
+  const id = resolution ?? null;
+  // A CLI render has no order behind it and no account to charge, so it takes
+  // the provider's first offer -- the same shape this file had before there
+  // was a resolution to honour.
+  if (id === null) {
+    const size = provider.capabilities.stillSizes[0];
+    return { id: null, size: { width: size.width, height: size.height }, honoured: true };
+  }
+
+  const raster = resolutionRaster(id);
+  const offered = provider.capabilities.stillSizes
+    .some((s) => s.width === raster.width && s.height === raster.height);
+  if (offered) {
+    return { id, size: { width: raster.width, height: raster.height }, honoured: true };
+  }
+
+  const offers = provider.capabilities.stillSizes.map((s) => `${s.width}x${s.height}`).join(', ');
+  if (provider.paid) {
+    throw new PipelineError(
+      `this job was ordered at ${id} (${raster.width}x${raster.height}, 4:3) and ${provider.id} offers ${offers}.\n` +
+      '  Refusing rather than substituting: a paid render that bills for one size and delivers another is\n' +
+      '  invisible to the customer and to the ledger, which is the one failure neither of them can catch.',
+      {
+        code: 'RESOLUTION_UNAVAILABLE',
+        step: 'compose',
+        userMessage: 'That output size is not available from this renderer.',
+        detail: { resolution: id, requested: raster, offered: provider.capabilities.stillSizes },
+      },
+    );
+  }
+  const size = provider.capabilities.stillSizes[0];
+  log(`  ${provider.id} does not offer ${raster.width}x${raster.height} (${id}); using ${size.width}x${size.height} -- free provider, nothing is billed`);
+  return { id, size: { width: size.width, height: size.height }, honoured: false };
+}
 
 // ---------------------------------------------------------------------------
 // dependencies
@@ -590,8 +657,15 @@ async function stepCompose(ctx) {
     log(`  clamped ${c.path}: ${c.from} -> ${c.to} (allowed ${c.min}..${c.max})`);
   }
 
+  // FROZEN HERE, WITH EVERYTHING ELSE. `job.input.resolution` is what was
+  // ordered and charged for; this is the raster that answer means. It goes into
+  // `resolved` so that nothing downstream re-derives it from a config file, a
+  // default or a provider that may all have moved on by the time a job resumes.
+  const resolution = resolveRaster({ resolution: job.input.resolution, provider, log });
+  log(`  ${resolution.id ?? 'no resolution ordered'} -> ${resolution.size.width}x${resolution.size.height} (4:3)`);
+
   const segments = planSegments({
-    cfg, capabilities: provider.capabilities, jobId: job.jobId, mode: segmentMode,
+    cfg, capabilities: provider.capabilities, jobId: job.jobId, mode: segmentMode, size: resolution.size,
   });
   log(`  ${describePlan(segments)}`);
 
@@ -624,6 +698,7 @@ async function stepCompose(ctx) {
     look,
     cfg,
     era: DEFAULT_ERA,
+    resolution,
     stillPrompt,
     motionPrompts,
     segments,
@@ -639,6 +714,9 @@ async function stepCompose(ctx) {
       lookHash: job.resolved.lookHash,
       placeId: place.id,
       outfitId: outfit.id,
+      resolution: resolution.id,
+      size: `${resolution.size.width}x${resolution.size.height}`,
+      resolutionHonoured: resolution.honoured,
       segments: segments.length,
       estimatedUsd: estimate.estimated,
       clamped: [...clamped, ...audioClamped].map((c) => `${c.path}: ${c.from} -> ${c.to}`),
@@ -651,7 +729,14 @@ async function stepCompose(ctx) {
 async function stepStill(ctx) {
   const { job, provider, log, wasRunning } = ctx;
   const r = job.resolved;
-  const size = provider.capabilities.stillSizes[0];
+  // The raster the customer ordered, frozen at compose. NOT
+  // `provider.capabilities.stillSizes[0]`, which is what this line used to be
+  // and is the whole of the bug: it asked for whatever the provider happened to
+  // list first, on a job that had already been charged for something specific.
+  // `?? stillSizes[0]` covers a manifest frozen before this field existed --
+  // an old job must still resume, and it resumes to the behaviour it was
+  // started with.
+  const size = r.resolution?.size ?? provider.capabilities.stillSizes[0];
 
   const references = [{ role: 'face', path: fromJobRelative(job, job.input.photo.path) }];
   if (job.input.place.photoPath) {
@@ -854,6 +939,12 @@ async function stepAnimate(ctx) {
     }
 
     const prompt = r.motionPrompts[seg.index - 1];
+    // Carried on the segment by `planSegments`, and falling back to the frozen
+    // job-level raster for a manifest written before segments had one. It is
+    // part of the PAYLOAD, not just the request, so the idempotency key moves
+    // when the size does: a clip bought at 480p must never be adopted by a
+    // resume of a job that is now asking for 720p.
+    const size = seg.size ?? r.resolution?.size ?? null;
     const payload = {
       model: r.models.video,
       index: seg.index,
@@ -861,6 +952,7 @@ async function stepAnimate(ctx) {
       negativePrompt: prompt.negativePrompt,
       seed: seg.seed,
       seconds: seg.seconds,
+      size,
       imagePath: toJobRelative(job, startPath),
     };
 
@@ -891,6 +983,12 @@ async function stepAnimate(ctx) {
         imagePath: startPath,
         seed: payload.seed,
         seconds: payload.seconds,
+        // The raster the customer paid for. Like `index`, this is not a field
+        // interfaces.md's VideoRequest names -- it is an interpretation, and
+        // the alternative is a provider guessing at a resolution on a job that
+        // was billed for a specific one. A provider that does not want it
+        // ignores it; the fixture does exactly that and probes the start image.
+        ...(payload.size ? { size: payload.size } : {}),
         // Layer 1 of the three-layer rule, and required rather than defaulted.
         nativeAudio: false,
         // Not decoration: with it the clip is written as the documented
@@ -1459,7 +1557,12 @@ export async function dryRun({ provider, input, cfg, deps = {}, segmentMode = 'c
     ? getOutfit(catalog, input.outfit.value)
     : await (await dep('expandOutfit'))(input.outfit.value, { catalog, baseLook, seed: 0 });
 
-  const segments = planSegments({ cfg: renderCfg, capabilities: provider.capabilities, mode: segmentMode });
+  // The same raster resolution the real run will freeze, so `--dry-run` names
+  // the size it would actually buy rather than the provider's first offer.
+  const resolution = resolveRaster({ resolution: input.resolution ?? null, provider });
+  const segments = planSegments({
+    cfg: renderCfg, capabilities: provider.capabilities, mode: segmentMode, size: resolution.size,
+  });
   const modelsFile = await (await dep('loadModels'))();
   const models = defaultModels(modelsFile, provider.id);
   modelEntry(modelsFile, models.still);
@@ -1474,7 +1577,7 @@ export async function dryRun({ provider, input, cfg, deps = {}, segmentMode = 'c
     {
       step: 'still',
       model: models.still,
-      description: `generateStill x1 asking for ${input.stillCount ?? 3} image(s) at ${provider.capabilities.stillSizes[0].width}x${provider.capabilities.stillSizes[0].height}`,
+      description: `generateStill x1 asking for ${input.stillCount ?? 3} image(s) at ${resolution.size.width}x${resolution.size.height}`,
       usd: estimate.lines.find((l) => l.step === 'still')?.usd ?? 0,
     },
     ...segments.map((seg) => ({
@@ -1487,6 +1590,7 @@ export async function dryRun({ provider, input, cfg, deps = {}, segmentMode = 'c
 
   return {
     provider: provider.id,
+    resolution,
     place: { id: place.id, label: place.label },
     outfit: { id: outfit.id, label: outfit.label },
     compatibility: checkCompatibility(place, outfit),

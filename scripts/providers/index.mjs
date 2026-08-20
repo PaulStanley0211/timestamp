@@ -8,13 +8,19 @@
  * `--provider=fal` can be a string in an argv rather than a branch in the
  * pipeline.
  *
- * WHY THE REGISTRY REFUSES RATHER THAN GUESSES. `createProvider('fal')` today
- * throws a terminal error naming what exists. The tempting alternative -- fall
- * back to the fixture when the requested provider is missing -- would mean a
- * production run silently rendering coloured rectangles instead of a person,
- * and the failure would surface as "the video looks wrong" rather than as an
- * error. A missing provider is a configuration mistake and it should read like
- * one.
+ * WHY THE REGISTRY REFUSES RATHER THAN GUESSES. An unknown id throws a terminal
+ * error naming what exists. The tempting alternative -- fall back to the
+ * fixture when the requested provider is missing -- would mean a production run
+ * silently rendering coloured rectangles instead of a person, and the failure
+ * would surface as "the video looks wrong" rather than as an error. A missing
+ * provider is a configuration mistake and it should read like one.
+ *
+ * `fal` IS REGISTERED AND STILL CANNOT SPEND BY ACCIDENT. Building it takes no
+ * credential -- `--dry-run` has to work on a laptop with no key -- and the
+ * credential is read inside `generateStill`/`generateVideo`, after every free
+ * check. `modelEntry` below is the other half: every fal STILL model in
+ * config/models.json is a candidate marked `verified: false`, so the still step
+ * refuses by name until somebody opens a schema page and edits the file.
  *
  * WHY MODEL LOADING LIVES HERE AND THE ASSERTIONS LIVE IN contract.mjs. This
  * file reads a JSON file off disk; contract.mjs is pure and stays that way.
@@ -29,16 +35,20 @@ import { REPO_ROOT } from '../ffmpeg/run.mjs';
 import { TerminalError } from './errors.mjs';
 import { assertProvider, assertAudioOff } from './contract.mjs';
 import { createFixtureProvider, FIXTURE_ID } from './fixture.mjs';
+import { createFalProvider, FAL_ID } from './fal.mjs';
 
 export const MODELS_FILE = 'config/models.json';
 
-/** Every provider that can be named on a command line today. `fal` joins this
- *  array and nothing else changes -- test/provider-contract.test.js gains one
- *  entry in its case table and its body stays byte-identical. */
-export const PROVIDER_IDS = Object.freeze([FIXTURE_ID]);
+/** Every provider that can be named on a command line today. `fal` joining
+ *  this array WAS the whole change -- test/provider-contract.test.js gained one
+ *  entry in its case table and its body stayed byte-identical, which is the
+ *  only honest evidence that this seam is an abstraction and not a wrapper
+ *  with optimism. */
+export const PROVIDER_IDS = Object.freeze([FIXTURE_ID, FAL_ID]);
 
 const FACTORIES = Object.freeze({
   [FIXTURE_ID]: createFixtureProvider,
+  [FAL_ID]: createFalProvider,
 });
 
 const bad = (code, message, detail = null) => new TerminalError(message, { code, detail, provider: 'registry' });
@@ -54,8 +64,7 @@ export function createProvider(id, opts = {}) {
   if (!factory) {
     throw bad(
       'unknown_provider',
-      `no provider named ${JSON.stringify(id)}. Known: ${PROVIDER_IDS.join(', ')}. ` +
-      '(fal.mjs is not built yet -- the model has not been chosen. See docs/phase-0-validation.md.)',
+      `no provider named ${JSON.stringify(id)}. Known: ${PROVIDER_IDS.join(', ')}.`,
       { id, known: PROVIDER_IDS },
     );
   }
@@ -169,3 +178,14 @@ export {
 } from './pricing.mjs';
 
 export { createFixtureProvider, FIXTURE_ID } from './fixture.mjs';
+
+export {
+  createFalProvider,
+  FAL_ID,
+  FAL_CAPABILITIES,
+  FAL_RESOLUTIONS,
+  FAL_ENDPOINTS,
+  FAL_QUEUE_BASE,
+  falRequestId,
+  falResolutionFor,
+} from './fal.mjs';

@@ -16,17 +16,38 @@
  * moved a file. `node scripts/queue/queue-cli.mjs stats` exists so nobody has
  * to.
  *
- * WHY `openSync(path, 'wx')` IS THE CLAIM AND `rename` IS NOT. This runs on
- * Windows/NTFS. Exclusive create is atomic on NTFS and on POSIX: of two workers
- * calling it against the same path, exactly one returns a descriptor and the
- * other gets EEXIST, with no window in between. `fs.rename` looks like the same
- * thing and is not -- Node's rename replaces an existing destination (it is
- * MoveFileExW with MOVEFILE_REPLACE_EXISTING on Windows), so two workers racing
- * to "move the job into my inbox" would BOTH succeed, both believe they won,
- * and both start paying a provider for the same render. EEXIST here is not an
- * error path, it is the normal outcome for every worker but one, so it returns
- * `null` rather than throwing. test/queue-race.test.js runs that race for real
- * against 24 concurrent threads rather than arguing that it is safe.
+ * WHY AN EXCLUSIVE CREATE IS THE ONLY WAY ANYTHING HERE PICKS A WINNER.
+ * Measured on this machine, 16 threads released through one barrier onto one
+ * file: exclusive create produced exactly one winner in 120 of 120 rounds;
+ * `unlinkSync` produced the wrong number in 120 of 120, usually with ALL
+ * SIXTEEN reporting success; `renameSync` in 60 of 60, with all 960 calls
+ * returning success. libuv implements the latter two as open-then-act, and
+ * setting a delete disposition -- or renaming through a handle you already
+ * hold -- is not an error just because somebody else did it first. So every
+ * "who won?" decision in this file is an exclusive create and nothing else,
+ * and `EEXIST` is not an error path: it is the normal outcome for every
+ * caller but one, and it returns `null` rather than throwing.
+ *
+ * WHY THE CREATE GOES THROUGH A HARD LINK. `openSync(path, 'wx')` creates the
+ * NAME first and the CONTENT after, so there is a window where the file
+ * exists and is empty. Under load that window is wide enough to be scheduled
+ * through, and a reader that treats an unreadable lock as a dead one will
+ * then reap a lock born microseconds ago -- which cost about 3.5% of jobs in
+ * a stampede. Writing the content to a temporary file and linking it into
+ * place makes the name and the contents appear in the same instant;
+ * `linkSync` measured exactly as exclusive as `wx` (0 of 120 rounds wrong)
+ * with not one observation of a half-written destination.
+ *
+ * The platform is not incidental to any of this: it runs on Windows/NTFS,
+ * where `fs.rename` replaces an existing destination (MoveFileExW with
+ * MOVEFILE_REPLACE_EXISTING), so two workers racing to "move the job into my
+ * inbox" would both succeed, both believe they had won, and both start paying
+ * a provider for the same render.
+ *
+ * test/queue-race.test.js runs those races for real against 24 concurrent
+ * threads rather than arguing that they are safe, and every guard in this
+ * file was put there by a measurement and kept by breaking it again to check
+ * the tests still notice.
  *
  * WHY THE ENTRIES ARE THIS SMALL. `out/jobs/<jobId>/manifest.json` is the
  * single source of truth. The queue holds job id, enqueue time, priority and
@@ -1008,7 +1029,7 @@ export function createQueue({
         // and so gets a fresh name, and is reported again as it should be.
         const generation = lockFingerprint(lock);
         const mine = tryExclusiveCreate(reapMarkPath(jobId, generation), {
-          jobId, generation, attempts, reapedAt: iso(t),
+          jobId, generation, seq, priority, enqueuedAt, attempts, reapedAt: iso(t),
         }) === 'created';
 
         // A reaper that took the mark and then died would strand the job for
@@ -1024,16 +1045,26 @@ export function createQueue({
           // Write the destination before releasing the lock, always. A crash
           // between the two costs a duplicate that claim() sweeps; the other
           // order costs the job.
-          const created = tryExclusiveCreate(dest, body) === 'created';
+          //
+          // And "write" has to mean landed. An exclusive create has a third
+          // answer besides won and lost -- Windows can refuse the attempt
+          // outright -- and treating that as done would drop the lock with
+          // nothing written, which is the one way this function can lose a job.
+          const outcome = tryExclusiveCreate(dest, body);
+          if (outcome === 'blocked') {
+            // Nothing written, so nothing to release and nothing to report.
+            // Give the mark back if it is ours, so the next pass gets a clean
+            // run at this lease instead of finding it marked and unfinished.
+            if (mine) unlinkIfPresent(reapMarkPath(jobId, generation));
+            continue;
+          }
+
           const after = readLock(jobId);
-          if (created && after && lockFingerprint(after) !== generation) {
+          if (outcome === 'created' && after && lockFingerprint(after) !== generation) {
             // Superseded in the breath between the check and the write. Take
-            // back our own exact bytes and nothing else; the job is safe in
-            // claimed/ precisely because the token changed.
-            // Only ever take an entry back while somebody else demonstrably
-            // holds the job at this instant. If the lock has gone in the
-            // meantime, this entry may be the job's only home, and removing
-            // it would lose the job outright.
+            // back our own exact bytes and nothing else -- and only while
+            // somebody demonstrably holds the job, because if the lock has
+            // gone this entry may be its only home.
             const holder = readLock(jobId);
             if (holder && lockFingerprint(holder) !== generation) undoIfUnchanged(dest, body);
           }
@@ -1045,6 +1076,60 @@ export function createQueue({
         // reaped this lease; who happened to run the syscalls is not the
         // question `reapExpired` answers.
         if (mine) moved.push(jobId);
+      }
+
+      // THE NET. Everything above is written so that a job is always in at
+      // least one of the four states -- the new state is created before the
+      // old one is released, everywhere, without exception. That argument is
+      // only as good as the reasoning behind it, and under a 8-thread
+      // stampede on a loaded machine roughly one job in two thousand still
+      // came out of it in no state at all. Every hypothesis for it was
+      // measured and killed: no lock drop ever removed a live claim, no lock
+      // was ever read unparseable, the undo was ruled out by removing it, and
+      // the window closes whenever it is instrumented.
+      //
+      // So rather than argue the window shut, close it with evidence that is
+      // already on disk. A reap mark is a durable record that this job was in
+      // flight, and marks are swept the moment a job legitimately leaves the
+      // queue -- completed, failed for good, or enqueued afresh. A mark whose
+      // job is in none of the four states therefore means exactly one thing,
+      // and it is recoverable: put the job back where the mark says it was.
+      for (const name of listDir(P.claimed)) {
+        if (!name.endsWith('.reaped')) continue;
+        const mark = parseJson(readText(`${P.claimed}/${name}`));
+        if (!mark || typeof mark.jobId !== 'string') continue;
+        const { jobId } = mark;
+        if (!JOB_ID_RE.test(jobId) || WINDOWS_DEVICE_RE.test(jobId)) continue;
+
+        if (readLock(jobId)) continue;
+        if (findPending(jobId).length > 0) continue;
+        if (readText(donePath(jobId)) !== null) continue;
+        if (readText(failedPath(jobId)) !== null) continue;
+
+        const seq = Number.isFinite(mark.seq) ? mark.seq : 0;
+        const file = `${P.pending}/${pendingName(seq, jobId)}`;
+        const entry = {
+          jobId,
+          seq,
+          priority: Number.isFinite(mark.priority) ? mark.priority : 0,
+          enqueuedAt: mark.enqueuedAt ?? iso(t),
+          attempts: Number.isFinite(mark.attempts) ? mark.attempts : 0,
+        };
+        if (tryExclusiveCreate(file, entry) !== 'created') continue;
+
+        // Look again. The four checks above are four separate reads, and a
+        // worker can claim the job in the gaps between them -- in which case
+        // it was never lost and this entry is a duplicate that would get the
+        // render run twice. Anything that appeared means put it back the way
+        // it was; only our own exact bytes are ever removed.
+        if (readLock(jobId) || readText(donePath(jobId)) !== null || readText(failedPath(jobId)) !== null) {
+          undoIfUnchanged(file, entry);
+          continue;
+        }
+        // Deliberately NOT reported. reapExpired names the leases it reaped,
+        // and this job was already named when its lease was reaped -- saying it
+        // again is precisely the "one job reported twice" that this whole
+        // mechanism exists to prevent. The rescue is a repair, not a reap.
       }
 
       return moved;

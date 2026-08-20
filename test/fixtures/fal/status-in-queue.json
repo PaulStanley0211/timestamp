@@ -1,0 +1,11 @@
+{
+  "_provenance": "From fal's REST queue documentation, read 2026-08-20. `queue_position` is documented as present only while IN_QUEUE, which is why scripts/providers/fal.mjs reports it as a progress MESSAGE rather than folding it into a percentage: a position is a fact and a percentage derived from it would be an invention.",
+  "_shape": "GET <status_url> -- 200",
+  "status": 200,
+  "body": {
+    "status": "IN_QUEUE",
+    "request_id": "fixture-req-0000000000000001",
+    "queue_position": 2,
+    "response_url": "https://queue.fal.run/bytedance/seedance-2.0/image-to-video/requests/fixture-req-0000000000000001"
+  }
+}

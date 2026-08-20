@@ -1,0 +1,14 @@
+{
+  "_provenance": "From fal's REST queue documentation, read 2026-08-20. NOTHING IN HERE IS A PERCENTAGE. The provider's progress bar creeps by poll count rather than claiming a number the vendor never sent -- a bar that jumps to 90 and sits there is worse than one that moves slowly, because it reads as a hang rather than as work.",
+  "_shape": "GET <status_url> -- 200",
+  "status": 200,
+  "body": {
+    "status": "IN_PROGRESS",
+    "request_id": "fixture-req-0000000000000001",
+    "logs": [
+      { "message": "loading model", "timestamp": "2026-08-20T14:45:03.000Z" },
+      { "message": "sampling", "timestamp": "2026-08-20T14:45:19.000Z" }
+    ],
+    "response_url": "https://queue.fal.run/bytedance/seedance-2.0/image-to-video/requests/fixture-req-0000000000000001"
+  }
+}

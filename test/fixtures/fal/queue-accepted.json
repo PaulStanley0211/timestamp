@@ -1,0 +1,13 @@
+{
+  "_provenance": "RECORDED FROM DOCUMENTATION, NOT FROM A LIVE CALL, and that distinction is the whole reason this directory exists. Nobody may spend money to make a test pass, so every shape here was copied from fal's REST queue documentation (fal.ai/docs/model-endpoints/queue, read 2026-08-20) rather than from a response we paid for. What that buys: the provider's parsing is exercised against the shape the vendor SAYS it returns. What it does not buy: any evidence that the vendor actually returns it. The first live call through test/fal-smoke.test.js is what turns these from plausible into true, and if one of them is wrong that test is where it shows.",
+  "_shape": "POST https://queue.fal.run/<model-id> -- 200",
+  "status": 200,
+  "body": {
+    "status": "IN_QUEUE",
+    "request_id": "fixture-req-0000000000000001",
+    "response_url": "https://queue.fal.run/bytedance/seedance-2.0/image-to-video/requests/fixture-req-0000000000000001",
+    "status_url": "https://queue.fal.run/bytedance/seedance-2.0/image-to-video/requests/fixture-req-0000000000000001/status",
+    "cancel_url": "https://queue.fal.run/bytedance/seedance-2.0/image-to-video/requests/fixture-req-0000000000000001/cancel",
+    "queue_position": 3
+  }
+}

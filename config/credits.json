@@ -24,6 +24,8 @@
       "available": true,
       "width": 640,
       "height": 480,
+      "raster": { "width": 640, "height": 480 },
+      "_raster_comment": "WHAT THE RENDERER ACTUALLY ASKS FOR. Identical to width/height here, because the price above was already derived at the 4:3 raster. See the 720p row, where they differ, for why the field exists at all.",
       "estimatedUSDPer15s": 1.51,
       "source": "provider formula at the 4:3 raster we actually request, UNVERIFIED"
     },
@@ -33,6 +35,8 @@
       "available": true,
       "width": 1280,
       "height": 720,
+      "raster": { "width": 960, "height": 720 },
+      "_raster_comment": "WHAT THE RENDERER ACTUALLY ASKS FOR, and it is NOT width/height above. THIS PRODUCT ALWAYS REQUESTS 4:3 -- the tape raster is 720x576 at SAR 16/15, i.e. DAR 4:3 -- so `720p` means 960x720 on the wire and nothing ever renders 1280x720. The two fields disagree on purpose and each is honest about a different thing: `raster` is the picture, `width`/`height` are the shape the PRICE above was derived at, and the open question in the _comment is exactly whether fal bills the raster it renders or the nominal frame. The higher figure is kept until a --meter run settles it. scripts/animate/plan.mjs derives the raster from the label (the number is the height, 4:3 gives the width) and scripts/providers/fal.mjs derives the same two rasters for its own resolution enum; a test asserts all three agree, so this row cannot drift away from what is requested without something going red.",
       "estimatedUSDPer15s": 4.54,
       "source": "derived from provider formula, UNVERIFIED"
     },
@@ -42,6 +46,8 @@
       "available": false,
       "width": 1920,
       "height": 1080,
+      "raster": { "width": 1440, "height": 1080 },
+      "_raster_comment": "Recorded for the same reason the rest of this row is: turning 1080p on later should be a field, not an archaeology exercise. Nothing may request it while `available` is false -- creditCost throws, and so does resolutionRaster in scripts/animate/plan.mjs.",
       "estimatedUSDPer15s": 10.22,
       "source": "ratio to the 720p anchor, UNVERIFIED"
     }

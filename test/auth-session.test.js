@@ -361,6 +361,84 @@ const shared = new Int32Array(workerData.shared);
   t.diagnostic(`peak concurrent sessionSecret() calls: ${peak} of ${COUNT}`);
 });
 
+/**
+ * The same race, made deterministic.
+ *
+ * The eight-thread test above arranges a real race, so it catches this only
+ * when the interleaving happens to occur -- measured on this machine with no
+ * load at all, 5 rounds in 30. This one forces the exact interleaving.
+ *
+ * The window is `openSync(secret,'wx')` returning: the name exists and holds
+ * nothing yet, because a create makes the NAME first and the CONTENT after. A
+ * peer arriving here must WAIT for the contents. The version that instead read
+ * it as empty, concluded "present but unusable" and deleted it went on to mint
+ * a SECOND secret -- and in production that is every logged-in user thrown out
+ * at once, with nothing in any log, because the process that started second
+ * silently invalidated every cookie the first one had already signed.
+ */
+test('a peer that arrives mid-write adopts the secret instead of deleting it', async (t) => {
+  const root = makeRoot(t);
+  const { dir, secret: file } = sessionsRoot(root);
+  fs.mkdirSync(dir, { recursive: true });
+  const WINNER = 'a1'.repeat(32);
+
+  // The peer is started FIRST and parked on a barrier, so that spawning it and
+  // importing the module -- which under a loaded disk can take seconds --
+  // happens outside the window under test rather than inside it. A newborn file
+  // is only newborn for a bounded time, on purpose; a test that pays worker
+  // startup out of that budget is measuring the machine, not the code.
+  const gun = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
+  const view = new Int32Array(gun);
+  const worker = new Worker(
+    `const { workerData, parentPort } = require('node:worker_threads');
+     const gun = new Int32Array(workerData.gun);
+     (async () => {
+       const { sessionSecret } = await import(workerData.moduleUrl);
+       parentPort.postMessage({ ready: true });
+       Atomics.wait(gun, 0, 0);
+       try { parentPort.postMessage({ secret: sessionSecret({ root: workerData.root }) }); }
+       catch (err) { parentPort.postMessage({ error: err.code || String(err.message) }); }
+     })();`,
+    { eval: true, workerData: { moduleUrl: SESSION_URL, root, gun } },
+  );
+  t.after(() => worker.terminate());
+
+  const ready = new Promise((resolve, reject) => {
+    worker.on('error', reject);
+    worker.on('message', (msg) => { if (msg.ready) resolve(); });
+  });
+  const settled = new Promise((resolve, reject) => {
+    worker.on('error', reject);
+    worker.on('message', (msg) => { if (!msg.ready) resolve(msg); });
+  });
+  await ready;
+
+  // Now stand in for the winner, stopped at the instant the name exists and
+  // holds nothing, and release the peer into exactly that instant.
+  const fd = fs.openSync(file, 'wx', 0o600);
+  t.after(() => { try { fs.closeSync(fd); } catch { /* already closed */ } });
+  assert.equal(fs.statSync(file).size, 0, 'the window under test is a name with no contents');
+  Atomics.store(view, 0, 1);
+  Atomics.notify(view, 0);
+
+  // Finish the winner's write a long way inside the window the peer is required
+  // to tolerate, so the margin is a proportion of that window rather than a
+  // wall-clock budget competing with the rest of the suite. A peer slow enough
+  // to arrive after this line still passes -- it reads a complete file.
+  await new Promise((r) => setTimeout(r, 150));
+  fs.writeFileSync(fd, `${WINNER}\n`);
+  fs.fsyncSync(fd);
+  fs.closeSync(fd);
+
+  const result = await settled;
+  assert.equal(result.error, undefined, 'a peer inside the window must not fail');
+  assert.equal(result.secret, WINNER, 'the peer must adopt the winner secret, not mint a second one');
+  assert.equal(
+    fs.readFileSync(file, 'utf8').trim(), WINNER,
+    'and it must not have deleted the file the winner was writing',
+  );
+});
+
 // --------------------------------------------------------------------------
 // the HTTP edge
 // --------------------------------------------------------------------------

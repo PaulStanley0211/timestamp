@@ -1,0 +1,14 @@
+{
+  "_provenance": "VERIFIED SHAPE, from fal's own schema page for bytedance/seedance-2.0/image-to-video, read 2026-08-20. The documented output is exactly `{ video: { url, content_type, file_name, file_size }, seed }`, and the example on the model-api-reference page shows a response with only `video.url` and `seed` populated -- which is why scripts/providers/fal.mjs requires `video.url` and treats every other field as optional decoration. NOTE `seed`: the response reports the seed the model used, and whether it equals the one we sent is an open question recorded in config/models.json. It is stored as meta.providerSeed rather than assumed.",
+  "_shape": "GET <response_url> -- 200",
+  "status": 200,
+  "body": {
+    "video": {
+      "url": "https://v3.fal.media/files/fixture/seedance-2-0-output.mp4",
+      "content_type": "video/mp4",
+      "file_name": "output.mp4",
+      "file_size": 4211337
+    },
+    "seed": 777
+  }
+}

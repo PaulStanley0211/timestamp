@@ -23,6 +23,22 @@
       "source": "measured: it is local ffmpeg"
     },
 
+    "bytedance/seedance-2.0/image-to-video": {
+      "_comment": "ESTIMATE, and deliberately the CONSERVATIVE one. config/credits.json is the resolution-aware money path -- $1.51 per 15s at 480p, $4.54 at 720p -- and this table has no resolution dimension at all: estimateVideo takes seconds and nothing else. So the number here is the 720p rate, $4.54 / 15s = $0.3027 per second, which OVERSTATES a 480p job by about 3x. That is the safe direction to be wrong in for the same reason credits.json gives: overstating cost understates margin. It is not the number a customer sees -- they see credits, computed by creditCost from credits.json -- it is the number the manifest and npm run ledger carry. One --meter run replaces both.",
+      "estimate": true,
+      "unit": "second",
+      "usd": 0.3027,
+      "source": "derived from config/credits.json 720p estimate, itself derived from fal's published token formula, UNVERIFIED"
+    },
+
+    "bytedance/seedance-2.0/reference-to-video": {
+      "_comment": "ESTIMATE. Same rate and same reasoning as image-to-video above -- fal prices the two Seedance 2.0 routes off the same token formula as far as anyone has read, and nobody has read an invoice. Listed so that switching the animate step to the two-reference route is a config change rather than an unknown_model at compose.",
+      "estimate": true,
+      "unit": "second",
+      "usd": 0.3027,
+      "source": "derived from config/credits.json 720p estimate, UNVERIFIED"
+    },
+
     "fal/still-UNVERIFIED": {
       "_comment": "ESTIMATE, and a placeholder: the still model has NOT been chosen. Paul picks it at Phase 0 (docs/phase-0-validation.md), and criterion 6 measures the real number as balance-before minus balance-after. The figure below is an order-of-magnitude stand-in for an identity-preserving image model at ~1MP so the estimator has something to divide by -- it is not a quote and it is not attributed to any vendor. Replace the id and the number together, in one edit, when the model is chosen.",
       "estimate": true,
