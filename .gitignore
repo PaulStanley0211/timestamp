@@ -1,0 +1,9 @@
+node_modules/
+build/
+out/
+review/
+logs/
+assets/stock/*
+!assets/stock/.gitkeep
+!assets/stock/README.md
+.env

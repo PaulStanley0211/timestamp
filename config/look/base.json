@@ -1,0 +1,85 @@
+{
+  "_comment": "THE SOUL OF THE PRODUCT LIVES IN THIS FILE. Every value here is a starting point verified for syntax and determinism, not a tuned result -- expect a full pass at M1 against a real clip. That pass costs nothing, which is the entire reason this file exists separately from the code. Clamp ranges are enforced in scripts/tapedeck/look.mjs, not here, so this file stays readable and hand-editable.",
+  "_ordering": "The filter order follows the physical signal path of a real camcorder: lens -> CCD -> camera DSP -> character generator -> tape encoder -> tape -> playback transport -> display. Do not reorder without reading the ordering rationale in docs/the-look.md; several reorderings are visually catastrophic in ways that are not obvious.",
+  "version": 1,
+  "seed": 20030714,
+  "seed2": 777,
+  "audioSeed": 1337,
+  "optics": {
+    "_comment": "The lens, before any electronics. Bloom is halation on real scene light, so it must run before the grade -- reversed, you crush blacks and then add a glow that lifts them again.",
+    "bloomThreshold": 0.72,
+    "bloomRadius": 12,
+    "bloomStrength": 0.38,
+    "bloomWarmth": 0.1,
+    "cornerSoftenAmount": 0.55,
+    "cornerSoftenSigma": 2.2,
+    "vignetteAngle": "PI/12",
+    "_measured": "vignette is far stronger than its angle suggests: PI/4.3 costs 45% of mean luma, PI/12 costs 20%, and even PI/20 costs 18%. It is applied twice (lens falloff here, canvas unifier at composite) so the losses compound. curveMaster carries the compensation -- do not raise either angle without re-measuring."
+  },
+  "grade": {
+    "_comment": "Camera DSP. curveMaster starting at 0/0.055 is the milky black floor -- consumer tape never reached true black, and crushing it to 0 is the fastest way to look like a modern camera with a filter on. Ending at 1/0.95 rolls the highlights off.",
+    "curveMaster": "0/0.085 0.25/0.34 0.5/0.60 0.75/0.83 1/0.93",
+    "curveRed": "0/0.05 0.5/0.55 1/1",
+    "curveBlue": "0/0.08 0.5/0.46 1/0.93",
+    "cbRedMid": 0.05,
+    "cbBlueMid": -0.05,
+    "cbRedShadow": 0.03,
+    "cbBlueShadow": 0.05,
+    "saturation": 0.8,
+    "contrast": 0.95,
+    "gamma": 1.03
+  },
+  "osd": {
+    "_comment": "The character generator wrote this into the signal BEFORE the tape, so it degrades with the image but never picks up lens artifacts. dateText and timeText are literals computed in Node from the seed -- never %{localtime}, which reads the wall clock and destroys reproducibility. Colons in timeText are escaped at build time.",
+    "enabled": true,
+    "fontRelPath": "assets/fonts/tape-osd.ttf",
+    "dateText": "14 JUL 2003",
+    "timeText": "20:42",
+    "color": "0xF6EAC8",
+    "size": 20,
+    "marginX": 30,
+    "marginY": 28,
+    "lineGap": 24
+  },
+  "tape": {
+    "_comment": "The tape encoder and the medium. chromaSmear is the star of the whole chain -- VHS chroma bandwidth was roughly a tenth of its luma bandwidth, which is why colour visibly runs off lips and brake lights. grainStrength is applied HERE, at 720x576, so it upscales into clumps larger than a pixel. Applied after the upscale it reads as a modern high-ISO sensor instead.",
+    "chromaSmear": 9,
+    "chromaShiftR": 2,
+    "chromaShiftB": -1,
+    "grainStrength": 20,
+    "lumaSoftness": 0.9
+  },
+  "transport": {
+    "_comment": "Playback mechanics, not recording. These displace the FINISHED tape image including its grain and its burnt-in date, which is why they run last. headSwitch is the constant noise band at the very bottom of frame -- the single most recognisable VHS tell, and it must never blink off. tears are the opposite: sparse, 1-2 across 15 seconds, noticeable once and then again just as you had forgotten.",
+    "jitterX": 2,
+    "jitterY": 1.2,
+    "headSwitchHeight": 14,
+    "headSwitchShift": -9,
+    "headSwitchNoise": 58,
+    "tears": [
+      {
+        "start": 4.1,
+        "end": 4.23,
+        "y": 150,
+        "h": 26,
+        "shift": -22
+      },
+      {
+        "start": 11.42,
+        "end": 11.5,
+        "y": 302,
+        "h": 18,
+        "shift": 14
+      }
+    ],
+    "droppedFrames": [
+      201,
+      202
+    ]
+  },
+  "composite": {
+    "_comment": "The final vignette is applied to the WHOLE 1080x1920 canvas after the overlay, not to the tape image. That is what fuses tape and surround into one photographed object rather than two stacked layers, and it is the move that actually sells the framing.",
+    "finalVignetteAngle": "PI/20"
+  },
+  "_notInBase": "interlace is deliberately absent. On a progressive delivery target real field artifacts read as an encoding bug more often than as nostalgia, and the head-switch band already does about 80% of the 'this is tape' work for 5% of the risk. Add it only if M1 proves it earns its place."
+}

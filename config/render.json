@@ -1,0 +1,57 @@
+{
+  "_comment": "Render contract. These are not preferences -- several of them are asserted by tests and changing one without changing the test is a build break. PAL was chosen because 25fps x 15s is exactly 375 frames; at NTSC's 30000/1001 it is 449.55, so 'exactly 15.000 seconds' would be a rounding argument rather than an assertion.",
+
+  "durationSeconds": 15,
+  "fps": 25,
+  "totalFrames": 375,
+
+  "tape": {
+    "_comment": "The tape raster itself. SAR 16/15 on 720x576 gives DAR 4:3, which is what PAL 4:3 actually was. work* carries jitter headroom so the transport wobble has pixels to steal from instead of exposing an edge; both work dimensions must stay divisible by 4 for chroma subsampling.",
+    "width": 720,
+    "height": 576,
+    "sar": "16/15",
+    "workWidth": 736,
+    "workHeight": 588,
+    "jitterOriginX": 8,
+    "jitterOriginY": 6
+  },
+
+  "delivery": {
+    "_comment": "1080x810 is the 4:3 tape image unsqueezed to 1080 wide. Centred in 1080x1920 it leaves 555px above and below. surroundColor is deliberately not pure black -- see CLAUDE.md, 'The output contract'.",
+    "width": 1080,
+    "height": 1920,
+    "tapeDisplayWidth": 1080,
+    "tapeDisplayHeight": 810,
+    "surroundColor": "0x0B0A09"
+  },
+
+  "encode": {
+    "_comment": "filterComplexThreads MUST stay 1. gblur is slice-threaded and goes nondeterministic when frame height approaches the core count; pinning threads is the global safety net behind the avgblur fix on the head-switch band. Costs about 19% render time and buys a hard purity guarantee.",
+    "filterComplexThreads": 1,
+    "videoCodec": "libx264",
+    "crf": 19,
+    "preset": "medium",
+    "pixFmt": "yuv420p",
+    "x264Params": "deterministic=1",
+    "audioCodec": "aac",
+    "audioBitrate": "128k",
+    "audioSampleRate": 48000,
+    "audioChannels": 1
+  },
+
+  "provider": {
+    "_comment": "MAX_INFLIGHT is 1 because a CLI run is one job, one call at a time. It lives here so that raising it on the day a web app fans out is a one-line change rather than a refactor. Backoff is the 1/2/4/8 ladder from Ad-Regenerator's meta-adapter.",
+    "maxInflight": 1,
+    "maxAttempts": 4,
+    "backoffBaseMs": 1000,
+    "submitTimeoutMs": 60000,
+    "pollIntervalMs": 5000,
+    "pollTimeoutMs": 900000
+  },
+
+  "retention": {
+    "_comment": "This system stores photographs of people's faces. Designing deletion in now costs an afternoon; retrofitting it onto a live app that has been accumulating strangers' faces is a rewrite plus a disclosure.",
+    "photoDays": 7,
+    "jobDays": 30
+  }
+}
