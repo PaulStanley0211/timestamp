@@ -53,16 +53,22 @@ PAL, 720×576 at SAR 16/15, 25fps — what a camcorder tape in Europe actually w
 
 | Milestone | State |
 |---|---|
-| **M1 — the tape look** | **Done.** 44 tests green, including a five-run bit-identical purity check |
-| M0 — manual validation gate | Not run. Needs a fal account. `docs/phase-0-validation.md` |
-| M2 — audio bed, single-pass mux | Next |
-| M3–M7 | Planned |
+| **M1 — the tape look** | **Done.** PAL chain, 4:3 in 9:16, five-run bit-identical purity check |
+| **M2 — audio bed, single-pass mux** | **Done.** Synthesised bed at −27.2 LUFS, joined in one ffmpeg invocation |
+| **M3 — preset catalog + prompts** | **Done.** 8 places, 6 outfits, three prompt rules enforced at load |
+| M0 — the validation gate | **Not run — the only real blocker.** One still generated so far. `docs/phase-0-validation.md` |
+| **Next — the app, end to end** | Next.js locally + a render worker with ffmpeg + a job queue, generation stubbed by the fixture provider |
+| Then | Real uploads · real video APIs (model chosen at that point) · moderation · billing |
+
+**131 tests, 0 failures.** Nothing in the suite can spend money.
 
 ## Honest limits
 
 - **The aesthetic values are tuned against two clips**, not a corpus. They will need another pass once real generated footage exists.
 - **No bundled font yet.** The date stamp falls back to a system font, which works but means a render will not reproduce byte-for-byte on another machine. `npm run doctor` says so every time. An OFL camcorder face at `assets/fonts/tape-osd.ttf` fixes it.
-- **No face detection at intake.** Deliberate for a CLI you run on your own photos, where a bad input is obvious the moment you see the result. It is a hard requirement of the web app spec, along with a consent gate, retention limits and a takedown path — the moment strangers upload faces, none of those are optional.
+- **No face detection at intake, and it is now required.** It was deferred for a CLI run on your own photos. The product takes uploads from strangers, so it is mandatory along with a consent gate, retention limits and a takedown path.
+- **No moderation layer yet, and free-text input needs one.** The menu became recommendations rather than a gate, so arbitrary text now reaches the prompt — including text engineered to hijack it.
+- **The identity premise is untested.** Everything here assumes a model can put a specific person in a place and an outfit, recognisably, from one ordinary photo. Nobody has measured that yet. That is what the gate is for.
 - **Higgsfield cannot serve a public version of this.** Its access is a consumer creator subscription; reselling that output through a paid app is outside consumer terms and its concurrency caps are per-account. That is why the provider is fal.ai.
 
 ## Not in scope

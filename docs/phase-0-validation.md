@@ -65,6 +65,46 @@ They are not pass/fail here — they are the measurements the web app spec is bu
 
 ---
 
+---
+
+## Amendments, 2026-08-20
+
+Three changes since this document was first written. They are here rather than edited in above, so the reasoning stays visible.
+
+### The product now ships with TWO reference images
+
+Paul decided that users may **upload a photo of the place** alongside their face, not merely type a location. That changes what this gate has to measure. A model juggling two references decides how much of each to honour, and identity is usually what gives — so testing with one reference and shipping with two measures a condition the product never operates in. That is the character-sheet mistake inverted.
+
+**Sequence:** run the five one-reference stills as the baseline first, then two or three more with face **plus a real place photo**.
+
+| One-ref | Two-ref | Reading |
+|---|---|---|
+| fail | fail | The premise is wrong. **Stop.** |
+| pass | fail | Premise fine, the place-photo feature is the problem. Ship typed-text first, add place photos later. |
+| pass | pass | Build the product Paul described. |
+
+### A three-rung ladder, so a failure says where it broke
+
+A plain-background test is a good **diagnostic** and a bad **gate**: it is the easiest possible case for identity, so failing it kills the project, but passing it proves nothing about a garden with a tracksuit. Its value is bisection — it separates "the model cannot hold a face" from "our scene is drowning it".
+
+1. **Identity alone** — plain mid-grey background, no wardrobe change, nothing in frame.
+2. **Identity under a wardrobe change** — same, plus the jacket.
+3. **The product** — the full composed preset. *This is the one that supplies the hit rate.*
+
+Two or three rolls at rungs 1 and 2 is plenty; you are asking "does it break here", not measuring frequency. Add `beauty retouching, smoothed skin` to the negatives while measuring likeness — models flatter a face on a plain background, and a smoothed, symmetrical version of someone is exactly the "looks like my cousin" failure.
+
+### Criterion 4 is probably too strict — UNRESOLVED
+
+It says a model with no audio-off parameter is disqualified outright. That was inherited from RELIO, where generated ambience would fight a scripted voiceover. **Timestamp has no voiceover**: `tapedeck` builds its own bed and the render never maps the model's audio stream, so a model that emits audio cannot hurt us — it only wastes a little generation cost.
+
+It should probably be demoted from disqualifier to preference, leaving 1, 3 and 5 as the hard stops. **Paul has not ruled on this and it has deliberately not been changed** — quietly loosening a gate is exactly the kind of thing that should not happen unattended.
+
+### Result so far
+
+One still generated (rung 3, `schrebergarten-august` + `trainingsjacke`, catalog `3047fddc750de92f`). **Scene adherence: strong pass** — 15 of 17 elements present. Two misses: the model gave *three* white stripes where the prompt asked for two (an Adidas trademark, worth tightening in the preset), and framing came out wider than the requested waist-up. Generate at **4:3** from here so the 4:3 crop does not discard composition. **Identity: unmeasured** — needs the two-person blind check.
+
+---
+
 ## Recording the result
 
 Fill in the Result column, paste the eight numbers, and note the model IDs and exact prompts used. Then commit this file. When a render six months from now looks wrong, this is the document that says what "right" was measured to be.

@@ -7,6 +7,23 @@ Warm, grainy, quiet.
 
 ---
 
+## Where things stand (2026-08-20)
+
+**Built, committed, 131 tests green.** M1 the tape look, M2 the audio bed, M3 the preset catalog. `npm run doctor`, `npm run look`, `npm run presets`, `npm run compose` all work and none of them can spend money.
+
+**Next, and agreed with Paul:** build the application **end to end with generation stubbed** — a Next.js app running locally, a separate render worker that has ffmpeg, a job queue between them, and the fixture provider standing in for fal. Then real uploads. Then real video generation, choosing the model *at that point*.
+
+**Two things that must be designed in from the first line or they become a rewrite:**
+- **Nothing is request/response.** A 15s render is ~30s of ffmpeg *after* generation calls that take minutes. Job queue with durable state, status polling, result page — from the start. (RELIO §11.3 calls this the single most likely reason a 6-week build becomes 14.)
+- **ffmpeg needs a real machine.** Vercel's serverless runtime has no ffmpeg binary and the entire look lives in ffmpeg. App and renderer are two processes talking through the queue, on day one.
+
+**Still open, needs Paul:**
+- **Phase 0 has not been run.** One still generated so far (scene adherence good — 15 of 17 elements). Needs five at rung 3 plus the two-person blind identity check. See `docs/phase-0-validation.md`.
+- **Criterion 4** — Claude flagged twice that "model generates its own audio → disqualified" is too strict for Timestamp (we build our own bed and never map model audio). **Not changed without Paul's word.**
+- **No bundled font.** `assets/fonts/tape-osd.ttf` is missing, so `doctor` warns and renders will not reproduce across machines. Claude has asked permission to download an OFL VCR face and not received it.
+
+---
+
 ## The split that is the whole architecture
 
 "Looks like a tape" is two problems, and they are solved in two different places.
@@ -125,6 +142,18 @@ PAL, because a 2003 camcorder tape in Germany was PAL, and because the arithmeti
 
 **Outfits describe only what is on the body. Places describe everything else** — scene, light, lens, era props, weather. Without that split the two fragments fight and you get a parka on a beach lit like a beach. The schema enforces it; a preset that breaks it fails CI, not a render.
 
+### Scope change, 2026-08-20 — the menu is no longer a gate
+
+Paul's stated vision: **anyone uploads any photo, gives a location and an outfit, and gets a video.** The simplicity is the product. That supersedes the earlier "curated presets only" decision, and it changes three things:
+
+- **The 8 places and 6 outfits become recommendations**, not the whole menu. Free input is the norm; we refuse as rarely as possible.
+- **Users may upload a photo of the place** as a second reference image alongside their face — not just type it. "Your actual childhood garden" is the strongest version of this product and no preset-menu competitor can match it.
+- **M3's hand-written fragments are not wasted.** They become the recommendations *and* the quality template that free text is expanded into. A new `expand` stage turns "a beach" into the same eight-line shape — scene, light, lens, framing, props, era — that a hand-written place has. The three prompt rules above survive intact and apply to expanded text exactly as they do to a shipped preset; that is what keeps this tractable.
+
+**Consequently these stop being deferrable:** input moderation (free text plus a place photo, producing an image of a real person's face, is this product's highest-risk surface — including prompt injection, since user text lands inside our prompt), the face gate at intake, a consent gate, retention limits, and a takedown path.
+
+**EXIF/GPS stripping moves from hygiene to load-bearing.** A photo of a place carries its exact coordinates. Someone uploading their childhood garden is handing over its location.
+
 ---
 
 ## Common mistakes
@@ -141,8 +170,10 @@ PAL, because a 2003 camcorder tape in Germany was PAL, and because the arithmeti
 
 ## Not in scope
 
-**The web app.** Accounts, credits, queueing, UI, gallery, sharing, rate limits, storage lifecycle. It is a separate spec, written after M7, using the cost and wall-time numbers M0 measured rather than guesses.
+**Billing.** Accounts, credits, Stripe, rate limits. Not until the thing works and Phase 0 has an answer.
 
-**Face detection at intake.** Deferred deliberately for the CLI, where a bad photo is obvious the moment you see the contact sheet. It is a **hard requirement of the web app spec** — the moment strangers upload faces, it is mandatory, along with a consent gate, retention limits and a takedown path.
+~~The web app~~ — **no longer out of scope.** Paul reordered on 2026-08-20: build the app end to end with generation stubbed, *then* uploads, *then* real video APIs. See "Where things stand" at the top.
+
+~~Face detection at intake~~ — **no longer deferrable.** It was deferred for a CLI Paul ran on his own photos. The product takes uploads from strangers, so it is required, along with the consent gate, retention limits and takedown path.
 
 **A second paid provider.** `fixtureProvider` is a genuinely different implementation exercised by the same conformance test, which is what makes the interface an abstraction rather than a wrapper with optimism. Replicate would buy vendor-risk insurance, not interface validation.
