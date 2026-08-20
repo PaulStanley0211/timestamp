@@ -2,7 +2,32 @@
 
 One photo, one place, one outfit — fifteen seconds that look like a camcorder tape from 2003. Warm, grainy, quiet.
 
-**Be precise about what this is.** Right now it is a look, not a product. The tape aesthetic works and is fully built; the generation half — putting *you* in a chosen place and outfit — has not been validated against a real model yet. That validation is `docs/phase-0-validation.md` and it is deliberately the next thing, not something to discover in week nine.
+**Be precise about what this is.** The *application* is built and it runs end to end: upload a photo in a browser, describe a place and an outfit in your own words, and a finished 15-second tape comes back — through a real job queue, a real render worker and real ffmpeg, for zero dollars.
+
+What that does **not** establish is the thing the product actually rests on: whether a generative model can put *you* in a chosen place and outfit recognisably, from one photograph. Every render above is served by `--provider=fixture`, which produces genuine files but invents nothing. So the plumbing is proven and the premise is not. That validation is `docs/phase-0-validation.md`, it is deliberately the next thing, and it is not something to discover in week nine.
+
+---
+
+## Run the app
+
+Two terminals, because ffmpeg needs a real machine and nothing here is request/response.
+
+```bash
+npm run web
+```
+
+```bash
+npm run worker -- --provider=fixture
+```
+
+Open the address the first one prints. `docs/running-the-app.md` covers the two-process shape, what to do when a job stalls, and retention.
+
+Or drive it from the command line, with either preset ids or free text:
+
+```bash
+npm run render -- --photo=me.jpg --place=schrebergarten-august --outfit=trainingsjacke --provider=fixture --consent
+npm run render -- --photo=me.jpg --place="my grandmother's kitchen" --outfit="a wedding suit" --provider=fixture --consent
+```
 
 ---
 

@@ -1,0 +1,88 @@
+{
+  "_comment": "The model registry. NOTHING IN THE `fal/` NAMESPACE BELOW IS VERIFIED. The model has not been chosen -- Paul chooses it at Phase 0 (docs/phase-0-validation.md), and the endpoint ids here are plausible-looking placeholders written from memory, not from fal's catalogue. Every one of them carries `verified: false` and stays that way until somebody has opened the model's schema page, read the parameter list, and edited this file with what it actually says. Treating an unverified id as real is how a build spends an afternoon debugging a 404 that was a typo in a guess.",
+
+  "schemaVersion": 1,
+
+  "nativeAudio": {
+    "_comment": "One boolean, three layers, because a model version bump can quietly re-enable audio and the symptom is a week of shipped videos with two ambiences arguing -- our designed bed from audio/bed.mjs, and whatever the model decided a Schrebergarten sounds like. LAYER 1: VideoRequest.nativeAudio is a REQUIRED field that must be exactly false; enforced by assertVideoRequest in scripts/providers/contract.mjs, where a MISSING field is a failure rather than a default. LAYER 2: the provider shape -- capabilities.supportsNativeAudioOff must be true (assertProvider), and every entry below with kind 'video' must name the parameter that turns audio off (assertAudioOff). Both live in contract.mjs. LAYER 3: an ffprobe assertion that the file that actually came back has ZERO audio streams. That layer is NOT in the provider package and cannot be -- only the pipeline sees the downloaded file -- it lives in scripts/render/pipeline.mjs, step 'assemble' (docs/interfaces.md section 7, step 8). If you are reading this because you are adding a model: layers 1 and 2 are config and code, layer 3 is the one that catches the vendor changing their mind.",
+    "required": false,
+    "layer3": "scripts/render/pipeline.mjs, step 'assemble' -- ffprobe must report zero audio streams"
+  },
+
+  "defaults": {
+    "_comment": "What `--provider=fixture` uses. There is deliberately no fal default: choosing a paid model must be an explicit act, and a default here would make it a typo.",
+    "fixture": { "still": "fixture/still-v1", "video": "fixture/video-v1" }
+  },
+
+  "models": {
+    "fixture/still-v1": {
+      "_comment": "The local ffmpeg still generator. Verified in the sense that we wrote it: scripts/providers/fixture.mjs. Sizes are 4:3 because the tape raster is DAR 4:3 and anything else gets silently cropped downstream.",
+      "verified": true,
+      "provider": "fixture",
+      "kind": "still",
+      "endpoint": null,
+      "capabilities": {
+        "stillSizes": [{ "width": 1024, "height": 768 }],
+        "maxReferences": 2,
+        "supportsPlaceReference": true
+      }
+    },
+
+    "fixture/video-v1": {
+      "_comment": "The local ffmpeg clip generator. kind 'video', so it is held to the layer-2 audio rule like any paid model would be -- and it passes for the strongest possible reason: its filtergraph has no audio source at all and its argv carries -an. audioOffParam names that -an flag so the shape assertion has something real to check rather than an exemption to skip.",
+      "verified": true,
+      "provider": "fixture",
+      "kind": "video",
+      "endpoint": null,
+      "nativeAudio": false,
+      "audioOffParam": {
+        "name": "-an",
+        "value": false,
+        "verified": true,
+        "_comment": "Not a model parameter -- an ffmpeg flag. The real guarantee is structural: the fixture's filtergraph contains no audio source, exactly as audio/bed.mjs has no [0:a] to leak through. -an is the belt to that braces."
+      },
+      "capabilities": {
+        "maxClipSeconds": 8,
+        "supportsNativeAudioOff": true
+      }
+    },
+
+    "fal/UNVERIFIED-identity-still": {
+      "_comment": "UNVERIFIED PLACEHOLDER. The still model has not been chosen. What it must do: hold identity from ONE reference photo well enough that two people who know the subject call 3 of 5 stills 'you' (phase-0 criterion 1), while taking a prompt that never describes the person (CLAUDE.md, 'Prompt rules'). Optionally a SECOND reference for the place -- see supportsPlaceReference, which is what makes 'your actual childhood garden' possible and is the feature no preset-menu competitor can match. `endpoint` is a guess at the shape of a fal id, NOT a real route.",
+      "verified": false,
+      "provider": "fal",
+      "kind": "still",
+      "endpoint": "fal-ai/PLACEHOLDER-identity-preserving-image-model",
+      "capabilities": {
+        "stillSizes": [{ "width": 1024, "height": 768 }],
+        "maxReferences": 2,
+        "supportsPlaceReference": null
+      },
+      "openQuestions": [
+        "Does it accept two reference images with distinct roles, or only one?",
+        "Does it offer a 4:3 output size, or only 1:1 and 16:9? A 1:1 still pillarboxed into a 4:3 tape is a visible mistake.",
+        "Does it take an integer seed, and does the same seed actually reproduce?"
+      ]
+    },
+
+    "fal/UNVERIFIED-image-to-video": {
+      "_comment": "UNVERIFIED PLACEHOLDER. The video model has not been chosen and this entry exists to hold the SHAPE of the answer, not the answer. audioOffParam is null, which is not a shrug: under phase-0 criterion 4 a video model with no audio-off parameter is DISQUALIFIED, and assertAudioOff in contract.mjs throws a CapabilityError on this entry today. That is correct and deliberate -- the registry refuses to hand out a model nobody has checked. Filling in `audioOffParam` is a deliberate act performed after reading the model's schema, which is the only moment anyone will ever actually read it.",
+      "verified": false,
+      "provider": "fal",
+      "kind": "video",
+      "endpoint": "fal-ai/PLACEHOLDER-image-to-video-model",
+      "nativeAudio": false,
+      "audioOffParam": null,
+      "capabilities": {
+        "maxClipSeconds": null,
+        "supportsNativeAudioOff": null
+      },
+      "openQuestions": [
+        "What is maxClipSeconds? Phase-0 criterion 5 records it. Image-to-video models cap somewhere around 5-10s, so 15s is N calls chained on the previous clip's last frame.",
+        "What is the audio-off parameter CALLED? Candidates seen in the wild include `generate_audio: false`, `enable_audio: false`, `with_audio: false`, and 'the model has no audio at all'. Write down which one it is and delete the others -- a guess recorded as fact here defeats the entire point of layer 2.",
+        "Does it accept a start image AND a seed, and is the seed honoured? Without a honoured seed a retry returns a different clip and the join with the previous segment moves.",
+        "Is the returned file mp4 with a single video stream, or does it hand back a container with an empty audio track? Layer 3 is what answers this one, on a real file."
+      ]
+    }
+  }
+}

@@ -5,14 +5,21 @@
   "type": "module",
   "license": "UNLICENSED",
   "description": "One photo plus a curated place and outfit becomes a 15-second video that looks like it was found on a camcorder tape.",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node --test",
     "doctor": "node scripts/preflight/doctor.mjs",
     "look": "node scripts/tapedeck/look-cli.mjs",
     "presets": "node scripts/catalog/list-cli.mjs",
     "compose": "node scripts/compose/compose-cli.mjs",
+    "expand": "node scripts/expand/expand-cli.mjs",
     "render": "node --env-file-if-exists=.env scripts/render/render.mjs",
+    "web": "node scripts/web/server-cli.mjs",
+    "worker": "node --env-file-if-exists=.env scripts/worker/worker-cli.mjs",
+    "queue": "node scripts/queue/queue-cli.mjs",
+    "jobs": "node scripts/render/jobs-cli.mjs",
     "smoke": "node --env-file-if-exists=.env scripts/providers/smoke-cli.mjs",
     "ledger": "node --env-file-if-exists=.env scripts/render/ledger-cli.mjs",
     "purge": "node scripts/render/purge-cli.mjs"

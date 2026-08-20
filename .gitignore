@@ -7,3 +7,5 @@ assets/stock/*
 !assets/stock/.gitkeep
 !assets/stock/README.md
 .env
+assets/test-photos/*
+!assets/test-photos/README.md

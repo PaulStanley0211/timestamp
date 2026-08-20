@@ -1,0 +1,357 @@
+/**
+ * The two things that decide whether this worker can be trusted to run
+ * unattended: what it does when it loses its lease mid-render, and what it does
+ * when someone stops it.
+ *
+ * Both are tested without a single real timer. The lease is expired by moving
+ * an injected clock and calling `reapExpired()` -- which is exactly what
+ * another worker's startup would do -- and the shutdown is driven by calling
+ * `stop()` from inside the fake pipeline, which is where a SIGTERM actually
+ * lands: in the middle of somebody's render. The signal handlers themselves are
+ * proved against an injected `process`, because a test that sends a real SIGINT
+ * to the test runner kills the test runner.
+ *
+ * The specific failure these tests exist to rule out: a worker that stalls past
+ * its lease, gets reaped, wakes up and reports success on a job another process
+ * is now rendering. Two writers on one manifest is not recoverable -- `saveJob`
+ * writes a single fixed tmp file -- so the only safe behaviour is to stop
+ * immediately and write nothing further.
+ */
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { EventEmitter } from 'node:events';
+
+import { createQueue } from '../scripts/queue/queue.mjs';
+import {
+  createJob, loadJob, saveJob, beginStep, finishStep, completeJob, nextStep,
+} from '../scripts/render/job.mjs';
+import { createWorker } from '../scripts/worker/worker.mjs';
+
+const T0 = Date.UTC(2026, 7, 20, 14, 45, 0);
+const LEASE_MS = 900_000;
+const JOB_A = '20260820-144501-a3f19c';
+const JOB_B = '20260820-144502-b41e07';
+
+const CFG = Object.freeze({
+  provider: { maxInflight: 1, maxAttempts: 4, backoffBaseMs: 1000, pollIntervalMs: 5000, pollTimeoutMs: 900_000 },
+});
+
+const PROVIDER = Object.freeze({ id: 'fake', capabilities: {} });
+
+const INPUT = Object.freeze({
+  photo: { path: 'input/photo.jpg', sha256: 'a'.repeat(64), width: 1024, height: 768 },
+  place: { kind: 'preset', value: 'schrebergarten-august' },
+  outfit: { kind: 'preset', value: 'trainingsjacke' },
+  stillCount: 3,
+  consent: { granted: true, at: new Date(T0).toISOString(), text: 'I agree that this is my face.' },
+});
+
+const QUEUE_METHODS = ['claim', 'heartbeat', 'complete', 'fail', 'release', 'reapExpired'];
+
+function makeRig(t, { pipeline, clock = { now: T0 }, ...overrides } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'timestamp-worker-life-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const nowImpl = () => clock.now;
+  const queue = createQueue({
+    root: dir, nowImpl, leaseMs: LEASE_MS, maxAttempts: CFG.provider.maxAttempts,
+  });
+
+  // The worker gets a recording wrapper; the tests drive the raw queue directly
+  // when they are standing in for somebody else's reaper, so `calls` holds only
+  // what the worker itself did.
+  const calls = [];
+  const watched = { ...queue };
+  for (const name of QUEUE_METHODS) {
+    watched[name] = (...args) => { calls.push(name); return queue[name](...args); };
+  }
+
+  const events = [];
+  const tickers = [];
+  const rig = {
+    dir, clock, queue, calls, events, tickers,
+    types: () => events.map((e) => e.type),
+    of: (type) => events.filter((e) => e.type === type),
+    seed(jobId = JOB_A) {
+      createJob({ root: dir, jobId, provider: 'fixture', cfg: CFG, nowImpl, input: INPUT });
+      queue.enqueue(jobId);
+      return jobId;
+    },
+    load: (jobId = JOB_A) => loadJob({ root: dir, jobId, nowImpl }),
+  };
+
+  rig.worker = createWorker({
+    root: dir,
+    cfg: CFG,
+    provider: PROVIDER,
+    queue: watched,
+    nowImpl,
+    workerId: 'renderer-1',
+    onEvent: (event) => events.push(event),
+    sleepImpl: async () => {},
+    setIntervalImpl: (fn, ms) => { const handle = { fn, ms }; tickers.push(handle); return handle; },
+    clearIntervalImpl: (handle) => {
+      const i = tickers.indexOf(handle);
+      if (i >= 0) tickers.splice(i, 1);
+    },
+    runPipelineImpl: pipeline ?? (async (job) => job),
+    ...overrides,
+  });
+
+  return rig;
+}
+
+function runStep(job, name, clock, { ms = 1200, onProgress } = {}) {
+  beginStep(job, name);
+  saveJob(job);
+  onProgress?.({ step: name, phase: 'running', pct: 50 });
+  clock.now += ms;
+  finishStep(job, name, { output: {} });
+  saveJob(job);
+  onProgress?.({ step: name, phase: 'done' });
+}
+
+const transitions = (calls) => calls.filter((c) => ['complete', 'fail', 'release'].includes(c));
+
+// --- the lease outlives the work, or the work stops --------------------------
+
+test('a lease lost mid-render aborts the pipeline and never reports success', async (t) => {
+  let abortedInsidePipeline = null;
+  const rig = makeRig(t, {
+    pipeline: async (job, opts) => {
+      beginStep(job, 'still');
+      saveJob(job);
+
+      // Sixteen minutes inside a generation call with no heartbeat landing.
+      // Another worker starts up, reaps the dead lease, and this job is now
+      // somebody else's.
+      rig.clock.now += LEASE_MS + 1;
+      assert.deepEqual(rig.queue.reapExpired(), [JOB_A]);
+
+      // The next heartbeat is the first moment this process can find out.
+      opts.onProgress({ step: 'still', phase: 'running', pct: 60 });
+      abortedInsidePipeline = opts.signal.aborted;
+
+      // Even if the work "succeeded", reporting it would overwrite the result
+      // of whoever owns the job now. In memory only -- nothing may reach disk.
+      completeJob(job, { videoPath: 'timestamp.mp4' });
+      return job;
+    },
+  });
+  rig.seed();
+
+  await rig.worker.once();
+
+  assert.equal(abortedInsidePipeline, true, 'the pipeline was told to stop through its AbortSignal');
+  assert.equal(rig.of('lease-lost').length, 1);
+  assert.deepEqual(transitions(rig.calls), [], 'no complete(), no fail(), no release() on a lease we no longer hold');
+  // The job is exactly where the reaper left it: back in pending, one attempt
+  // spent, and free for the worker that now owns it.
+  assert.deepEqual(rig.queue.stats(), { pending: 1, claimed: 0, done: 0, failed: 0 });
+  assert.equal(rig.queue.peek()[0].attempts, 1);
+  // Nothing was written after the abort: the manifest still says `running`.
+  assert.equal(rig.load().status, 'running');
+});
+
+test('the lease is checked once more before a result is reported', async (t) => {
+  // The pipeline finishes cleanly but the lease died during the last step and
+  // nothing reported progress, so the only chance to notice is the sync the
+  // worker does when the pipeline returns. It must take it.
+  const rig = makeRig(t, {
+    pipeline: async (job) => {
+      beginStep(job, 'publish');
+      saveJob(job);
+      rig.clock.now += LEASE_MS + 1;
+      rig.queue.reapExpired();
+      finishStep(job, 'publish', {});
+      completeJob(job, { videoPath: 'timestamp.mp4' });
+      saveJob(job);
+      return job;
+    },
+  });
+  rig.seed();
+
+  await rig.worker.once();
+
+  assert.equal(rig.of('lease-lost').length, 1);
+  assert.deepEqual(transitions(rig.calls), []);
+  assert.equal(rig.queue.stats().done, 0);
+});
+
+// --- graceful shutdown -------------------------------------------------------
+
+test('a stop finishes the current step, releases the job and burns no attempt', async (t) => {
+  let abortedInsidePipeline = null;
+  const rig = makeRig(t, {
+    pipeline: async (job, opts) => {
+      runStep(job, 'intake', rig.clock, { onProgress: opts.onProgress });
+
+      // SIGTERM lands here, in the middle of the next step.
+      void rig.worker.stop({ reason: 'SIGTERM' });
+
+      runStep(job, 'moderate', rig.clock, { onProgress: opts.onProgress });
+      abortedInsidePipeline = opts.signal.aborted;
+      return job;    // the pipeline stops between steps, as it is specified to
+    },
+  });
+  rig.seed();
+
+  await rig.worker.once();
+
+  assert.equal(abortedInsidePipeline, true, 'the abort arrived at a step boundary, not mid-step');
+  assert.deepEqual(transitions(rig.calls), ['release'],
+    'release() hands the job back; fail() would burn an attempt a clean restart never earned');
+  assert.deepEqual(rig.queue.stats(), { pending: 1, claimed: 0, done: 0, failed: 0 });
+  assert.equal(rig.queue.peek()[0].attempts, 0);
+  assert.equal(rig.of('released')[0].reason, 'shutdown');
+
+  // And the whole point of finishing the step: the work already done -- which
+  // for `still` would mean money already spent -- is on disk and resumes.
+  const job = rig.load();
+  assert.equal(job.steps.find((s) => s.name === 'intake').status, 'done');
+  assert.equal(job.steps.find((s) => s.name === 'moderate').status, 'done');
+  assert.equal(nextStep(job), 'expand');
+});
+
+test('a stop still lands when the pipeline reports no progress at all', async (t) => {
+  // The step boundary is diffed off the job on the heartbeat tick, so shutdown
+  // does not depend on the pipeline choosing to call onProgress.
+  let abortedInsidePipeline = null;
+  const rig = makeRig(t, {
+    pipeline: async (job, opts) => {
+      runStep(job, 'intake', rig.clock);
+      void rig.worker.stop({ reason: 'SIGINT' });
+      rig.tickers[0].fn();
+      abortedInsidePipeline = opts.signal.aborted;
+      return job;
+    },
+  });
+  rig.seed();
+
+  await rig.worker.once();
+
+  assert.equal(abortedInsidePipeline, true);
+  assert.deepEqual(transitions(rig.calls), ['release']);
+});
+
+test('a job that finishes before the stop is completed, not released', async (t) => {
+  const rig = makeRig(t, {
+    pipeline: async (job, opts) => {
+      runStep(job, 'intake', rig.clock, { onProgress: opts.onProgress });
+      void rig.worker.stop({ reason: 'SIGTERM' });
+      completeJob(job, { videoPath: 'timestamp.mp4' });
+      saveJob(job);
+      return job;
+    },
+  });
+  rig.seed();
+
+  await rig.worker.once();
+
+  assert.deepEqual(transitions(rig.calls), ['complete']);
+  assert.equal(rig.queue.stats().done, 1);
+});
+
+test('once() refuses to claim anything new after a stop', async (t) => {
+  const rig = makeRig(t);
+  rig.seed();
+  await rig.worker.stop();
+  assert.equal(await rig.worker.once(), false);
+  assert.equal(rig.queue.stats().pending, 1);
+});
+
+// --- signals -----------------------------------------------------------------
+
+test('the first signal stops gracefully and the second one exits immediately', async (t) => {
+  const fakeProcess = new EventEmitter();
+  const exits = [];
+  fakeProcess.exit = (code) => exits.push(code);
+
+  let sleeps = 0;
+  const rig = makeRig(t, {
+    signals: true,
+    processImpl: fakeProcess,
+    sleepImpl: async () => {
+      sleeps += 1;
+      // Ctrl-C, then Ctrl-C again because nothing appeared to happen. Someone
+      // pressing it twice means it.
+      fakeProcess.emit('SIGINT');
+      fakeProcess.emit('SIGINT');
+    },
+  });
+
+  await rig.worker.start();
+
+  assert.equal(sleeps, 1);
+  assert.deepEqual(exits, [130], 'the second signal exits without unwinding; the lease is reaped next startup');
+  assert.equal(rig.of('signal')[0].reason, 'SIGINT');
+  assert.equal(rig.of('forced').length, 1);
+  assert.equal(rig.types().at(-1), 'stopped');
+  assert.equal(fakeProcess.listenerCount('SIGINT'), 0, 'handlers are removed when the loop exits');
+});
+
+// --- the loop ----------------------------------------------------------------
+
+test('start() is once() in a loop, and stops cleanly when there is nothing left', async (t) => {
+  const clock = { now: T0 };
+  let idlePolls = 0;
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async (job, opts) => {
+      runStep(job, 'intake', clock, { onProgress: opts.onProgress });
+      completeJob(job, { videoPath: 'timestamp.mp4' });
+      saveJob(job);
+      return job;
+    },
+    sleepImpl: async () => { idlePolls += 1; void rig.worker.stop(); },
+  });
+  rig.seed(JOB_A);
+  rig.seed(JOB_B);
+
+  await rig.worker.start();
+
+  assert.equal(rig.queue.stats().done, 2);
+  assert.equal(idlePolls, 1, 'the worker only waits when the queue is actually empty');
+  assert.equal(rig.types().at(-1), 'stopped');
+  assert.equal(rig.worker.running, false);
+});
+
+test('reapExpired() runs before the first claim, which is what recovers a crashed run', async (t) => {
+  const clock = { now: T0 };
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async (job) => {
+      beginStep(job, 'intake');
+      finishStep(job, 'intake', {});
+      completeJob(job, { videoPath: 'timestamp.mp4' });
+      saveJob(job);
+      return job;
+    },
+    sleepImpl: async () => { void rig.worker.stop(); },
+  });
+  rig.seed();
+
+  // A previous worker claimed this job and was killed. Its lock outlives it --
+  // the lock is a file, and the file does not care that the process is gone.
+  rig.queue.claim({ workerId: 'a-worker-that-died' });
+  clock.now += LEASE_MS + 1;
+
+  await rig.worker.start();
+
+  assert.equal(rig.calls[0], 'reapExpired',
+    'without this line the queue looks stuck and nothing says why');
+  assert.ok(rig.calls.indexOf('reapExpired') < rig.calls.indexOf('claim'));
+  assert.deepEqual(rig.of('reaped')[0].jobIds, [JOB_A]);
+  assert.equal(rig.queue.stats().done, 1, 'the stranded job was picked up and finished');
+});
+
+test('reap() is not run twice when the CLI has already done it for the banner', async (t) => {
+  const rig = makeRig(t, { sleepImpl: async () => { void rig.worker.stop(); } });
+  rig.worker.reap();
+  await rig.worker.start();
+  assert.equal(rig.calls.filter((c) => c === 'reapExpired').length, 1);
+});

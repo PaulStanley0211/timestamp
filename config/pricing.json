@@ -1,0 +1,42 @@
+{
+  "_comment": "EVERY NON-ZERO NUMBER IN THIS FILE IS AN ESTIMATE. Not one of them has been proved by a --meter run, and treating one as fact is listed under 'Common mistakes' in CLAUDE.md. A vendor's price page is a marketing document; the invoice depends on the resolution actually delivered, the seconds actually billed, and whether a retried submit charged twice. scripts/providers/pricing.mjs REFUSES to load an entry that does not carry a _comment and an explicit `estimate` flag, and refuses `estimate: false` on any non-zero price -- zero is the only price that cannot drift. When actual diverges from estimated by more than divergenceLimit, `npm run ledger` names the job. Believe the ledger, not this file.",
+
+  "schemaVersion": 1,
+  "currency": "USD",
+  "divergenceLimit": 0.15,
+  "asOf": "2026-08-20",
+
+  "models": {
+    "fixture/still-v1": {
+      "_comment": "Not an estimate, and the only kind of entry allowed to say so: the fixture provider spawns local ffmpeg and there is no counterparty to bill anyone. Zero is a fact here. It is listed rather than special-cased so the cost path -- estimate, record, compare -- is exercised end to end at $0 before a paid provider is ever wired in.",
+      "estimate": false,
+      "unit": "image",
+      "usd": 0,
+      "source": "measured: it is local ffmpeg"
+    },
+
+    "fixture/video-v1": {
+      "_comment": "Not an estimate. Same reasoning as fixture/still-v1 -- local ffmpeg, no counterparty, zero is a fact.",
+      "estimate": false,
+      "unit": "second",
+      "usd": 0,
+      "source": "measured: it is local ffmpeg"
+    },
+
+    "fal/still-UNVERIFIED": {
+      "_comment": "ESTIMATE, and a placeholder: the still model has NOT been chosen. Paul picks it at Phase 0 (docs/phase-0-validation.md), and criterion 6 measures the real number as balance-before minus balance-after. The figure below is an order-of-magnitude stand-in for an identity-preserving image model at ~1MP so the estimator has something to divide by -- it is not a quote and it is not attributed to any vendor. Replace the id and the number together, in one edit, when the model is chosen.",
+      "estimate": true,
+      "unit": "image",
+      "usd": 0.05,
+      "source": "order-of-magnitude placeholder, no vendor quote, UNVERIFIED"
+    },
+
+    "fal/video-UNVERIFIED": {
+      "_comment": "ESTIMATE, and a placeholder: the video model has NOT been chosen. Per-second because that is the common shape for image-to-video billing, not because any specific vendor was checked. 15 seconds at this rate is $3.00 per finished video, which is the number that decides whether this product has a price -- so it is exactly the number that must be replaced by a measurement rather than argued about.",
+      "estimate": true,
+      "unit": "second",
+      "usd": 0.2,
+      "source": "order-of-magnitude placeholder, no vendor quote, UNVERIFIED"
+    }
+  }
+}
