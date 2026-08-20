@@ -1,11 +1,14 @@
 /**
  * The HTTP surface, end to end, against a real listener on port 0.
  *
- * The queue is a fake. That is not a shortcut: `scripts/queue/queue.mjs` is
- * written in parallel with this file and has its own tests, and what these tests
- * are about is whether the web layer talks to a queue *correctly* -- enqueues
- * once, enqueues after the manifest exists, asks before it writes -- which a fake
- * that records calls answers better than the real thing does.
+ * The queue is a fake and so is `scripts/auth/`. That is not a shortcut in
+ * either case. `scripts/queue/queue.mjs` and `scripts/auth/*` have their own
+ * tests; what these tests are about is whether the web layer talks to them
+ * *correctly* -- enqueues once, enqueues after the manifest exists, asks before
+ * it writes, spends credits at enqueue and not at completion -- which fakes
+ * that record calls answer better than the real things do. The auth fake also
+ * exists because `scripts/auth/` was written in parallel with this file and the
+ * web layer has to be provable without it.
  *
  * There is no ffmpeg here either. `POST /api/jobs` does not decode the upload;
  * `intake` does, in the worker. What this file proves is that the bytes a client
@@ -55,19 +58,204 @@ function fakeQueue() {
   };
 }
 
-async function withServer(run, { queue = fakeQueue() } = {}) {
+const PLANS = Object.freeze({
+  free: { id: 'free', label: 'Free', monthlyUSD: 0, annualUSD: 0, creditsPerPeriod: 51 },
+  shelf: { id: 'shelf', label: 'Shelf', monthlyUSD: 10, annualUSD: 100, creditsPerPeriod: 153 },
+  archive: { id: 'archive', label: 'Archive', monthlyUSD: 12, annualUSD: 120, creditsPerPeriod: 204 },
+});
+
+/**
+ * `CREDIT_COSTS` as `scripts/auth/credits.mjs` exports it: every row the config
+ * knows about, INCLUDING the deferred one, each carrying its own `available`.
+ * The deferred row is the point -- the UI has to know 1080p exists in order to
+ * render it disabled, and the page must be built from this rather than from a
+ * list written into the web layer. The figures are the live ones: 51 CR at
+ * 480p, 152 at 720p, 341 at the deferred 1080p.
+ */
+const CREDIT_COSTS = Object.freeze({
+  '480p': { resolution: '480p', width: 854, height: 480, available: true, creditsPerReference: 51 },
+  '720p': { resolution: '720p', width: 1280, height: 720, available: true, creditsPerReference: 152 },
+  '1080p': { resolution: '1080p', width: 1920, height: 1080, available: false, creditsPerReference: 341 },
+});
+
+const TIERS = Object.freeze({ standard: { multiplier: 1 } });
+
+/**
+ * `scripts/auth/` as documented in docs/interfaces-app.md A, in memory.
+ *
+ * Only the surface the web layer is specified to call. `credits` is an opening
+ * balance this fake adds so a test can put an account in front of a balance it
+ * cannot exhaust by accident.
+ */
+function fakeAuth() {
+  const accounts = new Map();
+  const byEmail = new Map();
+  const sessions = new Map();
+  const SECRET = 'a-secret-that-is-not-a-real-secret';
+  let n = 0;
+
+  const sign = (value, secret) => `${value}.${crypto.createHmac('sha256', secret).update(value).digest('hex').slice(0, 16)}`;
+
+  return {
+    PLANS,
+    CREDIT_COSTS,
+    accounts,
+    sessions,
+
+    createAccount({ email, password, plan = 'free', credits = null }) {
+      const key = String(email).toLowerCase();
+      if (byEmail.has(key)) {
+        const err = new Error('email already registered');
+        err.code = 'EMAIL_TAKEN';
+        err.userMessage = 'That email already has an account.';
+        throw err;
+      }
+      n += 1;
+      const account = {
+        accountId: `acct-${n}`,
+        root: '/fake',
+        email,
+        plan,
+        password,
+        credits: credits ?? PLANS[plan].creditsPerPeriod,
+        ledger: [],
+      };
+      accounts.set(account.accountId, account);
+      byEmail.set(key, account.accountId);
+      return account;
+    },
+    findAccountByEmail({ email }) {
+      const id = byEmail.get(String(email ?? '').toLowerCase());
+      return id ? accounts.get(id) : null;
+    },
+    verifyPassword(account, password) {
+      return typeof password === 'string' && password.length > 0 && account.password === password;
+    },
+    loadAccount({ accountId }) {
+      const account = accounts.get(accountId);
+      if (!account) throw new Error(`no account ${accountId}`);
+      return account;
+    },
+    saveAccount() {},
+    setPlan(account, planId) { account.plan = planId; },
+
+    createSession({ accountId }) {
+      n += 1;
+      const sessionId = `sess-${n}`;
+      sessions.set(sessionId, { sessionId, accountId });
+      return { sessionId, expiresAt: new Date(Date.now() + 86_400_000).toISOString() };
+    },
+    readSession({ sessionId }) { return sessions.get(sessionId) ?? null; },
+    destroySession({ sessionId }) { sessions.delete(sessionId); },
+    signCookie: sign,
+    verifyCookie(signed, secret) {
+      const cut = String(signed ?? '').lastIndexOf('.');
+      if (cut < 1) return null;
+      const value = signed.slice(0, cut);
+      return sign(value, secret) === signed ? value : null;
+    },
+    sessionSecret() { return SECRET; },
+
+    // THROWS ON A DEFERRED RESOLUTION, exactly as the real module does, so that
+    // nothing can bill for one size and render another. That is why the quality
+    // row is built from CREDIT_COSTS and this is called only for the one the
+    // person actually picked.
+    creditCost({ resolution = '480p', seconds = 15, tier = 'standard' } = {}) {
+      const row = CREDIT_COSTS[resolution];
+      if (!row) {
+        const err = new Error(`unknown resolution ${resolution}`);
+        err.code = 'UNKNOWN_RESOLUTION';
+        err.userMessage = 'That output size is not available.';
+        throw err;
+      }
+      if (row.available === false) {
+        const err = new Error(`${resolution} is deferred`);
+        err.code = 'RESOLUTION_UNAVAILABLE';
+        err.userMessage = 'That output size is not available yet.';
+        throw err;
+      }
+      const multiplier = TIERS[tier]?.multiplier;
+      if (multiplier === undefined) {
+        const err = new Error(`unknown tier ${tier}`);
+        err.code = 'UNKNOWN_TIER';
+        throw err;
+      }
+      return Math.ceil((row.creditsPerReference * (seconds / 15)) * multiplier);
+    },
+    /** One error, one sentence, one duration for both failures. */
+    authenticate({ email, password }) {
+      const id = byEmail.get(String(email ?? '').toLowerCase());
+      const account = id ? accounts.get(id) : null;
+      if (!account || account.password !== password || !password) {
+        const err = new Error('email not found or password did not verify');
+        err.code = 'BAD_CREDENTIALS';
+        err.userMessage = 'That email and password do not match an account.';
+        throw err;
+      }
+      return account;
+    },
+    balanceOf(account) {
+      return { credits: account.credits, planId: account.plan, grantedAt: null, expiresAt: null };
+    },
+    debitCredits(account, { jobId, credits }) {
+      // Idempotent by jobId, the way the real module is: a re-enqueue of a job
+      // that has already been charged is the same render, not a new one.
+      if (account.ledger.some((e) => e.jobId === jobId && e.delta < 0)) return;
+      if (account.credits < credits) {
+        const err = new Error('insufficient credits');
+        err.code = 'INSUFFICIENT_CREDITS';
+        err.userMessage = 'Not enough credits for that tape.';
+        throw err;
+      }
+      account.credits -= credits;
+      account.ledger.push({ jobId, delta: -credits, at: new Date().toISOString() });
+    },
+    refundCredits(account, { jobId }) {
+      const spent = account.ledger.find((e) => e.jobId === jobId && e.delta < 0);
+      if (!spent || account.ledger.some((e) => e.jobId === jobId && e.delta > 0)) return;
+      account.credits += -spent.delta;
+      account.ledger.push({ jobId, delta: -spent.delta, at: new Date().toISOString() });
+    },
+  };
+}
+
+/** The `Cookie:` header for a signed-in session, obtained the way a browser
+ *  obtains it: by posting the sign-in form and keeping what came back. */
+async function signIn(base, { email, password }) {
+  const res = await fetch(`${base}/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ email, password }),
+    redirect: 'manual',
+  });
+  assert.equal(res.status, 200, `sign-in for ${email} failed`);
+  const set = res.headers.getSetCookie();
+  assert.ok(set.length, 'no session cookie was set');
+  return set.map((c) => c.split(';')[0]).join('; ');
+}
+
+async function withServer(run, { queue = fakeQueue(), credits = 5_000 } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const auth = fakeAuth();
+  auth.createAccount({ email: 'a@example.com', password: 'correct horse battery', plan: 'archive', credits });
+  auth.createAccount({ email: 'b@example.com', password: 'a different password', plan: 'archive', credits });
+
   const app = createServer({
     root,
     cfg: CFG,
     queue,
     port: 0,
+    auth,
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
   });
   const port = await app.listen();
   const base = `http://127.0.0.1:${port}`;
   try {
-    await run({ base, root, queue, app });
+    const cookieA = await signIn(base, { email: 'a@example.com', password: 'correct horse battery' });
+    const cookieB = await signIn(base, { email: 'b@example.com', password: 'a different password' });
+    const accountA = auth.findAccountByEmail({ email: 'a@example.com' });
+    const accountB = auth.findAccountByEmail({ email: 'b@example.com' });
+    await run({ base, root, queue, app, auth, cookieA, cookieB, accountA, accountB });
   } finally {
     await app.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -110,10 +298,14 @@ function jobDirs(root) {
   try { return fs.readdirSync(path.join(root, 'out', 'jobs')); } catch { return []; }
 }
 
-function post(base, pathname, body, headers = {}, init = {}) {
+function get(base, pathname, cookie, headers = {}, init = {}) {
+  return fetch(`${base}${pathname}`, { headers: { cookie, ...headers }, ...init });
+}
+
+function post(base, pathname, body, cookie, headers = {}, init = {}) {
   return fetch(`${base}${pathname}`, {
     method: 'POST',
-    headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, ...headers },
+    headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie, ...headers },
     body,
     ...init,
   });
@@ -128,8 +320,8 @@ const goodParts = (extra = []) => ([
 ]);
 
 /** Build a job straight through the model, to put the server in front of a state
- *  a worker would have produced. */
-function seedJob(root, { status = 'queued', place = 'a beach', outfit = 'a t-shirt', result = null } = {}) {
+ *  a worker would have produced, and hand it to an account. */
+function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a t-shirt', result = null, owner = null } = {}) {
   const job = createJob({
     root,
     input: {
@@ -148,16 +340,17 @@ function seedJob(root, { status = 'queued', place = 'a beach', outfit = 'a t-shi
     else if (status !== 'running') setJobStatus(job, status);
   }
   saveJob(job);
+  if (owner) app.sessions.claimJob({ accountId: owner.accountId, jobId: job.jobId });
   return job;
 }
 
 // ---------------------------------------------------------------------------
-// the upload page
+// the home page -- the redesign
 // ---------------------------------------------------------------------------
 
-test('GET / offers all fourteen presets as recommendations, not a menu', async () => {
-  await withServer(async ({ base }) => {
-    const res = await fetch(`${base}/`);
+test('GET / renders the fourteen presets as cards, from the preset files', async () => {
+  await withServer(async ({ base, cookieA, app }) => {
+    const res = await get(base, '/', cookieA);
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /text\/html/);
     const html = await res.text();
@@ -172,14 +365,178 @@ test('GET / offers all fourteen presets as recommendations, not a menu', async (
       assert.ok(html.includes(label), `${label} is missing from the page`);
     }
 
+    // Rendered FROM the catalog, not from a second copy of the menu: every id
+    // the server loaded has a radio, and the count matches.
+    assert.equal(app.cards.places.length, 8);
+    assert.equal(app.cards.outfits.length, 6);
+    for (const p of app.cards.places) {
+      assert.ok(html.includes(`id="pl-${p.id}"`), `no card for place ${p.id}`);
+    }
+    for (const o of app.cards.outfits) {
+      assert.ok(html.includes(`id="of-${o.id}"`), `no card for outfit ${o.id}`);
+    }
+
     assert.ok(html.includes('enctype="multipart/form-data"'));
     assert.ok(html.includes('name="place"') && html.includes('name="outfit"'));
     assert.ok(html.includes('name="placePhoto"'), 'the optional place photo is offered');
     assert.ok(html.includes('name="consent"'));
-    assert.ok(!/<select[^>]*name="place"/.test(html),
-      'place must be free text -- a dropdown says the menu is a gate');
+    assert.ok(!/<select[^>]*name="place"/.test(html), 'place is a card rail, never a dropdown');
   });
 });
+
+test('the step flow is three numbered steps, one decision each', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    assert.ok(html.includes('STEP 01'), 'STEP 01 eyebrow');
+    assert.ok(html.includes('STEP 02'));
+    assert.ok(html.includes('STEP 03'));
+    assert.ok(html.includes('Your photo'));
+    assert.ok(html.includes('The look'));
+    assert.ok(html.includes('The place'));
+    assert.ok(html.includes('+ Add photo'));
+    assert.ok(html.includes('Uploaded once, kept in your library'));
+    assert.ok(html.includes('Use my own place'), 'the last card in the rail is the escape hatch');
+  });
+});
+
+/**
+ * THE PILL ROW IS FACTS, NOT CHOICES. Decided with Paul on 2026-08-20 and
+ * written into docs/interfaces-app.md: a camcorder tape is 4:3, and the
+ * 375-frame contract is asserted by roughly two hundred tests. If a future edit
+ * puts the toggles back, this is the test that says no.
+ */
+test('the FRAME row is stated facts and there is nothing to change', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    for (const fact of ['4:3', 'PAL', '25 fps', '15.000s', '15 SEC']) {
+      assert.ok(html.includes(fact), `${fact} is not stated`);
+    }
+    assert.ok(html.includes('4:3 is the true camcorder frame.'));
+    assert.ok(!html.includes('16:9'), '16:9 is not offered');
+    assert.ok(!html.includes('9:16'), '9:16 is not offered');
+    // The pills are spans, not controls.
+    assert.ok(/<span class="pill">4:3<\/span>/.test(html), 'the frame pill must not be a button or an input');
+    assert.ok(!/name="aspect"|name="fps"/.test(html), 'no aspect or fps field exists anywhere');
+  });
+});
+
+/**
+ * The QUALITY row is the one thing in this panel that is a real choice, and it
+ * is built out of `CREDIT_COSTS` -- including the row that is switched off, so
+ * that turning 1080p on is a config field and not an edit here.
+ */
+test('the QUALITY row is a real choice, rendered from the credit config', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+
+    assert.ok(html.includes('id="q-480p"'), '480p has a radio');
+    assert.ok(html.includes('id="q-720p"'), '720p has a radio');
+    assert.ok(html.includes('name="resolution"'), 'the choice posts with the job');
+
+    // 720p is the native fit -- the first size that covers the tape's raster --
+    // so it is what starts selected.
+    assert.ok(/id="q-720p"[^>]*checked/.test(html), '720p is the default');
+    assert.ok(!/id="q-480p"[^>]*checked/.test(html), 'only one option starts checked');
+    assert.ok(/qualitycard--q-720p[\s\S]{0,400}Recommended/.test(html), '720p is the recommended one');
+
+    // The deferred one renders, and has no control behind it at all.
+    assert.ok(html.includes('1080p'), 'the deferred option is still shown');
+    assert.ok(html.includes('Coming soon'));
+    assert.ok(!html.includes('id="q-1080p"'), 'a deferred option must have no radio to post');
+    assert.ok(!/value="1080p"/.test(html), 'and nothing that names it as a value');
+
+    // The live figures.
+    assert.ok(html.includes('~51 CR'), '480p costs 51 CR');
+    assert.ok(html.includes('~152 CR'), '720p costs 152 CR');
+    assert.ok(html.includes('Estimated cost'));
+    assert.ok(html.includes('Credits'));
+  });
+});
+
+/**
+ * WE MEASURED THIS. After the tape pass a 720p-sourced and a 1080p-sourced
+ * delivery are indistinguishable (SSIM 0.958), because grain is applied at
+ * 720x576 before the upscale and everything above the raster is discarded. So
+ * the copy must not sell a difference we know the size of.
+ */
+test('the quality copy does not sell an upgrade we measured and know is invisible', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    for (const oversell of [/\bHD\b/, /high definition/i, /better quality/i, /higher quality/i,
+      /lower quality/i, /premium/i, /crisper/i, /sharper/i]) {
+      assert.ok(!oversell.test(html), `the quality row oversells: ${oversell}`);
+    }
+    // And it says the true thing instead.
+    assert.ok(html.includes('The native fit'), '720p is described as the native fit');
+    assert.ok(html.includes('Slightly softer'), '480p says plainly what it costs you');
+    assert.ok(html.includes('1080'), 'the delivered file is 1080x1920 either way, and it says so');
+  });
+});
+
+test('the Record button shows the real balance and a plain reason', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    assert.ok(html.includes('5000 CR'), 'the real balance, not a placeholder');
+    assert.ok(html.includes('Record the tape'));
+    assert.ok(html.includes('Upload a photo first'), 'the reason is rendered server-side');
+    assert.ok(!html.includes('Not enough credits'), 'this account can afford a tape');
+  }, { credits: 5000 });
+});
+
+test('with no credits the button is disabled server-side and says why', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    assert.ok(/<button[^>]*class="record"[^>]*disabled/.test(html), 'the button is genuinely disabled');
+    assert.ok(html.includes('Not enough credits'));
+    assert.ok(html.includes('~51 CR'), 'and it names the price of the cheapest tape');
+    assert.ok(html.includes('/pricing'), 'and there is a way to do something about it');
+  }, { credits: 0 });
+});
+
+/**
+ * A balance that covers 480p but not 720p is the interesting case: the button
+ * stays live, and the reason that appears is the one for whichever option is
+ * selected -- switched by the same CSS rule that styles the card, so it is right
+ * with scripting off.
+ */
+test('a balance between the two prices warns about the dear one only', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    assert.ok(!/<button[^>]*class="record"[^>]*disabled/.test(html),
+      '480p is still affordable, so the button must not be dead');
+    assert.ok(html.includes('why--q-720p'), 'the 720p warning is rendered');
+    assert.ok(!html.includes('why--q-480p'), 'and the 480p one is not, because it is affordable');
+    assert.ok(html.includes('a 720p tape costs ~152 CR and you have 100 CR'));
+  }, { credits: 100 });
+});
+
+test('the shelf is empty until there is something on it, and then it is not', async () => {
+  await withServer(async ({ base, cookieA, app, root, accountA }) => {
+    const empty = await (await get(base, '/', cookieA)).text();
+    assert.ok(empty.includes('Every recording stays on the shelf.'));
+    assert.ok(empty.includes('The shelf is empty'));
+    assert.ok(empty.includes('your first tape lands here'));
+
+    const job = seedJob(app, root, { status: 'done', place: 'a beach', owner: accountA });
+    const filled = await (await get(base, '/', cookieA)).text();
+    assert.ok(!filled.includes('The shelf is empty'), 'a tape is on the shelf now');
+    assert.ok(filled.includes(`/j/${job.jobId}/result`), 'and it links to the finished tape');
+  });
+});
+
+test('the wordmark is the OSD face with the recording dot, and not an illustration', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    assert.ok(html.includes('class="wordmark"'));
+    assert.ok(html.includes('class="rec"'), 'the blinking dot');
+    assert.ok(html.includes('TIMESTAMP'));
+    assert.ok(!html.includes('<svg'), 'no icon pack, no drawn logo');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// the stylesheet and the place imagery
+// ---------------------------------------------------------------------------
 
 test('GET /styles.css is served, cached and revalidatable', async () => {
   await withServer(async ({ base }) => {
@@ -193,12 +550,79 @@ test('GET /styles.css is served, cached and revalidatable', async () => {
   });
 });
 
+/**
+ * The place photographs do not exist and must not block the build. The card's
+ * `background-image` lists the photograph first and a warm gradient derived from
+ * the place id second, so a missing file is a layer the browser does not paint
+ * rather than a broken image icon -- and the page is finished on a fresh clone.
+ */
+test('every place has an image URL and a gradient underneath it in one declaration', async () => {
+  await withServer(async ({ base, app }) => {
+    const css = await (await fetch(`${base}/styles.css`)).text();
+    for (const p of app.cards.places) {
+      const rule = new RegExp(`\\.thumb--pl-${p.id}\\{background-image:url\\('/places/${p.id}\\.jpg'\\), linear-gradient\\(`);
+      assert.ok(rule.test(css), `no image+gradient rule for ${p.id}`);
+      assert.ok(css.includes(`.bg--pl-${p.id}{background-image:`), `no background layer for ${p.id}`);
+      assert.ok(css.includes(`#pl-${p.id}:checked~.bgs .bg--pl-${p.id}{opacity:1;}`),
+        `${p.id} does not cross-fade the background when selected`);
+    }
+    // The quality row switches its own cost line, with no script involved.
+    assert.ok(css.includes('#q-720p:checked~.wrap .cost--q-720p{display:inline;}'),
+      'the estimated cost must follow the selection without JavaScript');
+    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p{border-color:var(--accent);'));
+    assert.ok(!css.includes('#q-1080p:checked'), 'a deferred resolution gets no selection rule');
+
+    // The cross-fade is a CSS transition, not a script -- which is why it works
+    // with scripting off and why one media query is enough to switch it off.
+    assert.ok(/\.bg \{[^}]*transition: opacity/.test(css), 'the cross-fade is not a transition');
+    assert.ok(/\.bg \{[^}]*animation: drift/.test(css), 'the background drift');
+
+    const reduced = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css);
+    assert.ok(reduced, 'there is no prefers-reduced-motion block');
+    assert.match(reduced[1], /\.bg \{[^}]*animation: none/, 'reduced motion must stop the drift');
+    assert.match(reduced[1], /\.bg \{[^}]*transition: none/, 'reduced motion must stop the cross-fade');
+    assert.match(reduced[1], /\.rec \{[^}]*animation: none/, 'reduced motion must stop the blinking dot');
+  });
+});
+
+test('a missing place photograph is a 404 and never a path the client chose', async () => {
+  await withServer(async ({ base }) => {
+    // In the catalog, but no file on disk yet: the designed state.
+    assert.equal((await fetch(`${base}/places/schrebergarten-august.jpg`)).status, 404);
+    // Not in the catalog: refused before the filesystem is consulted at all.
+    for (const target of ['/places/nope.jpg', '/places/..%2f..%2fpackage.json', '/places/manifest.json']) {
+      const res = await fetch(`${base}${target}`);
+      assert.ok(res.status === 400 || res.status === 404, `${target} -> ${res.status}`);
+      assert.ok(!(await res.text()).includes('"name": "timestamp"'), 'a repo file was served');
+    }
+  });
+});
+
+test('a real place photograph is served when it is there', async () => {
+  const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
+  fs.mkdirSync(`${assets}/places`, { recursive: true });
+  fs.writeFileSync(`${assets}/places/ostsee-strand.jpg`, Buffer.from('not really a jpeg'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), assetsRoot: assets });
+  const port = await app.listen();
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/places/ostsee-strand.jpg`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'image/jpeg');
+    assert.equal(await res.text(), 'not really a jpeg');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(assets, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // POST /api/jobs
 // ---------------------------------------------------------------------------
 
 test('POST /api/jobs is 201 immediately, and the bytes land intact', async () => {
-  await withServer(async ({ base, root, queue }) => {
+  await withServer(async ({ base, root, queue, cookieA }) => {
     const photo = fakePhoto(120_000, 'landing');
     const sent = sha256(photo);
 
@@ -208,7 +632,7 @@ test('POST /api/jobs is 201 immediately, and the bytes land intact', async () =>
       { name: 'place', body: 'my grandmother s kitchen' },
       { name: 'outfit', body: 'a green anorak' },
       { name: 'consent', body: 'yes' },
-    ]));
+    ]), cookieA);
     const elapsed = Date.now() - started;
 
     assert.equal(res.status, 201);
@@ -237,39 +661,114 @@ test('POST /api/jobs is 201 immediately, and the bytes land intact', async () =>
   });
 });
 
-test('free text is recorded as text and a recommendation as the preset it names', async () => {
-  await withServer(async ({ base, root }) => {
-    const free = await post(base, '/api/jobs', multipart(goodParts()));
+test('a card posts its preset id and the describe-it box posts free text', async () => {
+  await withServer(async ({ base, root, cookieA }) => {
+    const free = await post(base, '/api/jobs', multipart([
+      { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
+      { name: 'place', body: '' },
+      { name: 'placeText', body: 'my grandmother s kitchen' },
+      { name: 'outfitText', body: 'a green anorak' },
+      { name: 'consent', body: 'yes' },
+    ]), cookieA);
+    assert.equal(free.status, 201);
     const freeJob = loadJob({ root, jobId: (await free.json()).jobId });
     assert.equal(freeJob.input.place.kind, 'text');
     assert.equal(freeJob.input.place.value, 'my grandmother s kitchen');
     assert.equal(freeJob.input.outfit.kind, 'text');
 
-    const chipped = await post(base, '/api/jobs', multipart([
+    // A card posts the preset id.
+    const carded = await post(base, '/api/jobs', multipart([
+      { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
+      { name: 'place', body: 'schrebergarten-august' },
+      { name: 'outfit', body: 'trainingsjacke' },
+      { name: 'consent', body: 'on' },
+    ]), cookieA);
+    const cardJob = loadJob({ root, jobId: (await carded.json()).jobId });
+    assert.equal(cardJob.input.place.kind, 'preset');
+    assert.equal(cardJob.input.place.value, 'schrebergarten-august');
+    assert.equal(cardJob.input.outfit.kind, 'preset');
+    assert.equal(cardJob.input.outfit.value, 'trainingsjacke');
+
+    // And the label still resolves, so an older client does not break.
+    const labelled = await post(base, '/api/jobs', multipart([
       { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
       { name: 'place', body: 'Allotment garden, late August' },
       { name: 'outfit', body: 'Tracksuit jacket' },
-      { name: 'consent', body: 'on' },
-    ]));
-    const chipJob = loadJob({ root, jobId: (await chipped.json()).jobId });
-    assert.equal(chipJob.input.place.kind, 'preset');
-    assert.equal(chipJob.input.place.value, 'schrebergarten-august');
-    assert.equal(chipJob.input.outfit.kind, 'preset');
-    assert.equal(chipJob.input.outfit.value, 'trainingsjacke');
+      { name: 'consent', body: 'yes' },
+    ]), cookieA);
+    const labelJob = loadJob({ root, jobId: (await labelled.json()).jobId });
+    assert.equal(labelJob.input.place.value, 'schrebergarten-august');
+  });
+});
+
+test('the chosen resolution posts with the job, is priced, and is charged', async () => {
+  await withServer(async ({ base, cookieA, accountA, app, auth }) => {
+    const before = auth.balanceOf(accountA).credits;
+    const res = await post(base, '/api/jobs', multipart([
+      ...goodParts(),
+      { name: 'resolution', body: '720p' },
+    ]), cookieA);
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.resolution, '720p');
+    assert.equal(body.credits, 152);
+    assert.equal(auth.balanceOf(accountA).credits, before - 152, 'the debit is the quoted price');
+
+    // The web layer records what was chosen and what it cost, because the job
+    // manifest cannot carry it -- `normalizeInput` drops fields it does not know.
+    const claim = app.sessions.claimOf({ accountId: accountA.accountId, jobId: body.jobId });
+    assert.equal(claim.resolution, '720p');
+    assert.equal(claim.credits, 152);
+  });
+});
+
+test('no resolution posted means the default one, and a deferred one is refused', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const silent = await post(base, '/api/jobs', multipart(goodParts()), cookieA);
+    assert.equal(silent.status, 201);
+    assert.equal((await silent.json()).resolution, '720p');
+
+    for (const resolution of ['1080p', '4k', '', '../../etc']) {
+      const parts = [...goodParts(), { name: 'resolution', body: resolution }];
+      const res = await post(base, '/api/jobs', multipart(parts), cookieA);
+      if (resolution === '') {
+        // An empty field is "did not choose", which is the default, not an error.
+        assert.equal(res.status, 201);
+        continue;
+      }
+      assert.equal(res.status, 400, `${resolution} was accepted`);
+      assert.equal((await res.json()).error.status, 400);
+    }
+  });
+});
+
+test('a card beats the describe-it box when somebody fills in both', async () => {
+  await withServer(async ({ base, root, cookieA }) => {
+    const res = await post(base, '/api/jobs', multipart([
+      { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
+      { name: 'place', body: 'ostsee-strand' },
+      { name: 'placeText', body: 'somewhere else entirely' },
+      { name: 'outfit', body: 'fleecepulli' },
+      { name: 'consent', body: 'yes' },
+    ]), cookieA);
+    const job = loadJob({ root, jobId: (await res.json()).jobId });
+    assert.equal(job.input.place.value, 'ostsee-strand', 'the card the person clicked wins');
   });
 });
 
 test('a photo of the place is a second reference, and both files land', async () => {
-  await withServer(async ({ base, root }) => {
+  await withServer(async ({ base, root, cookieA }) => {
     const face = fakePhoto(30_000, 'face');
     const place = fakePhoto(50_000, 'place');
     const res = await post(base, '/api/jobs', multipart([
       { name: 'photo', filename: 'me.png', type: 'image/png', body: face },
       { name: 'placePhoto', filename: 'garden.png', type: 'image/png', body: place },
-      { name: 'place', body: 'the garden behind the house' },
+      // "Use my own place" posts an empty `place`; the caption is optional.
+      { name: 'place', body: '' },
+      { name: 'placeText', body: 'the garden behind the house' },
       { name: 'outfit', body: 'a fleece' },
       { name: 'consent', body: 'yes' },
-    ]));
+    ]), cookieA);
     assert.equal(res.status, 201);
     const { jobId } = await res.json();
     const job = loadJob({ root, jobId });
@@ -283,9 +782,25 @@ test('a photo of the place is a second reference, and both files land', async ()
   });
 });
 
+test('a place photo with no caption at all is still accepted', async () => {
+  await withServer(async ({ base, root, cookieA }) => {
+    const res = await post(base, '/api/jobs', multipart([
+      { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
+      { name: 'placePhoto', filename: 'garden.png', type: 'image/png', body: fakePhoto(20_000, 'g') },
+      { name: 'place', body: '' },
+      { name: 'outfit', body: 'winterjacke' },
+      { name: 'consent', body: 'yes' },
+    ]), cookieA);
+    assert.equal(res.status, 201);
+    const job = loadJob({ root, jobId: (await res.json()).jobId });
+    assert.equal(job.input.place.kind, 'photo');
+    assert.equal(job.input.place.value, null);
+  });
+});
+
 test('every manifest path is relative -- saveJob throws PATH_NOT_RELATIVE otherwise', async () => {
-  await withServer(async ({ base, root }) => {
-    const { jobId } = await (await post(base, '/api/jobs', multipart(goodParts()))).json();
+  await withServer(async ({ base, root, cookieA }) => {
+    const { jobId } = await (await post(base, '/api/jobs', multipart(goodParts()), cookieA)).json();
     const raw = JSON.parse(fs.readFileSync(jobPaths(root, jobId).manifest, 'utf8'));
     for (const p of [raw.input.photo.path, raw.input.place.photoPath].filter(Boolean)) {
       assert.ok(!path.isAbsolute(p) && !p.includes('\\') && !/^[A-Za-z]:/.test(p), `${p} is not relative`);
@@ -294,11 +809,11 @@ test('every manifest path is relative -- saveJob throws PATH_NOT_RELATIVE otherw
 });
 
 test('consent is a gate, and a refused upload leaves nothing on disk', async () => {
-  await withServer(async ({ base, root, queue }) => {
+  await withServer(async ({ base, root, queue, cookieA }) => {
     for (const consent of [undefined, 'false', '', 'no', 'off']) {
       const parts = goodParts().filter((p) => p.name !== 'consent');
       if (consent !== undefined) parts.push({ name: 'consent', body: consent });
-      const res = await post(base, '/api/jobs', multipart(parts));
+      const res = await post(base, '/api/jobs', multipart(parts), cookieA);
       assert.equal(res.status, 400, `consent=${JSON.stringify(consent)} was accepted`);
       assert.equal((await res.json()).error.status, 400);
     }
@@ -309,7 +824,7 @@ test('consent is a gate, and a refused upload leaves nothing on disk', async () 
 });
 
 test('a missing photo, missing text and over-long text are each a 400', async () => {
-  await withServer(async ({ base, root }) => {
+  await withServer(async ({ base, root, cookieA }) => {
     const cases = [
       goodParts().filter((p) => p.name !== 'photo'),
       goodParts().filter((p) => p.name !== 'outfit'),
@@ -317,25 +832,25 @@ test('a missing photo, missing text and over-long text are each a 400', async ()
       goodParts().map((p) => (p.name === 'photo' ? { ...p, body: Buffer.alloc(0) } : p)),
     ];
     for (const parts of cases) {
-      assert.equal((await post(base, '/api/jobs', multipart(parts))).status, 400);
+      assert.equal((await post(base, '/api/jobs', multipart(parts), cookieA)).status, 400);
     }
     assert.deepEqual(jobDirs(root), []);
   });
 });
 
 test('an upload over the cap is 413 and a non-multipart post is 415', async () => {
-  await withServer(async ({ base, root }) => {
+  await withServer(async ({ base, root, cookieA }) => {
     const huge = await post(base, '/api/jobs', multipart([
       { name: 'photo', filename: 'big.png', type: 'image/png', body: fakePhoto(13_000_000, 'big') },
       { name: 'place', body: 'a beach' },
       { name: 'outfit', body: 'a shirt' },
       { name: 'consent', body: 'yes' },
-    ]));
+    ]), cookieA);
     assert.equal(huge.status, 413);
 
     const wrongType = await fetch(`${base}/api/jobs`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', cookie: cookieA },
       body: JSON.stringify({ place: 'a beach' }),
     });
     assert.equal(wrongType.status, 415);
@@ -345,15 +860,15 @@ test('an upload over the cap is 413 and a non-multipart post is 415', async () =
 });
 
 test('a browser form post is redirected; an API client gets the 201', async () => {
-  await withServer(async ({ base }) => {
+  await withServer(async ({ base, cookieA }) => {
     // `redirect: 'manual'` because the point under test IS the redirect; fetch
     // would otherwise follow it and report the 200 from the status page.
-    const res = await post(base, '/api/jobs', multipart(goodParts()), {
+    const res = await post(base, '/api/jobs', multipart(goodParts()), cookieA, {
       accept: 'text/html,application/xhtml+xml',
     }, { redirect: 'manual' });
     assert.equal(res.status, 303);
     assert.match(res.headers.get('location'), /^\/j\/\d{8}-\d{6}-[0-9a-f]{6}$/);
-  }, {});
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -361,9 +876,9 @@ test('a browser form post is redirected; an API client gets the 201', async () =
 // ---------------------------------------------------------------------------
 
 test('GET /api/jobs/:id has the documented shape', async () => {
-  await withServer(async ({ base, root }) => {
-    const job = seedJob(root);
-    const res = await fetch(`${base}/api/jobs/${job.jobId}`);
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { owner: accountA });
+    const res = await get(base, `/api/jobs/${job.jobId}`, cookieA);
     assert.equal(res.status, 200);
     const view = await res.json();
 
@@ -381,36 +896,36 @@ test('GET /api/jobs/:id has the documented shape', async () => {
 });
 
 test('pct counts finished steps and never runs ahead of them', async () => {
-  await withServer(async ({ base, root }) => {
-    const job = seedJob(root);
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { owner: accountA });
     job.steps[0].status = 'done';
     job.steps[1].status = 'skipped';
     saveJob(job);
-    const view = await (await fetch(`${base}/api/jobs/${job.jobId}`)).json();
+    const view = await (await get(base, `/api/jobs/${job.jobId}`, cookieA)).json();
     assert.equal(view.pct, Math.round((2 / 11) * 100));
     assert.equal(view.step, 'expand');
   });
 });
 
 test('a bad id is 400 before the filesystem, and an unknown id is 404', async () => {
-  await withServer(async ({ base }) => {
+  await withServer(async ({ base, cookieA }) => {
     for (const id of ['not-an-id', '2026-08-20', '20260820-144501-A3F19C', 'x'.repeat(80)]) {
-      const res = await fetch(`${base}/api/jobs/${encodeURIComponent(id)}`);
+      const res = await get(base, `/api/jobs/${encodeURIComponent(id)}`, cookieA);
       assert.equal(res.status, 400, `${id} was not refused`);
     }
     // Right shape, no such job.
-    assert.equal((await fetch(`${base}/api/jobs/20260820-144501-a3f19c`)).status, 404);
+    assert.equal((await get(base, '/api/jobs/20260820-144501-a3f19c', cookieA)).status, 404);
   });
 });
 
 test('traversal in the path never reaches the filesystem', async () => {
-  await withServer(async ({ base }) => {
+  await withServer(async ({ base, cookieA }) => {
     for (const target of [
       '/api/jobs/%2e%2e%2f%2e%2e%2fconfig%2frender.json',
       '/api/jobs/..%2f..%2fpackage.json/video',
       '/j/%2e%2e%2f%2e%2e',
     ]) {
-      const res = await fetch(`${base}${target}`);
+      const res = await get(base, target, cookieA);
       assert.ok(res.status === 400 || res.status === 404, `${target} -> ${res.status}`);
       const text = await res.text();
       assert.ok(!text.includes('durationSeconds'), 'a repo file was served');
@@ -424,28 +939,43 @@ test('traversal in the path never reaches the filesystem', async () => {
 // ---------------------------------------------------------------------------
 
 test('free text is escaped everywhere it is echoed back', async () => {
-  await withServer(async ({ base, root }) => {
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
     const nasty = '<img src=x onerror=alert(1)>"\'&';
-    const job = seedJob(root, { place: nasty, outfit: `</script><script>alert(2)</script>` });
+    const job = seedJob(app, root, {
+      place: nasty, outfit: `</script><script>alert(2)</script>`, owner: accountA,
+    });
 
-    const page = await (await fetch(`${base}/j/${job.jobId}`)).text();
+    const page = await (await get(base, `/j/${job.jobId}`, cookieA)).text();
     assert.ok(!page.includes('<img src=x'), 'the place field rendered as markup');
     assert.ok(!page.includes('<script>alert(2)'), 'the outfit field closed the script element');
     assert.ok(page.includes('&lt;img src=x onerror=alert(1)&gt;'), 'and it is visible as text');
 
+    // The shelf echoes the same value in a different template.
+    const home = await (await get(base, '/', cookieA)).text();
+    assert.ok(!home.includes('<img src=x onerror'), 'the shelf rendered the place as markup');
+    assert.ok(home.includes('&lt;img src=x onerror=alert(1)&gt;'), 'and shows it as text');
+
     // The JSON payload the poller reads carries it raw, which is correct -- JSON
     // is not HTML -- and the page must be the thing that escapes it.
-    const view = await (await fetch(`${base}/api/jobs/${job.jobId}`)).json();
+    const view = await (await get(base, `/api/jobs/${job.jobId}`, cookieA)).json();
     assert.equal(view.input.place, nasty);
   });
 });
 
 test('pages declare a content security policy and refuse to be sniffed', async () => {
-  await withServer(async ({ base }) => {
-    const res = await fetch(`${base}/`);
+  await withServer(async ({ base, cookieA }) => {
+    const res = await get(base, '/', cookieA);
     assert.match(res.headers.get('content-security-policy'), /default-src 'self'/);
     assert.match(res.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+    // The per-place gradients are generated into /styles.css precisely so that
+    // this can stay as it is. If somebody adds `style="..."` to a card, this
+    // fails before the CSP has to be loosened for it.
+    assert.match(res.headers.get('content-security-policy'), /style-src 'self';/);
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(res.headers.get('vary') ?? '', /Cookie/);
+
+    const html = await res.text();
+    assert.ok(!/ style="/.test(html), 'an inline style attribute would be blocked by this CSP');
   });
 });
 
@@ -465,32 +995,32 @@ function writeStills(root, jobId, numbers) {
 }
 
 test('stills are numbered 1-based, off the filename and not off the loop', async () => {
-  await withServer(async ({ base, root }) => {
-    const job = seedJob(root, { status: 'awaiting-selection' });
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'awaiting-selection', owner: accountA });
     writeStills(root, job.jobId, [1, 2, 4]);
 
-    const body = await (await fetch(`${base}/api/jobs/${job.jobId}/stills`)).json();
+    const body = await (await get(base, `/api/jobs/${job.jobId}/stills`, cookieA)).json();
     assert.deepEqual(body.stills.map((s) => s.index), [1, 2, 4],
       'indices must come off still-NN.png, not from the array position');
     assert.equal(body.stills[0].url, `/api/jobs/${job.jobId}/stills/1`);
     assert.equal(body.selected, null);
 
     // And the file behind index 4 is still-04.png, not the fourth entry.
-    const png = await (await fetch(`${base}/api/jobs/${job.jobId}/stills/4`)).text();
+    const png = await (await get(base, `/api/jobs/${job.jobId}/stills/4`, cookieA)).text();
     assert.equal(png, 'still 4');
-    assert.equal((await fetch(`${base}/api/jobs/${job.jobId}/stills/3`)).status, 404);
-    assert.equal((await fetch(`${base}/api/jobs/${job.jobId}/stills/0`)).status, 400);
+    assert.equal((await get(base, `/api/jobs/${job.jobId}/stills/3`, cookieA)).status, 404);
+    assert.equal((await get(base, `/api/jobs/${job.jobId}/stills/0`, cookieA)).status, 400);
   });
 });
 
 test('POST select records the 1-based index and re-enqueues', async () => {
-  await withServer(async ({ base, root, queue }) => {
-    const job = seedJob(root, { status: 'awaiting-selection' });
+  await withServer(async ({ base, root, queue, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'awaiting-selection', owner: accountA });
     writeStills(root, job.jobId, [1, 2, 3]);
 
     const res = await fetch(`${base}/api/jobs/${job.jobId}/select`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', cookie: cookieA },
       body: JSON.stringify({ stillIndex: 1 }),
     });
     assert.equal(res.status, 200);
@@ -504,14 +1034,14 @@ test('POST select records the 1-based index and re-enqueues', async () => {
 });
 
 test('an out-of-range still index is a 400 and never a clamp', async () => {
-  await withServer(async ({ base, root }) => {
-    const job = seedJob(root, { status: 'awaiting-selection' });
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'awaiting-selection', owner: accountA });
     writeStills(root, job.jobId, [1, 2, 3]);
 
     for (const stillIndex of [0, -1, 4, 99, 1.5, 'two', null]) {
       const res = await fetch(`${base}/api/jobs/${job.jobId}/select`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', cookie: cookieA },
         body: JSON.stringify({ stillIndex }),
       });
       assert.equal(res.status, 400, `stillIndex=${JSON.stringify(stillIndex)} was accepted`);
@@ -522,22 +1052,22 @@ test('an out-of-range still index is a 400 and never a clamp', async () => {
 });
 
 test('select is 409 unless the job is parked, and 409 while a worker holds it', async () => {
-  await withServer(async ({ base, root, queue }) => {
-    const running = seedJob(root, { status: 'running' });
+  await withServer(async ({ base, root, queue, app, accountA, cookieA }) => {
+    const running = seedJob(app, root, { status: 'running', owner: accountA });
     writeStills(root, running.jobId, [1]);
     const busy = await fetch(`${base}/api/jobs/${running.jobId}/select`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', cookie: cookieA },
       body: JSON.stringify({ stillIndex: 1 }),
     });
     assert.equal(busy.status, 409);
 
-    const parked = seedJob(root, { status: 'awaiting-selection' });
+    const parked = seedJob(app, root, { status: 'awaiting-selection', owner: accountA });
     writeStills(root, parked.jobId, [1]);
     queue.holdLease(parked.jobId);
     const leased = await fetch(`${base}/api/jobs/${parked.jobId}/select`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', cookie: cookieA },
       body: JSON.stringify({ stillIndex: 1 }),
     });
     assert.equal(leased.status, 409, 'the web process must not write a manifest a worker holds');
@@ -545,23 +1075,30 @@ test('select is 409 unless the job is parked, and 409 while a worker holds it', 
   });
 });
 
-test('the contact sheet posts the index off the record, as a plain form', async () => {
-  await withServer(async ({ base, root }) => {
-    const job = seedJob(root, { status: 'awaiting-selection' });
+/**
+ * THE ONE SCREEN THAT MUST WORK WITHOUT JAVASCRIPT. It carries a human decision
+ * and it gates real spend: one submit button per frame, a plain form action, and
+ * no script element on the page at all.
+ */
+test('the contact sheet is a plain form and carries no script', async () => {
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'awaiting-selection', owner: accountA });
     writeStills(root, job.jobId, [1, 2, 4]);
-    const html = await (await fetch(`${base}/j/${job.jobId}/select`)).text();
+    const html = await (await get(base, `/j/${job.jobId}/select`, cookieA)).text();
 
     assert.ok(html.includes(`action="/api/jobs/${job.jobId}/select"`));
+    assert.ok(html.includes('method="post"'));
     assert.ok(html.includes('name="stillIndex" value="1"'));
     assert.ok(html.includes('name="stillIndex" value="4"'));
     assert.ok(!html.includes('name="stillIndex" value="0"'), 'there is no frame zero');
     assert.ok(!html.includes('name="stillIndex" value="3"'), 'still-03.png does not exist');
     assert.ok(html.includes('>4</span>'), 'the number shown matches the number posted');
+    assert.ok(!html.includes('<script'), 'the contact sheet must not need scripting');
 
     // A form post gets a redirect back to the status page.
     const res = await fetch(`${base}/api/jobs/${job.jobId}/select`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: cookieA },
       body: 'stillIndex=4',
       redirect: 'manual',
     });
@@ -576,36 +1113,36 @@ test('the contact sheet posts the index off the record, as a plain form', async 
 // ---------------------------------------------------------------------------
 
 test('the status page sends you where the job actually is', async () => {
-  await withServer(async ({ base, root }) => {
-    const queued = seedJob(root);
-    const page = await fetch(`${base}/j/${queued.jobId}`, { redirect: 'manual' });
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const queued = seedJob(app, root, { owner: accountA });
+    const page = await get(base, `/j/${queued.jobId}`, cookieA, {}, { redirect: 'manual' });
     assert.equal(page.status, 200);
     const html = await page.text();
     assert.ok(html.includes('Reading your photo'), 'the current step is named');
     assert.ok(!/\b9[0-9]%/.test(html), 'no fake percentage');
 
-    const parked = seedJob(root, { status: 'awaiting-selection' });
-    const toSelect = await fetch(`${base}/j/${parked.jobId}`, { redirect: 'manual' });
+    const parked = seedJob(app, root, { status: 'awaiting-selection', owner: accountA });
+    const toSelect = await get(base, `/j/${parked.jobId}`, cookieA, {}, { redirect: 'manual' });
     assert.equal(toSelect.status, 303);
     assert.equal(toSelect.headers.get('location'), `/j/${parked.jobId}/select`);
 
-    const finished = seedJob(root, { status: 'done' });
-    const toResult = await fetch(`${base}/j/${finished.jobId}`, { redirect: 'manual' });
+    const finished = seedJob(app, root, { status: 'done', owner: accountA });
+    const toResult = await get(base, `/j/${finished.jobId}`, cookieA, {}, { redirect: 'manual' });
     assert.equal(toResult.status, 303);
     assert.equal(toResult.headers.get('location'), `/j/${finished.jobId}/result`);
 
     // And the reverse: a result page for an unfinished job goes back.
-    const back = await fetch(`${base}/j/${queued.jobId}/result`, { redirect: 'manual' });
+    const back = await get(base, `/j/${queued.jobId}/result`, cookieA, {}, { redirect: 'manual' });
     assert.equal(back.status, 303);
     assert.equal(back.headers.get('location'), `/j/${queued.jobId}`);
   });
 });
 
 test('the result page offers the video, a download and a way to start again', async () => {
-  await withServer(async ({ base, root }) => {
-    const job = seedJob(root, { status: 'done' });
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA });
     fs.writeFileSync(jobPaths(root, job.jobId).video, Buffer.alloc(2048, 7));
-    const html = await (await fetch(`${base}/j/${job.jobId}/result`)).text();
+    const html = await (await get(base, `/j/${job.jobId}/result`, cookieA)).text();
     assert.ok(html.includes('<video controls'));
     assert.ok(html.includes(`src="/api/jobs/${job.jobId}/video"`));
     assert.ok(html.includes('download='));
@@ -618,43 +1155,43 @@ test('the result page offers the video, a download and a way to start again', as
 // ---------------------------------------------------------------------------
 
 test('the video is range-request capable', async () => {
-  await withServer(async ({ base, root }) => {
-    const job = seedJob(root, { status: 'done' });
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA });
     const bytes = crypto.randomBytes(5000);
     fs.writeFileSync(jobPaths(root, job.jobId).video, bytes);
-    const url = `${base}/api/jobs/${job.jobId}/video`;
+    const url = `/api/jobs/${job.jobId}/video`;
 
-    const whole = await fetch(url);
+    const whole = await get(base, url, cookieA);
     assert.equal(whole.status, 200);
     assert.equal(whole.headers.get('accept-ranges'), 'bytes');
     assert.equal(whole.headers.get('content-type'), 'video/mp4');
     assert.equal(Buffer.from(await whole.arrayBuffer()).length, 5000);
 
-    const partial = await fetch(url, { headers: { range: 'bytes=100-199' } });
+    const partial = await get(base, url, cookieA, { range: 'bytes=100-199' });
     assert.equal(partial.status, 206);
     assert.equal(partial.headers.get('content-range'), 'bytes 100-199/5000');
     const got = Buffer.from(await partial.arrayBuffer());
     assert.equal(got.length, 100);
     assert.ok(got.equals(bytes.subarray(100, 200)), 'the wrong bytes came back');
 
-    const tail = await fetch(url, { headers: { range: 'bytes=-50' } });
+    const tail = await get(base, url, cookieA, { range: 'bytes=-50' });
     assert.equal(tail.status, 206);
     assert.ok(Buffer.from(await tail.arrayBuffer()).equals(bytes.subarray(4950)),
       'bytes=-50 is the LAST fifty bytes');
 
-    const bad = await fetch(url, { headers: { range: 'bytes=99999-' } });
+    const bad = await get(base, url, cookieA, { range: 'bytes=99999-' });
     assert.equal(bad.status, 416);
 
-    const attached = await fetch(`${url}?download=1`);
+    const attached = await get(base, `${url}?download=1`, cookieA);
     assert.match(attached.headers.get('content-disposition'), /attachment; filename="timestamp-/);
   });
 });
 
 test('asking for a video or poster that does not exist yet is 404, not 500', async () => {
-  await withServer(async ({ base, root }) => {
-    const job = seedJob(root);
-    assert.equal((await fetch(`${base}/api/jobs/${job.jobId}/video`)).status, 404);
-    assert.equal((await fetch(`${base}/api/jobs/${job.jobId}/poster`)).status, 404);
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { owner: accountA });
+    assert.equal((await get(base, `/api/jobs/${job.jobId}/video`, cookieA)).status, 404);
+    assert.equal((await get(base, `/api/jobs/${job.jobId}/poster`, cookieA)).status, 404);
   });
 });
 
@@ -663,12 +1200,12 @@ test('asking for a video or poster that does not exist yet is 404, not 500', asy
 // ---------------------------------------------------------------------------
 
 test('DELETE on an unclaimed job cancels it and deletes the photograph', async () => {
-  await withServer(async ({ base, root }) => {
-    const { jobId } = await (await post(base, '/api/jobs', multipart(goodParts()))).json();
+  await withServer(async ({ base, root, cookieA }) => {
+    const { jobId } = await (await post(base, '/api/jobs', multipart(goodParts()), cookieA)).json();
     const paths = jobPaths(root, jobId);
     assert.ok(fs.existsSync(`${paths.dir}/input/upload-photo`));
 
-    const res = await fetch(`${base}/api/jobs/${jobId}`, { method: 'DELETE' });
+    const res = await get(base, `/api/jobs/${jobId}`, cookieA, {}, { method: 'DELETE' });
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.status, 'cancelled');
@@ -681,12 +1218,12 @@ test('DELETE on an unclaimed job cancels it and deletes the photograph', async (
 });
 
 test('DELETE on a job a worker holds is 202 and does NOT touch the manifest', async () => {
-  await withServer(async ({ base, root, queue }) => {
-    const job = seedJob(root, { status: 'running' });
+  await withServer(async ({ base, root, queue, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'running', owner: accountA });
     const before = fs.readFileSync(jobPaths(root, job.jobId).manifest, 'utf8');
     queue.holdLease(job.jobId);
 
-    const res = await fetch(`${base}/api/jobs/${job.jobId}`, { method: 'DELETE' });
+    const res = await get(base, `/api/jobs/${job.jobId}`, cookieA, {}, { method: 'DELETE' });
     assert.equal(res.status, 202);
     const body = await res.json();
     assert.equal(body.cancelRequested, true);
@@ -700,10 +1237,10 @@ test('DELETE on a job a worker holds is 202 and does NOT touch the manifest', as
 });
 
 test('an expired lease is not a claim', async () => {
-  await withServer(async ({ base, root, queue }) => {
-    const job = seedJob(root, { status: 'running' });
+  await withServer(async ({ base, root, queue, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'running', owner: accountA });
     queue.holdLease(job.jobId, { expired: true });
-    const res = await fetch(`${base}/api/jobs/${job.jobId}`, { method: 'DELETE' });
+    const res = await get(base, `/api/jobs/${job.jobId}`, cookieA, {}, { method: 'DELETE' });
     assert.equal(res.status, 200);
     assert.equal(loadJob({ root, jobId: job.jobId }).status, 'cancelled');
   });
@@ -713,7 +1250,7 @@ test('an expired lease is not a claim', async () => {
 // health and the edges
 // ---------------------------------------------------------------------------
 
-test('GET /api/health reports ffmpeg, the queue and the worker', async () => {
+test('GET /api/health reports ffmpeg, the queue and the worker, without a session', async () => {
   await withServer(async ({ base }) => {
     const res = await fetch(`${base}/api/health`);
     assert.equal(res.status, 200);
@@ -732,6 +1269,7 @@ test('health says so honestly when ffmpeg is missing', async () => {
     cfg: CFG,
     queue: fakeQueue(),
     port: 0,
+    auth: fakeAuth(),
     ffprobeImpl: async () => { const e = new Error('nope'); e.code = 'ENOENT'; throw e; },
   });
   const port = await app.listen();
@@ -746,25 +1284,25 @@ test('health says so honestly when ffmpeg is missing', async () => {
 });
 
 test('the wrong method on a real path is 405 with Allow, not 404', async () => {
-  await withServer(async ({ base, root }) => {
-    const job = seedJob(root);
-    const res = await fetch(`${base}/api/jobs/${job.jobId}/video`, { method: 'POST' });
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { owner: accountA });
+    const res = await get(base, `/api/jobs/${job.jobId}/video`, cookieA, {}, { method: 'POST' });
     assert.equal(res.status, 405);
     assert.match(res.headers.get('allow'), /GET/);
 
-    const opts = await fetch(`${base}/api/jobs/${job.jobId}`, { method: 'OPTIONS' });
+    const opts = await get(base, `/api/jobs/${job.jobId}`, cookieA, {}, { method: 'OPTIONS' });
     assert.equal(opts.status, 204);
     assert.match(opts.headers.get('allow'), /DELETE/);
   });
 });
 
 test('an unknown path is an HTML 404 for a browser and JSON for a client', async () => {
-  await withServer(async ({ base }) => {
-    const api = await fetch(`${base}/api/nope`);
+  await withServer(async ({ base, cookieA }) => {
+    const api = await get(base, '/api/nope', cookieA);
     assert.equal(api.status, 404);
     assert.match(api.headers.get('content-type'), /application\/json/);
 
-    const browser = await fetch(`${base}/nope`, { headers: { accept: 'text/html' } });
+    const browser = await get(base, '/nope', cookieA, { accept: 'text/html' });
     assert.equal(browser.status, 404);
     assert.match(browser.headers.get('content-type'), /text\/html/);
     assert.ok((await browser.text()).includes('Start again'));
@@ -772,9 +1310,9 @@ test('an unknown path is an HTML 404 for a browser and JSON for a client', async
 });
 
 test('HEAD works wherever GET does and sends no body', async () => {
-  await withServer(async ({ base, root }) => {
-    const job = seedJob(root);
-    const res = await fetch(`${base}/api/jobs/${job.jobId}`, { method: 'HEAD' });
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { owner: accountA });
+    const res = await get(base, `/api/jobs/${job.jobId}`, cookieA, {}, { method: 'HEAD' });
     assert.equal(res.status, 200);
     assert.equal((await res.text()).length, 0);
   });

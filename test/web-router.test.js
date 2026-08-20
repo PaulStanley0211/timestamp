@@ -7,7 +7,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ROUTES, METHODS, matchRoute, splitPath, RouteError } from '../scripts/web/router.mjs';
+import {
+  ROUTES, METHODS, matchRoute, splitPath, RouteError, PUBLIC_ROUTES, isPublicRoute,
+} from '../scripts/web/router.mjs';
 import { JOB_ID_RE } from '../scripts/render/job.mjs';
 
 const ID = '20260820-144501-a3f19c';
@@ -35,6 +37,56 @@ test('every documented route in docs/interfaces.md 9 is in the table', () => {
   }
 });
 
+test('every page in docs/interfaces-app.md B is in the table', () => {
+  const documented = [
+    ['GET', '/login'], ['POST', '/login'],
+    ['GET', '/signup'], ['POST', '/signup'],
+    ['POST', '/logout'],
+    ['GET', '/pricing'],
+    ['GET', '/places/:file'],
+  ];
+  for (const [method, pattern] of documented) {
+    assert.ok(
+      ROUTES.some((r) => r.method === method && r.pattern === pattern),
+      `${method} ${pattern} is missing from ROUTES`,
+    );
+  }
+});
+
+/**
+ * A LOGOUT ON GET IS A LOGOUT ANYBODY CAN TRIGGER WITH AN `<img src>`, and
+ * `SameSite=Lax` sends the session cookie on a cross-site GET navigation. So the
+ * verb is part of the contract, not a preference.
+ */
+test('logout is POST only', () => {
+  assert.equal(matchRoute('POST', '/logout').name, 'logout');
+  const wrong = matchRoute('GET', '/logout');
+  assert.equal(wrong.ok, false);
+  assert.equal(wrong.status, 405);
+});
+
+/**
+ * An ALLOW-LIST, so the failure mode of adding a route without thinking about
+ * auth is "signed-out users cannot reach it" rather than "anybody can read
+ * anybody's job".
+ */
+test('the public set is an allow-list and every entry is a real route', () => {
+  for (const name of PUBLIC_ROUTES) {
+    assert.ok(ROUTES.some((r) => r.name === name), `${name} is public but is not a route`);
+  }
+  for (const name of ['homePage', 'statusPage', 'selectPage', 'resultPage', 'createJob',
+    'getJob', 'cancelJob', 'listStills', 'getStill', 'select', 'getVideo', 'getPoster']) {
+    assert.ok(ROUTES.some((r) => r.name === name), `${name} is not a route`);
+    assert.equal(isPublicRoute(name), false, `${name} must not be public`);
+  }
+  // Sign-in has to be reachable without being signed in, and a load balancer
+  // cannot log in.
+  for (const name of ['loginPage', 'login', 'signupPage', 'signup', 'pricingPage', 'stylesheet', 'health']) {
+    assert.equal(isPublicRoute(name), true, `${name} must be reachable without a session`);
+  }
+  assert.equal(isPublicRoute('nonsense'), false, 'an unknown name is never public');
+});
+
 test('the surface has not grown a verb by accident', () => {
   assert.deepEqual(METHODS, ['DELETE', 'GET', 'POST']);
 });
@@ -50,7 +102,7 @@ test('every route name is unique', () => {
 
 test('paths resolve to the right handler with the right params', () => {
   const cases = [
-    ['GET', '/', 'uploadPage', {}],
+    ['GET', '/', 'homePage', {}],
     ['GET', '/styles.css', 'stylesheet', {}],
     ['GET', '/api/health', 'health', {}],
     ['POST', '/api/jobs', 'createJob', {}],
@@ -64,6 +116,13 @@ test('paths resolve to the right handler with the right params', () => {
     ['GET', `/j/${ID}`, 'statusPage', { id: ID }],
     ['GET', `/j/${ID}/select`, 'selectPage', { id: ID }],
     ['GET', `/j/${ID}/result`, 'resultPage', { id: ID }],
+    ['GET', '/login', 'loginPage', {}],
+    ['POST', '/login', 'login', {}],
+    ['GET', '/signup', 'signupPage', {}],
+    ['POST', '/signup', 'signup', {}],
+    ['POST', '/logout', 'logout', {}],
+    ['GET', '/pricing', 'pricingPage', {}],
+    ['GET', '/places/schrebergarten-august.jpg', 'placeImage', { file: 'schrebergarten-august.jpg' }],
   ];
   for (const [method, url, name, params] of cases) {
     const m = matchRoute(method, url);
@@ -94,7 +153,7 @@ test('a fragment is not part of the path', () => {
 
 test('a trailing slash is tolerated', () => {
   assert.equal(matchRoute('GET', '/api/health/').name, 'health');
-  assert.equal(matchRoute('GET', '/').name, 'uploadPage');
+  assert.equal(matchRoute('GET', '/').name, 'homePage');
 });
 
 test('HEAD routes as GET, and OPTIONS does not', () => {

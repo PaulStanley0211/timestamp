@@ -1,0 +1,96 @@
+{
+  "_comment": "EVERY NUMBER IN THIS FILE IS AN ESTIMATE until a --meter run proves it, and treating one as fact is listed under 'Common mistakes' in CLAUDE.md. This is the money path: a credit is the unit a customer is charged in, so a wrong number here is not a wrong render, it is a wrong invoice. Nothing in scripts/auth/ hardcodes any of it -- one metered run has to be able to correct all of it in one edit, which is only true if there is exactly one copy. It supersedes config/pricing.json's `fal/video-UNVERIFIED` guess ($0.20/second, $3.00 per 15s) with a published formula plus a ratio, which is better evidence and still not a measurement.",
+  "schemaVersion": 1,
+  "currency": "USD",
+  "asOf": "2026-08-20",
+  "creditUSD": 0.03,
+  "_creditUSD_comment": "ESTIMATE. What one credit is worth in ESTIMATED PROVIDER COST, and therefore the only thing that converts dollars into the unit on the button. Three cents is a round, explainable number rather than a derived one, and it is a scale factor and nothing else: it is NOT the price a credit is sold at, and no code in scripts/auth/ multiplies it by anything a customer pays. Change it and every credit figure below moves together, which is the point.",
+  "referenceSeconds": 15,
+  "_referenceSeconds_comment": "The duration every estimatedUSDPer15s below is quoted at, and not a default so much as the contract: 375 frames at 25fps, asserted by ~200 tests. `creditCost` scales linearly from here for any other duration.",
+  "provider": {
+    "_comment": "ESTIMATE, and PROVENANCE rather than the engine: `creditCost` computes from the estimatedUSDPer15s figures below, not from these fields. They are here because the 720p figure was derived from fal's published video token formula -- tokens = height * width * seconds * 24 / 1024, billed at $0.014 per 1000 tokens -- and a number whose derivation is not written down becomes folklore in about a month. A test asserts that the 720p estimate still matches this formula, so an edit that breaks the link is caught rather than absorbed. The 480p and 1080p figures are NOT this formula: pixel count is not the whole rate, because fal's fast Seedance tier tops out at 720p and the tiers are priced differently.",
+    "estimate": true,
+    "id": "fal",
+    "usdPerThousandTokens": 0.014,
+    "tokensPerPixelSecond": 24,
+    "tokenDivisor": 1024,
+    "anchorResolution": "720p",
+    "source": "fal published token formula, no invoice yet, UNVERIFIED"
+  },
+  "resolutions": {
+    "480p": {
+      "_comment": "ESTIMATE, and the cheap tier. 640x480 through the token formula is 108000 tokens, $1.51 for 15 seconds. CORRECTED 2026-08-20: this entry previously recorded 854x480 while carrying the $1.51 price, and those two disagree -- 854x480 is $2.02. The dimensions were the 16:9 shape of \"480p\", but THIS PRODUCT ALWAYS REQUESTS 4:3, so 640x480 is the raster and $1.51 is the matching number. Recording a price derived one way beside dimensions derived another is how an estimate quietly becomes unfalsifiable. THE NON-OBVIOUS RISK, and it is a real one: 480 is BELOW the tape raster vertically (the tape works at 736x588 per config/render.json), so this is the only option that is upscaled before the grain goes on, and the only one that actually loses detail. That loss is invisible on a test pattern. It is UNTESTED ON A FACE, and likeness is the entire product. A legitimate cheap tier, not a free lunch.",
+      "estimate": true,
+      "available": true,
+      "width": 640,
+      "height": 480,
+      "estimatedUSDPer15s": 1.51,
+      "source": "provider formula at the 4:3 raster we actually request, UNVERIFIED"
+    },
+    "720p": {
+      "_comment": "ESTIMATE, and the anchor: 1280x720 through the token formula above is 324000 tokens, $4.54 for 15 seconds. It is also the resolution the product is designed around. The tape works at 736x588 (720x576 plus jitter headroom), and 720p is the first size that fully covers that raster -- which makes it the last size that buys anything. Measured SSIM between a 720p-sourced and a 1080p-sourced delivery was 0.958 and the two are indistinguishable at 4x zoom. OPEN QUESTION, and it is worth a metered call rather than an argument: this anchor uses 1280x720, the 16:9 shape. We request 4:3, and 960x720 through the same formula is $3.40, not $4.54. Whether the provider bills the raster it renders or the nominal frame size is not documented anywhere we could find. The higher figure is kept deliberately -- overstating cost understates margin, which is the safe direction to be wrong in. Do NOT lower it to $3.40 on reasoning alone; one --meter run settles it.",
+      "estimate": true,
+      "available": true,
+      "width": 1280,
+      "height": 720,
+      "estimatedUSDPer15s": 4.54,
+      "source": "derived from provider formula, UNVERIFIED"
+    },
+    "1080p": {
+      "_comment": "DEFERRED, NOT CANCELLED, and the row is kept with its reasoning attached so that turning it on later is a one-field change rather than an archaeology exercise -- and so nobody re-derives the same measurement in six months. Why it is off: roughly 2.25x the cost of 720p for pixels that are thrown away before the grain is applied, because the tape raster is 736x588 and 720p already covers it (SSIM 0.958 against a 1080p source, indistinguishable at 4x zoom). It also forces the expensive standard tier, since fal's fast Seedance tops out at 720p -- so it is more than 2.25x the cost in practice. Set `available: true` when there is a reason; `creditCost` refuses it until then rather than quietly rendering something else.",
+      "estimate": true,
+      "available": false,
+      "width": 1920,
+      "height": 1080,
+      "estimatedUSDPer15s": 10.22,
+      "source": "ratio to the 720p anchor, UNVERIFIED"
+    }
+  },
+  "tiers": {
+    "standard": {
+      "_comment": "Not an estimate: a multiplier of exactly 1 is the identity, and it is listed rather than special-cased so the tier seam is exercised end to end before a second tier exists. A faster or higher-quality tier is one entry here plus one MEASURED multiplier. Do NOT add a speculative second tier -- an invented multiplier in the money path is a guess that bills somebody.",
+      "estimate": false,
+      "multiplier": 1
+    }
+  },
+  "defaults": {
+    "_comment": "What the estimate on the Record button is computed with when nothing else is asked for. 480p is the default because it is the cheap tier and the product is credit-conscious; 720p is the one that is worth paying for, and the page should say so.",
+    "resolution": "480p",
+    "seconds": 15,
+    "tier": "standard"
+  },
+  "grant": {
+    "_comment": "ESTIMATE in the sense that the cadence is a product decision nobody has taken yet. periodDays is the interval a plan's creditsPerPeriod is granted on. expiryDays is null, which means CREDITS DO NOT EXPIRE and the balance simply accumulates; if Paul decides they should not roll over, set it and realise the expiry as an explicit negative ledger entry, never as a silent adjustment -- credits vanishing without a ledger line is precisely the unauditable thing the ledger exists to prevent. DECISION NEEDED.",
+    "periodDays": 30,
+    "expiryDays": null
+  },
+  "plans": {
+    "free": {
+      "_comment": "ESTIMATE. 51 credits is exactly one 480p tape, which keeps the previously specified 'free: 1 tape per month' true under the credit mechanism. It is not enough for a 720p tape, and that is the shape of the free tier rather than an oversight. Zero is the only price in this file that cannot drift.",
+      "estimate": true,
+      "id": "free",
+      "label": "Free",
+      "monthlyUSD": 0,
+      "annualUSD": 0,
+      "creditsPerPeriod": 51
+    },
+    "shelf": {
+      "_comment": "ESTIMATE. 153 credits is exactly three 480p tapes, preserving the allowance the flat spec named -- or one 720p tape with a 480p one left over, which is the trade the credit model exists to let a person make. $10/month against $4.53 of estimated provider spend at full 480p usage is a 55% gross margin BEFORE any infrastructure; at full 720p usage it is 55% of one tape and then nothing, which is the correct behaviour and not a bug. annualUSD is ten months for twelve -- an interpretation of Paul's 'price it very small annually', not his words. NEEDS PAUL.",
+      "estimate": true,
+      "id": "shelf",
+      "label": "Shelf",
+      "monthlyUSD": 10,
+      "annualUSD": 100,
+      "creditsPerPeriod": 153
+    },
+    "archive": {
+      "_comment": "ESTIMATE. 204 credits is exactly four 480p tapes, or one 720p tape plus one 480p. $12/month against $6.04 of estimated provider spend is a 50% gross margin; the annual rate at $10/month effective is 40%. The ladder is still weak on its own terms: two dollars and 51 credits apart is one extra 480p tape a month, which has to read as obviously worth two dollars or it looks like indecision. Flagged in docs/interfaces-app.md, unchanged by the move to credits, and worth revisiting the moment a --meter run gives these numbers a floor.",
+      "estimate": true,
+      "id": "archive",
+      "label": "Archive",
+      "monthlyUSD": 12,
+      "annualUSD": 120,
+      "creditsPerPeriod": 204
+    }
+  }
+}

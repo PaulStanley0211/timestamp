@@ -176,6 +176,9 @@ export function queuePaths(root = REPO_ROOT, { queueDir } = {}) {
  *  rather than a timer so this stays synchronous; 15ms worst case, and it never
  *  runs on the happy path. */
 const TRANSIENT = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+/** A filesystem that cannot hard-link says so in one of these ways. */
+const NO_HARDLINK = new Set(['ENOSYS', 'EXDEV', 'EMLINK', 'ENOTSUP', 'EOPNOTSUPP', 'EINVAL']);
 const PARK = new Int32Array(new SharedArrayBuffer(4));
 
 /** Total time retryTransient will spend parked before giving up: 1+2+4+...+256.
@@ -259,11 +262,53 @@ function unlinkIfPresent(file) {
 
 const serialise = (obj) => `${JSON.stringify(obj, null, 2)}\n`;
 
-/** Throws EEXIST when someone else got there first. That is the whole claim. */
+/**
+ * Create a file exclusively, with its contents already in it.
+ *
+ * WHY NOT JUST `openSync(file, 'wx')`. That is exclusive, but it creates the
+ * NAME first and the CONTENT afterwards, so there is a window in which the file
+ * exists and is zero bytes. Under load that window is wide enough to be
+ * scheduled through: a reader sees an empty lock, cannot parse it, and -- since
+ * reapExpired treats a lock it cannot read as a dead one -- reaps a lock that
+ * was born microseconds ago. The worker that had just won that job then has its
+ * claim deleted out from under it, and because the claimer's own duplicate
+ * sweep removes the entry the reaper wrote, the job ends up in no state at all.
+ * Measured at roughly 3.5% of jobs with 8 threads on a loaded machine.
+ *
+ * Writing the content into a temporary file and hard-linking it into place
+ * closes the window: the name and the full contents appear in the same
+ * instant. Measured with the same 16-thread barrier used for the other
+ * primitives, `linkSync` gave exactly one winner in 120 of 120 rounds and not
+ * one observation of a partially written destination.
+ *
+ * The `wx` fallback is for a filesystem with no hard links -- a network share,
+ * or FAT. It is exclusive too, so correctness of the winner-selection holds;
+ * only the atomicity of the contents is lost, which is why readLock separately
+ * treats a zero-byte lock as newborn rather than as dead.
+ */
 function writeJsonExclusive(file, obj) {
+  const data = serialise(obj);
+  const tmp = `${file}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+  try {
+    fs.writeFileSync(tmp, data);
+  } catch (err) {
+    unlinkIfPresent(tmp);
+    throw err;
+  }
+  try {
+    retryTransient(() => fs.linkSync(tmp, file));
+    return;
+  } catch (err) {
+    if (err.code === 'EEXIST') throw err; // somebody else got there first
+    if (!NO_HARDLINK.has(err.code)) throw err;
+  } finally {
+    unlinkIfPresent(tmp);
+  }
+  // No hard links here. Exclusive, but the contents arrive a moment after the
+  // name does.
   const fd = retryTransient(() => fs.openSync(file, 'wx'));
   try {
-    fs.writeFileSync(fd, serialise(obj));
+    fs.writeFileSync(fd, data);
   } finally {
     fs.closeSync(fd);
   }
@@ -399,6 +444,27 @@ export function createQueue({
   const failedPath = (jobId) => `${P.failed}/${jobId}.json`;
 
   /**
+   * One mark per lease that has been reaped. It lives beside the lock it
+   * replaced and is named after that lock, so it can never be confused with a
+   * later lease on the same job. Nothing reads `claimed/` except by the
+   * `.lock` suffix, so marks are invisible to stats(), peek() and reapExpired.
+   *
+   * A generation is a 32-character hex token, or the word `newborn` or
+   * `corrupt` -- all safe in a filename, none able to collide with another.
+   */
+  const reapMarkPath = (jobId, generation) => `${P.claimed}/${jobId}.${generation}.reaped`;
+
+  /** Marks are swept when the job's life in the queue ends: it finished, it
+   *  failed for good, or somebody enqueued it afresh. Until then they are
+   *  bounded by maxAttempts, which is how many leases a job can burn. */
+  function sweepReapMarks(jobId) {
+    const prefix = `${jobId}.`;
+    for (const name of listDir(P.claimed)) {
+      if (name.startsWith(prefix) && name.endsWith('.reaped')) unlinkIfPresent(`${P.claimed}/${name}`);
+    }
+  }
+
+  /**
    * @returns {{entries: object[], raced: number}} `raced` counts entries whose
    * filename was a job but whose body could not be read -- vanished between the
    * listing and the read, or caught mid-write. That is not the same as "there
@@ -431,12 +497,22 @@ export function createQueue({
 
   const findPending = (jobId) => listPending().entries.filter((e) => e.jobId === jobId);
 
+  /**
+   * @returns {null} no lock at all
+   * @returns {{newborn: true}} the name exists but the contents have not landed
+   *   yet -- only possible on the `wx` fallback path in writeJsonExclusive. A
+   *   newborn lock is the youngest possible claim, so it is emphatically alive.
+   * @returns {{corrupt: true}} there are contents and they are not readable
+   * @returns {object} the lock
+   */
   function readLock(jobId) {
     const file = lockPath(jobId);
-    const body = parseJson(readText(file));
-    if (body === null) return null;
-    if (body === undefined) return { jobId, file, corrupt: true };
-    return { ...body, jobId, file, corrupt: false };
+    const text = readText(file);
+    if (text === null) return null;
+    if (text.trim() === '') return { jobId, file, newborn: true, corrupt: false };
+    const body = parseJson(text);
+    if (body === undefined) return { jobId, file, newborn: false, corrupt: true };
+    return { ...body, jobId, file, newborn: false, corrupt: false };
   }
 
   /**
@@ -516,7 +592,12 @@ export function createQueue({
    * the same lease -- and two that disagree are separated by a claim, which is
    * the only thing that can happen in between.
    */
-  const lockFingerprint = (l) => (l.corrupt ? '\u0000corrupt' : String(l.token));
+  const lockFingerprint = (l) => {
+    // A token is 32 hex characters, so neither word can ever collide with one.
+    if (l.newborn) return 'newborn';
+    if (l.corrupt) return 'corrupt';
+    return String(l.token);
+  };
 
   /**
    * Remove a file only if it still holds exactly the bytes we wrote into it.
@@ -612,7 +693,7 @@ export function createQueue({
 
       const lock = readLock(jobId);
       if (lock) {
-        if (!lock.corrupt && Number(lock.deadline) > t) {
+        if (lock.newborn || (!lock.corrupt && Number(lock.deadline) > t)) {
           throw new QueueError(
             `${jobId} is being rendered right now by ${lock.workerId} -- enqueueing it again would render it twice`,
             { code: 'ALREADY_CLAIMED', jobId },
@@ -629,6 +710,7 @@ export function createQueue({
       // and a human asking for another go means attempt zero.
       unlinkIfPresent(donePath(jobId));
       unlinkIfPresent(failedPath(jobId));
+      sweepReapMarks(jobId);
 
       return publicEntry(writePendingEntry({ jobId, priority, enqueuedAt: iso(t), attempts: 0 }));
     },
@@ -677,15 +759,16 @@ export function createQueue({
             continue;
           }
 
-          // The lock is won; now take the pending entry off the board. If it
-          // has already gone, this job was finished and re-queued underneath us
-          // and the lock we just made is a claim on nothing -- drop it and move
-          // on rather than handing out a job that is not there.
-          if (!unlinkIfPresent(candidate.file)) {
-            unlinkIfPresent(lockPath(jobId));
-            raced = true;
-            continue;
-          }
+          // The lock is won; now take the pending entry off the board.
+          //
+          // If the entry has already gone, we still hold the only lock on this
+          // job, so nobody else can be running it and it exists in no other
+          // state. Handing it back would mean deleting our lock, and a reaper
+          // voiding its own spurious entry at the same moment would then leave
+          // the job in nothing at all -- measured once in 1600 jobs when this
+          // branch used to release. Keeping it is safe for exactly the reason
+          // the lock is: it is ours.
+          unlinkIfPresent(candidate.file);
 
           // Sweep any duplicate pending entry for this job. Duplicates can only
           // come from two enqueues or two reaps racing; collapsing them at the
@@ -742,6 +825,7 @@ export function createQueue({
         completedAt: iso(t),
       });
       unlinkIfPresent(lock.file);
+      sweepReapMarks(jobId);
       for (const dup of findPending(jobId)) unlinkIfPresent(dup.file);
     },
 
@@ -786,6 +870,7 @@ export function createQueue({
         error: { ...detail, retriable: Boolean(retriable) },
       });
       unlinkIfPresent(lock.file);
+      sweepReapMarks(jobId);
       for (const dup of findPending(jobId)) unlinkIfPresent(dup.file);
       return { state: 'failed', attempts };
     },
@@ -835,6 +920,11 @@ export function createQueue({
 
         const lock = readLock(jobId);
         if (!lock) continue;
+        // A lock whose contents have not landed yet belongs to a worker that is
+        // claiming this job at this instant. Reaping it deletes a live claim, and
+        // the claimer then sweeps away the entry we wrote as a duplicate -- which
+        // is exactly how a job ends up in no state at all.
+        if (lock.newborn) continue;
         if (!lock.corrupt && Number(lock.deadline) > t) continue;
 
         const attempts = (Number.isFinite(lock.attempts) ? lock.attempts : 0) + 1;
@@ -898,51 +988,63 @@ export function createQueue({
           }
           : { jobId, seq, priority, enqueuedAt, attempts };
 
-        if (tryExclusiveCreate(dest, body) !== 'created') {
-          // Somebody else owns this reap. They wrote the destination before
-          // they touched the lock, so the job is already findable and the only
-          // thing that can be left over is the lock itself -- which is exactly
-          // the state a reaper that died mid-repair leaves behind. Clear it,
-          // but do not report: we did not move anything.
+        // WHO REAPED THIS LEASE. Winning the destination create cannot answer
+        // that, and the trace that proves it looks like this: two reapers of
+        // the SAME lease both created the same pending file a millisecond
+        // apart, because in between a worker claimed the job and consumed the
+        // entry, freeing the filename again. An exclusive create is exclusive
+        // at an instant, not across a lifetime.
+        //
+        // The lock cannot answer it either. The second reaper's post-check saw
+        // no lock at all -- which is exactly what a fresh, legitimate reap also
+        // looks like, since the winner drops the lock as its last act. "I
+        // reaped this" and "this was already reaped and has moved on" are
+        // indistinguishable from the live state alone.
+        //
+        // So the reap leaves a record that outlives the entry, named after the
+        // lease it consumed. Taking that mark IS the reap: one lease, one mark,
+        // one reporter, decided by the one primitive on this platform that is
+        // actually exclusive. A later lease on the same job mints a fresh token
+        // and so gets a fresh name, and is reported again as it should be.
+        const generation = lockFingerprint(lock);
+        const mine = tryExclusiveCreate(reapMarkPath(jobId, generation), {
+          jobId, generation, attempts, reapedAt: iso(t),
+        }) === 'created';
+
+        // A reaper that took the mark and then died would strand the job for
+        // ever if nobody else were allowed to finish: the mark can never be
+        // taken again, so the entry would never be written. Anyone may finish
+        // it -- but only while this lease is still the one on disk. Writing
+        // behind a worker that has since claimed the job is how an entry ends
+        // up beside a live lock, and how one render gets run twice.
+        const still = readLock(jobId);
+        const current = Boolean(still) && lockFingerprint(still) === generation;
+
+        if (current) {
+          // Write the destination before releasing the lock, always. A crash
+          // between the two costs a duplicate that claim() sweeps; the other
+          // order costs the job.
+          const created = tryExclusiveCreate(dest, body) === 'created';
+          const after = readLock(jobId);
+          if (created && after && lockFingerprint(after) !== generation) {
+            // Superseded in the breath between the check and the write. Take
+            // back our own exact bytes and nothing else; the job is safe in
+            // claimed/ precisely because the token changed.
+            // Only ever take an entry back while somebody else demonstrably
+            // holds the job at this instant. If the lock has gone in the
+            // meantime, this entry may be the job's only home, and removing
+            // it would lose the job outright.
+            const holder = readLock(jobId);
+            if (holder && lockFingerprint(holder) !== generation) undoIfUnchanged(dest, body);
+          }
           dropLockIfUnchanged(lock);
-          continue;
         }
 
-        // We created the destination. But did we create it for a lease that
-        // still exists?
-        //
-        // This is an ABA race and it is not theoretical -- it showed up twice
-        // in twenty-five runs of test/queue-race.test.js on a deliberately
-        // loaded machine, and only ever in the test where workers reap and then
-        // claim, because a claim is what makes it possible. Reaper A wins the
-        // create and drops the lock. A worker claims the job, which DELETES the
-        // pending entry and takes a new lock. The destination filename is now
-        // free again, so reaper B -- still holding the lease it read a moment
-        // ago -- creates the very same file and believes it won a reap that
-        // happened without it. Two reapers report one job, and the job is left
-        // both claimed and pending.
-        //
-        // An exclusive create is exclusive at an instant, not across a
-        // lifetime. Comparing the lock we acted on against the lock that is
-        // there now is what supplies the missing generation: a fresh claim
-        // carries a fresh random token, so a token that has changed means the
-        // world moved on underneath us and this reap is void.
-        const after = readLock(jobId);
-        if (after && lockFingerprint(after) !== lockFingerprint(lock)) {
-          // Void. Take back only what we just wrote, identified byte for byte
-          // so that we can never remove an entry that belongs to somebody else.
-          // This cannot lose the job: the token changed because the job is
-          // claimed, so it is accounted for in claimed/ whatever we do here.
-          undoIfUnchanged(dest, body);
-          continue;
-        }
-
-        // A lock that has vanished rather than changed is fine: a loser cleared
-        // it after seeing our destination, which is the repair path doing its
-        // job. Our create still stands, and it is still the thing that moved
-        // this job.
-        dropLockIfUnchanged(lock);
-        moved.push(jobId);
+        // The mark holder reports even when somebody else did the writing, and
+        // even when the lease has since moved on. Taking the mark is what
+        // reaped this lease; who happened to run the syscalls is not the
+        // question `reapExpired` answers.
+        if (mine) moved.push(jobId);
       }
 
       return moved;
@@ -994,7 +1096,7 @@ export function createQueue({
             priority: lock.priority ?? 0,
             claimedAt: lock.claimedAt ?? null,
             deadline: Number(lock.deadline) || null,
-            expired: Boolean(lock.corrupt) || !(Number(lock.deadline) > t),
+            expired: !lock.newborn && (Boolean(lock.corrupt) || !(Number(lock.deadline) > t)),
           });
         }
         return rows.sort((a, b) => (a.deadline ?? 0) - (b.deadline ?? 0)).slice(0, limit);

@@ -568,6 +568,27 @@ function normalizeInput(input, jobId) {
       value: outfit.value ?? null,
     },
     stillCount,
+    // What was asked for, and therefore what was charged for. These have to
+    // survive into the manifest because the manifest is the ONLY channel
+    // between the web process and the worker -- the worker never sees the
+    // request that created the job. Without them the renderer cannot know which
+    // raster to ask the provider for, so a user pays for 720p and receives
+    // whatever the default happened to be. That is a billing bug, not a
+    // rendering one, and it is invisible from both ends.
+    //
+    // Deliberately NOT validated against config/credits.json here. The job
+    // model sits below the billing layer and must not import from it, or a
+    // pricing change becomes a reason the job model stops loading old
+    // manifests. The web layer validates on the way in and the pipeline
+    // asserts before it spends; this field just has to arrive intact.
+    resolution: input.resolution ?? null,
+    tier: input.tier ?? null,
+    // Nullable, and null is the honest value for a CLI render: `npm run render`
+    // has no account behind it. Ownership for web jobs is additionally indexed
+    // at out/owners/ for lookup without scanning every manifest, but recording
+    // it here too means a job still knows whose it is if that index is lost --
+    // and the index is a cache, while this is the record.
+    accountId: input.accountId ?? null,
     consent,
   };
 }

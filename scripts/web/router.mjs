@@ -49,10 +49,28 @@ export class RouteError extends Error {
  */
 export const ROUTES = Object.freeze([
   // --- pages -------------------------------------------------------------
-  { method: 'GET', pattern: '/', name: 'uploadPage' },
+  { method: 'GET', pattern: '/', name: 'homePage' },
   { method: 'GET', pattern: '/styles.css', name: 'stylesheet' },
   { method: 'GET', pattern: '/tape-osd.ttf', name: 'font' },
   { method: 'GET', pattern: '/favicon.ico', name: 'favicon' },
+
+  // --- accounts (docs/interfaces-app.md B) --------------------------------
+  // The GET and the POST of each form are separate rows rather than one row
+  // with two methods, because a 405 has to be able to say which verbs a path
+  // answers and a route that carries a set of methods cannot.
+  { method: 'GET', pattern: '/login', name: 'loginPage' },
+  { method: 'POST', pattern: '/login', name: 'login' },
+  { method: 'GET', pattern: '/signup', name: 'signupPage' },
+  { method: 'POST', pattern: '/signup', name: 'signup' },
+  // POST, not GET. A logout on GET is a logout anybody can trigger with an
+  // <img src>, and `SameSite=Lax` sends the cookie on a cross-site GET.
+  { method: 'POST', pattern: '/logout', name: 'logout' },
+  { method: 'GET', pattern: '/pricing', name: 'pricingPage' },
+
+  // Place card imagery. `assets/places/<id>.jpg` does not exist yet; a 404 here
+  // is the designed state, and the CSS falls through to the gradient layer.
+  { method: 'GET', pattern: '/places/:file', name: 'placeImage' },
+
   { method: 'GET', pattern: '/j/:id', name: 'statusPage' },
   { method: 'GET', pattern: '/j/:id/select', name: 'selectPage' },
   { method: 'GET', pattern: '/j/:id/result', name: 'resultPage' },
@@ -71,6 +89,30 @@ export const ROUTES = Object.freeze([
   { method: 'GET', pattern: '/api/jobs/:id/video', name: 'getVideo' },
   { method: 'GET', pattern: '/api/jobs/:id/poster', name: 'getPoster' },
 ]);
+
+/**
+ * The routes that answer without an account, by name.
+ *
+ * A DENY-LIST WOULD BE THE WRONG SHAPE. This is an allow-list, so a route added
+ * to `ROUTES` without a thought about auth is gated by default -- the failure
+ * mode of forgetting is "signed-out users cannot reach it", not "anybody can
+ * read anybody's job". `test/web-auth.test.js` asserts that every name in
+ * `ROUTES` is either in here or gated, so the list cannot silently fall behind.
+ *
+ * `health` is public because a load balancer cannot log in. It reports the
+ * queue's counts and whether ffmpeg is present, and no job ids.
+ */
+export const PUBLIC_ROUTES = Object.freeze(new Set([
+  'stylesheet', 'font', 'favicon', 'placeImage',
+  'loginPage', 'login', 'signupPage', 'signup', 'logout',
+  'pricingPage',
+  'health',
+]));
+
+/** True when this route may be served to somebody with no session. */
+export function isPublicRoute(name) {
+  return PUBLIC_ROUTES.has(name);
+}
 
 /** `HEAD` is `GET` without a body, and node:http will drop the body for us.
  *  Routing it as GET is one line and the alternative is fourteen more rows. */

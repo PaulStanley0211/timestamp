@@ -1,0 +1,917 @@
+/**
+ * Accounts, sessions, ownership and credits, at the HTTP boundary.
+ *
+ * `scripts/auth/` is faked here for the same reason the queue is faked in
+ * `web-api.test.js`: it is written against `docs/interfaces-app.md` A in
+ * parallel with this layer and has its own tests, and what is under test here is
+ * whether the *web* layer uses it correctly -- gates the right routes, refuses
+ * somebody else's job, spends credits at enqueue rather than at completion, and
+ * puts nothing resembling a payment field on a page.
+ *
+ * THE TEST THIS FILE EXISTS FOR is `account B gets a 404 on account A's job`. It
+ * is written against every job route rather than one, because the failure mode
+ * is per-handler: a route that forgets the check is a route that hands a
+ * stranger a photograph of somebody's face, and it is exactly the kind of thing
+ * that gets added later and gets the check copied in later still.
+ */
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+
+import { createServer, safeNext } from '../scripts/web/server.mjs';
+import { ROUTES, PUBLIC_ROUTES, isPublicRoute } from '../scripts/web/router.mjs';
+import {
+  createSessions, parseCookies, serializeCookie, isSecureRequest,
+  missingAuthFunctions, SESSION_COOKIE, AuthUnavailableError,
+} from '../scripts/web/session-middleware.mjs';
+import { createJob, saveJob, jobPaths, setJobStatus, completeJob } from '../scripts/render/job.mjs';
+
+const CFG = JSON.parse(fs.readFileSync(new URL('../config/render.json', import.meta.url), 'utf8'));
+const BOUNDARY = 'authboundary44';
+const SHAPED_ID = '20260820-144501-a3f19c';
+
+function fakeQueue() {
+  const calls = { enqueued: [] };
+  return {
+    calls,
+    enqueue(jobId) { calls.enqueued.push(jobId); },
+    peek({ state = 'pending' } = {}) { return state === 'claimed' ? [] : calls.enqueued.map((jobId) => ({ jobId })); },
+    stats() { return { pending: calls.enqueued.length, claimed: 0, done: 0, failed: 0 }; },
+  };
+}
+
+const PLANS = Object.freeze({
+  free: { id: 'free', label: 'Free', monthlyUSD: 0, annualUSD: 0, creditsPerPeriod: 51 },
+  shelf: { id: 'shelf', label: 'Shelf', monthlyUSD: 10, annualUSD: 100, creditsPerPeriod: 153 },
+  archive: { id: 'archive', label: 'Archive', monthlyUSD: 12, annualUSD: 120, creditsPerPeriod: 204 },
+});
+
+/**
+ * `CREDIT_COSTS` as `scripts/auth/credits.mjs` exports it: every row the config
+ * knows about, INCLUDING the deferred one, each carrying its own `available`.
+ * The deferred row is the point -- the UI has to know 1080p exists in order to
+ * render it disabled, and the page must be built from this rather than from a
+ * list written into the web layer. The figures are the live ones: 51 CR at
+ * 480p, 152 at 720p, 341 at the deferred 1080p.
+ */
+const CREDIT_COSTS = Object.freeze({
+  '480p': { resolution: '480p', width: 854, height: 480, available: true, creditsPerReference: 51 },
+  '720p': { resolution: '720p', width: 1280, height: 720, available: true, creditsPerReference: 152 },
+  '1080p': { resolution: '1080p', width: 1920, height: 1080, available: false, creditsPerReference: 341 },
+});
+
+const TIERS = Object.freeze({ standard: { multiplier: 1 } });
+
+/**
+ * `scripts/auth/` as documented in docs/interfaces-app.md A, in memory.
+ *
+ * Only the surface the web layer is specified to call. `credits` is an opening
+ * balance this fake adds so a test can put an account in front of a balance it
+ * cannot exhaust by accident.
+ */
+function fakeAuth() {
+  const accounts = new Map();
+  const byEmail = new Map();
+  const sessions = new Map();
+  const SECRET = 'a-secret-that-is-not-a-real-secret';
+  let n = 0;
+
+  const sign = (value, secret) => `${value}.${crypto.createHmac('sha256', secret).update(value).digest('hex').slice(0, 16)}`;
+
+  return {
+    PLANS,
+    CREDIT_COSTS,
+    accounts,
+    sessions,
+
+    createAccount({ email, password, plan = 'free', credits = null }) {
+      const key = String(email).toLowerCase();
+      if (byEmail.has(key)) {
+        const err = new Error('email already registered');
+        err.code = 'EMAIL_TAKEN';
+        err.userMessage = 'That email already has an account.';
+        throw err;
+      }
+      n += 1;
+      const account = {
+        accountId: `acct-${n}`,
+        root: '/fake',
+        email,
+        plan,
+        password,
+        credits: credits ?? PLANS[plan].creditsPerPeriod,
+        ledger: [],
+      };
+      accounts.set(account.accountId, account);
+      byEmail.set(key, account.accountId);
+      return account;
+    },
+    findAccountByEmail({ email }) {
+      const id = byEmail.get(String(email ?? '').toLowerCase());
+      return id ? accounts.get(id) : null;
+    },
+    verifyPassword(account, password) {
+      return typeof password === 'string' && password.length > 0 && account.password === password;
+    },
+    loadAccount({ accountId }) {
+      const account = accounts.get(accountId);
+      if (!account) throw new Error(`no account ${accountId}`);
+      return account;
+    },
+    saveAccount() {},
+    setPlan(account, planId) { account.plan = planId; },
+
+    createSession({ accountId }) {
+      n += 1;
+      const sessionId = `sess-${n}`;
+      sessions.set(sessionId, { sessionId, accountId });
+      return { sessionId, expiresAt: new Date(Date.now() + 86_400_000).toISOString() };
+    },
+    readSession({ sessionId }) { return sessions.get(sessionId) ?? null; },
+    destroySession({ sessionId }) { sessions.delete(sessionId); },
+    signCookie: sign,
+    verifyCookie(signed, secret) {
+      const cut = String(signed ?? '').lastIndexOf('.');
+      if (cut < 1) return null;
+      const value = signed.slice(0, cut);
+      return sign(value, secret) === signed ? value : null;
+    },
+    sessionSecret() { return SECRET; },
+
+    // THROWS ON A DEFERRED RESOLUTION, exactly as the real module does, so that
+    // nothing can bill for one size and render another. That is why the quality
+    // row is built from CREDIT_COSTS and this is called only for the one the
+    // person actually picked.
+    creditCost({ resolution = '480p', seconds = 15, tier = 'standard' } = {}) {
+      const row = CREDIT_COSTS[resolution];
+      if (!row) {
+        const err = new Error(`unknown resolution ${resolution}`);
+        err.code = 'UNKNOWN_RESOLUTION';
+        err.userMessage = 'That output size is not available.';
+        throw err;
+      }
+      if (row.available === false) {
+        const err = new Error(`${resolution} is deferred`);
+        err.code = 'RESOLUTION_UNAVAILABLE';
+        err.userMessage = 'That output size is not available yet.';
+        throw err;
+      }
+      const multiplier = TIERS[tier]?.multiplier;
+      if (multiplier === undefined) {
+        const err = new Error(`unknown tier ${tier}`);
+        err.code = 'UNKNOWN_TIER';
+        throw err;
+      }
+      return Math.ceil((row.creditsPerReference * (seconds / 15)) * multiplier);
+    },
+    /** One error, one sentence, one duration for both failures. */
+    authenticate({ email, password }) {
+      const id = byEmail.get(String(email ?? '').toLowerCase());
+      const account = id ? accounts.get(id) : null;
+      if (!account || account.password !== password || !password) {
+        const err = new Error('email not found or password did not verify');
+        err.code = 'BAD_CREDENTIALS';
+        err.userMessage = 'That email and password do not match an account.';
+        throw err;
+      }
+      return account;
+    },
+    balanceOf(account) {
+      return { credits: account.credits, planId: account.plan, grantedAt: null, expiresAt: null };
+    },
+    debitCredits(account, { jobId, credits }) {
+      // Idempotent by jobId, the way the real module is: a re-enqueue of a job
+      // that has already been charged is the same render, not a new one.
+      if (account.ledger.some((e) => e.jobId === jobId && e.delta < 0)) return;
+      if (account.credits < credits) {
+        const err = new Error('insufficient credits');
+        err.code = 'INSUFFICIENT_CREDITS';
+        err.userMessage = 'Not enough credits for that tape.';
+        throw err;
+      }
+      account.credits -= credits;
+      account.ledger.push({ jobId, delta: -credits, at: new Date().toISOString() });
+    },
+    refundCredits(account, { jobId }) {
+      const spent = account.ledger.find((e) => e.jobId === jobId && e.delta < 0);
+      if (!spent || account.ledger.some((e) => e.jobId === jobId && e.delta > 0)) return;
+      account.credits += -spent.delta;
+      account.ledger.push({ jobId, delta: -spent.delta, at: new Date().toISOString() });
+    },
+  };
+}
+
+function multipart(parts) {
+  const chunks = [];
+  for (const p of parts) {
+    const disposition = p.filename === undefined
+      ? `form-data; name="${p.name}"`
+      : `form-data; name="${p.name}"; filename="${p.filename}"`;
+    chunks.push(Buffer.from(`--${BOUNDARY}\r\nContent-Disposition: ${disposition}\r\n\r\n`, 'latin1'));
+    chunks.push(Buffer.isBuffer(p.body) ? p.body : Buffer.from(String(p.body), 'utf8'));
+    chunks.push(Buffer.from('\r\n', 'latin1'));
+  }
+  chunks.push(Buffer.from(`--${BOUNDARY}--\r\n`, 'latin1'));
+  return Buffer.concat(chunks);
+}
+
+const photoBytes = (salt = 'x') => Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  crypto.createHash('sha512').update(salt).digest(),
+]);
+
+const uploadParts = (salt = 'x', resolution = '480p') => ([
+  { name: 'photo', filename: 'me.png', body: photoBytes(salt) },
+  { name: 'place', body: 'ostsee-strand' },
+  { name: 'outfit', body: 'fleecepulli' },
+  { name: 'resolution', body: resolution },
+  { name: 'consent', body: 'yes' },
+]);
+
+async function signIn(base, email, password) {
+  const res = await fetch(`${base}/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ email, password }),
+    redirect: 'manual',
+  });
+  if (res.status !== 200) return null;
+  return res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+}
+
+async function withApp(run, { auth = fakeAuth(), queue = fakeQueue(), sessions = null } = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-auth-'));
+  const app = createServer({
+    root, cfg: CFG, queue, port: 0, auth: sessions ? null : auth, sessions,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
+    logImpl: () => {},
+  });
+  const port = await app.listen();
+  try {
+    await run({ base: `http://127.0.0.1:${port}`, root, app, auth, queue });
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function seedJob(app, root, owner, { status = 'queued' } = {}) {
+  const job = createJob({
+    root,
+    input: {
+      photo: { path: 'input/upload-photo', sha256: 'x'.repeat(64) },
+      place: { kind: 'text', value: 'a beach' },
+      outfit: { kind: 'text', value: 'a t-shirt' },
+      stillCount: 3,
+      consent: { granted: true, at: new Date().toISOString(), text: 'the wording' },
+    },
+    provider: 'fixture',
+    cfg: CFG,
+  });
+  if (status !== 'queued') {
+    setJobStatus(job, 'running');
+    if (status === 'done') completeJob(job, { videoPath: 'timestamp.mp4', posterPath: 'poster.jpg' });
+    else if (status !== 'running') setJobStatus(job, status);
+  }
+  saveJob(job);
+  app.sessions.claimJob({ accountId: owner.accountId, jobId: job.jobId });
+  return job;
+}
+
+// ---------------------------------------------------------------------------
+// the gate
+// ---------------------------------------------------------------------------
+
+test('the public surface is exactly the allow-list, and nothing else', () => {
+  // A deny-list would fail open. This asserts the shape of the decision, not
+  // just its current contents: every route is classified, one way or the other.
+  for (const route of ROUTES) {
+    assert.equal(typeof isPublicRoute(route.name), 'boolean');
+  }
+  for (const name of PUBLIC_ROUTES) {
+    assert.ok(ROUTES.some((r) => r.name === name), `${name} is public but is not a route`);
+  }
+  for (const name of ['homePage', 'statusPage', 'selectPage', 'resultPage',
+    'createJob', 'getJob', 'cancelJob', 'listStills', 'getStill', 'select', 'getVideo', 'getPoster']) {
+    assert.equal(isPublicRoute(name), false, `${name} must require an account`);
+  }
+});
+
+test('every gated route refuses an anonymous request', async () => {
+  await withApp(async ({ base }) => {
+    const gated = ROUTES.filter((r) => !isPublicRoute(r.name));
+    assert.ok(gated.length >= 12, 'the gated set should not have shrunk');
+
+    for (const route of gated) {
+      const target = route.pattern.replace(':id', SHAPED_ID).replace(':index', '1');
+      // JSON clients get a status code they can branch on.
+      const api = await fetch(`${base}${target}`, { method: route.method, redirect: 'manual' });
+      assert.equal(api.status, 401, `${route.method} ${target} answered ${api.status} to an anonymous JSON client`);
+      assert.equal((await api.json()).error.code, 'NOT_SIGNED_IN');
+
+      // Browsers get sent to the sign-in page instead.
+      const browser = await fetch(`${base}${target}`, {
+        method: route.method, headers: { accept: 'text/html' }, redirect: 'manual',
+      });
+      assert.equal(browser.status, 303, `${route.method} ${target} did not redirect a browser`);
+      assert.match(browser.headers.get('location'), /^\/login/);
+    }
+  });
+});
+
+test('a browser is sent back where it was going after signing in', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const res = await fetch(`${base}/j/${SHAPED_ID}`, { headers: { accept: 'text/html' }, redirect: 'manual' });
+    assert.equal(res.headers.get('location'), `/login?next=${encodeURIComponent(`/j/${SHAPED_ID}`)}`);
+
+    const login = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', next: `/j/${SHAPED_ID}` }),
+      redirect: 'manual',
+    });
+    assert.equal(login.status, 303);
+    assert.equal(login.headers.get('location'), `/j/${SHAPED_ID}`);
+  });
+});
+
+/**
+ * `next=https://evil.example` on a login page is the textbook open redirect: the
+ * link is ours, the login is ours, and the landing page is not.
+ */
+test('next is only ever a same-origin absolute path', async () => {
+  for (const bad of ['https://evil.example', '//evil.example', '/\\evil.example', 'evil', '', null, '/x'.repeat(400)]) {
+    assert.equal(safeNext(bad), '', `${JSON.stringify(bad)} was accepted as a next`);
+  }
+  assert.equal(safeNext('/j/abc'), '/j/abc');
+
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const login = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', next: 'https://evil.example' }),
+      redirect: 'manual',
+    });
+    assert.equal(login.headers.get('location'), '/', 'an off-site next must be dropped, not followed');
+  });
+});
+
+test('the public pages answer without a session', async () => {
+  await withApp(async ({ base }) => {
+    for (const target of ['/login', '/signup', '/pricing', '/styles.css', '/api/health', '/favicon.ico']) {
+      const res = await fetch(`${base}${target}`);
+      assert.ok(res.status === 200 || res.status === 204, `${target} -> ${res.status}`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sign up, sign in, sign out
+// ---------------------------------------------------------------------------
+
+test('signing up creates the account, starts a session and lands on the shelf', async () => {
+  await withApp(async ({ base, auth }) => {
+    const res = await fetch(`${base}/signup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
+      body: new URLSearchParams({ email: 'new@example.com', password: 'ten or more chars', consent: 'yes' }),
+      redirect: 'manual',
+    });
+    assert.equal(res.status, 303);
+    assert.equal(res.headers.get('location'), '/');
+    assert.ok(auth.findAccountByEmail({ email: 'new@example.com' }), 'the account was not created');
+
+    const cookie = res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+    const home = await fetch(`${base}/`, { headers: { cookie } });
+    assert.equal(home.status, 200);
+  });
+});
+
+test('sign-up refuses a bad address, a short password and a missing consent', async () => {
+  await withApp(async ({ base, auth }) => {
+    const cases = [
+      { email: 'not-an-address', password: 'ten or more chars', consent: 'yes' },
+      { email: 'ok@example.com', password: 'short', consent: 'yes' },
+      { email: 'ok@example.com', password: 'ten or more chars' },
+    ];
+    for (const body of cases) {
+      const res = await fetch(`${base}/signup`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(body),
+      });
+      assert.equal(res.status, 400, `${JSON.stringify(body)} was accepted`);
+    }
+    assert.equal(auth.findAccountByEmail({ email: 'ok@example.com' }), null);
+  });
+});
+
+test('a duplicate email is refused in the words of the auth module', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'taken@example.com', password: 'a long enough password' });
+    const res = await fetch(`${base}/signup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
+      body: new URLSearchParams({ email: 'taken@example.com', password: 'another long one', consent: 'yes' }),
+    });
+    assert.equal(res.status, 400);
+    assert.ok((await res.text()).includes('That email already has an account.'));
+  });
+});
+
+/**
+ * ONE MESSAGE FOR BOTH FAILURES. "No such account" and "wrong password" are
+ * different facts and must be the same answer, or the login form is a free
+ * account-enumeration oracle on a site that stores photographs of faces.
+ */
+test('a wrong password and an unknown email are the same 401 and the same sentence', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+
+    const wrong = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'nope' }),
+    });
+    const unknown = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
+      body: new URLSearchParams({ email: 'nobody@example.com', password: 'nope' }),
+    });
+
+    assert.equal(wrong.status, 401);
+    assert.equal(unknown.status, 401);
+    const a = await wrong.text();
+    const b = await unknown.text();
+    assert.ok(a.includes('That email and password do not match an account.'));
+    assert.ok(b.includes('That email and password do not match an account.'));
+    assert.ok(!b.includes('no such account'));
+  });
+});
+
+test('the session cookie is HttpOnly, SameSite=Lax and not Secure over plain HTTP', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const res = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password' }),
+    });
+    const [cookie] = res.headers.getSetCookie();
+    assert.ok(cookie.startsWith(`${SESSION_COOKIE}=`));
+    assert.match(cookie, /HttpOnly/);
+    assert.match(cookie, /SameSite=Lax/);
+    assert.match(cookie, /Path=\//);
+    // Secure on a plain-HTTP response means the browser silently discards it and
+    // local development stops working with no error anywhere.
+    assert.ok(!/Secure/.test(cookie), 'Secure must only be set when the request arrived over TLS');
+  });
+});
+
+/** The server-side record is what makes logout actually log out. A JWT cannot be
+ *  revoked, and this app can hand somebody else's face to whoever holds one. */
+test('signing out destroys the record, so the old cookie stops working', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    assert.equal((await fetch(`${base}/`, { headers: { cookie } })).status, 200);
+    assert.equal(auth.sessions.size, 1);
+
+    const out = await fetch(`${base}/logout`, { method: 'POST', headers: { cookie } });
+    assert.equal(out.status, 200);
+    assert.equal(auth.sessions.size, 0, 'the server-side session record survived a logout');
+
+    const after = await fetch(`${base}/`, { headers: { cookie, accept: 'text/html' }, redirect: 'manual' });
+    assert.equal(after.status, 303, 'the cookie still worked after signing out');
+  });
+});
+
+test('a forged or tampered cookie is rejected before any filesystem lookup', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const real = await signIn(base, 'a@example.com', 'a long enough password');
+    const forged = [
+      `${SESSION_COOKIE}=sess-1`,
+      `${SESSION_COOKIE}=sess-1.deadbeefdeadbeef`,
+      `${SESSION_COOKIE}=${encodeURIComponent('../../etc/passwd.aaaa')}`,
+      real.replace(/.$/, 'z'),
+    ];
+    for (const cookie of forged) {
+      const res = await fetch(`${base}/api/health`, { headers: { cookie } });
+      assert.equal(res.status, 200, 'a bad cookie must not break an unrelated route');
+      const gated = await fetch(`${base}/`, { headers: { cookie, accept: 'text/html' }, redirect: 'manual' });
+      assert.equal(gated.status, 303, `${cookie} was accepted as a session`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ownership -- the one that matters
+// ---------------------------------------------------------------------------
+
+test('account B gets a 404 on account A\'s job, on every job route', async () => {
+  await withApp(async ({ base, root, app, auth }) => {
+    const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    auth.createAccount({ email: 'b@example.com', password: 'a different password' });
+    const cookieB = await signIn(base, 'b@example.com', 'a different password');
+    const cookieA = await signIn(base, 'a@example.com', 'a long enough password');
+
+    const job = seedJob(app, root, a, { status: 'done' });
+    fs.writeFileSync(jobPaths(root, job.jobId).video, Buffer.alloc(64, 3));
+    fs.writeFileSync(jobPaths(root, job.jobId).poster, Buffer.alloc(64, 4));
+    fs.mkdirSync(jobPaths(root, job.jobId).stills, { recursive: true });
+    fs.writeFileSync(`${jobPaths(root, job.jobId).stills}/still-01.png`, Buffer.from('still 1'));
+
+    const targets = [
+      ['GET', `/j/${job.jobId}`],
+      ['GET', `/j/${job.jobId}/select`],
+      ['GET', `/j/${job.jobId}/result`],
+      ['GET', `/api/jobs/${job.jobId}`],
+      ['GET', `/api/jobs/${job.jobId}/stills`],
+      ['GET', `/api/jobs/${job.jobId}/stills/1`],
+      ['GET', `/api/jobs/${job.jobId}/video`],
+      ['GET', `/api/jobs/${job.jobId}/poster`],
+      ['POST', `/api/jobs/${job.jobId}/select`],
+      ['DELETE', `/api/jobs/${job.jobId}`],
+    ];
+
+    for (const [method, target] of targets) {
+      const res = await fetch(`${base}${target}`, {
+        method,
+        headers: { cookie: cookieB, 'content-type': 'application/json' },
+        body: method === 'POST' ? JSON.stringify({ stillIndex: 1 }) : undefined,
+        redirect: 'manual',
+      });
+      // 404, NOT 403. A 403 confirms the job exists, which is the fact an
+      // enumerator is fishing for.
+      assert.equal(res.status, 404, `${method} ${target} answered ${res.status} to the wrong account`);
+      const text = await res.text();
+      assert.ok(!text.includes('a beach'), `${method} ${target} leaked the other account's input`);
+    }
+
+    // And the owner still gets everything.
+    assert.equal((await fetch(`${base}/api/jobs/${job.jobId}`, { headers: { cookie: cookieA } })).status, 200);
+    assert.equal((await fetch(`${base}/api/jobs/${job.jobId}/video`, { headers: { cookie: cookieA } })).status, 200);
+
+    // The job is not on B's shelf either.
+    const shelf = await (await fetch(`${base}/`, { headers: { cookie: cookieB } })).text();
+    assert.ok(shelf.includes('The shelf is empty'), 'the other account\'s job appeared on this shelf');
+  });
+});
+
+test('a job with no owner is nobody\'s job', async () => {
+  await withApp(async ({ base, root, app, auth }) => {
+    const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const job = seedJob(app, root, a);
+    // Take the ownership entry away: a manifest with no index entry must not be
+    // readable by the account that used to own it, let alone by anybody else.
+    app.sessions.releaseJob({ accountId: a.accountId, jobId: job.jobId });
+    assert.equal((await fetch(`${base}/api/jobs/${job.jobId}`, { headers: { cookie } })).status, 404);
+  });
+});
+
+test('uploading claims the job for the account that uploaded it', async () => {
+  await withApp(async ({ base, app, auth }) => {
+    const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const res = await fetch(`${base}/api/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
+      body: multipart(uploadParts()),
+    });
+    assert.equal(res.status, 201);
+    const { jobId } = await res.json();
+    assert.ok(app.sessions.ownsJob({ accountId: a.accountId, jobId }));
+    assert.deepEqual(app.sessions.jobIdsFor(a.accountId), [jobId]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// quota
+// ---------------------------------------------------------------------------
+
+/**
+ * SPENT AT ENQUEUE, NOT AT COMPLETION. Charging when a render finishes lets
+ * somebody start twelve jobs in parallel, each of which checks a balance none of
+ * them has spent yet.
+ */
+test('credits are spent when the job is enqueued, and the next one is refused', async () => {
+  await withApp(async ({ base, root, auth, queue }) => {
+    // The free plan grants exactly one 480p tape.
+    const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+
+    assert.equal(auth.balanceOf(a).credits, 51);
+    const first = await fetch(`${base}/api/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
+      body: multipart(uploadParts('one')),
+    });
+    assert.equal(first.status, 201);
+    const { jobId, credits } = await first.json();
+    assert.equal(credits, 51);
+
+    // Spent at enqueue: the job is still `queued` and the credits are gone.
+    assert.equal(auth.balanceOf(a).credits, 0);
+    assert.deepEqual(a.ledger.map((e) => e.jobId), [jobId]);
+    assert.deepEqual(queue.calls.enqueued, [jobId]);
+
+    const second = await fetch(`${base}/api/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
+      body: multipart(uploadParts('two')),
+    });
+    assert.equal(second.status, 402);
+    assert.equal((await second.json()).error.status, 402);
+
+    // Nothing half-made: one job directory, one queue entry, one tape paid for.
+    assert.equal(fs.readdirSync(path.join(root, 'out', 'jobs')).length, 1);
+    assert.deepEqual(queue.calls.enqueued, [jobId]);
+  });
+});
+
+test('a balance that covers 480p but not 720p refuses only the 720p tape', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 100 });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+
+    const dear = await fetch(`${base}/api/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
+      body: multipart(uploadParts('dear', '720p')),
+    });
+    assert.equal(dear.status, 402);
+    const message = (await dear.json()).error.message;
+    assert.match(message, /720p/, 'the refusal names the size that was asked for');
+    assert.match(message, /152 CR/);
+    assert.match(message, /100 CR/, 'and the balance, so the arithmetic is visible');
+
+    const cheap = await fetch(`${base}/api/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
+      body: multipart(uploadParts('cheap', '480p')),
+    });
+    assert.equal(cheap.status, 201);
+  });
+});
+
+test('a debit refusal at enqueue leaves no directory, no claim and no charge', async () => {
+  // `debitCredits` refuses after the manifest has been written and the job
+  // claimed. All three have to come back off disk.
+  const auth = fakeAuth();
+  await withApp(async ({ base, root, app }) => {
+    const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+
+    // Report a balance, then refuse to spend it -- the exact race the
+    // enqueue-time debit exists to close.
+    auth.debitCredits = () => { const e = new Error('gone'); e.code = 'INSUFFICIENT_CREDITS'; throw e; };
+
+    const res = await fetch(`${base}/api/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
+      body: multipart(uploadParts()),
+    });
+    assert.equal(res.status, 402);
+
+    let dirs = [];
+    try { dirs = fs.readdirSync(path.join(root, 'out', 'jobs')); } catch { dirs = []; }
+    assert.deepEqual(dirs, [], 'a photograph was left on disk for a job that was never enqueued');
+    assert.deepEqual(app.sessions.jobIdsFor(a.accountId), [], 'the ownership entry was not unwound');
+    assert.equal(a.credits, 500, 'nothing was charged');
+  }, { auth });
+});
+
+/**
+ * The debit lands and then the enqueue throws. The job never reached the queue,
+ * so no provider was ever called, so the refund is legitimate -- and it must
+ * happen, or the person is out of credits for a render that does not exist.
+ */
+test('a failure after the debit refunds it, because nothing was ever rendered', async () => {
+  const auth = fakeAuth();
+  const queue = {
+    calls: { enqueued: [] },
+    enqueue() { throw new Error('the queue directory is gone'); },
+    peek() { return []; },
+    stats() { return { pending: 0, claimed: 0, done: 0, failed: 0 }; },
+  };
+  await withApp(async ({ base, root, app }) => {
+    const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+
+    const res = await fetch(`${base}/api/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
+      body: multipart(uploadParts()),
+    });
+    assert.equal(res.status, 500);
+    assert.equal(a.credits, 500, 'the debit was not refunded');
+
+    let dirs = [];
+    try { dirs = fs.readdirSync(path.join(root, 'out', 'jobs')); } catch { dirs = []; }
+    assert.deepEqual(dirs, []);
+    assert.deepEqual(app.sessions.jobIdsFor(a.accountId), []);
+  }, { auth, queue });
+});
+
+// ---------------------------------------------------------------------------
+// pricing -- and the absence of a payment form
+// ---------------------------------------------------------------------------
+
+test('the pricing page lists the plans in credits and marks the current one', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password', plan: 'shelf' });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+
+    const anon = await fetch(`${base}/pricing`);
+    assert.equal(anon.status, 200);
+    const anonHtml = await anon.text();
+    for (const label of ['Free', 'Shelf', 'Archive']) assert.ok(anonHtml.includes(label), `${label} is missing`);
+    assert.ok(anonHtml.includes('$10') && anonHtml.includes('$12'));
+    assert.ok(!anonHtml.includes('Your plan'), 'nothing is marked for a signed-out visitor');
+
+    // Credits are the honest unit -- "N tapes a month" stopped being true the
+    // moment a tape had two prices -- but the translation is shown as well,
+    // because "153 credits" on its own tells a first-time reader nothing.
+    assert.ok(anonHtml.includes('153 credits a month'));
+    assert.ok(anonHtml.includes('3 tapes at 480p'), 'shelf is three 480p tapes');
+    assert.ok(anonHtml.includes('1 tape at 720p'), 'and one 720p tape, singular');
+    assert.ok(!anonHtml.includes('1 tapes'), 'and nothing reads like a placeholder');
+    // A plan that cannot fund a 720p tape says so in words rather than "0 tapes".
+    assert.ok(anonHtml.includes('not enough for a 720p tape'));
+    assert.ok(anonHtml.includes('480p — ~51 CR'));
+    assert.ok(anonHtml.includes('720p — ~152 CR'));
+    assert.ok(!anonHtml.includes('1080p'), 'a deferred size is not priced on the plans page');
+
+    const mine = await (await fetch(`${base}/pricing`, { headers: { cookie } })).text();
+    assert.ok(mine.includes('Your plan'));
+    assert.ok(/plan--current[\s\S]{0,200}Shelf/.test(mine), 'the Shelf plan is the one marked');
+  });
+});
+
+/**
+ * NO PAYMENT FORM ANYWHERE. Not a card field, not a CVV field, not a mockup. A
+ * "mockup" card input is the same risk as a real one: it is a text box on a
+ * public page asking for a card number, and whether the bytes are stored is a
+ * detail the person typing them cannot see.
+ */
+test('no page in this app contains anything that collects payment details', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+
+    // Asserted against FORM CONTROLS, not against prose. The pricing page says
+    // out loud that this application never sees a card number, and a test that
+    // banned the words would forbid saying so. What must not exist is somewhere
+    // to type one.
+    const banned = /\b(cc-(number|exp|csc|name)|cvv|cvc|card ?number|cardnumber|iban|sort ?code|expiry|postal-code|billing)\b/i;
+    const controls = /<(input|select|textarea)\b[^>]*>/gi;
+
+    for (const target of ['/', '/pricing', '/login', '/signup']) {
+      const html = await (await fetch(`${base}${target}`, { headers: { cookie, accept: 'text/html' } })).text();
+      for (const tag of html.match(controls) ?? []) {
+        assert.ok(!banned.test(tag), `${target} has a control that collects payment details: ${tag}`);
+      }
+      assert.ok(!/<form[^>]*action="[^"]*(checkout|pay|billing|card)/i.test(html),
+        `${target} posts a form at something that sounds like payment`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// degrading when scripts/auth/ is not there
+// ---------------------------------------------------------------------------
+
+test('a missing scripts/auth/ is a 503 with a sentence, and the assets still serve', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-auth-'));
+  const sessions = createSessions({
+    root,
+    loadAuthImpl: async () => { throw Object.assign(new Error('Cannot find module'), { code: 'ERR_MODULE_NOT_FOUND' }); },
+  });
+  const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, sessions, logImpl: () => {} });
+  const port = await app.listen();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } });
+    assert.equal(home.status, 503);
+    assert.ok((await home.text()).includes('scripts/auth/'), 'the 503 must name what is missing');
+
+    const api = await fetch(`${base}/api/jobs/${SHAPED_ID}`);
+    assert.equal(api.status, 503);
+    assert.equal((await api.json()).error.code, 'AUTH_UNAVAILABLE');
+
+    // A sign-in form that cannot possibly work says so BEFORE somebody types a
+    // password into it.
+    assert.equal((await fetch(`${base}/login`, { headers: { accept: 'text/html' } })).status, 503);
+
+    // The parts that do not need an account keep working.
+    assert.equal((await fetch(`${base}/styles.css`)).status, 200);
+    assert.equal((await fetch(`${base}/api/health`)).status, 200);
+    assert.equal((await fetch(`${base}/places/ostsee-strand.jpg`)).status, 404);
+
+    // And the plans are public prose: 503-ing a marketing page because an
+    // unrelated module will not load is a worse answer than showing it.
+    const plans = await fetch(`${base}/pricing`, { headers: { accept: 'text/html' } });
+    assert.equal(plans.status, 200);
+    assert.ok((await plans.text()).includes('What a tape costs'));
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the auth surface this layer depends on is the one A documents', () => {
+  assert.deepEqual(missingAuthFunctions(fakeAuth()), [], 'the fake is missing a documented function');
+  assert.ok(missingAuthFunctions(null).includes('createSession'));
+  assert.ok(missingAuthFunctions({ createAccount: () => {} }).includes('verifyPassword'));
+});
+
+// ---------------------------------------------------------------------------
+// the middleware, on its own
+// ---------------------------------------------------------------------------
+
+test('cookies parse tolerantly and serialize strictly', () => {
+  assert.deepEqual({ ...parseCookies('a=1; b=two') }, { a: '1', b: 'two' });
+  assert.deepEqual({ ...parseCookies('') }, {});
+  assert.deepEqual({ ...parseCookies(undefined) }, {});
+  // A cookie somebody else set, with an undecodable value, must not throw --
+  // that would log everybody out because of an unrelated cookie.
+  assert.equal(parseCookies('junk=%E0%A4%A; ts_session=v').ts_session, 'v');
+
+  const set = serializeCookie('n', 'v alue', { maxAge: 60, secure: true });
+  assert.match(set, /^n=v%20alue;/);
+  assert.match(set, /HttpOnly/);
+  assert.match(set, /SameSite=Lax/);
+  assert.match(set, /Secure/);
+  assert.match(set, /Max-Age=60/);
+});
+
+test('Secure follows the actual protocol, and a forwarded header is believed exactly', () => {
+  assert.equal(isSecureRequest({ socket: { encrypted: true }, headers: {} }), true);
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https' } }), true);
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https, http' } }), true);
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'http' } }), false);
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'nothttps' } }), false);
+  assert.equal(isSecureRequest({ socket: {}, headers: {} }), false);
+});
+
+test('the ownership index refuses ids that are not path-safe', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-own-'));
+  try {
+    const s = createSessions({ root, auth: fakeAuth() });
+    assert.throws(() => s.claimJob({ accountId: '../escape', jobId: SHAPED_ID }), /path-safe/);
+    assert.throws(() => s.claimJob({ accountId: 'acct-1', jobId: '../../etc/passwd' }), /not a job id/);
+    assert.equal(s.ownsJob({ accountId: '../escape', jobId: SHAPED_ID }), false);
+    assert.equal(s.ownsJob({ accountId: 'acct-1', jobId: 'nope' }), false);
+
+    s.claimJob({ accountId: 'acct-1', jobId: SHAPED_ID });
+    assert.equal(s.ownsJob({ accountId: 'acct-1', jobId: SHAPED_ID }), true);
+    assert.equal(s.ownsJob({ accountId: 'acct-2', jobId: SHAPED_ID }), false);
+    assert.deepEqual(s.jobIdsFor('acct-1'), [SHAPED_ID]);
+    assert.deepEqual(s.jobIdsFor('acct-2'), []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the shelf is newest first', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-own-'));
+  try {
+    const s = createSessions({ root, auth: fakeAuth() });
+    const ids = ['20260101-100000-aaaaaa', '20260820-090000-bbbbbb', '20260819-235959-cccccc'];
+    for (const jobId of ids) s.claimJob({ accountId: 'acct-1', jobId });
+    assert.deepEqual(s.jobIdsFor('acct-1'), [
+      '20260820-090000-bbbbbb', '20260819-235959-cccccc', '20260101-100000-aaaaaa',
+    ]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a missing auth module surfaces as AuthUnavailableError, and can recover', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-own-'));
+  try {
+    let present = false;
+    const s = createSessions({
+      root,
+      loadAuthImpl: async () => {
+        if (!present) throw new Error('ENOENT');
+        return fakeAuth();
+      },
+    });
+    await assert.rejects(() => s.currentAccount({ headers: { cookie: 'ts_session=x' } }), AuthUnavailableError);
+    // The module can appear while the server is running; a permanently poisoned
+    // promise would mean a restart for something that fixed itself.
+    present = true;
+    assert.equal(await s.currentAccount({ headers: { cookie: 'ts_session=x' } }), null);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

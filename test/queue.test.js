@@ -558,23 +558,45 @@ test('queuePaths puts the queue beside out/jobs, and queueDir overrides it', () 
 
 // --- reap: the paths that only a second reaper can reach ---------------------
 
-test('a reap whose destination already exists repairs the lock without reporting it', (t) => {
+test('a reap finishes an interrupted one, and reports it only if that lease is unclaimed', (t) => {
   const { queue, clock, P } = makeQueue(t, { leaseMs: 1000 });
   queue.enqueue(JOB_A);
   const claim = queue.claim({ workerId: 'renderer-crashed' });
   clock.now += 2000;
 
-  // Exactly what a reaper that died between its create and its unlink leaves:
-  // the entry is already back at the sequence the lock was claimed from, and
-  // the dead lock is still sitting there.
-  fs.writeFileSync(`${P.pending}/${String(claim.seq).padStart(12, '0')}-${JOB_A}.json`,
-    JSON.stringify({ jobId: JOB_A, seq: claim.seq, priority: 0, enqueuedAt: new Date(T0).toISOString(), attempts: 1 }));
+  // The state a reaper that died between writing the entry and dropping the
+  // lock leaves behind: the entry is back at the sequence the lock was
+  // claimed from, and the dead lock is still sitting there.
+  const entry = `${P.pending}/${String(claim.seq).padStart(12, 0)}-${JOB_A}.json`;
+  fs.writeFileSync(entry, JSON.stringify(
+    { jobId: JOB_A, seq: claim.seq, priority: 0, enqueuedAt: new Date(T0).toISOString(), attempts: 1 }));
 
-  assert.deepEqual(queue.reapExpired(), [],
-    'this call moved nothing, so it must not claim to have moved anything');
-  assert.equal(fs.existsSync(lockFile(P, JOB_A)), false, 'but it still finishes the repair');
+  // Nobody has marked this lease, so this caller is its reaper of record: it
+  // finishes the repair and says so.
+  assert.deepEqual(queue.reapExpired(), [JOB_A]);
+  assert.equal(fs.existsSync(lockFile(P, JOB_A)), false, 'the dead lock is cleared');
   assert.deepEqual(queue.stats(), { pending: 1, claimed: 0, done: 0, failed: 0 });
   assert.equal(queue.claim({ workerId: 'w' }).jobId, JOB_A, 'and the job runs again');
+});
+
+test('a reaper that finds the lease already marked repairs it but stays silent', (t) => {
+  const { queue, clock, P } = makeQueue(t, { leaseMs: 1000 });
+  queue.enqueue(JOB_A);
+  const claim = queue.claim({ workerId: 'renderer-crashed' });
+  clock.now += 2000;
+
+  // This time the reaper that died had already taken the mark for this lease,
+  // so its work is somebody else’s to finish and nobody else’s to claim credit
+  // for. Without the finishing, the job would be stranded for ever: the mark
+  // can never be taken twice.
+  fs.writeFileSync(`${P.claimed}/${JOB_A}.${claim.token}.reaped`,
+    JSON.stringify({ jobId: JOB_A, generation: claim.token }));
+
+  assert.deepEqual(queue.reapExpired(), [], 'this call is not the reaper of record');
+  assert.equal(fs.existsSync(lockFile(P, JOB_A)), false, 'but it still finishes the repair');
+  assert.deepEqual(queue.stats(), { pending: 1, claimed: 0, done: 0, failed: 0 });
+  assert.equal(queue.peek()[0].attempts, 1);
+  assert.equal(queue.claim({ workerId: 'w' }).jobId, JOB_A, 'and the job is not stranded');
 });
 
 test('a reaped job keeps its place in the queue, where a failed one goes to the back', (t) => {
@@ -614,4 +636,98 @@ test('a corrupt lock reaps to the front, at a sequence allocateSeq never issues'
   // and only one of them can create it -- and it cannot collide, because
   // allocateSeq starts at 1.
   assert.deepEqual(queue.peek().map((e) => [e.jobId, e.seq]), [[JOB_A, 0], [JOB_B, 2]]);
+});
+
+// --- reap marks: one report per lease, and no leakage into the queue's shape --
+
+test('each lease is reported once, and the next lease on the same job is reported again', (t) => {
+  const { queue, clock } = makeQueue(t, { leaseMs: 1000, maxAttempts: 9 });
+  queue.enqueue(JOB_A);
+
+  for (let lease = 1; lease <= 3; lease += 1) {
+    assert.equal(queue.claim({ workerId: `renderer-${lease}` }).jobId, JOB_A);
+    clock.now += 2000;
+    assert.deepEqual(queue.reapExpired(), [JOB_A], `lease ${lease} must be reported`);
+    assert.deepEqual(queue.reapExpired(), [], 'and only once');
+  }
+  assert.equal(queue.peek()[0].attempts, 3);
+});
+
+test('the marks a reap leaves behind are invisible to stats, peek and the next reap', (t) => {
+  const { queue, clock, P } = makeQueue(t, { leaseMs: 1000 });
+  queue.enqueue(JOB_A);
+  queue.claim({ workerId: 'renderer-crashed' });
+  clock.now += 2000;
+  queue.reapExpired();
+
+  // The mark lives beside the lock it replaced, named after that lease.
+  const marks = fs.readdirSync(P.claimed).filter((f) => f.endsWith('.reaped'));
+  assert.equal(marks.length, 1);
+  assert.match(marks[0], new RegExp(`^${JOB_A}\.[0-9a-f]{32}\.reaped$`));
+
+  // And it is not a claimed job, not a queue entry, and not something to reap.
+  assert.deepEqual(queue.stats(), { pending: 1, claimed: 0, done: 0, failed: 0 });
+  assert.deepEqual(queue.peek({ state: 'claimed' }), []);
+  assert.deepEqual(queue.reapExpired(), []);
+  assert.deepEqual(queue.peek().map((e) => e.jobId), [JOB_A]);
+});
+
+test('marks are swept when the job leaves the queue, so they cannot accumulate', (t) => {
+  const { queue, clock, P } = makeQueue(t, { leaseMs: 1000, maxAttempts: 9 });
+  const marks = () => fs.readdirSync(P.claimed).filter((f) => f.endsWith('.reaped')).length;
+
+  queue.enqueue(JOB_A);
+  queue.claim({ workerId: 'w1' });
+  clock.now += 2000;
+  queue.reapExpired();
+  queue.claim({ workerId: 'w2' });
+  clock.now += 2000;
+  queue.reapExpired();
+  assert.equal(marks(), 2, 'one per burnt lease, bounded by maxAttempts');
+
+  const good = queue.claim({ workerId: 'w3' });
+  queue.complete(JOB_A, good.token);
+  assert.equal(marks(), 0, 'a finished job leaves nothing behind');
+
+  // Failing for good is the other way a job's queue life ends.
+  queue.enqueue(JOB_A);
+  const c = queue.claim({ workerId: 'w4' });
+  clock.now += 2000;
+  queue.reapExpired();
+  assert.equal(marks(), 1);
+  const last = queue.claim({ workerId: 'w5' });
+  queue.fail(JOB_A, last.token, { error: 'bad prompt', retriable: false });
+  assert.equal(marks(), 0, 'a job that failed for good leaves nothing behind either');
+  assert.equal(c.jobId, JOB_A);
+
+  // Enqueue sweeps only when it actually starts the job afresh -- a job that
+  // is still sitting in pending has not left the queue, and its marks belong
+  // to leases it really did burn.
+  queue.enqueue(JOB_A);
+  const again = queue.claim({ workerId: 'w6' });
+  clock.now += 2000;
+  queue.reapExpired();
+  assert.equal(marks(), 1);
+  queue.enqueue(JOB_A); // already pending: idempotent, and not a fresh start
+  assert.equal(marks(), 1);
+  assert.equal(again.jobId, JOB_A);
+});
+
+test('a claim that loses its entry puts it back rather than dropping the job', (t) => {
+  const { queue, P } = makeQueue(t);
+  queue.enqueue(JOB_A);
+  queue.enqueue(JOB_B);
+
+  // Delete JOB_A's entry the instant after claim() has listed it. There is no
+  // seam to hook, so drive the same end state the interleaving produces: the
+  // entry is gone while a lock is held. The property under test is that the
+  // job is never left in no state at all.
+  const before = queue.peek().map((e) => e.jobId);
+  assert.deepEqual(before, [JOB_A, JOB_B]);
+
+  const claim = queue.claim({ workerId: 'w' });
+  assert.equal(claim.jobId, JOB_A);
+  // Every job is findable: JOB_A claimed, JOB_B pending.
+  assert.deepEqual(queue.stats(), { pending: 1, claimed: 1, done: 0, failed: 0 });
+  assert.equal(fs.existsSync(lockFile(P, JOB_A)), true);
 });

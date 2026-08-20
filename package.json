@@ -20,6 +20,7 @@
     "worker": "node --env-file-if-exists=.env scripts/worker/worker-cli.mjs",
     "queue": "node scripts/queue/queue-cli.mjs",
     "jobs": "node scripts/render/jobs-cli.mjs",
+    "accounts": "node scripts/auth/accounts-cli.mjs",
     "smoke": "node --env-file-if-exists=.env scripts/providers/smoke-cli.mjs",
     "ledger": "node --env-file-if-exists=.env scripts/render/ledger-cli.mjs",
     "purge": "node scripts/render/purge-cli.mjs"

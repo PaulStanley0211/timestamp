@@ -1,5 +1,6 @@
 /**
- * The HTTP layer. Four pages and a JSON API over the job model and the queue.
+ * The HTTP layer. The step page, the plans, sign-in, and the JSON API over the
+ * job model and the queue.
  *
  * WHY NOTHING HERE AWAITS A RENDER, AND WHY THAT IS THE WHOLE DESIGN.
  * `POST /api/jobs` writes a manifest, puts a pointer on the queue and returns
@@ -30,12 +31,33 @@
  * and lets the worker, the legitimate writer, perform the transition between
  * steps. See `handlers.cancelJob`.
  *
- * WHY EVERY `:id` IS CHECKED TWICE. `router.mjs` refuses traversal shapes in the
- * path; this file then checks the surviving string against `JOB_ID_RE` -- the
- * strict one exported by `job.mjs`, not the laxer internal `SAFE_ID_RE` that
- * exists so other modules' tests can use readable ids -- before any of it
- * reaches `jobPaths`. Path traversal is not theoretical when strangers can hit
- * this endpoint, and the second check costs a regex.
+ * WHY EVERY `:id` IS CHECKED TWICE, AND NOW THREE TIMES. `router.mjs` refuses
+ * traversal shapes in the path; this file then checks the surviving string
+ * against `JOB_ID_RE` -- the strict one exported by `job.mjs`, not the laxer
+ * internal `SAFE_ID_RE` -- before any of it reaches `jobPaths`; and then it asks
+ * the ownership index whether the signed-in account may see that job at all.
+ * Path traversal is not theoretical when strangers can hit this endpoint, and
+ * neither is one stranger reading another's job: this application stores
+ * photographs of people's faces, so a job route that only checks the id is a
+ * route that hands anybody anybody's face for the price of guessing a
+ * timestamp.
+ *
+ * WHY A JOB SOMEBODY ELSE OWNS IS A 404 AND NOT A 403. A 403 confirms the job
+ * exists, which is exactly the fact an enumerator is fishing for. Not-yours and
+ * not-there are the same answer here on purpose.
+ *
+ * WHY CREDITS ARE SPENT AT ENQUEUE. The reason is a race: charging when a render
+ * finishes lets somebody start twelve jobs in parallel, each of which checks a
+ * balance none of them has spent yet. So the order in `createJob` is create ->
+ * claim ownership -> debit -> enqueue, and anything that throws part-way unwinds
+ * everything before it: the job directory is removed, the ownership entry is
+ * released, and the debit is refunded -- which is legitimate here precisely
+ * because the job never reached the queue, so no provider was ever called.
+ *
+ * WHY THE RESOLUTION IS CHECKED AGAINST CONFIG AND NOT AGAINST A LIST. 480p and
+ * 720p are on offer and 1080p is not, and all three of those facts live in
+ * `config/credits.json` with the measurement attached. Turning 1080p on is one
+ * field there and no change here.
  */
 
 import http from 'node:http';
@@ -55,14 +77,16 @@ import { CONSENT_TEXT, recordConsent } from '../safety/consent.mjs';
 import { LIMITS } from '../intake/photo.mjs';
 import { runFfprobe } from '../ffmpeg/run.mjs';
 
-/** The repo root, for the two assets served off disk. Derived from this module's
+/** The repo root, for the assets served off disk. Derived from this module's
  *  own location rather than from cwd, so `npm run web` from anywhere finds them. */
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..').split(path.sep).join('/');
 
-import { matchRoute } from './router.mjs';
+import { matchRoute, isPublicRoute } from './router.mjs';
 import { boundaryFromContentType, parseMultipart, fileSink, MultipartError } from './multipart.mjs';
-import { sendCss, sendFile } from './static.mjs';
-import { uploadPage, statusPage, selectPage, resultPage, errorPage } from './views.mjs';
+import { createStylesheet, sendFile } from './static.mjs';
+import { homePage, statusPage, selectPage, resultPage, errorPage } from './views.mjs';
+import { loginPage, signupPage, pricingPage, authUnavailablePage } from './views-auth.mjs';
+import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
 
 /** Anything a handler throws that has a status. Everything else becomes a 500
  *  with a generic message, because a filesystem error message contains an
@@ -86,7 +110,8 @@ export class HttpError extends Error {
  *  `safety/consent.mjs` makes the same point about `granted !== true`. */
 const CONSENT_YES = new Set(['yes', 'on', 'true', '1']);
 
-/** The raw upload, before `intake` re-encodes it into `input/photo.jpg`.
+/**
+ * The raw upload, before `intake` re-encodes it into `input/photo.jpg`.
  *
  *  Deliberately extension-less. The client's filename is attacker-controlled and
  *  `inspectPhoto` derives the real format from the codec rather than the name,
@@ -95,6 +120,33 @@ const CONSENT_YES = new Set(['yes', 'on', 'true', '1']);
 const UPLOAD_NAMES = Object.freeze({ photo: 'input/upload-photo', placePhoto: 'input/upload-place' });
 
 const STILL_FILE_RE = /^still-(\d+)\.(png|jpe?g|webp)$/i;
+
+/** `<id>.jpg` under `assets/places/`. The id is matched against the catalog, so
+ *  no part of a request ever becomes a path component. */
+const PLACE_IMAGE_RE = /^([A-Za-z0-9-]{1,64})\.jpg$/;
+
+/** Routes that never look at a session: two static files, an icon, a card image
+ *  and the health check. Keeping them out of the auth path means a missing
+ *  `scripts/auth/` still serves the stylesheet, and a load balancer still gets
+ *  an answer. */
+const NO_SESSION_ROUTES = new Set(['stylesheet', 'font', 'favicon', 'placeImage', 'health']);
+
+/** Routes that look at a session when there is one but must still render when
+ *  `scripts/auth/` is unavailable. Exactly one, and it is the plans page: it is
+ *  public prose, and 503-ing a marketing page because an unrelated module will
+ *  not load is a worse answer than showing it signed-out. `/login` deliberately
+ *  is NOT here -- a sign-in form that cannot possibly work should say so before
+ *  somebody types a password into it, not after. */
+const AUTH_OPTIONAL_ROUTES = new Set(['pricingPage']);
+
+/** How many tapes the shelf renders. A shelf is a page, not an archive dump. */
+const SHELF_LIMIT = 60;
+
+/** The tape is exactly fifteen seconds -- 375 frames at 25fps, asserted by
+ *  roughly two hundred tests. It is passed to `creditCost` explicitly rather
+ *  than left to the config default, so the quote is priced against the contract
+ *  and not against whatever the estimator happens to default to. */
+const TAPE_SECONDS = 15;
 
 // ---------------------------------------------------------------------------
 // small response helpers
@@ -117,10 +169,17 @@ function sendHtml(req, res, status, html, headers = {}) {
     'Content-Type': 'text/html; charset=utf-8',
     'Content-Length': Buffer.byteLength(html),
     'Cache-Control': 'no-store',
+    // Every page differs by who is signed in. `no-store` already forbids a
+    // shared cache from keeping it, and saying `Vary: Cookie` as well is what
+    // stops a proxy that ignores the first header from serving one person's
+    // shelf to another.
+    Vary: 'Cookie',
     'X-Content-Type-Options': 'nosniff',
     // The pages load nothing from anywhere else -- one same-origin stylesheet,
     // one same-origin font, images and video from this app. Saying so means a
     // successful injection into the place field still cannot exfiltrate.
+    // `style-src 'self'` with no `'unsafe-inline'` is why the per-place card
+    // gradients are generated into /styles.css instead of onto style attributes.
     'Content-Security-Policy':
       "default-src 'self'; img-src 'self' data:; media-src 'self'; "
       + "style-src 'self'; font-src 'self'; script-src 'unsafe-inline'; "
@@ -130,8 +189,8 @@ function sendHtml(req, res, status, html, headers = {}) {
   res.end(req.method === 'HEAD' ? undefined : html);
 }
 
-function redirect(res, to, status = 303) {
-  res.writeHead(status, { Location: to, 'Cache-Control': 'no-store' });
+function redirect(res, to, status = 303, headers = {}) {
+  res.writeHead(status, { Location: to, 'Cache-Control': 'no-store', ...headers });
   res.end();
 }
 
@@ -148,7 +207,7 @@ function wantsHtml(req) {
 }
 
 /**
- * Read a small request body with the cap enforced as it arrives, for the two
+ * Read a small request body with the cap enforced as it arrives, for the
  * endpoints that take one. Same discipline as the multipart parser and for the
  * same reason: checking the size after buffering is not a check.
  */
@@ -170,8 +229,8 @@ function readBody(req, maxBytes = 8_192) {
   });
 }
 
-/** JSON or `application/x-www-form-urlencoded`, because the contact sheet is a
- *  plain form and the poller is fetch(). Neither is more real than the other. */
+/** JSON or `application/x-www-form-urlencoded`, because the contact sheet and
+ *  the sign-in form are plain forms. Neither is more real than the other. */
 function parseSmallBody(contentType, text) {
   const type = String(contentType ?? '').split(';')[0].trim().toLowerCase();
   if (type === 'application/json') {
@@ -189,18 +248,49 @@ function parseSmallBody(contentType, text) {
   return Object.fromEntries(new URLSearchParams(text));
 }
 
+/**
+ * Where to send somebody after they sign in.
+ *
+ * ONLY A SAME-ORIGIN ABSOLUTE PATH. `next=https://evil.example` on a login page
+ * is the textbook open redirect: the link is genuinely ours, the login is
+ * genuinely ours, and the landing page is not. `//evil.example` is the same
+ * attack spelled protocol-relative, which is why the second character is
+ * checked as well as the first, and a backslash is checked because some clients
+ * normalise `/\evil.example` into `//evil.example`.
+ */
+export function safeNext(value) {
+  const next = String(value ?? '');
+  if (!next.startsWith('/')) return '';
+  if (next.length > 512) return '';
+  if (next[1] === '/' || next[1] === '\\') return '';
+  if (next.includes('\\') || /[\x00-\x1f]/.test(next)) return '';
+  return next;
+}
+
+/** The first of several form fields that actually has text in it. The step cards
+ *  post a preset id; the "or describe it" box posts free text; a person who does
+ *  both meant the card they clicked. */
+function firstFilled(...values) {
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
 // ---------------------------------------------------------------------------
 // the server
 // ---------------------------------------------------------------------------
 
 /**
  * @param {object} opts
- * @param {string} opts.root      data root; `out/jobs` and `out/queue` live under it
+ * @param {string} opts.root      data root; `out/jobs`, `out/queue`, `out/accounts` live under it
  * @param {object} opts.cfg       config/render.json as loaded
  * @param {object} opts.queue     a Queue from scripts/queue/queue.mjs
  * @param {number} [opts.port]    0 means "any free port", which is what tests want
  * @param {object} [opts.catalog] injected; defaults to the shipped preset menu
  * @param {string} [opts.provider] provider id recorded on every new job
+ * @param {object} [opts.auth]    injected `scripts/auth/` surface; omit to import it lazily
  */
 export function createServer({
   root,
@@ -213,6 +303,9 @@ export function createServer({
   limits = LIMITS,
   consentText = CONSENT_TEXT,
   ffprobeImpl = runFfprobe,
+  auth = null,
+  sessions = null,
+  assetsRoot = `${REPO_ROOT}/assets`,
   nowImpl = () => new Date(),
   logImpl = (line) => process.stderr.write(`${line}\n`),
 } = {}) {
@@ -223,22 +316,63 @@ export function createServer({
     throw new TypeError('createServer needs a queue (scripts/queue/queue.mjs)');
   }
 
+  const auths = sessions ?? createSessions({ root, auth });
+
   // Loaded once, at construction. A preset file that fails validation should
   // stop the server coming up, not produce a 500 on the first page view.
   const menu = catalog ?? loadCatalog();
-  const recommendations = {
-    places: [...menu.places.values()].map((p) => ({ id: p.id, label: p.label })),
-    outfits: [...menu.outfits.values()].map((o) => ({ id: o.id, label: o.label })),
+
+  /**
+   * The cards are rendered FROM the preset files. There is deliberately no
+   * second copy of the menu in this repo: adding a place is adding a JSON file,
+   * and the carousel, the background layer, the generated CSS and the preset
+   * lookup all pick it up from the same load.
+   */
+  const cards = {
+    places: [...menu.places.values()].map((p) => ({ id: p.id, label: p.label, timeOfDay: p.timeOfDay })),
+    outfits: [...menu.outfits.values()].map((o) => ({ id: o.id, label: o.label, wardrobe: o.wardrobe })),
   };
-  /** label and id both map back to the id, so a chip click ("Allotment garden,
-   *  late August") is recognised as the preset it came from rather than being
+  const placeIds = new Set(cards.places.map((p) => p.id));
+
+  /**
+   * The stylesheet carries a rule per preset AND per resolution -- the card
+   * image with its warm gradient underneath, the full-bleed background layer,
+   * the `:checked` styling, and the cost line that follows the quality
+   * selection. Generated rather than inlined onto elements so `style-src 'self'`
+   * can stay exactly as strict as it was.
+   *
+   * BUILT ON FIRST REQUEST, NOT AT CONSTRUCTION, because the resolution rows
+   * come from `scripts/auth/` and reading them is async. Only a successful build
+   * is cached: if the credits module is unavailable the sheet is still served,
+   * without the quality rules, and the next request tries again -- a stylesheet
+   * that 500s takes every page down with it, including the sign-in page that
+   * would explain what is wrong.
+   */
+  let sheetCache = null;
+  async function stylesheet() {
+    if (sheetCache) return sheetCache;
+    let resolutions = [];
+    let complete = false;
+    try {
+      resolutions = await resolutionRows();
+      complete = true;
+    } catch (err) {
+      logImpl(`[web] stylesheet built without the quality rules: ${err?.message ?? err}`);
+    }
+    const built = createStylesheet({ ...cards, resolutions });
+    if (complete) sheetCache = built;
+    return built;
+  }
+
+  /** label and id both map back to the id, so a card ("Allotment garden, late
+   *  August") is recognised as the preset it came from rather than being
    *  treated as free text and sent through `expand` to be re-derived. */
   const presetLookup = { place: new Map(), outfit: new Map() };
-  for (const p of recommendations.places) {
+  for (const p of cards.places) {
     presetLookup.place.set(p.id.toLowerCase(), p.id);
     presetLookup.place.set(p.label.toLowerCase(), p.id);
   }
-  for (const o of recommendations.outfits) {
+  for (const o of cards.outfits) {
     presetLookup.outfit.set(o.id.toLowerCase(), o.id);
     presetLookup.outfit.set(o.label.toLowerCase(), o.id);
   }
@@ -271,6 +405,22 @@ export function createServer({
       }
       throw err;
     }
+  }
+
+  /**
+   * The only way a handler gets a job.
+   *
+   * Shape, then ownership, then disk -- in that order, so a guessed id that
+   * belongs to somebody else never causes a read. The answer for a job this
+   * account does not own is byte-for-byte the answer for a job that does not
+   * exist.
+   */
+  function ownedJob(account, id) {
+    requireJobId(id);
+    if (!account || !auths.ownsJob({ accountId: account.accountId, jobId: id })) {
+      throw new HttpError(404, 'No such job.', { code: 'NO_JOB' });
+    }
+    return readJob(id);
   }
 
   /**
@@ -363,6 +513,108 @@ export function createServer({
     };
   }
 
+  /** A preset id is not a label. The manifest stores the id, which is what the
+   *  pipeline needs; the page shows what the person actually picked. Free text
+   *  has no entry and falls through as itself. */
+  function labelsOf(job) {
+    const place = job.input?.place?.value ?? null;
+    const outfit = job.input?.outfit?.value ?? null;
+    return {
+      place: cards.places.find((p) => p.id === place)?.label ?? place,
+      outfit: cards.outfits.find((o) => o.id === outfit)?.label ?? outfit,
+    };
+  }
+
+  /**
+   * The shelf.
+   *
+   * Read from the ownership index rather than by scanning `out/jobs`, so it is
+   * one `readdir` plus a manifest read per tape this account actually owns. A
+   * manifest that will not parse is skipped: one broken job must not empty
+   * somebody's shelf.
+   */
+  function shelfFor(account) {
+    if (!account) return [];
+    const out = [];
+    for (const jobId of auths.jobIdsFor(account.accountId).slice(0, SHELF_LIMIT)) {
+      let job;
+      try {
+        job = loadJob({ root, jobId, nowImpl, cfg });
+      } catch {
+        continue;
+      }
+      out.push({
+        jobId,
+        status: job.status,
+        place: labelsOf(job).place ?? '',
+        posterUrl: job.result?.posterPath ? `/api/jobs/${jobId}/poster` : null,
+        href: job.status === 'done' ? `/j/${jobId}/result` : `/j/${jobId}`,
+      });
+    }
+    return out;
+  }
+
+  /** `{credits, planId}`, or a zeroed stand-in. Never throws into a page render:
+   *  a shelf that will not display because a balance lookup failed is a worse
+   *  failure than a shelf that displays with a conservative number -- and zero is
+   *  the conservative direction, because it disables the button rather than
+   *  enabling a render nobody can pay for. */
+  async function balanceOf(account) {
+    try {
+      const b = await auths.balance(account);
+      return {
+        credits: Number(b?.credits ?? 0),
+        planId: b?.planId ?? account?.plan ?? 'free',
+        expiresAt: b?.expiresAt ?? null,
+      };
+    } catch (err) {
+      if (err instanceof AuthUnavailableError) throw err;
+      logImpl(`[web] balance lookup failed: ${err?.message ?? err}`);
+      return { credits: 0, planId: account?.plan ?? 'free', expiresAt: null };
+    }
+  }
+
+  /**
+   * The quality row, straight out of `config/credits.json`.
+   *
+   * NOT A LIST WRITTEN DOWN HERE. 1080p is off today because that file says
+   * `available: false` with the measurement attached; turning it on later is
+   * that field and nothing else, and this function does not need to change for
+   * it. Cached for a minute so that a page view is not three JSON reads, and
+   * only for a minute so an operator editing the config sees it without a
+   * restart.
+   */
+  let resolutionCache = { at: 0, rows: null };
+  async function resolutionRows() {
+    const now = Date.now();
+    if (resolutionCache.rows && now - resolutionCache.at < 60_000) return resolutionCache.rows;
+    const rows = await auths.resolutions();
+    resolutionCache = { at: now, rows };
+    return rows;
+  }
+
+  /**
+   * Which option starts selected.
+   *
+   * 720p when it is on offer: it is the first resolution that fully covers the
+   * tape's 736x588 raster, so nothing is thrown away, and 1080p buys nothing
+   * above it (SSIM 0.958, measured). Falling back to the config default and then
+   * to whatever is left means switching 720p off is still a config change rather
+   * than a code change.
+   */
+  const PREFERRED_RESOLUTION = '720p';
+  async function defaultResolution() {
+    const offered = (await resolutionRows()).filter((r) => r.available);
+    if (offered.some((r) => r.id === PREFERRED_RESOLUTION)) return PREFERRED_RESOLUTION;
+    return offered[0]?.id ?? null;
+  }
+
+  /** The cost of one tape at this resolution, in credits. Fifteen seconds is not
+   *  a default so much as the contract -- 375 frames at 25fps. */
+  async function costOf(resolution) {
+    return auths.cost({ resolution, seconds: TAPE_SECONDS });
+  }
+
   // -------------------------------------------------------------------------
   // health
   // -------------------------------------------------------------------------
@@ -392,14 +644,26 @@ export function createServer({
   const handlers = {
     // --- pages -----------------------------------------------------------
 
-    uploadPage(req, res) {
-      sendHtml(req, res, 200, uploadPage({ ...recommendations, consentText }));
+    async homePage(req, res, { account }) {
+      const [balance, resolutions, resolution] = await Promise.all([
+        balanceOf(account), resolutionRows(), defaultResolution(),
+      ]);
+      sendHtml(req, res, 200, homePage({
+        places: cards.places,
+        outfits: cards.outfits,
+        resolutions,
+        resolution,
+        consentText,
+        balance,
+        account,
+        tapes: shelfFor(account),
+      }));
     },
 
-    stylesheet(req, res) { sendCss(req, res); },
+    async stylesheet(req, res) { (await stylesheet()).send(req, res); },
 
     font(req, res) {
-      const file = `${REPO_ROOT}/assets/fonts/tape-osd.ttf`;
+      const file = `${assetsRoot}/fonts/tape-osd.ttf`;
       if (!sendFile(req, res, { file, contentType: 'font/ttf', maxAge: 86_400 })) {
         throw new HttpError(404, 'Not found.', { code: 'NO_FONT' });
       }
@@ -407,27 +671,185 @@ export function createServer({
 
     favicon(req, res) { res.writeHead(204); res.end(); },
 
-    statusPage(req, res, { params }) {
-      const job = readJob(params.id);
-      if (job.status === 'done') return redirect(res, `/j/${job.jobId}/result`);
-      if (job.status === 'awaiting-selection') return redirect(res, `/j/${job.jobId}/select`);
-      return sendHtml(req, res, 200, statusPage({ view: jobView(job) }));
+    /**
+     * The place photographs, when they exist.
+     *
+     * `assets/places/` is empty today. A 404 here is the designed state, not a
+     * fault: the card's `background-image` lists the photograph first and the
+     * warm gradient second, so a layer that fails to load is simply not painted
+     * and the gradient shows through. The page is finished on a fresh clone and
+     * the real images drop in with no code change.
+     *
+     * The id is resolved by MEMBERSHIP in the loaded catalog, so no byte of the
+     * request is ever concatenated into a path.
+     */
+    placeImage(req, res, { params }) {
+      const m = PLACE_IMAGE_RE.exec(String(params.file ?? ''));
+      const id = m ? m[1] : null;
+      if (!id || !placeIds.has(id)) {
+        throw new HttpError(404, 'No such place image.', { code: 'NO_PLACE_IMAGE' });
+      }
+      if (!sendFile(req, res, {
+        file: `${assetsRoot}/places/${id}.jpg`, contentType: 'image/jpeg', maxAge: 86_400,
+      })) {
+        throw new HttpError(404, 'No such place image.', { code: 'NO_PLACE_IMAGE' });
+      }
     },
 
-    selectPage(req, res, { params }) {
-      const job = readJob(params.id);
+    statusPage(req, res, { params, account }) {
+      const job = ownedJob(account, params.id);
+      if (job.status === 'done') return redirect(res, `/j/${job.jobId}/result`);
+      if (job.status === 'awaiting-selection') return redirect(res, `/j/${job.jobId}/select`);
+      return sendHtml(req, res, 200, statusPage({ view: jobView(job), account, labels: labelsOf(job) }));
+    },
+
+    selectPage(req, res, { params, account }) {
+      const job = ownedJob(account, params.id);
       if (job.status !== 'awaiting-selection') return redirect(res, `/j/${job.jobId}`);
       const stills = stillsOf(job.jobId).map((s) => ({
         index: s.index,
         url: `/api/jobs/${job.jobId}/stills/${s.index}`,
       }));
-      return sendHtml(req, res, 200, selectPage({ view: jobView(job), stills }));
+      return sendHtml(req, res, 200, selectPage({ view: jobView(job), stills, account }));
     },
 
-    resultPage(req, res, { params }) {
-      const job = readJob(params.id);
+    resultPage(req, res, { params, account }) {
+      const job = ownedJob(account, params.id);
       if (job.status !== 'done') return redirect(res, `/j/${job.jobId}`);
-      return sendHtml(req, res, 200, resultPage({ view: jobView(job) }));
+      return sendHtml(req, res, 200, resultPage({ view: jobView(job), account, labels: labelsOf(job) }));
+    },
+
+    // --- accounts --------------------------------------------------------
+
+    async loginPage(req, res, { query, account }) {
+      if (account) return redirect(res, safeNext(query?.get('next')) || '/');
+      return sendHtml(req, res, 200, loginPage({ next: safeNext(query?.get('next')) }));
+    },
+
+    async signupPage(req, res, { query, account }) {
+      if (account) return redirect(res, safeNext(query?.get('next')) || '/');
+      return sendHtml(req, res, 200, signupPage({ next: safeNext(query?.get('next')), consentText }));
+    },
+
+    /**
+     * Sign in.
+     *
+     * ONE MESSAGE FOR BOTH FAILURES. "No such account" and "wrong password" are
+     * different facts and the same answer, because the difference between them
+     * is a free account-enumeration oracle on a site that stores photographs of
+     * people's faces.
+     */
+    async login(req, res) {
+      const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
+      const email = String(body.email ?? '').trim();
+      const password = String(body.password ?? '');
+      const next = safeNext(body.next);
+
+      const mod = await auths.api();
+      let account = null;
+      let refusal = null;
+      try {
+        // `authenticate` answers an unknown email and a wrong password with the
+        // same error, the same sentence and the same amount of work. Its message
+        // is rendered unchanged -- an "improvement" that told them apart would
+        // turn this form into an account-enumeration oracle on a site that
+        // stores photographs of people's faces.
+        account = mod.authenticate({ root, email, password });
+      } catch (err) {
+        account = null;
+        refusal = err?.userMessage ?? null;
+      }
+      if (!account) {
+        const message = refusal ?? 'That email and password do not match an account.';
+        if (wantsHtml(req)) return sendHtml(req, res, 401, loginPage({ error: message, email, next }));
+        return sendJson(req, res, 401, { error: { status: 401, message } });
+      }
+
+      const cookie = await auths.startSession(req, account.accountId);
+      if (wantsHtml(req)) return redirect(res, next || '/', 303, { 'Set-Cookie': cookie });
+      return sendJson(req, res, 200, { accountId: account.accountId, next: next || '/' }, { 'Set-Cookie': cookie });
+    },
+
+    async signup(req, res) {
+      const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
+      const email = String(body.email ?? '').trim();
+      const password = String(body.password ?? '');
+      const next = safeNext(body.next);
+
+      const reject = (message) => {
+        const html = signupPage({ error: message, email, next, consentText });
+        if (wantsHtml(req)) return sendHtml(req, res, 400, html);
+        return sendJson(req, res, 400, { error: { status: 400, message } });
+      };
+
+      // Shape only. A real address is proved by a mail round trip, which this
+      // build does not do; refusing something that is obviously not an address
+      // is still worth the two lines.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+        return reject('That does not look like an email address.');
+      }
+      if (password.length < 10) {
+        return reject('Please use at least ten characters.');
+      }
+      if (!CONSENT_YES.has(String(body.consent ?? '').trim().toLowerCase())) {
+        return reject('Please confirm the statement before creating an account.');
+      }
+
+      const mod = await auths.api();
+      let account;
+      try {
+        account = mod.createAccount({ root, email, password });
+      } catch (err) {
+        // `AuthError` carries `.userMessage` by contract; anything else is ours
+        // and gets a sentence rather than a stack trace.
+        const message = err?.userMessage ?? 'That account could not be created.';
+        logImpl(`[web] signup failed: ${err?.stack ?? err}`);
+        return reject(message);
+      }
+
+      const cookie = await auths.startSession(req, account.accountId);
+      if (wantsHtml(req)) return redirect(res, next || '/', 303, { 'Set-Cookie': cookie });
+      return sendJson(req, res, 201, { accountId: account.accountId }, { 'Set-Cookie': cookie });
+    },
+
+    /** Destroys the server-side record as well as the cookie. That is the whole
+     *  reason sessions are opaque ids rather than JWTs: a token cannot be
+     *  revoked, and this app can hand somebody else's face to whoever holds one. */
+    async logout(req, res) {
+      const cookie = await auths.endSession(req);
+      if (wantsHtml(req)) return redirect(res, '/login', 303, { 'Set-Cookie': cookie });
+      return sendJson(req, res, 200, { ok: true }, { 'Set-Cookie': cookie });
+    },
+
+    /**
+     * The plans.
+     *
+     * NO PAYMENT FORM, HERE OR ANYWHERE. `docs/interfaces-app.md` A: card
+     * handling never touches this code, and when it is wired it goes through a
+     * hosted checkout. `plan` is set by an operator or a future webhook.
+     */
+    async pricingPage(req, res, { account }) {
+      let plans = [];
+      let resolutions = [];
+      try {
+        const mod = await auths.api();
+        plans = Object.values(mod.PLANS ?? {});
+        resolutions = await resolutionRows();
+      } catch (err) {
+        if (!(err instanceof AuthUnavailableError)) throw err;
+        // The plans are prose. A page that cannot name them is worth serving
+        // empty rather than 503-ing a public marketing page.
+        plans = [];
+        resolutions = [];
+      }
+      const balance = account ? await balanceOf(account) : null;
+      sendHtml(req, res, 200, pricingPage({
+        plans,
+        resolutions,
+        currentPlan: account?.plan ?? null,
+        account,
+        balance,
+      }));
     },
 
     // --- API -------------------------------------------------------------
@@ -460,12 +882,13 @@ export function createServer({
     },
 
     /**
-     * Create a job. Writes a manifest, enqueues a pointer, returns 201.
+     * Create a job. Writes a manifest, claims it for the account, consumes a
+     * tape from the quota, enqueues a pointer, returns 201.
      *
      * NOTHING IS AWAITED HERE EXCEPT THE UPLOAD ITSELF. The only slow thing in
      * this handler is reading the bytes the client is already sending.
      */
-    async createJob(req, res) {
+    async createJob(req, res, { account }) {
       const boundary = boundaryFromContentType(req.headers['content-type']);
       if (!boundary) {
         throw new HttpError(415, 'Send the form as multipart/form-data.', { code: 'NOT_MULTIPART' });
@@ -480,6 +903,18 @@ export function createServer({
         });
       }
 
+      // Read before a byte is accepted, so somebody who cannot afford anything is
+      // refused before they spend two minutes uploading. The authoritative debit
+      // still happens at enqueue, below, against the resolution they actually
+      // picked -- this is only the cheap early no.
+      const rows = await resolutionRows();
+      const offered = rows.filter((r) => r.available);
+      const cheapest = offered.reduce((min, r) => (min === null || r.credits < min ? r.credits : min), null);
+      const before = await balanceOf(account);
+      if (cheapest === null || before.credits < cheapest) {
+        throw new HttpError(402, 'Not enough credits for a tape.', { code: 'INSUFFICIENT_CREDITS' });
+      }
+
       // The id is minted before the body is read so the uploads can stream
       // straight into the directory they belong in. Nothing else knows about
       // this id yet, so a failed upload takes the whole directory with it.
@@ -489,6 +924,9 @@ export function createServer({
 
       const hashes = new Map();
       const discard = { write: () => true, end: async () => ({ bytes: 0, discarded: true }), abort: async () => {} };
+      let claimed = false;
+      let debited = false;
+      let createdJob = null;
 
       try {
         const { fields, files } = await parseMultipart(req, {
@@ -522,12 +960,35 @@ export function createServer({
           });
         }
 
-        const placeText = cleanText(fields.place, 'place', { required: placePhoto === null });
-        const outfitText = cleanText(fields.outfit, 'outfit', { required: true });
+        // `place` is the card (a preset id, or empty for "use my own place");
+        // `placeText` is the "or describe it" box. The card wins, because a
+        // person who did both meant the one they clicked.
+        const placeText = cleanText(firstFilled(fields.place, fields.placeText), 'place', {
+          required: placePhoto === null,
+        });
+        const outfitText = cleanText(firstFilled(fields.outfit, fields.outfitText), 'outfit', { required: true });
         const stillCount = cleanStillCount(fields.stillCount);
 
         const placeId = placeText ? presetLookup.place.get(placeText.toLowerCase()) ?? null : null;
         const outfitId = presetLookup.outfit.get(outfitText.toLowerCase()) ?? null;
+
+        // MEMBERSHIP IN THE AVAILABLE SET, not a shape check. An unavailable
+        // resolution is refused rather than quietly downgraded: silently
+        // rendering something the person did not ask for, at a price they did
+        // not see, is the one failure mode on this endpoint that is worse than
+        // an error.
+        const resolution = firstFilled(fields.resolution) || (await defaultResolution());
+        if (!offered.some((r) => r.id === resolution)) {
+          throw new HttpError(400, 'That output size is not available.', {
+            code: 'BAD_RESOLUTION', detail: { available: offered.map((r) => r.id) },
+          });
+        }
+        const credits = await costOf(resolution);
+        if (before.credits < credits) {
+          throw new HttpError(402,
+            `Not enough credits — a ${resolution} tape costs ~${credits} CR and you have ${before.credits} CR.`,
+            { code: 'INSUFFICIENT_CREDITS', detail: { credits, balance: before.credits } });
+        }
 
         const input = {
           photo: {
@@ -543,6 +1004,19 @@ export function createServer({
             : { kind: placeId ? 'preset' : 'text', value: placeId ?? placeText, photoPath: null, photoSha256: null },
           outfit: { kind: outfitId ? 'preset' : 'text', value: outfitId ?? outfitText },
           stillCount,
+          // What was charged for, carried where the worker can actually read it.
+          // `normalizeInput` used to drop unknown fields, which is why ownership
+          // went to a side index and the resolution had nowhere to go at all --
+          // the manifest is the ONLY channel between this process and the
+          // renderer. It now carries both, so a user who paid 152 CR for 720p
+          // gets 720p asked of the provider instead of whatever the default was.
+          // That was a billing bug wearing a rendering bug's clothes.
+          resolution,
+          accountId: account.accountId,
+          // The out/owners index stays, and stays authoritative for lookup --
+          // finding "every job belonging to this account" by scanning every
+          // manifest is the wrong shape. This is the durable record; that is
+          // the index over it.
           consent: recordConsent({ granted: true, text: consentText, nowImpl }),
         };
 
@@ -550,6 +1024,23 @@ export function createServer({
         // the one state this system cannot recover from (job.mjs says so), and
         // this ordering is what makes it impossible.
         const job = createJob({ root, jobId, input, provider, cfg, nowImpl });
+        createdJob = job;
+
+        // Ownership BEFORE the queue, because a worker that starts instantly
+        // and a user who reloads instantly both need the answer to already be
+        // on disk. `job.input` cannot carry it: `normalizeInput` returns a
+        // fixed shape and silently drops fields it does not know, so an
+        // accountId written there would vanish on the worker's first save.
+        auths.claimJob({
+          accountId: account.accountId, jobId: job.jobId, at: nowImpl().toISOString(), resolution, credits,
+        });
+        claimed = true;
+
+        // AT ENQUEUE, not at completion. See the header comment. `debitCredits`
+        // is idempotent by jobId, so a retry of this request is the same render
+        // rather than a second charge.
+        await auths.debit(account, { jobId: job.jobId, credits });
+        debited = true;
         queue.enqueue(job.jobId);
 
         if (wantsHtml(req)) return redirect(res, `/j/${job.jobId}`);
@@ -557,11 +1048,29 @@ export function createServer({
           jobId: job.jobId,
           statusUrl: `/j/${job.jobId}`,
           apiUrl: `/api/jobs/${job.jobId}`,
+          resolution,
+          credits,
         }, { Location: `/j/${job.jobId}` });
       } catch (err) {
         // A half-made directory holding a stranger's photograph and no manifest
         // is invisible to `listJobs`, invisible to purge, and never cleaned up.
         try { fs.rmSync(paths.dir, { recursive: true, force: true }); } catch { /* best effort */ }
+        if (debited) {
+          // The job never reached the queue, so no provider was ever called and
+          // this is exactly the case a refund is for. `refundIfUnspent` reads the
+          // manifest's steps and decides that for itself rather than taking this
+          // handler's word for it; a job that failed AFTER spending is not
+          // refunded, because the money is gone.
+          await auths.refund(account, { jobId, job: createdJob, reason: 'refund:never-enqueued' });
+        }
+        if (claimed) {
+          try { auths.releaseJob({ accountId: account.accountId, jobId }); } catch { /* best effort */ }
+        }
+        // OUR OWN REFUSALS PASS STRAIGHT THROUGH. They already carry the exact
+        // sentence -- "a 720p tape costs ~152 CR and you have 100 CR" -- and the
+        // code-mapping below would otherwise catch one of them by its `code` and
+        // replace it with the generic version of itself.
+        if (err instanceof HttpError) throw err;
         if (err instanceof MultipartError) {
           // The body was abandoned mid-stream, so this response has to be the
           // last thing on the connection.
@@ -569,16 +1078,30 @@ export function createServer({
             code: err.code, closeConnection: true,
           });
         }
+        // The credits module's refusal, raised by `debitCredits` at the moment of
+        // enqueue. The job directory has already been removed above, so nothing
+        // was created and there is nothing left to refund.
+        if (err?.code === 'INSUFFICIENT_CREDITS' || err?.code === 'BAD_CREDITS') {
+          throw new HttpError(402, err?.userMessage ?? 'Not enough credits for that tape.', {
+            code: 'INSUFFICIENT_CREDITS',
+          });
+        }
+        if (err?.code === 'UNKNOWN_RESOLUTION' || err?.code === 'UNKNOWN_TIER'
+          || err?.code === 'RESOLUTION_UNAVAILABLE') {
+          throw new HttpError(400, err?.userMessage ?? 'That output size is not available.', {
+            code: 'BAD_RESOLUTION',
+          });
+        }
         throw err;
       }
     },
 
-    getJob(req, res, { params }) {
-      sendJson(req, res, 200, jobView(readJob(params.id)));
+    getJob(req, res, { params, account }) {
+      sendJson(req, res, 200, jobView(ownedJob(account, params.id)));
     },
 
-    listStills(req, res, { params }) {
-      const job = readJob(params.id);
+    listStills(req, res, { params, account }) {
+      const job = ownedJob(account, params.id);
       sendJson(req, res, 200, {
         jobId: job.jobId,
         stills: stillsOf(job.jobId).map((s) => ({
@@ -589,8 +1112,8 @@ export function createServer({
       });
     },
 
-    getStill(req, res, { params }) {
-      const job = readJob(params.id);
+    getStill(req, res, { params, account }) {
+      const job = ownedJob(account, params.id);
       const wanted = Number(params.index);
       if (!Number.isInteger(wanted) || wanted < 1) {
         throw new HttpError(400, 'Still index must be a whole number from 1.', { code: 'BAD_INDEX' });
@@ -613,8 +1136,8 @@ export function createServer({
      * save. Any other status is 409 -- refusing is correct, because a selection
      * arriving mid-render would be applied to a step that has already run.
      */
-    async select(req, res, { params }) {
-      const job = readJob(params.id);
+    async select(req, res, { params, account }) {
+      const job = ownedJob(account, params.id);
 
       // The body is drained BEFORE the refusals, even though a 409 does not need
       // it. An HTTP/1.1 response sent while the request body is still arriving
@@ -668,8 +1191,8 @@ export function createServer({
       return sendJson(req, res, 200, { jobId: job.jobId, stillIndex, status: job.status });
     },
 
-    getVideo(req, res, { params, query }) {
-      const job = readJob(params.id);
+    getVideo(req, res, { params, query, account }) {
+      const job = ownedJob(account, params.id);
       // `?download=1` and not Accept-sniffing: the same URL is both the <video>
       // source and the download link, and a header that differs between a media
       // element and a navigation is not something to hang a filename on.
@@ -684,8 +1207,8 @@ export function createServer({
       }
     },
 
-    getPoster(req, res, { params }) {
-      const job = readJob(params.id);
+    getPoster(req, res, { params, account }) {
+      const job = ownedJob(account, params.id);
       if (!sendFile(req, res, { file: jobPaths(root, job.jobId).poster, contentType: 'image/jpeg', maxAge: 3600 })) {
         throw new HttpError(404, 'This job has no poster yet.', { code: 'NO_POSTER' });
       }
@@ -710,9 +1233,13 @@ export function createServer({
      * text promises deletion on request. The manifest stays: it is the cost
      * record the ledger reads, and it holds no image. Scheduled retention
      * deletion is `scripts/render/purge.mjs` and stays there.
+     *
+     * The ownership entry stays too. A cancelled job is still this account's
+     * job, it still appears on the shelf, and removing the entry would make the
+     * cost record unreachable by the only person entitled to see it.
      */
-    cancelJob(req, res, { params }) {
-      const job = readJob(params.id);
+    cancelJob(req, res, { params, account }) {
+      const job = ownedJob(account, params.id);
       const paths = jobPaths(root, job.jobId);
 
       // Written before the branch, so a worker that claims the job in the
@@ -761,8 +1288,8 @@ export function createServer({
     if (text.length === 0) {
       if (!required) return null;
       throw new HttpError(400, kind === 'place'
-        ? 'Say where you want to be, or upload a photo of the place.'
-        : 'Say what you are wearing.', { code: 'MISSING_TEXT', detail: { kind } });
+        ? 'Pick a place, describe one, or upload a photo of it.'
+        : 'Pick a look, or describe what you are wearing.', { code: 'MISSING_TEXT', detail: { kind } });
     }
     if (text.length > 200) {
       throw new HttpError(400, 'Keep it under 200 characters.', { code: 'TEXT_TOO_LONG', detail: { kind } });
@@ -817,6 +1344,24 @@ export function createServer({
     sendJson(req, res, status, { error: { status, message: title, detail } }, headers);
   }
 
+  /**
+   * Not signed in.
+   *
+   * A browser is sent to `/login` carrying where it was going, so the round trip
+   * ends where it started. Everything else gets a 401, because a JSON client
+   * following a 303 to an HTML login form and parsing it as a job payload is a
+   * worse failure than a status code it can branch on.
+   */
+  function unauthenticated(req, res, matched) {
+    if (wantsHtml(req)) {
+      const next = safeNext(matched.pathname);
+      return redirect(res, next && next !== '/' ? `/login?next=${encodeURIComponent(next)}` : '/login');
+    }
+    return sendJson(req, res, 401, {
+      error: { status: 401, message: 'Sign in first.', code: 'NOT_SIGNED_IN' },
+    });
+  }
+
   async function handler(req, res) {
     const matched = matchRoute(req.method, req.url ?? '/');
 
@@ -824,7 +1369,7 @@ export function createServer({
       if (matched.status === 405) {
         res.setHeader('Allow', matched.allow.join(', '));
         // OPTIONS is answered here rather than routed, because it is the same
-        // answer for every path and a row per route would be fourteen more.
+        // answer for every path and a row per route would be twenty more.
         if (String(req.method).toUpperCase() === 'OPTIONS') {
           res.writeHead(204, { Allow: matched.allow.join(', ') });
           res.end();
@@ -836,12 +1381,46 @@ export function createServer({
       return;
     }
 
+    // Who is asking. Resolved once per request, before any handler runs, so a
+    // handler cannot forget to ask -- and never resolved at all for the five
+    // routes that are files, which is what keeps the stylesheet serving when
+    // `scripts/auth/` is not on disk.
+    let account = null;
+    if (!NO_SESSION_ROUTES.has(matched.name)) {
+      try {
+        account = await auths.currentAccount(req);
+      } catch (err) {
+        if (err instanceof AuthUnavailableError) {
+          if (AUTH_OPTIONAL_ROUTES.has(matched.name)) {
+            account = null;
+          } else {
+            logImpl(`[web] scripts/auth/ is not available (${err.cause?.message ?? 'no reason given'}); account routes are 503`);
+            if (wantsHtml(req)) sendHtml(req, res, 503, authUnavailablePage());
+            else sendJson(req, res, 503, { error: { status: 503, message: 'Accounts are not available.', code: 'AUTH_UNAVAILABLE' } });
+            return;
+          }
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!isPublicRoute(matched.name) && !account) {
+      unauthenticated(req, res, matched);
+      return;
+    }
+
     try {
-      await handlers[matched.name](req, res, matched);
+      await handlers[matched.name](req, res, { ...matched, account });
     } catch (err) {
       if (err instanceof HttpError) {
         fail(req, res, err.status, err.message, null, matched.params?.id ?? null,
           { closeConnection: err.closeConnection });
+        return;
+      }
+      if (err instanceof AuthUnavailableError) {
+        if (wantsHtml(req)) sendHtml(req, res, 503, authUnavailablePage());
+        else sendJson(req, res, 503, { error: { status: 503, message: 'Accounts are not available.', code: 'AUTH_UNAVAILABLE' } });
         return;
       }
       if (err instanceof MultipartError) {
@@ -865,6 +1444,10 @@ export function createServer({
   return {
     handler,
     server,
+    sessions: auths,
+    /** The menu the cards are rendered from, so a test can assert the page is
+     *  built out of `presets/` rather than out of a second copy. */
+    cards,
     get port() {
       const address = server.address();
       return address && typeof address === 'object' ? address.port : null;

@@ -7,13 +7,25 @@
  * is exactly one way a value reaches the output, `h()`, and any interpolation in
  * this file that is not wrapped in it is a bug you can find with a grep. The
  * strings that matter are not hypothetical -- `place` and `outfit` are free text
- * a stranger typed, they are echoed back on the status page, and
- * `<img src=x onerror=...>` in the outfit box is the first thing anybody tries.
+ * a stranger typed, they are echoed back on the status page and on the shelf,
+ * and `<img src=x onerror=...>` in the outfit box is the first thing anybody
+ * tries.
  *
  * WHY THE PAGES ARE PURE STRINGS AND KNOW NOTHING ABOUT `res`. A view that takes
  * a response object can only be tested by faking one. A view that returns a
  * string can be asserted on directly, which is how `test/web-api.test.js` checks
  * that a script tag typed into the place field comes back inert.
+ *
+ * WHY THE SELECTION RADIOS LIVE AT THE TOP OF `<body>` AND NOT INSIDE THE FORM.
+ * The full-bleed background is the selected place photograph, cross-fading when
+ * the selection changes, and the selected card grows and gains a badge. All
+ * three are `#id:checked ~ ...` rules, which means the inputs have to be
+ * *siblings* of the background layer and of the content -- so they sit at the
+ * top of the body, visually hidden, and are joined back to the form by the
+ * `form="tape"` attribute. The payoff is that selection, cross-fade, the badge
+ * and the reveal of "use my own place" all work with scripting switched off, and
+ * `prefers-reduced-motion` turns the transition off in one CSS rule rather than
+ * in a script that has to remember to check.
  *
  * WHY THE STATUS PAGE NAMES THE STEP INSTEAD OF SHOWING A PERCENTAGE. This is
  * the page somebody looks at for several minutes while paid generation calls run
@@ -24,6 +36,7 @@
  */
 
 import { STEPS } from '../render/job.mjs';
+import { placeSlug, outfitSlug, qualitySlug } from './static.mjs';
 
 // ---------------------------------------------------------------------------
 // escaping
@@ -93,17 +106,102 @@ const STATUS_COPY = Object.freeze({
   cancelled: 'Cancelled',
 });
 
+/**
+ * The FRAME row. Facts, not choices.
+ *
+ * A camcorder tape is 4:3, PAL is what a 2003 tape in Germany was, and 25 x 15
+ * is exactly 375 frames -- the number roughly two hundred tests assert. There is
+ * nothing here to change, so these are `<span>`s and not controls, and no field
+ * named `aspect` or `fps` exists anywhere in this application.
+ */
+export const TAPE_FACTS = Object.freeze(['4:3', 'PAL', '25 fps', '15.000s']);
+
+/**
+ * The QUALITY row's copy, and the reason it is worded the way it is.
+ *
+ * MEASURED, 2026-08-20 (docs/interfaces-app.md): the tape works at 736x588, and
+ * grain is applied at 720x576 *before* the upscale, because grain applied at
+ * 1080 reads as a modern sensor at high ISO instead of tape. So detail above the
+ * raster is not degraded by the look, it is discarded by it -- SSIM between a
+ * 720p-sourced and a 1080p-sourced delivery is 0.958, and a 4x zoom on a hard
+ * edge shows nothing.
+ *
+ * THIS IS THEREFORE NOT AN UPSELL AND MUST NOT READ AS ONE. The delivered file
+ * is 1080x1920 either way. Nothing here says "HD", nothing here calls 480p
+ * "lower quality video", and nothing implies paying more buys a better picture,
+ * because we measured how much it buys and the answer is nothing you can see.
+ * What 480p actually costs you is stated plainly: it is below the raster
+ * vertically, so it is upscaled and slightly softer.
+ *
+ * Keyed by resolution id with a total fallback, so a resolution added to
+ * `config/credits.json` renders with an honest generic line rather than
+ * vanishing off the page.
+ */
+export const RESOLUTION_COPY = Object.freeze({
+  '480p': 'Cheaper. Slightly softer, because it sits just under the tape’s own resolution.',
+  '720p': 'The native fit — nothing is thrown away.',
+  '1080p': 'Nothing gained over 720p: the tape discards everything above its own raster.',
+});
+
+export function resolutionDetail(res) {
+  return RESOLUTION_COPY[res.id]
+    ?? (res.width && res.height ? `${res.width}x${res.height} before the tape.` : 'Source size before the tape.');
+}
+
 // ---------------------------------------------------------------------------
 // the shell
 // ---------------------------------------------------------------------------
+
+/** `20260820-144501-a3f19c` -> `20.08.2026`. The date is already in the id, so
+ *  reading a clock to render it would be both unnecessary and, on a page that
+ *  can be cached, wrong. */
+export function stampDate(jobId) {
+  const m = /^(\d{4})(\d{2})(\d{2})-/.exec(String(jobId ?? ''));
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : '';
+}
+
+/** The wordmark: the product's own typeface, with the dot a camcorder blinks
+ *  while it is recording. Not an illustration, and not an icon pack. */
+function wordmark() {
+  return `<a class="wordmark" href="/"><span class="rec" aria-hidden="true">&#9679;</span>TIMESTAMP</a>`;
+}
+
+function nav({ account = null, balance = null } = {}) {
+  if (!account) {
+    return `<nav class="nav">
+  <a href="/pricing">Plans</a>
+  <a href="/login">Sign in</a>
+</nav>`;
+  }
+  const left = balance ? `<span class="who">${h(`${balance.credits} CR`)}</span>` : '';
+  return `<nav class="nav">
+  ${left}
+  <a href="/pricing">Plans</a>
+  <form method="post" action="/logout" class="nav-form"><button type="submit">Sign out</button></form>
+</nav>`;
+}
 
 /**
  * `refreshSeconds` drives a `<noscript>` meta refresh, not a scripted one. The
  * status page polls a JSON endpoint when it can; when it cannot, reloading the
  * whole page every few seconds is a worse experience and a working one, and the
  * alternative is a page that sits there frozen for someone with scripting off.
+ *
+ * `preBody` is where the selection radios, the background layers and the scrim
+ * go -- outside `.wrap`, because the CSS that fades one background into another
+ * needs them to be siblings. Everything else on the page is inside `.wrap`.
  */
-export function layout({ title, body, refreshSeconds = null, bodyClass = '' }) {
+export function layout({
+  title,
+  body,
+  preBody = '',
+  refreshSeconds = null,
+  bodyClass = '',
+  wrapClass = '',
+  account = null,
+  balance = null,
+  chrome = true,
+}) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -116,10 +214,11 @@ ${refreshSeconds ? `<noscript><meta http-equiv="refresh" content="${Number(refre
 </head>
 <body class="${h(bodyClass)}">
 <div class="grain" aria-hidden="true"></div>
-<div class="wrap">
+${preBody || '<div class="bgs" aria-hidden="true"></div>\n<div class="scrim" aria-hidden="true"></div>'}
+<div class="wrap ${h(wrapClass)}">
 <header class="masthead">
-  <a class="wordmark" href="/">TIMESTAMP</a>
-  <p class="tagline">One photo. Fifteen seconds. 2003.</p>
+  ${wordmark()}
+  ${chrome ? nav({ account, balance }) : ''}
 </header>
 ${body}
 <footer class="foot">
@@ -133,88 +232,242 @@ ${body}
 }
 
 // ---------------------------------------------------------------------------
-// the upload form
+// the home page
 // ---------------------------------------------------------------------------
 
-function recommendation(kind, item) {
-  return `<button type="button" class="chip" data-fill="${h(kind)}" data-value="${h(item.label)}">${h(item.label)}</button>`;
+/**
+ * A preset's one line of detail.
+ *
+ * `wardrobe` is a full sentence written for a prompt ("an oversized half-zip
+ * fleece pullover in marl grey, the zip pulled up to the collar, ..."), and the
+ * card wants the first clause of it. Cut at a comma rather than at a character
+ * count where possible, so the line ends on a phrase instead of mid-word.
+ */
+export function shortDetail(text, max = 58) {
+  const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!flat) return '';
+  const comma = flat.indexOf(',');
+  const clause = comma > 12 && comma <= max ? flat.slice(0, comma) : flat;
+  if (clause.length <= max) return clause;
+  const cut = clause.slice(0, max);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > 20 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
-function datalist(id, items) {
-  return `<datalist id="${h(id)}">${items.map((i) => `<option value="${h(i.label)}"></option>`).join('')}</datalist>`;
+function stepHead(n, name, subtitle) {
+  return `<div class="step-head">
+  <p class="eyebrow">${h(`STEP ${String(n).padStart(2, '0')}`)}</p>
+  <h2 class="title">${h(name)}</h2>
+  <p class="sub">${h(subtitle)}</p>
+  <hr class="rule">
+</div>`;
 }
 
 /**
- * The upload page.
+ * The one page the product lives on: four steps, the settings panel, the shelf.
  *
- * The fourteen presets are offered as *recommendations that fill a text box*,
- * never as a select element. That is the 2026-08-20 scope decision in CLAUDE.md
- * made visible: free text is the norm and the menu is a starting point, and a
- * dropdown would say the opposite no matter what the copy underneath it claimed.
- * They are also rendered into a `<datalist>`, so the recommendations still work
- * with scripting off -- the chips are an enhancement, the datalist is the floor.
- *
- * @param {{places: Array<{id,label}>, outfits: Array<{id,label}>,
- *          consentText: string, error?: {message: string}|null,
- *          values?: {place?: string, outfit?: string}}} data
+ * @param {object} data
+ * @param {Array<{id,label,timeOfDay}>} data.places   from `presets/places/`
+ * @param {Array<{id,label,wardrobe}>}  data.outfits  from `presets/outfits/`
+ * @param {Array<{id,width,height,available,credits}>} data.resolutions
+ *        from `config/credits.json` -- NOT a list written down in this file
+ * @param {string} data.resolution    which one starts selected
+ * @param {{credits:number,planId:string}} data.balance
+ * @param {Array} data.tapes   the shelf, newest first
  */
-export function uploadPage({ places = [], outfits = [], consentText = '', error = null, values = {} } = {}) {
+export function homePage({
+  places = [],
+  outfits = [],
+  resolutions = [],
+  resolution = null,
+  consentText = '',
+  balance = { credits: 0, planId: 'free' },
+  account = null,
+  tapes = [],
+  error = null,
+  values = {},
+} = {}) {
+  const offered = resolutions.filter((r) => r.available);
+  const chosen = offered.some((r) => r.id === resolution) ? resolution : (offered[0]?.id ?? null);
+  // The radios, hoisted out of the form. `form="tape"` is what puts them back
+  // into the submission; the CSS needs them here.
+  const hooks = [
+    ...outfits.map((o) => (
+      `<input class="statehook" type="radio" form="tape" name="outfit" id="${h(outfitSlug(o.id))}" value="${h(o.id)}">`
+    )),
+    ...places.map((p) => (
+      `<input class="statehook" type="radio" form="tape" name="place" id="${h(placeSlug(p.id))}" value="${h(p.id)}">`
+    )),
+    // The escape hatch posts an empty `place`, which the server reads as "there
+    // is no text, so the photograph had better be there" -- exactly the rule
+    // that already governs a place photo.
+    `<input class="statehook" type="radio" form="tape" name="place" id="pl-own" value="">`,
+    // Only the AVAILABLE resolutions get a radio. An unavailable one renders as
+    // a span with no control behind it, so it is not merely disabled in the
+    // browser -- there is nothing for a hand-written POST to name either.
+    ...offered.map((r) => (
+      `<input class="statehook" type="radio" form="tape" name="resolution" id="${h(qualitySlug(r.id))}" value="${h(r.id)}"${r.id === chosen ? ' checked' : ''}>`
+    )),
+  ].join('\n');
+
+  const backgrounds = places
+    .map((p) => `<div class="bg bg--${h(placeSlug(p.id))}"></div>`)
+    .join('\n');
+
+  const preBody = `${hooks}
+<div class="bgs" aria-hidden="true">
+${backgrounds}
+</div>
+<div class="scrim" aria-hidden="true"></div>`;
+
+  const lookCards = outfits.map((o) => `
+    <label class="lookcard lookcard--${h(outfitSlug(o.id))}" for="${h(outfitSlug(o.id))}">
+      <span class="tick" aria-hidden="true"></span>
+      <span class="name">${h(o.label)}</span>
+      <span class="detail">${h(shortDetail(o.wardrobe))}</span>
+    </label>`).join('');
+
+  const placeCards = places.map((p) => `
+    <label class="placecard placecard--${h(placeSlug(p.id))}" for="${h(placeSlug(p.id))}">
+      <span class="thumb thumb--${h(placeSlug(p.id))}" aria-hidden="true"></span>
+      <span class="badge" aria-hidden="true"></span>
+      <span class="cap">
+        <span class="name">${h(p.label)}</span>
+        <span class="when">${h(p.timeOfDay)}</span>
+      </span>
+    </label>`).join('');
+
+  const dots = [...places.map((p) => `<span class="dot dot--${h(placeSlug(p.id))}"></span>`), '<span class="dot dot--own"></span>'].join('');
+
+  const qualityCards = resolutions.map((r) => {
+    const detail = h(resolutionDetail(r));
+    const cr = h(`~${r.credits} CR`);
+    if (!r.available) {
+      return `
+    <span class="qualitycard qualitycard--soon">
+      <span class="name">${h(r.id)}</span>
+      <span class="cr">${cr}</span>
+      <span class="detail">${detail}</span>
+      <span class="flag">Coming soon</span>
+    </span>`;
+    }
+    return `
+    <label class="qualitycard qualitycard--${h(qualitySlug(r.id))}" for="${h(qualitySlug(r.id))}">
+      <span class="tick" aria-hidden="true"></span>
+      <span class="name">${h(r.id)}</span>
+      <span class="cr">${cr}</span>
+      <span class="detail">${detail}</span>
+      ${r.id === chosen ? '<span class="flag">Recommended</span>' : ''}
+    </label>`;
+  }).join('');
+
+  // One cost per resolution, switched by the same `:checked` rule that styles
+  // the card. A cost that only updated with JavaScript would be blank on the one
+  // page where a number decides whether somebody spends.
+  const costLines = offered.map((r) => (
+    `<span class="cost cost--${h(qualitySlug(r.id))}">${h(`~${r.credits} CR`)}</span>`
+  )).join('');
+
+  // Disabled ONLY when the balance cannot afford the cheapest thing on offer,
+  // because that is the only refusal that is true whatever gets picked. Anything
+  // dearer than the balance gets its own line instead, switched the same way, so
+  // the reason names the actual numbers rather than a general apology.
+  const cheapest = offered.reduce((min, r) => (min === null || r.credits < min ? r.credits : min), null);
+  const brokeEntirely = cheapest !== null && balance.credits < cheapest;
+  const creditWarnings = offered
+    .filter((r) => balance.credits < r.credits)
+    .map((r) => `<span class="why why--${h(qualitySlug(r.id))}">${
+      h(`Not enough credits — a ${r.id} tape costs ~${r.credits} CR and you have ${balance.credits} CR.`)
+    }</span>`).join('');
+
   const body = `
 <main>
 ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
 
-<p class="lede">Upload one photo of yourself, say where you want to be and what you are wearing,
-and get back fifteen seconds that look like they came off a camcorder tape.</p>
+<p class="lede">One photo, one look, one place. Fifteen seconds that look like they came off a
+camcorder tape in a German suburb, some time around 2003.</p>
 
-<form class="card" method="post" action="/api/jobs" enctype="multipart/form-data">
+<form id="tape" method="post" action="/api/jobs" enctype="multipart/form-data">
 
-  <fieldset class="field">
-    <legend>Your photo</legend>
-    <p class="hint">A clear photo of your face. JPEG, PNG or WebP, up to 12&nbsp;MB.
-    The location and camera data are stripped before anything else happens.</p>
-    <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp" required>
-  </fieldset>
+  <section class="panel">
+    ${stepHead(1, 'Your photo', 'Uploaded once, kept in your library — the person in every tape.')}
+    <label class="drop" for="photo">
+      <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp" required>
+      <span class="plus">+ Add photo</span>
+      <span class="chosen-name" id="photo-name"></span>
+      <span class="say">A clear photo of your face. JPEG, PNG or WebP, up to 12&nbsp;MB.
+      The location and camera data are stripped before anything else happens.</span>
+    </label>
+  </section>
 
-  <fieldset class="field">
-    <legend><label for="place">Where</label></legend>
-    <p class="hint">Anything you like. These are only suggestions.</p>
-    <input type="text" id="place" name="place" list="place-list" maxlength="200" required
-           autocomplete="off" spellcheck="false"
-           placeholder="my grandmother's kitchen"
-           value="${h(values.place)}">
-    ${datalist('place-list', places)}
-    <div class="chips">${places.map((p) => recommendation('place', p)).join('')}</div>
+  <section class="panel">
+    ${stepHead(2, 'The look', 'Only what is on the body — the place carries everything else.')}
+    <div class="looks">${lookCards}</div>
     <details class="aside">
-      <summary>Or upload a photo of the place</summary>
-      <p class="hint">A second photo, used as a reference alongside your face.
-      Your actual garden beats any description of one.</p>
-      <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp">
+      <summary>Or describe what you are wearing</summary>
+      <p class="hint">Used only when no card above is chosen.</p>
+      <input type="text" name="outfitText" maxlength="200" autocomplete="off" spellcheck="false"
+             placeholder="a green anorak" value="${h(values.outfit)}">
     </details>
-  </fieldset>
+  </section>
 
-  <fieldset class="field">
-    <legend><label for="outfit">Wearing</label></legend>
-    <p class="hint">Only what is on the body &mdash; the place carries everything else.</p>
-    <input type="text" id="outfit" name="outfit" list="outfit-list" maxlength="200" required
-           autocomplete="off" spellcheck="false"
-           placeholder="a green anorak"
-           value="${h(values.outfit)}">
-    ${datalist('outfit-list', outfits)}
-    <div class="chips">${outfits.map((o) => recommendation('outfit', o)).join('')}</div>
-  </fieldset>
+  <section class="panel">
+    ${stepHead(3, 'The place', 'Somewhere ordinary. That is the whole idea.')}
+    <div class="rail">${placeCards}
+    <label class="placecard placecard--own" for="pl-own">
+      <span class="thumb" aria-hidden="true"></span>
+      <span class="badge" aria-hidden="true"></span>
+      <span class="cap">
+        <span class="name">Use my own place</span>
+        <span class="when">Your photograph</span>
+      </span>
+    </label>
+    </div>
+    <div class="dots" aria-hidden="true">${dots}</div>
 
-  <fieldset class="field">
-    <legend><label for="stillCount">Frames to choose from</label></legend>
-    <p class="hint">You pick one before the video is made. More costs more and takes longer.</p>
-    <select id="stillCount" name="stillCount">
-      <option value="1">1</option>
-      <option value="3" selected>3</option>
-      <option value="5">5</option>
-    </select>
-  </fieldset>
+    <div class="ownplace">
+      <p class="hint">A second photograph, used as a reference alongside your face.
+      Your actual childhood garden beats any description of one.</p>
+      <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp">
+    </div>
 
-  <fieldset class="field consent">
-    <legend>Before you upload</legend>
+    <details class="aside">
+      <summary>Or describe the place</summary>
+      <p class="hint">Used only when no card above is chosen.</p>
+      <input type="text" name="placeText" maxlength="200" autocomplete="off" spellcheck="false"
+             placeholder="my grandmother&#39;s kitchen" value="${h(values.place)}">
+    </details>
+  </section>
+
+  <section class="panel">
+    ${stepHead(4, 'The tape', 'One of these is a choice. The rest is what a camcorder tape is.')}
+
+    <p class="eyebrow">Frame</p>
+    <div class="pills">${TAPE_FACTS.map((f) => `<span class="pill">${h(f)}</span>`).join('')}</div>
+    <p class="hint">4:3 is the true camcorder frame.</p>
+
+    <p class="eyebrow">Quality</p>
+    <div class="quality">${qualityCards}</div>
+    <p class="hint">Every option delivers the same 1080&times;1920 file. What changes is how much detail
+    exists before the tape &mdash; and the tape works at 720&times;576, so above that there is
+    nothing left to keep.</p>
+
+    <dl class="facts">
+      <dt>Length</dt><dd>15 SEC</dd>
+      <dt>Estimated cost</dt><dd>${costLines}</dd>
+      <dt>Credits</dt><dd>${h(`${balance.credits} CR`)}</dd>
+    </dl>
+
+    <div class="field">
+      <label for="stillCount">Frames to choose from</label>
+      <p class="hint">You pick one before the video is made. More costs more and takes longer.</p>
+      <select id="stillCount" name="stillCount">
+        <option value="1">1</option>
+        <option value="3" selected>3</option>
+        <option value="5">5</option>
+      </select>
+    </div>
+
     <label class="check">
       <input type="checkbox" id="consent" name="consent" value="yes" required>
       <span class="consent-text">${
@@ -225,25 +478,79 @@ and get back fifteen seconds that look like they came off a camcorder tape.</p>
   String(consentText).split('\n').map((para) => `<span>${h(para)}</span>`).join('')
 }</span>
     </label>
-  </fieldset>
 
-  <button type="submit" class="go">Make the tape</button>
+    <button type="submit" class="record" id="record"${brokeEntirely ? ' disabled' : ''}>&#10685; Record the tape</button>
+    ${brokeEntirely
+    ? `<p class="reason">${h(`Not enough credits — the cheapest tape costs ~${cheapest} CR and you have ${balance.credits} CR.`)}</p>`
+    : `<p class="reason" id="reason">Upload a photo first</p>${
+  creditWarnings ? `
+    <p class="reason">${creditWarnings}</p>` : ''}`}
+    ${creditWarnings || brokeEntirely ? `<p class="reason"><a class="quiet" href="/pricing">See the plans</a></p>` : ''}
+  </section>
+
 </form>
+
+<section class="panel">
+  <div class="step-head">
+    <p class="eyebrow">Archive</p>
+    <h2 class="title">Your tapes</h2>
+    <p class="sub">Every recording stays on the shelf.</p>
+    <hr class="rule">
+  </div>
+  ${tapes.length ? `<div class="shelf">${tapes.map(shelfTile).join('')}</div>` : `
+  <div class="empty">
+    <p class="title">The shelf is empty</p>
+    <p>Pick a photo, a look, and a place above &mdash; your first tape lands here.</p>
+  </div>`}
+</section>
 </main>
 
 <script>
-// Chips fill the text box; they never submit and they never replace it.
-document.querySelectorAll('.chip').forEach(function (chip) {
-  chip.addEventListener('click', function () {
-    var input = document.getElementById(chip.dataset.fill);
-    if (!input) return;
-    input.value = chip.dataset.value;
-    input.focus();
+// The only thing scripting adds to this page: telling you which file you chose,
+// and clearing the reason under a button that is already enabled. Selection,
+// the background cross-fade and the reveal of the place upload are all CSS.
+(function () {
+  var photo = document.getElementById('photo');
+  var name = document.getElementById('photo-name');
+  var reason = document.getElementById('reason');
+  var record = document.getElementById('record');
+  if (!photo || !record) return;
+  if (!record.disabled) { record.disabled = true; }
+  photo.addEventListener('change', function () {
+    var file = photo.files && photo.files[0];
+    name.textContent = file ? file.name : '';
+    if (file) { record.disabled = false; reason.textContent = ''; }
+    else { record.disabled = true; reason.textContent = 'Upload a photo first'; }
   });
-});
+}());
 </script>
 `;
-  return layout({ title: 'Timestamp', body, bodyClass: 'page-upload' });
+
+  return layout({
+    title: 'Timestamp',
+    body,
+    preBody,
+    bodyClass: 'page-home',
+    account,
+    balance,
+  });
+}
+
+/** One poster on the shelf. `status` is shown for anything unfinished, because a
+ *  grid of identical grey rectangles tells you nothing about which one stopped. */
+function shelfTile(tape) {
+  const finished = tape.status === 'done';
+  const inner = finished && tape.posterUrl
+    ? `<img src="${h(tape.posterUrl)}" alt="" loading="lazy" decoding="async">`
+    : '';
+  return `<a class="tape" href="${h(tape.href)}">
+  ${inner}
+  ${finished ? '' : `<span class="state">${h(STATUS_COPY[tape.status] ?? tape.status)}</span>`}
+  <span class="cap">
+    <span class="when">${h(stampDate(tape.jobId))}</span>
+    <span class="what">${h(tape.place)}</span>
+  </span>
+</a>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -267,17 +574,27 @@ function stepRow(step, isCurrent) {
  *
  * @param {{view: object}} data  the same object `GET /api/jobs/:id` returns
  */
-export function statusPage({ view }) {
+/**
+ * `labels` carries the human name of a preset, because the manifest stores the
+ * id. "schrebergarten-august" is what the pipeline needs and "Allotment garden,
+ * late August" is what the person picked; showing the first is showing them our
+ * filenames. Free text has no label and falls through unchanged, which is why
+ * this is a fallback rather than a lookup.
+ */
+export function statusPage({ view, account = null, labels = {} }) {
   const current = view.steps.find((s) => s.name === view.step);
   const copy = STEP_COPY[view.step] ?? null;
   const done = view.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length;
 
   const body = `
 <main data-job="${h(view.jobId)}" data-status="${h(view.status)}" id="status">
+  <section class="panel">
   <p class="stamp">${h(view.jobId)}</p>
 
+  <p class="eyebrow">Recording</p>
   <h1 class="headline" id="headline">${h(copy ? copy.title : STATUS_COPY[view.status] ?? view.status)}</h1>
   <p class="sub" id="subline">${h(copy ? copy.note : '')}</p>
+  <hr class="rule">
 
   <ol class="bar" id="bar" aria-label="Progress">
     ${view.steps.map((s) => `<li class="seg seg-${h(s.status)}" title="${h((STEP_COPY[s.name] ?? {}).title ?? s.name)}"></li>`).join('')}
@@ -291,15 +608,16 @@ export function statusPage({ view }) {
   </ol>
 
   <p class="inputs">
-    <span class="k">Where</span> <span class="v">${h(view.input.place)}</span><br>
-    <span class="k">Wearing</span> <span class="v">${h(view.input.outfit)}</span>
+    <span class="k">Where</span> <span class="v">${h(labels.place ?? view.input.place)}</span><br>
+    <span class="k">Wearing</span> <span class="v">${h(labels.outfit ?? view.input.outfit)}</span>
   </p>
 
   <p class="actions">
     <button type="button" class="quiet" id="cancel">Cancel this one</button>
-    <a class="quiet" href="/">Start another</a>
+    <a class="quiet" href="/">Back to the shelf</a>
   </p>
   <noscript><p class="hint">This page reloads every five seconds.</p></noscript>
+  </section>
 </main>
 
 <script>
@@ -345,7 +663,9 @@ export function statusPage({ view }) {
 }());
 </script>
 `;
-  return layout({ title: `Timestamp - ${view.status}`, body, refreshSeconds: 5, bodyClass: 'page-status' });
+  return layout({
+    title: `Timestamp - ${view.status}`, body, refreshSeconds: 5, bodyClass: 'page-status', account,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -355,23 +675,27 @@ export function statusPage({ view }) {
 /**
  * `/j/:id/select`. A plain form with one submit button per still, so it works
  * with scripting off -- this is the one screen where a person has to make a
- * decision, and it must not be the screen that needs JavaScript.
+ * decision, it gates real spend, and it must not be the screen that needs
+ * JavaScript. There is no script on this page at all.
  *
  * INDICES ARE 1-BASED AND COME OFF THE RECORD, NEVER OFF THE LOOP. `still-01.png`
  * is index 1, and `s.index` is what is posted back, displayed, and compared
  * against the existing selection. Using the map callback's position here would
  * be off by one against the provider's numbering, which means the user clicks
- * frame 1 and frame 2 gets animated -- with no error anywhere, because both
+ * frame 3 and frame 4 gets animated -- with no error anywhere, because both
  * numbers are valid. That is the failure this convention exists to prevent, so
  * there is deliberately no `+ 1` in this function.
  */
-export function selectPage({ view, stills }) {
+export function selectPage({ view, stills, account = null }) {
   const body = `
 <main>
+  <section class="panel">
   <p class="stamp">${h(view.jobId)}</p>
+  <p class="eyebrow">Your decision</p>
   <h1 class="headline">Pick a frame</h1>
   <p class="sub">The video is built out of one of these. Choose the one that looks most like you &mdash;
   sharpness matters less than likeness.</p>
+  <hr class="rule">
 
   <form class="sheet" method="post" action="/api/jobs/${h(view.jobId)}/select">
     ${stills.map((s) => `
@@ -382,16 +706,17 @@ export function selectPage({ view, stills }) {
   </form>
 
   <p class="actions"><a class="quiet" href="/j/${h(view.jobId)}">Back to progress</a></p>
+  </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - pick a frame', body, bodyClass: 'page-select' });
+  return layout({ title: 'Timestamp - pick a frame', body, bodyClass: 'page-select', account });
 }
 
 // ---------------------------------------------------------------------------
 // the result
 // ---------------------------------------------------------------------------
 
-export function resultPage({ view }) {
+export function resultPage({ view, account = null, labels = {} }) {
   // Assembled as text and escaped once, rather than stitched out of escaped
   // fragments with raw entities between them -- that pattern is where a
   // double-escape or a missed escape hides.
@@ -399,11 +724,15 @@ export function resultPage({ view }) {
   const metaLine = [
     seconds ? `${Number(seconds).toFixed(3)} seconds` : null,
     view.result?.frames ? `${view.result.frames} frames` : null,
+    '720x576 PAL',
   ].filter(Boolean).join(' · ');
   const body = `
 <main>
+  <section class="panel">
   <p class="stamp">${h(view.jobId)}</p>
+  <p class="eyebrow">${h(stampDate(view.jobId))}</p>
   <h1 class="headline">Here it is</h1>
+  <hr class="rule">
 
   <div class="player">
     <video controls playsinline preload="metadata"
@@ -414,8 +743,8 @@ export function resultPage({ view }) {
   <p class="meta">${h(metaLine)}</p>
 
   <p class="inputs">
-    <span class="k">Where</span> <span class="v">${h(view.input.place)}</span><br>
-    <span class="k">Wearing</span> <span class="v">${h(view.input.outfit)}</span>
+    <span class="k">Where</span> <span class="v">${h(labels.place ?? view.input.place)}</span><br>
+    <span class="k">Wearing</span> <span class="v">${h(labels.outfit ?? view.input.outfit)}</span>
   </p>
 
   <p class="actions">
@@ -426,9 +755,10 @@ export function resultPage({ view }) {
     <a class="go" href="/api/jobs/${h(view.jobId)}/video?download=1" download="timestamp-${h(view.jobId)}.mp4">Download</a>
     <a class="quiet" href="/">Make another</a>
   </p>
+  </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - finished', body, bodyClass: 'page-result' });
+  return layout({ title: 'Timestamp - finished', body, bodyClass: 'page-result', account });
 }
 
 // ---------------------------------------------------------------------------
@@ -440,13 +770,17 @@ export function resultPage({ view }) {
 export function errorPage({ status, title, detail = null, jobId = null }) {
   const body = `
 <main>
+  <section class="panel">
   ${jobId ? `<p class="stamp">${h(jobId)}</p>` : ''}
+  <p class="eyebrow">${h(status)}</p>
   <h1 class="headline">${h(title)}</h1>
+  <hr class="rule">
   ${detail ? `<p class="sub">${h(detail)}</p>` : ''}
   <p class="actions"><a class="go" href="/">Start again</a></p>
+  </section>
 </main>
 `;
-  return layout({ title: `Timestamp - ${status}`, body, bodyClass: 'page-error' });
+  return layout({ title: `Timestamp - ${status}`, body, bodyClass: 'page-error', chrome: false });
 }
 
 /** Exported so the server and the tests agree on how many segments the bar has
