@@ -1,0 +1,29 @@
+{
+  "_comment": "Grey Baltic, out of season. The temptation with a beach is to make it a holiday; this one is deliberately not. Flat overcast, nobody else, everything packed away -- a family walk in October, which is the version people actually have on tape.",
+  "id": "ostsee-strand",
+  "label": "Baltic beach, out of season",
+  "climate": "cold",
+  "timeOfDay": "afternoon",
+  "prompt": {
+    "_comment": "Strandkorb -- the roofed wicker beach chair -- is the detail that says Baltic rather than any grey coast in Europe. Turned away from the water is what says out of season.",
+    "scene": "a wide grey Baltic beach out of season, wet packed sand, a line of roofed wicker beach chairs turned away from the water, marram grass on the dune behind, a groyne of black timber posts running out into the sea",
+    "light": "flat overcast with no shadow at all, the water and the sky nearly the same grey, the sand slightly brighter than both",
+    "lens": "wide and low with a lot of sky, the horizon almost straight across the frame",
+    "framing": "waist-up against the empty sand, the groyne running away over one shoulder",
+    "eraProps": "roofed wicker beach chairs, a striped canvas wind-break, a metal thermos flask, a fold-out paper map weighted down with a stone"
+  },
+  "negatives": [
+    "sunshine",
+    "tropical water",
+    "modern beach bar",
+    "smartphone",
+    "aerial view"
+  ],
+  "motionHint": "the water moves in slow flat lines up the sand, the marram grass bends steadily, and the canvas of the wind-break snaps",
+  "lookOverride": {
+    "_comment": "The coldest and flattest thing in the menu. Saturation well down, warmth backed almost out (remember bm negative = yellow, so raising cbBlueMid towards zero cools it), halation nearly off because a flat overcast sky has no specular highlight to halate, and the least grain of any preset because there is nothing here for it to hide in.",
+    "grade": { "saturation": 0.7, "cbRedMid": 0.02, "cbBlueMid": -0.01 },
+    "tape": { "grainStrength": 15 },
+    "optics": { "bloomStrength": 0.3 }
+  }
+}

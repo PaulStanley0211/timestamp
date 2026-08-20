@@ -1,0 +1,13 @@
+{
+  "_comment": "Oversized is the period cue here. A half-zip fleece is still sold today; the 2003 version is two sizes larger than a modern one would be cut, which is why the negatives push against a fitted shape rather than against the garment itself.",
+  "id": "fleecepulli",
+  "label": "Half-zip fleece",
+  "climate": ["cold", "cool"],
+  "wardrobe": "an oversized half-zip fleece pullover in marl grey, the zip pulled up to the collar, elasticated hem, a plain crew-neck t-shirt just showing beneath",
+  "negatives": [
+    "modern sportswear branding",
+    "technical shell",
+    "fitted cut",
+    "cropped length"
+  ]
+}

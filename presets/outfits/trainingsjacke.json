@@ -1,0 +1,13 @@
+{
+  "_comment": "The most period-legible garment in the menu. Two stripes down a sleeve and an elasticated cuff date a frame on their own, without a single word about how the picture looks. Note what is NOT here: no weather, no place, no time of day. climate below is the machine-readable channel for all of that, and checkCompatibility reads it -- the prose must not.",
+  "id": "trainingsjacke",
+  "label": "Tracksuit jacket",
+  "climate": ["cool", "mild"],
+  "wardrobe": "a zip-up tracksuit jacket in navy with two white stripes running down each sleeve, elasticated cuffs and a small woven crest at the chest, worn half open over a plain white t-shirt",
+  "negatives": [
+    "modern performance wear",
+    "large brand logo",
+    "technical fabric",
+    "sharply tailored cut"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "_comment": "The neutral option, and the one most likely to be picked by someone who does not want to think about wardrobe. Stonewashed and straight-leg are the two words doing the period work; without them a model returns a modern slim jean every time.",
+  "id": "hemd-jeans",
+  "label": "Checked shirt and jeans",
+  "climate": ["mild", "warm", "indoor"],
+  "wardrobe": "a checked flannel shirt with the sleeves rolled to the elbow, tucked into stonewashed straight-leg jeans with a plain brown leather belt",
+  "negatives": [
+    "skinny jeans",
+    "ripped denim",
+    "modern graphic tee",
+    "designer branding"
+  ]
+}

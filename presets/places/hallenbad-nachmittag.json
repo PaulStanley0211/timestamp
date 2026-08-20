@@ -1,0 +1,29 @@
+{
+  "_comment": "A municipal indoor pool is the loudest quiet place in the menu: constant water movement, constant reflected light on the ceiling, and absolutely nothing happening. It gives the animate stage the most to work with of any preset here.",
+  "id": "hallenbad-nachmittag",
+  "label": "Indoor swimming pool",
+  "climate": "indoor",
+  "timeOfDay": "afternoon",
+  "prompt": {
+    "_comment": "Condensation on the high windows is doing two jobs -- it dates the building and it explains why the daylight is diffuse. Do not trade it for a cleaner description.",
+    "scene": "a municipal indoor swimming pool, pale blue tiles, lane ropes across the water, a high ceiling of ribbed panels, a lifeguard chair at the side, condensation on the high windows",
+    "light": "diffuse daylight through the misted windows plus rows of fluorescent fittings overhead, reflections off the water crawling across the ceiling",
+    "lens": "wide with deep focus down the length of the pool, everything a little flattened",
+    "framing": "waist-up at the tiled edge, the lanes running away behind",
+    "eraProps": "a stopwatch on a lanyard, a plastic locker key on a wrist band, a scratched vending machine, a tiled mosaic on the far wall"
+  },
+  "negatives": [
+    "modern leisure centre",
+    "water slide",
+    "smartphone",
+    "underwater view",
+    "swimming competition"
+  ],
+  "motionHint": "the water surface never stops moving and its reflections travel slowly across the ceiling and the tiles",
+  "lookOverride": {
+    "_comment": "Every hard highlight on moving water is a halation source, so this is the one preset that opens bloom furthest. Saturation stays fairly high because the tiles carry the only real colour in the frame.",
+    "grade": { "cbBlueMid": -0.02, "saturation": 0.82 },
+    "optics": { "bloomStrength": 0.5 },
+    "tape": { "grainStrength": 18 }
+  }
+}

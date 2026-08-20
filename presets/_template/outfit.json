@@ -1,0 +1,25 @@
+{
+  "_comment": "Copy this file to presets/outfits/<your-id>.json and replace every value. Like the place template it is a WORKING preset -- test/catalog-schema.test.js validates it exactly as it validates a shipped one. Any key beginning with an underscore is documentation: it is stripped before any merge and skipped by every vocabulary scan, so a _comment may safely name the words the values must not use.",
+  "_optional": "negatives may be omitted; it defaults to []. Everything else is required. Fields are documented by the _<field> key immediately above them.",
+  "_rule": "AN OUTFIT DESCRIBES ONLY WHAT IS ON THE BODY. Scene, light, weather, lens and time-of-day vocabulary is rejected at load -- overcast, sunlight, shadow, sky, wind, kitchen, beach, background, camera, evening and about sixty more. This is not tidiness. Both fragments are concatenated into one prompt and a model has no notion of which clause outranks which, so an outfit that says 'on an overcast day' and a place that says 'low late-August sun' average into a frame lit by neither. Season words (winter, summer) ARE allowed: 'padded winter jacket' is a garment category, and the machine-readable climate array below is the channel that actually carries weather intent.",
+  "_rule2": "NEVER ASK FOR THE LOOK, in the wardrobe line or in a negative. No VHS, grain, vintage, retro, film grain, distressed, faded colours. The era belongs here as the CUT and the FABRIC of the garment -- oversized, stonewashed, elasticated, straight-leg -- never as the texture of the picture.",
+  "_rule3": "NEVER DESCRIBE THE PERSON. No face, hair, skin, build, age or gender words. 'Slim' and 'tall' are rejected even in a negative about the cut of a garment: say 'sharply tailored cut' instead.",
+
+  "_id": "Lowercase and hyphenated, and it MUST equal the filename without .json.",
+  "id": "example-outfit",
+
+  "_label": "What the menu prints. Ten words at most.",
+  "label": "Example outfit",
+
+  "_climate": "A non-empty array drawn from cold, cool, mild, warm, indoor. List every climate the garment is plausible in. checkCompatibility compares this against the place's single climate value and WARNS when they are two or more steps apart -- it never refuses, because a padded jacket in a heated living room is a person who just got home, and that is a better video than either sensible option.",
+  "climate": ["mild", "cool"],
+
+  "_wardrobe": "One sentence describing only what is on the body: garment, colour, cut, fabric, how it is worn. Name the details that date it -- a stripe down a sleeve, an elasticated cuff, a stonewashed leg. Nothing about where the person is, what the light is doing, or what they look like.",
+  "wardrobe": "a named garment in a named colour, with the cut and the fabric that date it, and how it is worn",
+
+  "_negatives": "What the garment must not turn into. Almost always a modern silhouette or modern branding, because that is the failure mode: ask for a fleece and a model returns this year's fleece.",
+  "negatives": [
+    "modern sportswear branding",
+    "sharply tailored cut"
+  ]
+}

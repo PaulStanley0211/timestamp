@@ -1,0 +1,30 @@
+{
+  "_comment": "The darkest preset in the menu, and the reason lookOverride is part of the schema rather than a later idea. A living room lit mostly by a CRT is where a consumer camcorder's gain ran hardest, so it wants markedly more grain and more amber than anything else here -- see the override at the bottom, which is the largest departure from base.json in the catalog.",
+  "id": "wohnzimmer-abend",
+  "label": "Living room, television on",
+  "climate": "indoor",
+  "timeOfDay": "night",
+  "prompt": {
+    "_comment": "The CRT is a light source before it is a prop, which is why it appears in both the scene and the light fragments. That is not duplication -- the model needs to know the object is there AND that it is where the light comes from.",
+    "scene": "a small living room at night, a dark wood wall unit filling one wall, a CRT television switched on in the corner, a patterned rug, a rubber plant, a standard lamp with a fabric shade",
+    "light": "the television carrying most of it, cold and shifting across the room, one warm standard lamp behind, the ceiling almost dark",
+    "lens": "wide and close in a small space, the corners going dark",
+    "framing": "seated on the sofa, chest-up, the wall unit and the television behind",
+    "eraProps": "a CRT television with a rounded screen, a row of unlabelled black cassette boxes, a wired telephone on the side table, a glass ashtray, a crocheted blanket over the arm of the sofa"
+  },
+  "negatives": [
+    "flat-screen television",
+    "smartphone",
+    "modern furniture",
+    "recessed lighting",
+    "computer monitor"
+  ],
+  "motionHint": "light from the television shifts across the room as the picture changes, and the leaves of the plant stir in the draught from the window",
+  "lookOverride": {
+    "_comment": "The largest override in the menu, and every value has a reason. grainStrength 30 against base 20: a CCD at full gain in a room lit by a television. cbRedMid 0.1 for the tungsten lamp. saturation 0.74 because gain washes colour out rather than saturating it. headSwitchNoise 64 because the band sits in near-black here and at the base 58 it stops being visible at all.",
+    "tape": { "grainStrength": 30 },
+    "grade": { "cbRedMid": 0.1, "saturation": 0.74 },
+    "optics": { "bloomStrength": 0.5 },
+    "transport": { "headSwitchNoise": 64 }
+  }
+}

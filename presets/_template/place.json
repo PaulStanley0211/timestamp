@@ -1,0 +1,53 @@
+{
+  "_comment": "Copy this file to presets/places/<your-id>.json and replace every value. It is a WORKING preset, not a sketch: test/catalog-schema.test.js validates it exactly as it validates a shipped one, so if you break the schema here you find out from CI rather than from a render. The convention is the one used in config/render.json -- documentation lives inside the JSON, and any key beginning with an underscore is documentation. Underscore keys are stripped before a merge (see mergeInto in scripts/tapedeck/look.mjs) and are skipped by every vocabulary scan, so you can write 'do not mention lighting here' in a _comment without tripping the lighting ban.",
+  "_optional": "lookOverride and negatives may be omitted; they default to {} and []. Everything else is required. Fields are documented by the _<field> key immediately above them.",
+  "_rule": "A PLACE DESCRIBES EVERYTHING EXCEPT THE BODY. Wardrobe vocabulary is rejected at load -- jacket, shirt, dress, jeans, collar, sleeve and about thirty more. A place that dresses the person fights whichever outfit is chosen with it, and both descriptions end up half-applied.",
+  "_rule2": "NEVER ASK FOR THE LOOK. No VHS, grain, vintage, camcorder, retro, film grain, lo-fi, 8mm, analogue, cinematic, degraded. The texture is applied deterministically in ffmpeg by scripts/tapedeck/ and asking a model for it produces a vague mood that varies per generation and fights the real chain. The era belongs here only as CONTENT: the shape of a car, a CRT in the corner, the label on a bottle.",
+  "_rule3": "NEVER DESCRIBE THE PERSON. No face, hair, skin, age, build or gender words anywhere in this file. The uploaded photo is the identity anchor and anything you add here competes with it.",
+
+  "_id": "Lowercase and hyphenated, and it MUST equal the filename without .json. The filename is the id used on the command line and recorded in a manifest; two sources of truth for it is one too many.",
+  "id": "example-place",
+
+  "_label": "What the menu prints. Ten words at most -- it sits in a column in `npm run presets`.",
+  "label": "Example place, late afternoon",
+
+  "_climate": "One of: cold, cool, mild, warm, indoor. Read by checkCompatibility against the outfit's climate array. indoor sits at the same point on the scale as warm, because a heated German interior does. This is the ONLY place weather intent may be stated -- never in the prose.",
+  "climate": "mild",
+
+  "_timeOfDay": "One of: early morning, morning, midday, afternoon, late afternoon, dusk, night. A closed set, because a menu cannot group by a free-text field and 'golden hour' is 'late afternoon' spelled to sound better.",
+  "timeOfDay": "late afternoon",
+
+  "_prompt": "The five fragments this place owns. They are concatenated into one prompt in this order, each on its own labelled line. Keep each under about 90 words: past that a model starts dropping clauses, and the clause it drops is not the one you would choose.",
+  "prompt": {
+    "_scene": "What is physically there. Named objects beat adjectives every time -- 'a folding table with a patterned plastic tablecloth' places a decade, 'a nostalgic garden atmosphere' places nothing.",
+    "scene": "a specific ordinary room or piece of ground, described by the objects actually in it",
+
+    "_light": "Where the light comes from, what colour it is, and what it does to the shadows. Two mismatched sources -- grey daylight plus one warm bulb -- is what makes an interior read as a real room rather than a set.",
+    "light": "a named source, its direction, and what the shadows do",
+
+    "_lens": "How it was shot optically: focal breadth, depth of focus, edge behaviour. Not how the picture is processed -- that is tapedeck's half of the pipeline.",
+    "lens": "wide near the subject, deep focus behind, slight bend at the edges",
+
+    "_framing": "How much of the person is in frame and where they are standing. Say 'waist-up' or 'chest-up'; do not say anything about what they look like.",
+    "framing": "waist-up, three-quarters to the camera",
+
+    "_eraProps": "Three or four objects that date the frame by existing. This is where the era lives. A payphone, a wired telephone, a roof box, a wall clock with hands.",
+    "eraProps": "three or four objects that could only be from 1999 to 2005"
+  },
+
+  "_negatives": "Things that must not be in the frame. CONTENT only -- 'flat-screen television', 'smartphone', 'modern cars'. Never a texture ('no film grain'), because a negative is still that word in the conditioning, and it is exactly where a tired author hides the word they were told not to use.",
+  "negatives": [
+    "smartphone",
+    "modern furniture"
+  ],
+
+  "_motionHint": "What moves, for the animate stage. Every place implies its own: laundry on a line, traffic behind, a water surface, a flickering tube. Ambient and repeating, never an event -- nothing dramatic happens in this product, and a motion hint that stages something is the fastest way to lose that.",
+  "motionHint": "something ambient and repeating moves gently and continuously",
+
+  "_lookOverride": "A PARTIAL LookProfile, deep-merged over config/look/base.json by mergeLook(). Every path you name must already exist in base.json -- the schema checks, because a typo like grainStrengh merges in silently, is read by nothing, the render succeeds and the look does not change. Values must also sit inside the CLAMPS in scripts/tapedeck/look.mjs or loadLookProfile pulls them to the edge. Watch the signs: colorbalance bm NEGATIVE adds yellow, so raising cbBlueMid towards zero makes a scene COOLER. A dark interior wants more grain and more amber than an overcast beach; that difference is the entire reason this field exists.",
+  "lookOverride": {
+    "_comment": "Delete what you do not need. An empty object is a perfectly good answer for a scene the base profile already suits.",
+    "grade": { "saturation": 0.8 },
+    "tape": { "grainStrength": 20 }
+  }
+}

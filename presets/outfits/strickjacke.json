@@ -1,0 +1,13 @@
+{
+  "_comment": "The indoor-leaning option, and the only one in the menu that layers two garments visibly. Leather-look buttons and a collar worn out over the knit are the details that place it -- keep both, they are cheap and they are the whole effect.",
+  "id": "strickjacke",
+  "label": "Knitted cardigan",
+  "climate": ["indoor", "mild", "cool"],
+  "wardrobe": "a knitted wool cardigan in burgundy with leather-look buttons, worn open over a collared shirt with the collar folded out",
+  "negatives": [
+    "modern knitwear",
+    "oversized fashion cut",
+    "cropped length",
+    "designer branding"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "_comment": "Two light sources that do not match -- grey daylight and one warm bulb -- is what makes a domestic interior read as a real room rather than a set. It is also the hardest thing here for a model to hold, so this is a good preset to check adherence against.",
+  "id": "kuechentisch-fruehstueck",
+  "label": "Tiled kitchen at breakfast",
+  "climate": "indoor",
+  "timeOfDay": "early morning",
+  "prompt": {
+    "_comment": "Brown wall tiles and patterned lino do more period work than any single object in the frame. Keep them.",
+    "scene": "a small German kitchen with brown wall tiles half way up the wall, patterned lino underfoot, a wooden table pushed against the wall, net curtains gone yellow at the window, a filter coffee machine and a radio on the counter",
+    "light": "grey early light through the net curtains and one warm bulb over the table still switched on, the two colours plainly not matching",
+    "lens": "wide in a small space, the near edge of the table close to the camera and the counter behind going soft",
+    "framing": "seated at the table, chest-up, turned towards the window",
+    "eraProps": "a filter coffee machine with a glass jug, a wired telephone on the wall, a tin of loose tea, a folded newspaper, a wall clock with hands"
+  },
+  "negatives": [
+    "modern kitchen",
+    "induction hob",
+    "smartphone",
+    "recessed spotlights",
+    "open-plan living"
+  ],
+  "motionHint": "steam lifts off the cup, the net curtain breathes at the window, and the second hand moves on the clock",
+  "lookOverride": {
+    "_comment": "A dim interior on a consumer CCD meant gain, and gain meant grain -- this is the reason the override mechanism exists at all. Amber up for the tungsten bulb, saturation down because gain washes colour out, halation open for the bulb itself.",
+    "tape": { "grainStrength": 24 },
+    "grade": { "cbRedMid": 0.09, "saturation": 0.78 },
+    "optics": { "bloomStrength": 0.46 }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "_comment": "The word 'winter' is allowed here and the schema deliberately does not ban season words: 'padded winter jacket' is a garment category, not a claim about the weather in the frame. The claim about weather lives in climate below, where a machine can read it. Ban the season word and you force an author to describe the same garment worse.",
+  "id": "winterjacke",
+  "label": "Padded winter jacket",
+  "climate": ["cold", "cool"],
+  "wardrobe": "a quilted padded jacket in deep blue with a fur-trimmed hood and elasticated cuffs, zipped to the chin over a knitted scarf",
+  "negatives": [
+    "modern puffer jacket",
+    "reflective panels",
+    "brand logo",
+    "technical shell"
+  ]
+}

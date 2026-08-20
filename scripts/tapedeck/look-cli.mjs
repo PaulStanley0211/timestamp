@@ -12,6 +12,13 @@
  *   npm run look -- --in=assets/stock/porch.mp4 --name=porch
  *   npm run look -- --in=... --name=grain --sweep=tape.grainStrength=4,9,14,20
  *   npm run look -- --in=... --seed=19990824 --no-osd
+ *   npm run look -- --name=audio-check --with-audio       # picture and bed, one pass
+ *
+ * --with-audio is off by default and that is deliberate rather than timid. Most
+ * of the tuning this command exists for is visual, the bed costs a second of
+ * render and an AAC stream nobody is looking at, and -- most usefully -- leaving
+ * it off proves the negative the delivery contract cares about: without the flag
+ * the output must contain NO audio stream at all, not a silent one.
  *
  * The --sweep form is the one that matters. Judging a single graded clip is
  * nearly impossible because the eye adapts within seconds and everything starts
@@ -28,7 +35,9 @@ import { resolveFont } from '../preflight/doctor.mjs';
 import { tapeGeometry, deliveryGeometry, frameCount } from './frame.mjs';
 import { loadLookProfile, buildVideoFilter, get, set } from './look.mjs';
 import { burnInFilters, burnInProbeRegion, deriveStamp } from './burn-in.mjs';
-import { gradeArgs, beforeAfterArgs, framesArgs } from './grade.mjs';
+import { beforeAfterArgs, framesArgs } from './grade.mjs';
+import { buildAudioFilter, clampAudio } from '../audio/bed.mjs';
+import { muxedArgs, joinGraphs, fileLoudnessArgs, parseIntegratedLufs, lufsVerdict } from '../audio/mix.mjs';
 
 function parseArgs(argv) {
   const args = { flags: new Set() };
@@ -59,18 +68,23 @@ async function synthesiseSource(cfg, outFile) {
   return outFile;
 }
 
-async function renderOne({ input, outDir, label, look, cfg, font, withOsd, tape, delivery }) {
+async function renderOne({ input, outDir, label, look, cfg, font, withOsd, withAudio, tape, delivery }) {
   fs.mkdirSync(outDir, { recursive: true });
 
   const osd = withOsd
     ? { ...look.osd, enabled: true, fontRelPath: font.path }
     : { ...look.osd, enabled: false };
   const burnIn = burnInFilters(osd, { tape, delivery });
-  const filterComplex = buildVideoFilter({ ...look, osd }, cfg, { burnIn });
+  const videoFilter = buildVideoFilter({ ...look, osd }, cfg, { burnIn });
+  // The bed joins the picture inside the SAME -filter_complex. Rendering the
+  // tape and then muxing a separate wav would be two passes, and the second one
+  // is a re-encode of a look whose entire subject is generation loss.
+  const audioFilter = withAudio ? buildAudioFilter(look, cfg) : '';
+  const filterComplex = joinGraphs(videoFilter, audioFilter);
 
   const tapeFile = path.join(outDir, 'tape.mp4');
   const started = Date.now();
-  await runFfmpeg(gradeArgs({ input, output: tapeFile, filterComplex, cfg }));
+  await runFfmpeg(muxedArgs({ input, output: tapeFile, videoFilter, audioFilter, cfg }));
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
 
   // The resolved profile and the exact graph, saved next to the render. When
@@ -78,7 +92,21 @@ async function renderOne({ input, outDir, label, look, cfg, font, withOsd, tape,
   fs.writeFileSync(path.join(outDir, 'look.json'), JSON.stringify({ ...look, osd }, null, 2));
   fs.writeFileSync(path.join(outDir, 'filtergraph.txt'), filterComplex.split(';').join(';\n'));
 
-  return { label, tapeFile, outDir, elapsed, osd, filterComplex };
+  return { label, tapeFile, outDir, elapsed, osd, look, filterComplex };
+}
+
+/**
+ * The bed is at the level the profile claims.
+ *
+ * Measured, never reached for: there is no loudnorm in the render path, so this
+ * is an assertion about a number decided in base.json rather than a correction
+ * applied to one. See audio/bed.mjs for why that distinction is the whole design.
+ */
+async function assertQuiet(primary) {
+  const { stderr } = await runFfmpeg(fileLoudnessArgs({ input: primary.tapeFile }));
+  const verdict = lufsVerdict(parseIntegratedLufs(stderr), primary.look.audio);
+  if (!verdict.ok) throw new ContractError(`the bed is not quiet: ${verdict.message}`);
+  return verdict.message;
 }
 
 async function main() {
@@ -92,6 +120,7 @@ async function main() {
 
   const font = resolveFont();
   const withOsd = !args.flags.has('no-osd') && Boolean(font.path);
+  const withAudio = args.flags.has('with-audio');
   if (withOsd && !font.bundled) {
     console.log(`  note: using system font ${font.path}; renders will not reproduce on another machine.`);
   }
@@ -133,7 +162,11 @@ async function main() {
   const results = [];
   for (const variant of variants) {
     const { look, clamped } = loadLookProfile(base, variant.override);
-    for (const c of clamped) {
+    // The audio block has its own clamp table, in audio/bed.mjs next to the code
+    // that emits the filters. Reported through the same line so an operator sees
+    // one list rather than two.
+    const { clamped: audioClamped } = clampAudio(look);
+    for (const c of [...clamped, ...audioClamped]) {
       console.log(`  clamped ${c.path}: ${c.from} -> ${c.to} (allowed ${c.min}..${c.max})`);
     }
     // A seed with no explicit stamp derives its own date, so changing the seed
@@ -141,7 +174,7 @@ async function main() {
     if (args.seed && !args.flags.has('keep-stamp')) Object.assign(look.osd, deriveStamp(look.seed));
 
     const outDir = path.join(REPO_ROOT, 'review', 'look', name, variants.length > 1 ? variant.label : '.');
-    const result = await renderOne({ input, outDir, label: variant.label, look, cfg, font, withOsd, tape, delivery });
+    const result = await renderOne({ input, outDir, label: variant.label, look, cfg, font, withOsd, withAudio, tape, delivery });
     console.log(`  rendered ${variant.label} in ${result.elapsed}s -> ${path.relative(REPO_ROOT, result.tapeFile)}`);
     results.push(result);
   }
@@ -166,14 +199,18 @@ async function main() {
   console.log('\n  contract:');
   const report = [];
   for (const [label, fn] of [
-    ['delivery', () => assertDeliveryContract(primary.tapeFile, cfg)],
+    // expectAudio cuts both ways: with the flag an audio stream is required, and
+    // WITHOUT it the absence of one is asserted. A silent AAC track sneaking in
+    // would otherwise pass unnoticed forever.
+    ['delivery', () => assertDeliveryContract(primary.tapeFile, cfg, { expectAudio: withAudio })],
     ['composite', () => assertComposite(primary.tapeFile, delivery)],
     ['grade', () => assertTapeGrade(primary.tapeFile, delivery)],
     ...(withOsd ? [['burn-in', () => assertBurnIn(primary.tapeFile, burnInProbeRegion(primary.osd, delivery, tape))]] : []),
+    ...(withAudio ? [['bed', () => assertQuiet(primary)]] : []),
   ]) {
     try {
-      await fn();
-      console.log(`    [ok  ] ${label}`);
+      const detail = await fn();
+      console.log(`    [ok  ] ${label}${typeof detail === 'string' ? ` · ${detail}` : ''}`);
     } catch (err) {
       report.push(err);
       const message = err instanceof ContractError ? err.message : String(err);
