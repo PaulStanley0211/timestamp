@@ -22,7 +22,13 @@ npm run worker -- --provider=fixture     # terminal 2
 
 **What is real and what is not.** The queue, the manifest, resume, moderation, intake, expansion, the look, the contract assertions and the web app are all real. `--provider=fixture` renders genuine stills and clips through ffmpeg for $0, so the *plumbing* is proven. **It says nothing about whether a model can put a specific person in a specific place recognisably from one photograph.** That is Phase 0, it is still unanswered, and it is the only question that decides whether this is a product. Keep the two claims apart.
 
-**Next:** real generation. `providers/fal.mjs` against the conformance test that `fixture` already passes — `test/provider-contract.test.js` takes a second entry in its array and the body does not change. Choose the video model at that point, not before.
+**Since then (commits `cbc47c2`, `95c9227`): accounts, credits, the redesign, and the fal adapter.** 932 tests. Login, an append-only credit ledger, and a front end rebuilt to Paul's own portfolio layout — numbered steps, a place-photo carousel, an archive shelf, live cost, and **zero JavaScript** (CSS-only selection and background cross-fade). Seedance 2.0 is wired and verified off fal's schema pages; `generate_audio: false` is always sent, and **15 seconds arrives in ONE call**, so the last-frame seam that phase-0 criterion 5 worried about does not exist for this model.
+
+**Next: the security review.** Paul asked for a senior-appsec pass over the app as a paid multi-tenant SaaS — ASVS 5.0 Level 1, cross-tenant isolation first, with automated two-tenant tests that prove one account cannot reach another's records by tampering with ids, URLs, bodies, roles or HTTP methods. **The brief is written down in `docs/security-review-brief.md`**, including the scope notes that matter: there is no database, no SQL, no payment code, no npm dependencies and no client bundle, so several standard headings need translating rather than answering. Read it before starting; do not invent findings to fill a heading.
+
+**Then:** the still model (`fal/UNVERIFIED-identity-still` is deliberately the default so an unconfigured fal render stops at compose), place photographs, deployment, payments.
+
+**Phase 0 remains the only thing that decides whether this is a product**, and it is still unrun.
 
 **Two things that must be designed in from the first line or they become a rewrite:**
 - **Nothing is request/response.** A 15s render is ~30s of ffmpeg *after* generation calls that take minutes. Job queue with durable state, status polling, result page — from the start. (RELIO §11.3 calls this the single most likely reason a 6-week build becomes 14.)
