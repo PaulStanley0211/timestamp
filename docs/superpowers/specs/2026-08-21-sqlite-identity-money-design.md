@@ -1,6 +1,18 @@
 # SQLite for identity and money — design
 
-**Date:** 2026-08-21 · **Status:** approved in chat, not started
+**Date:** 2026-08-21 · **Status:** SUPERSEDED the same day — Paul chose Supabase
+over a self-hosted VPS after this was written. Kept because most of its reasoning
+survives the change of backend and the successor spec builds on it.
+
+**What still applies under Postgres:** the repository-seam approach and its
+191-test acceptance gate; `ledger_once` as a partial unique index (Postgres
+supports them); balance derived by `SUM(delta)` and never stored; expiry as an
+explicit negative row; the migration's never-delete-anything property and its
+per-account parity check; jobs and the queue staying on files.
+
+**What does not:** `node:sqlite` and the zero-npm-dependency argument for it, the
+single-VPS premise, WAL and busy-timeout configuration, the two-processes-one-file
+analysis, and the backup discussion — a managed database changes all of those.
 **Scope:** accounts, sessions, ownership and the credit ledger move from files to
 `node:sqlite`. Jobs, the queue and the render pipeline do not move.
 
