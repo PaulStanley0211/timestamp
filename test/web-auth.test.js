@@ -295,16 +295,63 @@ test('the public surface is exactly the allow-list, and nothing else', () => {
   for (const name of PUBLIC_ROUTES) {
     assert.ok(ROUTES.some((r) => r.name === name), `${name} is public but is not a route`);
   }
-  for (const name of ['homePage', 'statusPage', 'selectPage', 'resultPage',
+  for (const name of ['statusPage', 'selectPage', 'resultPage',
     'createJob', 'getJob', 'cancelJob', 'listStills', 'getStill', 'select', 'getVideo', 'getPoster']) {
     assert.equal(isPublicRoute(name), false, `${name} must require an account`);
   }
 });
 
+/**
+ * `homePage` left the gated list on 2026-08-21, when `/` gained a landing page.
+ *
+ * WHY THAT IS NOT A WEAKENING, AND WHAT REPLACED IT. The old guarantee was
+ * structural -- the root path 303'd anybody without a session -- and it was
+ * doing a job it was never the right tool for. The property that actually
+ * matters is that **no account data reaches an anonymous request**, and a
+ * redirect only enforced that as a side effect of refusing to render anything
+ * at all. Now the route renders two different pages, so the property has to be
+ * asserted on the OUTPUT rather than inferred from a status code. This test is
+ * that assertion, and it is strictly stronger than the one it replaces: a
+ * future edit that renders a shelf or a balance into the landing page fails
+ * here, where the redirect check would have passed it.
+ */
+test('the landing page carries nothing that belongs to an account', async () => {
+  await withApp(async ({ base, root, app, auth }) => {
+    const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    seedJob(app, root, a, { status: 'done' });
+
+    const res = await fetch(`${base}/`, { headers: { accept: 'text/html' }, redirect: 'manual' });
+    assert.equal(res.status, 200, 'the root path must render for a stranger, not redirect');
+    const html = await res.text();
+
+    // It is the landing page, not the app.
+    assert.ok(html.includes('ordinary'), 'the headline is missing');
+    assert.ok(html.includes('Make a tape'), 'the call to action is missing');
+
+    // And it is ONLY the landing page.
+    assert.ok(!html.includes('a beach'), 'a job belonging to an account leaked onto the public page');
+    assert.ok(!html.includes('form="tape"'), 'the upload form is rendered to a stranger');
+    assert.ok(!html.includes('name="photo"'), 'the file input is rendered to a stranger');
+    assert.ok(!html.includes('class="creds'), 'a credit balance is rendered to a stranger');
+    assert.ok(!/\bCR\b/.test(html), 'a credit figure reached a signed-out visitor');
+    assert.ok(!html.includes('Sign out'), 'the signed-in nav is rendered to a stranger');
+  });
+});
+
+test('the same path signed in is the app, not the landing page', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const html = await (await fetch(`${base}/`, { headers: { cookie, accept: 'text/html' } })).text();
+    assert.ok(html.includes('form="tape"'), 'the signed-in page lost the upload form');
+    assert.ok(!html.includes('Make a tape'), 'the landing call to action leaked into the app');
+  });
+});
+
 test('every gated route refuses an anonymous request', async () => {
   await withApp(async ({ base }) => {
     const gated = ROUTES.filter((r) => !isPublicRoute(r.name));
-    assert.ok(gated.length >= 12, 'the gated set should not have shrunk');
+    assert.ok(gated.length >= 11, 'the gated set should not have shrunk');
 
     for (const route of gated) {
       const target = route.pattern.replace(':id', SHAPED_ID).replace(':index', '1');
@@ -487,8 +534,15 @@ test('signing out destroys the record, so the old cookie stops working', async (
     assert.equal(out.status, 200);
     assert.equal(auth.sessions.size, 0, 'the server-side session record survived a logout');
 
+    // PROBED BY WHAT IS RENDERED, NOT BY A REDIRECT. Since 2026-08-21 the root
+    // path answers a stranger with the landing page rather than a 303, so
+    // "is this cookie still a session?" is no longer a status code -- it is
+    // whether the upload form came back. That is the more direct question
+    // anyway: the redirect was only ever a proxy for it.
     const after = await fetch(`${base}/`, { headers: { cookie, accept: 'text/html' }, redirect: 'manual' });
-    assert.equal(after.status, 303, 'the cookie still worked after signing out');
+    assert.equal(after.status, 200);
+    assert.ok(!(await after.text()).includes('form="tape"'),
+      'the cookie still worked after signing out');
   });
 });
 
@@ -506,7 +560,9 @@ test('a forged or tampered cookie is rejected before any filesystem lookup', asy
       const res = await fetch(`${base}/api/health`, { headers: { cookie } });
       assert.equal(res.status, 200, 'a bad cookie must not break an unrelated route');
       const gated = await fetch(`${base}/`, { headers: { cookie, accept: 'text/html' }, redirect: 'manual' });
-      assert.equal(gated.status, 303, `${cookie} was accepted as a session`);
+      assert.equal(gated.status, 200);
+      assert.ok(!(await gated.text()).includes('form="tape"'),
+        `${cookie} was accepted as a session`);
     }
   });
 });
@@ -799,9 +855,21 @@ test('a missing scripts/auth/ is a 503 with a sentence, and the assets still ser
   const port = await app.listen();
   const base = `http://127.0.0.1:${port}`;
   try {
+    // THE LANDING PAGE IS PUBLIC PROSE AND SURVIVES A BROKEN ACCOUNTS MODULE,
+    // for exactly the reason the plans page already does: 503-ing the page that
+    // explains what this product is, because an unrelated module will not load,
+    // loses every visitor who has never heard of it in order to report a fault
+    // they cannot act on. It is built from the preset catalog alone, so there is
+    // nothing on it that needs `scripts/auth/` to render.
+    //
+    // Before 2026-08-21 this asserted 503, because `/` was a redirect to the
+    // sign-in form and a sign-in form that cannot work should say so. That is
+    // still true, and it is still asserted below for `/login` itself.
     const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } });
-    assert.equal(home.status, 503);
-    assert.ok((await home.text()).includes('scripts/auth/'), 'the 503 must name what is missing');
+    assert.equal(home.status, 200, 'the landing page must survive a missing accounts module');
+    const homeHtml = await home.text();
+    assert.ok(homeHtml.includes('Make a tape'), 'it is the landing page');
+    assert.ok(!homeHtml.includes('form="tape"'), 'and not the app');
 
     const api = await fetch(`${base}/api/jobs/${SHAPED_ID}`);
     assert.equal(api.status, 503);

@@ -405,17 +405,42 @@ test('the step flow is three numbered steps, one decision each', async () => {
  * 375-frame contract is asserted by roughly two hundred tests. If a future edit
  * puts the toggles back, this is the test that says no.
  */
-test('the FRAME row is stated facts and there is nothing to change', async () => {
+/**
+ * The FRAME row states facts, and must not LOOK like it states choices.
+ *
+ * REWRITTEN 2026-08-21. It used to render four chips -- 4:3, PAL, 25 fps,
+ * 15.000s -- and this test asserted they were `<span>`s rather than controls,
+ * which was true and which entirely missed the problem. The chips sat directly
+ * above the quality cards, which are real controls and look almost identical,
+ * so the panel showed four unclickable things next to three clickable ones.
+ * Paul reported it as "I can't click the frame to select". The markup was
+ * correct and the page was still lying.
+ *
+ * So the assertions changed shape: instead of "the chip is a span", they are
+ * now "the jargon is gone" and "nothing that cannot be rendered is named".
+ */
+test('the FRAME row states the two facts a customer needs, and no jargon', async () => {
   await withServer(async ({ base, cookieA }) => {
     const html = await (await get(base, '/', cookieA)).text();
-    for (const fact of ['4:3', 'PAL', '25 fps', '15.000s', '15 SEC']) {
-      assert.ok(html.includes(fact), `${fact} is not stated`);
-    }
-    assert.ok(html.includes('4:3 is the true camcorder frame.'));
+
+    // What a person actually needs to know about the frame and the length.
+    assert.ok(html.includes('4:3'), 'the frame shape is not stated');
+    assert.ok(html.includes('fifteen seconds'), 'the length is not stated in words');
+    assert.ok(html.includes('15 SEC'), 'the facts list still carries the length');
+
+    // Broadcast-engineering vocabulary a customer has no use for. These are
+    // facts the RENDERER needs; they live in CLAUDE.md's output contract and in
+    // ~200 assertions, and they do not belong on the page.
+    assert.ok(!html.includes('PAL'), 'PAL is renderer vocabulary, not customer vocabulary');
+    assert.ok(!html.includes('25 fps'), 'the frame rate is not a customer-facing fact');
+    assert.ok(!/<span class="pill">/.test(html), 'the unclickable chips are gone');
+
+    // UNCHANGED AND STILL THE POINT: nothing may offer an aspect the renderer
+    // cannot fill. When the aspect selector lands these become assertions that
+    // the control EXISTS -- but not before the raster work, because offering a
+    // shape we cannot deliver sells something that does not exist.
     assert.ok(!html.includes('16:9'), '16:9 is not offered');
     assert.ok(!html.includes('9:16'), '9:16 is not offered');
-    // The pills are spans, not controls.
-    assert.ok(/<span class="pill">4:3<\/span>/.test(html), 'the frame pill must not be a button or an input');
     assert.ok(!/name="aspect"|name="fps"/.test(html), 'no aspect or fps field exists anywhere');
   });
 });
@@ -530,7 +555,25 @@ test('the wordmark is the OSD face with the recording dot, and not an illustrati
     assert.ok(html.includes('class="wordmark"'));
     assert.ok(html.includes('class="rec"'), 'the blinking dot');
     assert.ok(html.includes('TIMESTAMP'));
-    assert.ok(!html.includes('<svg'), 'no icon pack, no drawn logo');
+
+    // SCOPED TO THE WORDMARK, 2026-08-21. This used to assert `!html.includes(
+    // '<svg')` across the entire page, which said "the wordmark is type rather
+    // than a drawn logo" by banning vector graphics everywhere. That over-reached
+    // the moment the credit meter arrived: a ring showing how much of a plan is
+    // left is a DATA display, not an illustration, and drawing it with an <svg>
+    // is what lets the fraction ride on a `stroke-dasharray` attribute instead
+    // of an inline style the CSP would have to be loosened to allow.
+    //
+    // So the assertion now says what it always meant: nothing is drawn inside
+    // the wordmark. It stays a real one, because the wordmark being lettering
+    // rather than a picture is a deliberate choice and a page-wide grep is not
+    // the way to defend it.
+    // The wordmark is an <a>, so the element ends at the first </a> after it.
+    const from = html.indexOf('class="wordmark"');
+    const wordmark = html.slice(from, html.indexOf('</a>', from));
+    assert.ok(wordmark.includes('TIMESTAMP'), 'sliced the wrong element');
+    assert.ok(!wordmark.includes('<svg'),
+      'the wordmark itself must be lettering, not a drawn logo');
   });
 });
 
@@ -1233,6 +1276,45 @@ test('DELETE on a job a worker holds is 202 and does NOT touch the manifest', as
       'the web process wrote a manifest a worker holds the lease on');
     assert.ok(fs.existsSync(jobPaths(root, job.jobId).cancelRequest),
       'the worker needs the sentinel to make the transition itself');
+  });
+});
+
+test('DELETE on a finished job deletes the video, the stills and the poster, not just the upload', async () => {
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA });
+    const paths = jobPaths(root, job.jobId);
+    // A face ends up in four places, and before this test only the first was
+    // ever deleted. `docs/security-review-2026-08-21.md` F2: "there is no
+    // endpoint in this application that deletes a finished video".
+    fs.writeFileSync(`${paths.input}/upload-photo`, Buffer.from('the uploaded face'));
+    fs.writeFileSync(`${paths.stills}/still-01.png`, Buffer.from('a generated face'));
+    fs.writeFileSync(`${paths.review}/contact-sheet.png`, Buffer.from('every face at once'));
+    fs.writeFileSync(paths.video, Buffer.from('the finished tape'));
+    fs.writeFileSync(paths.poster, Buffer.from('a frame of the tape'));
+
+    const res = await get(base, `/api/jobs/${job.jobId}`, cookieA, {}, { method: 'DELETE' });
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(fs.readdirSync(paths.input), [], 'the upload');
+    assert.deepEqual(fs.readdirSync(paths.stills), [], 'the generated stills are faces too');
+    assert.deepEqual(fs.readdirSync(paths.review), [], 'the contact sheet is every face at once');
+    assert.equal(fs.existsSync(paths.video), false, 'the finished video');
+    assert.equal(fs.existsSync(paths.poster), false, 'the poster is a frame of the video');
+    assert.ok(fs.existsSync(paths.manifest), 'the manifest holds no image and is the cost record');
+  });
+});
+
+test('a finished job that was deleted stays deleted and reports it, rather than 500ing on a second DELETE', async () => {
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA });
+    fs.writeFileSync(jobPaths(root, job.jobId).video, Buffer.from('the finished tape'));
+
+    const first = await get(base, `/api/jobs/${job.jobId}`, cookieA, {}, { method: 'DELETE' });
+    const second = await get(base, `/api/jobs/${job.jobId}`, cookieA, {}, { method: 'DELETE' });
+
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200, 'deletion is idempotent; a double-click is not an error');
+    assert.equal((await second.json()).filesDeleted, 0, 'and the second one honestly reports removing nothing');
   });
 });
 

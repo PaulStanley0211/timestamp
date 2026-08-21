@@ -72,6 +72,7 @@ import {
   nextStep, setSelection, setJobStatus, cancelJob as markCancelled,
   JobError,
 } from '../render/job.mjs';
+import { purgeJobMedia } from '../render/purge.mjs';
 import { loadCatalog } from '../catalog/catalog.mjs';
 import { CONSENT_TEXT, recordConsent } from '../safety/consent.mjs';
 import { LIMITS } from '../intake/photo.mjs';
@@ -84,7 +85,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 import { matchRoute, isPublicRoute } from './router.mjs';
 import { boundaryFromContentType, parseMultipart, fileSink, MultipartError } from './multipart.mjs';
 import { createStylesheet, sendFile } from './static.mjs';
-import { homePage, statusPage, selectPage, resultPage, errorPage } from './views.mjs';
+import { homePage, landingPage, statusPage, selectPage, resultPage, errorPage } from './views.mjs';
 import { loginPage, signupPage, pricingPage, authUnavailablePage } from './views-auth.mjs';
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
 
@@ -137,7 +138,7 @@ const NO_SESSION_ROUTES = new Set(['stylesheet', 'font', 'favicon', 'placeImage'
  *  not load is a worse answer than showing it signed-out. `/login` deliberately
  *  is NOT here -- a sign-in form that cannot possibly work should say so before
  *  somebody types a password into it, not after. */
-const AUTH_OPTIONAL_ROUTES = new Set(['pricingPage']);
+const AUTH_OPTIONAL_ROUTES = new Set(['pricingPage', 'homePage']);
 
 /** How many tapes the shelf renders. A shelf is a page, not an archive dump. */
 const SHELF_LIMIT = 60;
@@ -562,15 +563,51 @@ export function createServer({
   async function balanceOf(account) {
     try {
       const b = await auths.balance(account);
+      const planId = b?.planId ?? account?.plan ?? 'free';
       return {
         credits: Number(b?.credits ?? 0),
-        planId: b?.planId ?? account?.plan ?? 'free',
+        planId,
         expiresAt: b?.expiresAt ?? null,
+        // What a full period looks like for this plan, so the meter has
+        // something to be a fraction OF. A bare credit count answers "how many"
+        // and never "how far through", which is the question a person actually
+        // has. Resolved through the auth module rather than read from config
+        // here, for the reason the quality row is: one copy of the plan table.
+        perPeriod: await planAllowance(planId),
+        // The cheapest thing that can currently be ordered. Below this the
+        // balance is not low, it is spent -- nothing can be rendered at all --
+        // and the meter says so in a different colour rather than showing a
+        // sliver that looks like it might be enough.
+        cheapest: await cheapestOffer(),
       };
     } catch (err) {
       if (err instanceof AuthUnavailableError) throw err;
       logImpl(`[web] balance lookup failed: ${err?.message ?? err}`);
-      return { credits: 0, planId: account?.plan ?? 'free', expiresAt: null };
+      return {
+        credits: 0, planId: account?.plan ?? 'free', expiresAt: null,
+        perPeriod: 0, cheapest: 0,
+      };
+    }
+  }
+
+  /** The plan's period grant, or 0 when the plan is unknown. Never throws: the
+   *  meter degrades to "no ring, just a number" rather than taking the page. */
+  async function planAllowance(planId) {
+    try {
+      const mod = await auths.api();
+      return Number(mod.PLANS?.[planId]?.creditsPerPeriod ?? 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  /** The lowest credit price among the resolutions actually on offer. */
+  async function cheapestOffer() {
+    try {
+      const offered = (await resolutionRows()).filter((r) => r.available);
+      return offered.reduce((min, r) => (min === null || r.credits < min ? r.credits : min), null) ?? 0;
+    } catch {
+      return 0;
     }
   }
 
@@ -644,7 +681,19 @@ export function createServer({
   const handlers = {
     // --- pages -----------------------------------------------------------
 
+    /**
+     * Two pages behind one path.
+     *
+     * Signed out, this is the landing page and it is built from the preset
+     * catalog alone -- no balance is looked up, no shelf is read, no upload
+     * form is rendered. That is deliberate and it is what makes the route safe
+     * to have on the public allow-list: the anonymous branch cannot leak
+     * account data because it never touches any.
+     */
     async homePage(req, res, { account }) {
+      if (!account) {
+        return sendHtml(req, res, 200, landingPage({ places: cards.places }));
+      }
       const [balance, resolutions, resolution] = await Promise.all([
         balanceOf(account), resolutionRows(), defaultResolution(),
       ]);
@@ -1228,11 +1277,17 @@ export function createServer({
      * other writer to race, and only then does this handler transition directly
      * and answer 200.
      *
-     * The uploaded photograph is deleted on the direct path, because that is the
-     * half of "cancel + purge" this process can honour safely and the consent
-     * text promises deletion on request. The manifest stays: it is the cost
-     * record the ledger reads, and it holds no image. Scheduled retention
-     * deletion is `scripts/render/purge.mjs` and stays there.
+     * EVERYTHING THAT CAN HOLD A FACE is deleted on the direct path -- the
+     * upload, the generated stills, the contact sheet, the segments, the source,
+     * the video and the poster -- because the consent text promises deletion on
+     * request and a face survives in four places besides `input/`. That gap was
+     * `docs/security-review-2026-08-21.md` F2, whose one-line summary was that
+     * there is no endpoint in this application that deletes a finished video.
+     * The set lives in `purgeJobMedia` rather than here, so this handler and the
+     * worker's claimed path cannot drift into deleting different things.
+     *
+     * The manifest stays: it is the cost record, and it holds no image.
+     * Scheduled retention deletion is the other half of the same module.
      *
      * The ownership entry stays too. A cancelled job is still this account's
      * job, it still appears on the shelf, and removing the entry would make the
@@ -1262,12 +1317,13 @@ export function createServer({
         markCancelled(job, 'cancelled by the person who uploaded it');
         saveJob(job);
       }
-      const photosDeleted = purgeUploads(paths);
+      const { photosDeleted, filesDeleted } = purgeJobMedia(paths);
       return sendJson(req, res, 200, {
         jobId: job.jobId,
         status: job.status,
         cancelRequested: true,
         photosDeleted,
+        filesDeleted,
       });
     },
   };
@@ -1306,16 +1362,6 @@ export function createServer({
       throw new HttpError(400, 'Choose between 1 and 8 frames.', { code: 'BAD_STILL_COUNT' });
     }
     return n;
-  }
-
-  function purgeUploads(paths) {
-    let deleted = 0;
-    let names;
-    try { names = fs.readdirSync(paths.input); } catch { return 0; }
-    for (const name of names) {
-      try { fs.rmSync(`${paths.input}/${name}`, { force: true }); deleted += 1; } catch { /* best effort */ }
-    }
-    return deleted;
   }
 
   // -------------------------------------------------------------------------

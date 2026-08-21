@@ -9,3 +9,8 @@ assets/stock/*
 .env
 assets/test-photos/*
 !assets/test-photos/README.md
+
+# Security reviews stay on this machine. This repo is public, and an accurate
+# list of a live system's open weaknesses is an attack roadmap. Publish a review
+# once its findings are closed, not while they are open.
+docs/security-review-*.md

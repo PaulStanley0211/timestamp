@@ -55,13 +55,19 @@ import { createHash } from 'node:crypto';
  */
 export const PALETTE = Object.freeze({
   ground: '#0B0A09',
-  accent: '#C8A15A',
-  accentBright: '#E0BE7E',
-  accentDeep: '#8A6E3C',
+  // FILM YELLOW, NOT ANTIQUE GOLD. Raised 2026-08-21 from `#C8A15A`, which was
+  // a muted brass and the reason the page read as tasteful-but-flat: every
+  // token in this object sat inside one 28-degree hue band, so there was no
+  // colour contrast anywhere on the page to adjust. `#FFB700` is the yellow of
+  // a Kodak box, and it is period-correct rather than a departure -- the film
+  // and tape packaging of the era this product evokes was genuinely loud.
+  accent: '#FFB700',
+  accentBright: '#FFD152',
+  accentDeep: '#B37F00',
   ink: '#F2EDE4',
   muted: '#A9A093',
   faint: '#6E655A',
-  alarm: '#C2603F',
+  alarm: '#E03B2F',
 });
 
 // ---------------------------------------------------------------------------
@@ -86,15 +92,53 @@ function hash32(text) {
  * afternoons, not for a synthwave poster.
  */
 const TIME_HUES = Object.freeze({
-  'early morning': 26,
-  morning: 28,
-  midday: 44,
-  afternoon: 34,
-  'late afternoon': 30,
-  dusk: 18,
-  evening: 16,
-  night: 226,
+  'early morning': 42,
+  morning: 46,
+  midday: 197,
+  afternoon: 186,
+  'late afternoon': 86,
+  dusk: 24,
+  evening: 290,
+  night: 290,
   indoor: 36,
+});
+
+/**
+ * The hue each place owns, overriding its time of day.
+ *
+ * WHY THIS EXISTS AT ALL. `TIME_HUES` alone used to span 16 to 44 degrees --
+ * every place on the menu inside a 28-degree wedge of warm brown, with `night`
+ * the single exception. That is why the page read as flat: there was no colour
+ * contrast anywhere to adjust, only more or less of the same brown, and no
+ * amount of tuning the accent could have fixed it.
+ *
+ * WHY PER PLACE AND NOT PER TIME OF DAY. Two places can share a time of day and
+ * look nothing alike -- a tiled kitchen at breakfast and an allotment garden in
+ * late August are both "warm daylight" and belong at opposite ends of the
+ * wheel. Time of day stays as the fallback, so a place added tomorrow without an
+ * entry here still gets a sensible hue rather than a hole in the page.
+ *
+ * WHY THE COLOUR IS TIED TO THE PLACE AND NOT SPRINKLED ON THE LAYOUT. It makes
+ * colour carry information: the whole page takes the selected place's hue, so
+ * the background, the card, the carousel dot and the button all move together
+ * and the app is a visibly different colour for every memory somebody picks.
+ * Decoration would have been eight tints of the same thing.
+ *
+ * THESE ARE OBSERVATIONS, NOT PREFERENCES. Sodium lamps on an Autobahn at dusk
+ * really are orange; a Hallenbad really is that chlorinated cyan; a television
+ * in a dark living room really does throw violet. The palette is vivid because
+ * the places are, which is what keeps it from reading as a theme applied over
+ * the top.
+ */
+const PLACE_HUES = Object.freeze({
+  'autobahn-raststaette': 24,      // sodium vapour
+  'balkon-waesche': 197,           // midday sky
+  'hallenbad-nachmittag': 176,     // chlorinated teal
+  'kuechentisch-fruehstueck': 42,  // butter, early sun
+  'ostsee-strand': 212,            // cold Baltic
+  'plattenbau-treppenhaus': 154,   // institutional green
+  'schrebergarten-august': 86,     // late-summer grass
+  'wohnzimmer-abend': 290,         // the television
 });
 
 /**
@@ -110,14 +154,31 @@ const TIME_HUES = Object.freeze({
 export function placeGradient({ id, timeOfDay = '' }) {
   const key = String(id ?? '');
   const h = hash32(key);
-  const base = TIME_HUES[String(timeOfDay).toLowerCase()] ?? 32;
-  // +-9 degrees of jitter so two afternoons are not the same rectangle, and no
-  // more than that, or the band stops reading as one family.
-  const hue = (base + ((h % 19) - 9) + 360) % 360;
-  const night = base > 180;
-  const sat = night ? 16 + (h >> 5) % 8 : 24 + (h >> 5) % 12;
-  const topL = night ? 15 + (h >> 11) % 5 : 26 + (h >> 11) % 8;
-  const botL = night ? 6 + (h >> 17) % 3 : 9 + (h >> 17) % 5;
+  // The place's own hue wins; time of day is the fallback for a place added
+  // without an entry, so the menu can grow without anybody editing this file.
+  const base = PLACE_HUES[key] ?? TIME_HUES[String(timeOfDay).toLowerCase()] ?? 32;
+  // +-5 degrees of jitter, down from +-9. The jitter existed to keep two
+  // same-time places from being the same rectangle; now that the hues are
+  // assigned per place they are already distinct, and a wide wobble only risks
+  // dragging a colour off the one it was chosen to be.
+  const hue = (base + ((h % 11) - 5) + 360) % 360;
+  // SATURATION IS THE CHANGE THAT MAKES THIS READ AS COLOUR. It was 24-36%,
+  // which on a near-black ground is barely a tint. 46-62% is vivid enough to
+  // carry a full-bleed background and still sit under white text. Lightness
+  // stays low on purpose -- these are backgrounds behind `#F2EDE4`, and the
+  // contrast has to hold at the top of the gradient, not just the average.
+  // UNSIGNED SHIFTS, AND THAT IS A BUG FIX RATHER THAN A STYLE CHOICE.
+  // `hash32` returns `h >>> 0`, so any hash above 2^31 is a value whose SIGNED
+  // right shift is negative -- and a negative left operand makes `%` return a
+  // negative remainder, which subtracts from the floor instead of adding to it.
+  // Measured: `balkon-waesche` came out at 37% saturation against a floor of
+  // 46%. It has been quietly darkening whichever cards happened to hash high
+  // since these gradients were written, with nothing to indicate it, because
+  // "slightly muddier than intended" looks exactly like a design decision.
+  const dark = base >= 250 || base <= 10;
+  const sat = dark ? 40 + (h >>> 5) % 10 : 46 + (h >>> 5) % 16;
+  const topL = dark ? 20 + (h >>> 11) % 5 : 27 + (h >>> 11) % 8;
+  const botL = dark ? 8 + (h >>> 17) % 3 : 11 + (h >>> 17) % 5;
   return {
     from: `hsl(${hue} ${sat}% ${topL}%)`,
     to: `hsl(${(hue + 348) % 360} ${Math.max(10, sat - 8)}% ${botL}%)`,
@@ -299,9 +360,24 @@ body {
 /* The radios live at the top of <body> so that ":checked ~ .bgs" and
    ":checked ~ .wrap" can reach the background and the cards. They are still
    part of the form, via the "form" attribute on each input. Hidden without
-   "display:none", which would take them out of the tab order entirely. */
+   "display:none", which would take them out of the tab order entirely.
+
+   POSITION IS "fixed" AND THAT IS THE WHOLE BUG FIX, so do not "tidy" it back
+   to "absolute". Clicking a <label for> focuses its input, and a browser
+   scrolls a newly focused element into view. With "absolute" these inputs sit
+   at the top of the DOCUMENT -- offset -1 -- so choosing 720p at step 4 threw
+   the page back up to step 1, measured at 1641px, every single time. "fixed"
+   positions them against the VIEWPORT instead, so they are always already in
+   view and there is nothing to scroll to. Verified by measuring scrollY across
+   a real click; see test/web-static.test.js.
+
+   pointer-events:none keeps the 1px boxes from swallowing a click at the very
+   top-left corner of the page. It does not affect keyboard focus, so the tab
+   order this block exists to preserve is untouched. */
 .statehook {
-  position: absolute;
+  position: fixed;
+  top: 0; left: 0;
+  pointer-events: none;
   width: 1px; height: 1px;
   margin: -1px; padding: 0; border: 0;
   clip-path: inset(50%);
@@ -357,6 +433,58 @@ body {
 .nav a:hover, .nav button:hover { color: var(--accent); }
 .nav-form { display: inline; margin: 0; }
 .nav .who { color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 13px; }
+
+/* --- the credit meter -------------------------------------------------- */
+/* A ring that empties as credits are spent. The FRACTION is carried on the
+   <circle> as stroke-dasharray, a presentation attribute rather than an inline
+   style, because style-src 'self' has no 'unsafe-inline' and must not gain
+   one for a progress ring. See creditMeter() in views.mjs.
+
+   Only the COLOURS live here; nothing in this block knows the percentage. */
+.creds {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ring { width: 20px; height: 20px; flex: none; overflow: visible; }
+.ring-track {
+  fill: none;
+  stroke: var(--hairline-firm);
+  stroke-width: 2.5;
+}
+.ring-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  /* Start the arc at twelve o'clock instead of three, so it drains the way a
+     dial does. Rotating the geometry rather than the <svg> box keeps the
+     element's layout square and its focus ring where it belongs. */
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dasharray 420ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.creds-n { font-variant-numeric: tabular-nums; color: var(--ink); }
+.creds-u { color: var(--faint); font-size: 11px; }
+
+/* Two of the cheapest tape or fewer: worth noticing, not yet a problem. */
+.creds--low .ring-fill { stroke: var(--accent-bright); }
+.creds--low .creds-n { color: var(--accent-bright); }
+
+/* Cannot afford anything at all. A different fact from "low", and it gets a
+   different colour, because a thin arc reads as "probably enough" and finding
+   out otherwise costs a click and a refusal. */
+.creds--spent .ring-fill { stroke: var(--alarm); }
+.creds--spent .creds-n { color: var(--alarm); }
+.creds--spent .ring-track { stroke: color-mix(in srgb, var(--alarm) 25%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-fill { transition: none; }
+}
 
 /* --- type -------------------------------------------------------------- */
 
@@ -524,6 +652,29 @@ body {
 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--hairline-firm); }
 
 .ownplace { display: none; margin-top: 1rem; }
+
+/* The signpost to the two escape hatches. See the comment in views.mjs: both
+   the upload and the free-text box already existed and neither could be found,
+   because one was behind a card at the far end of a scrolling rail and the
+   other was inside a collapsed <details>.
+
+   .linky is a <label for="pl-own"> dressed as a link. It has to LOOK
+   clickable, because the whole failure being fixed here is a control nobody
+   could tell was a control -- the same mistake the PAL chips made in the other
+   direction, where something unclickable looked clickable. Underlined, in the
+   accent colour, with a pointer cursor: three signals, because one is what the
+   place cards had and it was not enough. */
+.escape { margin: 0.9rem 0 0; text-align: center; }
+.linky {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.linky:hover { color: var(--accent-bright); }
+/* Keyboard parity: the radio is what actually receives focus, so the visible
+   ring has to be drawn on the label that stands in for it. */
+#pl-own:focus-visible ~ .wrap .linky { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* --- the free-text escape hatch ---------------------------------------- */
 
@@ -777,6 +928,104 @@ input[type="file"]::file-selector-button {
 }
 
 /* --- foot -------------------------------------------------------------- */
+
+/* --- the landing page -------------------------------------------------- */
+/* HIERARCHY IS THE POINT, not decoration. The signed-in page is four panels of
+   identical width and weight, which is the shape that reads as templated: when
+   every element is medium, nothing is the subject and the eye has nowhere to
+   land first. Here the sentence is five times the size of the body copy and
+   everything else is deliberately quiet underneath it. */
+.is-landing .wrap { max-width: 52rem; }
+
+.hero { padding: 3.2rem 0 2.6rem; }
+.hero-line {
+  font-size: clamp(2.4rem, 7vw, 4.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  margin: 0;
+  font-weight: 500;
+}
+.hero-sub {
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 30rem;
+  margin: 1.1rem 0 0;
+}
+.hero-do { display: flex; gap: 0.7rem; flex-wrap: wrap; margin: 1.9rem 0 0; }
+.cta {
+  display: inline-block;
+  padding: 0.72rem 1.5rem;
+  background: var(--accent);
+  color: #2A2010;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 15px;
+}
+.cta:hover { background: var(--accent-bright); }
+.cta--quiet {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--hairline-firm);
+}
+.cta--quiet:hover { background: transparent; color: var(--ink); border-color: var(--accent); }
+
+/* The shelf. Eight vivid hues doing the job eight photographs will do later --
+   same declaration, so the images drop in without the layout moving. */
+.shelf-strip { padding: 1.4rem 0 2.2rem; }
+.spines {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 7px;
+  margin: 0.7rem 0 0.9rem;
+}
+@media (max-width: 720px) { .spines { grid-template-columns: repeat(4, 1fr); } }
+.spine { display: block; min-width: 0; }
+.spine-face {
+  display: block;
+  aspect-ratio: 3 / 4;
+  border-radius: 3px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(242,237,228,0.07);
+}
+.spine-name {
+  display: block;
+  margin-top: 0.45rem;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.how {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.6rem;
+  padding: 1.6rem 0 0;
+  border-top: 1px solid rgba(242,237,228,0.06);
+}
+@media (max-width: 720px) { .how { grid-template-columns: 1fr; gap: 1.3rem; } }
+.how-n {
+  font-family: var(--osd, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+  margin: 0 0 0.45rem;
+}
+.how-t { font-size: 15px; color: var(--ink); margin: 0 0 0.35rem; font-weight: 500; }
+.how-d { font-size: 13.5px; line-height: 1.6; color: var(--muted); margin: 0; }
+
+.plain {
+  margin-top: 2.4rem;
+  padding: 1.2rem 1.3rem;
+  border-left: 2px solid var(--accent-deep);
+  background: rgba(242,237,228,0.02);
+}
+.plain p { margin: 0; font-size: 13.5px; line-height: 1.65; color: var(--muted); }
 
 .foot { margin-top: 3.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(242,237,228,0.06); color: var(--faint); font-size: 13px; }
 .foot p { margin: 0 0 0.4rem; }

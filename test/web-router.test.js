@@ -74,7 +74,7 @@ test('the public set is an allow-list and every entry is a real route', () => {
   for (const name of PUBLIC_ROUTES) {
     assert.ok(ROUTES.some((r) => r.name === name), `${name} is public but is not a route`);
   }
-  for (const name of ['homePage', 'statusPage', 'selectPage', 'resultPage', 'createJob',
+  for (const name of ['statusPage', 'selectPage', 'resultPage', 'createJob',
     'getJob', 'cancelJob', 'listStills', 'getStill', 'select', 'getVideo', 'getPoster']) {
     assert.ok(ROUTES.some((r) => r.name === name), `${name} is not a route`);
     assert.equal(isPublicRoute(name), false, `${name} must not be public`);

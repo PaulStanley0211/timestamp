@@ -106,6 +106,19 @@ export const SCHEMA_VERSION = 1;
  *  `--root` moves a whole installation. */
 export const ACCOUNTS_DIR = 'out/accounts';
 
+/**
+ * Which account owns which job: `out/owners/<accountId>/<jobId>.json`.
+ *
+ * WHY THE CONSTANT IS HERE RATHER THAN IN THE WEB LAYER THAT WRITES IT.
+ * `scripts/web/session-middleware.mjs` builds these paths and is the only writer,
+ * but it is no longer the only reader: `scripts/render/purge.mjs` removes the
+ * entry when it removes the job, because an entry authorising access to a job
+ * that no longer exists is a pointer to nothing that accumulates forever. Two
+ * modules spelling the same directory out by hand is exactly how a purge comes
+ * to sweep a path nothing writes to and report success.
+ */
+export const OWNERS_DIR = 'out/owners';
+
 /** Underscore-prefixed so it can never collide with an account id, which is 32
  *  lowercase hex characters and nothing else. */
 export const INDEX_DIR = '_index';

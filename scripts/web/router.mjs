@@ -106,6 +106,19 @@ export const PUBLIC_ROUTES = Object.freeze(new Set([
   'stylesheet', 'font', 'favicon', 'placeImage',
   'loginPage', 'login', 'signupPage', 'signup', 'logout',
   'pricingPage',
+  // PUBLIC SINCE 2026-08-21, AND IT IS THE ONE ENTRY HERE THAT SERVES TWO
+  // DIFFERENT PAGES. `/` used to 303 a signed-out visitor to `/login`, which
+  // made the entire product a password box: there was nowhere to say what this
+  // is and nobody who had not already been told could get past the door.
+  //
+  // The handler branches on the session. Signed in, it renders the step form
+  // and the shelf exactly as before. Signed out, it renders the landing page,
+  // which is built from the preset catalog and NOTHING ELSE -- no balance, no
+  // shelf, no upload form, no job id. The security property that matters was
+  // never "the root path is gated", it was "no account data reaches an
+  // anonymous request", and that is now asserted directly in
+  // test/web-auth.test.js rather than implied by a redirect.
+  'homePage',
   'health',
 ]));
 

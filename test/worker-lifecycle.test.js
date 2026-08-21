@@ -27,7 +27,7 @@ import { EventEmitter } from 'node:events';
 
 import { createQueue } from '../scripts/queue/queue.mjs';
 import {
-  createJob, loadJob, saveJob, beginStep, finishStep, completeJob, nextStep,
+  createJob, loadJob, saveJob, beginStep, finishStep, completeJob, nextStep, jobPaths,
 } from '../scripts/render/job.mjs';
 import { createWorker } from '../scripts/worker/worker.mjs';
 
@@ -354,4 +354,123 @@ test('reap() is not run twice when the CLI has already done it for the banner', 
   rig.worker.reap();
   await rig.worker.start();
   assert.equal(rig.calls.filter((c) => c === 'reapExpired').length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// retention: the sweep that keeps the consent promise
+// ---------------------------------------------------------------------------
+
+test('the worker sweeps retention at startup, so the promise does not need a cron', async (t) => {
+  const rig = makeRig(t, {
+    pipeline: async (job) => job,
+    retention: { photoDays: 7, jobDays: 30 },
+    sleepImpl: async () => { void rig.worker.stop(); },
+  });
+  // Older than `retention.photoDays`, which is what the consent text quotes.
+  const oldId = '20260101-120000-0000aa';
+  const stale = createJob({
+    root: rig.dir, jobId: oldId, provider: 'fixture', cfg: CFG, input: INPUT,
+    nowImpl: () => new Date(T0 - 40 * 86_400_000),
+  });
+  const paths = jobPaths(rig.dir, stale.jobId);
+  fs.writeFileSync(`${paths.input}/photo.jpg`, Buffer.from('a face 40 days old'));
+
+  await rig.worker.start();
+
+  assert.equal(fs.existsSync(paths.dir), false,
+    'a job 40 days old is past the job window and the whole directory goes');
+  const [purged] = rig.of('purged');
+  assert.ok(purged, 'the sweep is observable -- an unreported deletion is not auditable');
+  assert.equal(purged.jobsDeleted, 1);
+});
+
+test('a fresh job is never swept, and the sweep can be switched off entirely', async (t) => {
+  // `cfg` DOES carry a retention block here, so `retention: null` has something
+  // real to override. Without that, this test would pass whether or not the
+  // switch works.
+  const rig = makeRig(t, {
+    pipeline: async (job) => job,
+    cfg: { ...CFG, retention: { photoDays: 7, jobDays: 30 } },
+    retention: null,
+    sleepImpl: async () => { void rig.worker.stop(); },
+  });
+  const stale = createJob({
+    root: rig.dir, jobId: '20260101-120000-0000bb', provider: 'fixture', cfg: CFG, input: INPUT,
+    nowImpl: () => new Date(T0 - 40 * 86_400_000),
+  });
+  const young = rig.seed('20260820-120000-0000cc');
+
+  await rig.worker.start();
+
+  assert.ok(fs.existsSync(jobPaths(rig.dir, stale.jobId).dir),
+    'retention: null means an operator has taken deletion somewhere else and this worker must not guess');
+  assert.ok(fs.existsSync(jobPaths(rig.dir, young).dir));
+  assert.equal(rig.of('purged').length, 0);
+});
+
+test('the sweep takes its windows from cfg.retention, which is what the consent text quotes', async (t) => {
+  const rig = makeRig(t, {
+    pipeline: async (job) => job,
+    cfg: { ...CFG, retention: { photoDays: 7, jobDays: 30 } },
+    sleepImpl: async () => { void rig.worker.stop(); },
+  });
+  const stale = createJob({
+    root: rig.dir, jobId: '20260101-120000-0000dd', provider: 'fixture', cfg: CFG, input: INPUT,
+    nowImpl: () => new Date(T0 - 10 * 86_400_000),
+  });
+  const paths = jobPaths(rig.dir, stale.jobId);
+  fs.writeFileSync(`${paths.input}/photo.jpg`, Buffer.from('a face 10 days old'));
+
+  await rig.worker.start();
+
+  assert.deepEqual(fs.readdirSync(paths.input), [], 'ten days is past photoDays');
+  assert.ok(fs.existsSync(paths.manifest), 'and inside jobDays, so the job itself stays');
+  assert.equal(rig.of('purged')[0].photosDeleted, 1);
+});
+
+test('a worker with no retention configured anywhere sweeps nothing rather than inventing a policy', async (t) => {
+  const rig = makeRig(t, {
+    pipeline: async (job) => job,
+    sleepImpl: async () => { void rig.worker.stop(); },
+  });
+  const stale = createJob({
+    root: rig.dir, jobId: '20260101-120000-0000ee', provider: 'fixture', cfg: CFG, input: INPUT,
+    nowImpl: () => new Date(T0 - 400 * 86_400_000),
+  });
+
+  await rig.worker.start();
+
+  assert.ok(fs.existsSync(jobPaths(rig.dir, stale.jobId).dir),
+    'CFG carries no retention block; a worker that guessed one would enforce a policy nobody was shown');
+});
+
+test('the sweep never deletes a job somebody holds a live lease on', async (t) => {
+  // The nasty case is the HOURLY sweep, not the startup one: a job old enough to
+  // be due that another worker has already claimed. Age says delete; the lease
+  // says not yet, and the lease wins -- otherwise the directory disappears from
+  // under a live render and the customer loses a tape they paid for. It is not
+  // kept forever, just until whoever holds it lets go.
+  const rig = makeRig(t, { retention: { photoDays: 7, jobDays: 30 } });
+  const oldId = '20260101-120000-0000ff';
+  createJob({
+    root: rig.dir, jobId: oldId, provider: 'fixture', cfg: CFG, input: INPUT,
+    nowImpl: () => new Date(T0 - 400 * 86_400_000),
+  });
+  rig.queue.enqueue(oldId);
+  const claim = rig.queue.claim({ workerId: 'another-worker-mid-render' });
+  assert.equal(claim.jobId, oldId);
+
+  const held = rig.worker.sweepRetention();
+
+  assert.ok(fs.existsSync(jobPaths(rig.dir, oldId).manifest),
+    'a claimed job survives its own retention sweep');
+  assert.equal(held.jobsDeleted, 0);
+
+  // And it is not immune forever -- the next sweep after the lease is gone takes it.
+  rig.queue.release(oldId, claim.token);
+  const freed = rig.worker.sweepRetention();
+
+  assert.equal(fs.existsSync(jobPaths(rig.dir, oldId).dir), false,
+    'once nobody holds it, the promise applies again');
+  assert.equal(freed.jobsDeleted, 1);
 });

@@ -109,10 +109,34 @@ one for a job that a worker may be holding; a cancel arrives as a
 This system stores photographs of people's faces.
 
 ```bash
-npm run purge -- --older-than=7d --photos-only    # dry run by default
-npm run purge -- --older-than=7d --photos-only --execute
+npm run purge                 # what is due, from config. Deletes nothing.
+npm run purge -- --apply      # actually delete it
+npm run purge -- --json       # the same, machine-readable
 ```
 
 `retention.photoDays` is 7 and `retention.jobDays` is 30, in
-`config/render.json`. Purge defaults to a dry run because deleting faces is not
-something that should ever happen by accident.
+`config/render.json`. **Purge defaults to a dry run** because deleting faces is
+not something that should ever happen by accident — `--apply` (or `--execute`)
+is required, and there is no config setting that removes that requirement.
+
+The windows come from config and are deliberately not flags you need to know:
+the same two numbers are what `scripts/safety/consent.mjs` quotes to every user,
+and a test fails if the promise and the enforcement stop agreeing.
+`--photo-days=<n>` and `--job-days=<n>` exist for a one-off clear-out; when they
+differ from config the header says `OVERRIDDEN ON THE COMMAND LINE`, so the
+transcript records that they were used.
+
+**You normally do not have to run this at all.** The worker sweeps at startup and
+hourly, next to its queue reap — a promise whose enforcement lives in a crontab
+somebody has to remember to install is not a promise. Run `npm run purge` when
+you want to see what is due, or drive it from a scheduler with
+`retention: null` on the worker if you would rather own the schedule yourself.
+
+Exit code is `1` if anything could not be deleted, so a scheduled run that
+silently fails to keep the promise is not a thing that can happen quietly.
+
+**On request, not just on a schedule.** `DELETE /api/jobs/:id` removes
+everything that can hold a face — the upload, the generated stills, the contact
+sheet, the segments, the source, the video and the poster — and keeps
+`manifest.json` as the record. If a worker holds the lease it answers `202`, and
+the worker performs the deletion when it reaches the next step boundary.

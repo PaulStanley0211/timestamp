@@ -579,10 +579,45 @@ the post is a `400`.
 // scripts/render/ledger.mjs
 export function collectLedger({ root, since?, until? }): { jobs, totals, divergences }
 export function formatLedger(ledger): string
-// scripts/render/purge.mjs
+// scripts/render/purge.mjs                                    BUILT 2026-08-21
 export function planPurge({ root, olderThan, photosOnly, nowImpl? }): PurgePlan
-export function executePurge(plan, { dryRun = true }): PurgeResult
+export function executePurge(plan, { dryRun = true, fsImpl? }): PurgeResult
+export function purgeJobMedia(paths, { dryRun = false, fsImpl? }): { filesDeleted, photosDeleted, removed }
+export function ageInDays(createdAt, now): number | null
 ```
+
+`scripts/render/ledger.mjs` is **NOT built.** `npm run ledger` therefore fails.
+It is cost reconciliation — manifest actuals against `config/pricing.json`
+estimates — and it is waiting on real provider spend, since today every price in
+the repo is an estimate. It is unrelated to the credit ledger, which is built and
+lives on the account record (`npm run accounts -- ledger`).
+
+`purgeJobMedia` is the **on-request** half of the consent sentence ("and that I
+can ask for either to be deleted sooner"): everything that can hold a face —
+`input/`, `stills/`, `segments/`, `review/`, `source.mp4`, the video, the
+poster — with `manifest.json`, `logs/`, `intent/` and the cancel sentinel kept.
+It is called by `DELETE /api/jobs/:id` on the unclaimed path and by the pipeline
+when it observes the cancel sentinel at a step boundary, which is what makes that
+endpoint's `202` mean "will be deleted" rather than "was written down".
+
+Age is measured from **`createdAt`, never `updatedAt`** — `updatedAt` is
+restamped by every `saveJob`, so a retried job would push its own deletion date
+forward indefinitely.
+
+The scheduled half runs in the worker: `worker.sweepRetention()` at startup and
+every `DEFAULT_RETENTION_SWEEP_MS` (1 h), beside `reapExpired()`. Pass
+`retention: null` to disable it and drive `npm run purge` from a scheduler
+instead. A worker with no `cfg.retention` and no explicit `retention` sweeps
+nothing rather than inventing a policy.
+
+**A live lease beats age.** The sweep skips any job in `queue.peek({state:
+'claimed'})` that has not expired, plus its own in-flight job. The case is a job
+old enough to be due that is claimed for the first time today: without the guard
+the directory vanishes mid-render and the customer loses a tape they paid for.
+It is deferred, not spared — the next sweep after the lease is gone takes it. If
+the queue cannot answer, "unknown" is read as "somebody might" and nothing is
+swept. `npm run purge` has no queue and therefore no such guard, which is one
+more reason the worker is the scheduled path and the CLI is the manual one.
 
 `config/pricing.json` entries are **ESTIMATES** until a `--meter` run proves
 them. Divergence over 15% is named by job in `npm run ledger`.

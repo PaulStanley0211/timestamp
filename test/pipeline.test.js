@@ -678,6 +678,37 @@ test('a cancel sentinel dropped between steps stops the job and writes it down',
   assert.equal(loadJob({ root, jobId: job.jobId }).status, 'cancelled');
 });
 
+test('a cancel sentinel also purges the media, so a claimed job is not left holding a face', async () => {
+  const root = tmpRoot();
+  const photo = writeUpload(root);
+  const job = makeJob(root);
+  const { provider } = makeProvider();
+  const paths = jobPaths(root, job.jobId);
+
+  // `DELETE /api/jobs/:id` on a job a worker holds answers 202 and deletes
+  // nothing, because the web process must not write a manifest it does not hold
+  // the lease on. `docs/security-review-2026-08-21.md` F2: that 202 has to mean
+  // "will be deleted", and the worker -- which IS the legitimate writer -- is
+  // the only process that can honour it. Without this, asking to delete a
+  // rendering job left every generated still on disk permanently.
+  const finished = await runPipeline(job, {
+    provider, root, deps: makeDeps(), sources: { photo },
+    onProgress: (e) => {
+      if (e.step === 'compose' && e.phase === 'done') {
+        fs.writeFileSync(`${paths.stills}/still-01.png`, Buffer.from('a generated face'));
+        fs.writeFileSync(paths.cancelRequest, 'cancel');
+      }
+    },
+  });
+
+  assert.equal(finished.status, 'cancelled');
+  assert.deepEqual(fs.readdirSync(paths.stills), [], 'the stills a claimed job had already made');
+  assert.deepEqual(fs.readdirSync(paths.input), [], 'and the upload');
+  assert.ok(fs.existsSync(paths.manifest), 'the record of the cancellation survives it');
+  assert.ok(fs.existsSync(paths.cancelRequest),
+    'the sentinel stays: deleting it would let a worker mid-step carry on rendering into the directory just emptied');
+});
+
 test('the staged original is deleted once intake commits -- it is the copy with the EXIF', async () => {
   const { root, job } = await runFake();
   const input = `${jobPaths(root, job.jobId).dir}/input`;

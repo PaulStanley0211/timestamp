@@ -3,8 +3,8 @@
   "schemaVersion": 1,
   "currency": "USD",
   "asOf": "2026-08-20",
-  "creditUSD": 0.03,
-  "_creditUSD_comment": "ESTIMATE. What one credit is worth in ESTIMATED PROVIDER COST, and therefore the only thing that converts dollars into the unit on the button. Three cents is a round, explainable number rather than a derived one, and it is a scale factor and nothing else: it is NOT the price a credit is sold at, and no code in scripts/auth/ multiplies it by anything a customer pays. Change it and every credit figure below moves together, which is the point.",
+  "creditUSD": 0.10,
+  "_creditUSD_comment": "ESTIMATE. What one credit is worth in ESTIMATED PROVIDER COST, and therefore the only thing that converts dollars into the unit on the button. Ten cents is a round, explainable number rather than a derived one, and it is a scale factor and nothing else: it is NOT the price a credit is sold at, and no code in scripts/auth/ multiplies it by anything a customer pays. Change it and every credit figure below moves together, which is the point. RAISED FROM $0.03 ON 2026-08-21, at Paul's direction, and the reason was legibility rather than economics: at three cents a tape cost 51 or 152 credits, which are ugly numbers that read as arbitrary and made the free tier look stingier than it is. At ten cents the same tapes cost 16 and 46. MARGINS ARE UNCHANGED -- every plan's creditsPerPeriod was rescaled in the same edit, so each plan buys exactly the number of tapes it bought before. This is the honest way to make the numbers friendlier: scale the unit, do not discount the tape. Selling 720p at '100 credits' while it costs 152 credits' worth of provider time would have been a 52-credit loss on every render, invisible until an invoice arrived.",
   "referenceSeconds": 15,
   "_referenceSeconds_comment": "The duration every estimatedUSDPer15s below is quoted at, and not a default so much as the contract: 375 frames at 25fps, asserted by ~200 tests. `creditCost` scales linearly from here for any other duration.",
   "provider": {
@@ -72,31 +72,31 @@
   },
   "plans": {
     "free": {
-      "_comment": "ESTIMATE. 51 credits is exactly one 480p tape, which keeps the previously specified 'free: 1 tape per month' true under the credit mechanism. It is not enough for a 720p tape, and that is the shape of the free tier rather than an oversight. Zero is the only price in this file that cannot drift.",
+      "_comment": "ESTIMATE. 16 credits is exactly one 480p tape (rescaled from 51 when creditUSD moved to $0.10; same one tape), which keeps the previously specified 'free: 1 tape per month' true under the credit mechanism. It is not enough for a 720p tape, and that is the shape of the free tier rather than an oversight. Zero is the only price in this file that cannot drift.",
       "estimate": true,
       "id": "free",
       "label": "Free",
       "monthlyUSD": 0,
       "annualUSD": 0,
-      "creditsPerPeriod": 51
+      "creditsPerPeriod": 16
     },
     "shelf": {
-      "_comment": "ESTIMATE. 153 credits is exactly three 480p tapes, preserving the allowance the flat spec named -- or one 720p tape with a 480p one left over, which is the trade the credit model exists to let a person make. $10/month against $4.53 of estimated provider spend at full 480p usage is a 55% gross margin BEFORE any infrastructure; at full 720p usage it is 55% of one tape and then nothing, which is the correct behaviour and not a bug. annualUSD is ten months for twelve -- an interpretation of Paul's 'price it very small annually', not his words. NEEDS PAUL.",
+      "_comment": "ESTIMATE. 48 credits is exactly three 480p tapes (rescaled from 153; same three tapes), preserving the allowance the flat spec named -- or one 720p tape with a 480p one left over, which is the trade the credit model exists to let a person make. $10/month against $4.53 of estimated provider spend at full 480p usage is a 55% gross margin BEFORE any infrastructure; at full 720p usage it is 55% of one tape and then nothing, which is the correct behaviour and not a bug. annualUSD is ten months for twelve -- an interpretation of Paul's 'price it very small annually', not his words. NEEDS PAUL.",
       "estimate": true,
       "id": "shelf",
       "label": "Shelf",
       "monthlyUSD": 10,
       "annualUSD": 100,
-      "creditsPerPeriod": 153
+      "creditsPerPeriod": 48
     },
     "archive": {
-      "_comment": "ESTIMATE. 204 credits is exactly four 480p tapes, or one 720p tape plus one 480p. $12/month against $6.04 of estimated provider spend is a 50% gross margin; the annual rate at $10/month effective is 40%. The ladder is still weak on its own terms: two dollars and 51 credits apart is one extra 480p tape a month, which has to read as obviously worth two dollars or it looks like indecision. Flagged in docs/interfaces-app.md, unchanged by the move to credits, and worth revisiting the moment a --meter run gives these numbers a floor.",
+      "_comment": "ESTIMATE. 64 credits is exactly four 480p tapes (rescaled from 204; same four tapes), or one 720p tape plus one 480p. $12/month against $6.04 of estimated provider spend is a 50% gross margin; the annual rate at $10/month effective is 40%. The ladder is still weak on its own terms: two dollars and 51 credits apart is one extra 480p tape a month, which has to read as obviously worth two dollars or it looks like indecision. Flagged in docs/interfaces-app.md, unchanged by the move to credits, and worth revisiting the moment a --meter run gives these numbers a floor.",
       "estimate": true,
       "id": "archive",
       "label": "Archive",
       "monthlyUSD": 12,
       "annualUSD": 120,
-      "creditsPerPeriod": 204
+      "creditsPerPeriod": 64
     }
   }
 }

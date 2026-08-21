@@ -69,6 +69,7 @@ import {
   setJobStatus, setSelection, completeJob, cancelJob,
   recordIntent, readIntent, completeIntent,
 } from './job.mjs';
+import { purgeJobMedia } from './purge.mjs';
 
 import { runFfmpeg, probe, REPO_ROOT } from '../ffmpeg/run.mjs';
 import {
@@ -1431,6 +1432,16 @@ export async function runPipeline(job, {
       log(`  cancel requested before ${name}`);
       cancelJob(job, `cancelled before ${name}`);
       saveJob(job);
+      // AND THE MEDIA GOES WITH IT. The web process answered 202 to the person
+      // who asked for this, because it does not hold the lease and must not
+      // write the manifest -- so this is the only process that can make that 202
+      // mean "will be deleted" rather than "was written down". Without it, a
+      // cancel on a running job left every still already generated on disk
+      // permanently: `docs/security-review-2026-08-21.md` F2. Purged AFTER the
+      // manifest is saved, so a crash in between leaves a cancelled job with
+      // files rather than a running job with none.
+      const purged = purgeJobMedia(paths);
+      if (purged.filesDeleted > 0) log(`  purged ${purged.filesDeleted} file(s) on cancel`);
       return job;
     }
     checkCancelled();

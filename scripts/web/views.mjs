@@ -107,14 +107,31 @@ const STATUS_COPY = Object.freeze({
 });
 
 /**
- * The FRAME row. Facts, not choices.
+ * The FRAME row used to render `['4:3', 'PAL', '25 fps', '15.000s']` as four
+ * chips, with a comment here explaining that they were `<span>`s and not
+ * controls because there was nothing to choose.
  *
- * A camcorder tape is 4:3, PAL is what a 2003 tape in Germany was, and 25 x 15
- * is exactly 375 frames -- the number roughly two hundred tests assert. There is
- * nothing here to change, so these are `<span>`s and not controls, and no field
- * named `aspect` or `fps` exists anywhere in this application.
+ * THAT WAS TRUE AND IT STILL READ AS BROKEN. The chips sat directly above the
+ * quality cards, which ARE controls and look almost identical, so the row
+ * presented four things that could not be clicked next to three that could.
+ * Paul's report was "I can't click the frame to select" -- not a rendering
+ * fault, a fault in what the page was claiming. "PAL" made it worse: it is a
+ * broadcast standard nobody outside video engineering has a reason to know, and
+ * putting it on a chip implied it was an option somebody might want a different
+ * value of.
+ *
+ * Replaced with one sentence of prose that states the two facts a person
+ * actually needs -- 4:3 and fifteen seconds -- in a shape that cannot be
+ * mistaken for a control. The frame rate and the broadcast standard are not
+ * facts a customer needs; they are facts the RENDERER needs, they are asserted
+ * by roughly two hundred tests, and the place they are written down is the
+ * output contract in CLAUDE.md.
+ *
+ * WHEN THE ASPECT SELECTOR LANDS this becomes a real control with 4:3, 9:16 and
+ * 16:9, and the sentence loses its "nothing to choose here yet". Until the
+ * renderer can actually fill those rasters, offering the choice would sell
+ * something that cannot be delivered.
  */
-export const TAPE_FACTS = Object.freeze(['4:3', 'PAL', '25 fps', '15.000s']);
 
 /**
  * The QUALITY row's copy, and the reason it is worded the way it is.
@@ -166,6 +183,65 @@ function wordmark() {
   return `<a class="wordmark" href="/"><span class="rec" aria-hidden="true">&#9679;</span>TIMESTAMP</a>`;
 }
 
+/**
+ * The credit meter: a ring that empties as credits are spent.
+ *
+ * WHY A RING AND NOT A NUMBER. "153 CR" answers how many and never how far
+ * through, and "how far through" is the question a person actually has when
+ * they are deciding whether to press Record. A ring answers it at a glance and
+ * without arithmetic -- which matters most for the people who need it most, the
+ * ones near empty.
+ *
+ * WHY THE FRACTION IS AN SVG ATTRIBUTE AND NOT AN INLINE STYLE. The obvious
+ * implementation is `style="--pct:0.62"`, and the CSP forbids it: `style-src
+ * 'self'` carries no `'unsafe-inline'`, on purpose, and the per-place gradients
+ * are generated into the stylesheet rather than inlined for exactly this
+ * reason. But `stroke-dasharray` is an SVG PRESENTATION ATTRIBUTE, not CSS, so
+ * CSP does not police it and a per-request value is free. `pathLength="100"`
+ * then redefines the circle's own length as 100 units, so the dash array is
+ * literally "percent full, percent empty" and no circumference arithmetic
+ * appears anywhere. Change the radius and nothing else has to move.
+ *
+ * WHY IT CAPS AT FULL. A balance can exceed a period's grant -- a manual grant,
+ * a plan change, or credits that simply rolled over, since `expiryDays` is
+ * null. A ring drawn past 100% wraps and reads as nearly empty, which is the
+ * most dangerous possible misreading, so the arc clamps and the number beside
+ * it stays honest.
+ *
+ * THREE STATES, and the middle one is the point. Full-ish, low (fewer than two
+ * of the cheapest tape), and spent (cannot afford anything at all). "Spent" is
+ * a different fact from "low": a sliver of arc looks like it might be enough,
+ * and finding out it is not costs somebody a click and a refusal.
+ */
+export function creditMeter(balance) {
+  const credits = Math.max(0, Number(balance?.credits ?? 0));
+  const perPeriod = Math.max(0, Number(balance?.perPeriod ?? 0));
+  const cheapest = Math.max(0, Number(balance?.cheapest ?? 0));
+
+  // No plan allowance to measure against -- degrade to the plain number rather
+  // than drawing a ring that is a fraction of nothing.
+  if (!perPeriod) return `<span class="who">${h(`${credits} CR`)}</span>`;
+
+  const pct = Math.max(0, Math.min(100, Math.round((credits / perPeriod) * 100)));
+  const state = cheapest && credits < cheapest ? 'spent'
+    : cheapest && credits < cheapest * 2 ? 'low'
+      : 'ok';
+
+  const tapes = cheapest ? Math.floor(credits / cheapest) : null;
+  const title = state === 'spent'
+    ? `${credits} CR — not enough for a tape`
+    : `${credits} CR — about ${tapes} more ${tapes === 1 ? 'tape' : 'tapes'}`;
+
+  return `<span class="creds creds--${state}" title="${h(title)}">
+  <svg class="ring" viewBox="0 0 24 24" role="img" aria-label="${h(title)}">
+    <circle class="ring-track" cx="12" cy="12" r="9"></circle>
+    <circle class="ring-fill" cx="12" cy="12" r="9" pathLength="100"
+            stroke-dasharray="${pct} ${100 - pct}"></circle>
+  </svg>
+  <span class="creds-n">${h(String(credits))}</span><span class="creds-u">CR</span>
+</span>`;
+}
+
 function nav({ account = null, balance = null } = {}) {
   if (!account) {
     return `<nav class="nav">
@@ -173,7 +249,7 @@ function nav({ account = null, balance = null } = {}) {
   <a href="/login">Sign in</a>
 </nav>`;
   }
-  const left = balance ? `<span class="who">${h(`${balance.credits} CR`)}</span>` : '';
+  const left = balance ? creditMeter(balance) : '';
   return `<nav class="nav">
   ${left}
   <a href="/pricing">Plans</a>
@@ -275,6 +351,96 @@ function stepHead(n, name, subtitle) {
  * @param {{credits:number,planId:string}} data.balance
  * @param {Array} data.tapes   the shelf, newest first
  */
+/**
+ * The page a stranger sees. Everything above it in this file is for somebody
+ * who has already signed in.
+ *
+ * WHY THIS EXISTS AT ALL, AND WHY IT DID NOT BEFORE. `GET /` used to answer a
+ * signed-out visitor with a 303 to `/login`, so the entire product was a
+ * password box. There was nowhere to say what this is, nowhere for a headline,
+ * and nothing for somebody who had never heard of it to read. An app whose
+ * front door is a login form can only be used by people who already know what
+ * it does, which is a strange shape for something being built to sell.
+ *
+ * WHY THE COLOURS ARE THE ARTWORK. `assets/places/` is empty and the place
+ * photographs are the biggest missing asset in the product. Rather than leave a
+ * hole or reach for stock, the shelf is built from the per-place gradients that
+ * already exist -- the same `.thumb--pl-<id>` rules the carousel uses -- so the
+ * page is finished on a fresh clone with no images at all, and the day the
+ * photographs land they drop into the same declaration and the layout does not
+ * move. That is the same trick `presetCss` already plays, used one level up.
+ *
+ * WHY THE HIERARCHY IS DELIBERATE. The signed-in page is four panels of
+ * identical width and weight, which is the shape that reads as templated: when
+ * everything is medium, nothing is the subject. Here one thing is the subject --
+ * the sentence -- and it is several times the size of everything else.
+ */
+export function landingPage({ places = [], account = null } = {}) {
+  const spines = places.map((p) => `
+    <span class="spine">
+      <span class="spine-face thumb--${h(placeSlug(p.id))}"></span>
+      <span class="spine-name">${h(p.label)}</span>
+    </span>`).join('');
+
+  const body = `
+<main class="landing">
+
+  <section class="hero">
+    <h1 class="hero-line">You, somewhere<br>ordinary, in 2003.</h1>
+    <p class="hero-sub">One photograph becomes fifteen seconds of camcorder tape &mdash;
+    grain, chroma bleed, and the date burned into the corner.</p>
+    <p class="hero-do">
+      <a class="cta" href="/signup">Make a tape</a>
+      <a class="cta cta--quiet" href="/login">I have an account</a>
+    </p>
+  </section>
+
+  <section class="shelf-strip">
+    <p class="eyebrow">Somewhere ordinary</p>
+    <div class="spines">${spines}</div>
+    <p class="hint">Or your own photograph of the place. Your actual childhood
+    garden beats any description of one.</p>
+  </section>
+
+  <section class="how">
+    <div class="how-step">
+      <p class="how-n">01</p>
+      <h2 class="how-t">Your photograph</h2>
+      <p class="how-d">One picture of a face. The location and camera data are
+      stripped before anything else happens.</p>
+    </div>
+    <div class="how-step">
+      <p class="how-n">02</p>
+      <h2 class="how-t">A place and a look</h2>
+      <p class="how-d">Pick from the shelf, describe somewhere in your own words,
+      or upload a photograph of it.</p>
+    </div>
+    <div class="how-step">
+      <p class="how-n">03</p>
+      <h2 class="how-t">Fifteen seconds</h2>
+      <p class="how-d">375 frames at 25fps. You approve a still before the video
+      is ever made, so a likeness you do not like costs you nothing.</p>
+    </div>
+  </section>
+
+  <section class="plain">
+    <p>It is not a filter. The picture is generated, then run through a real tape
+    chain in ffmpeg &mdash; the grain goes on before the upscale, the date stamp
+    degrades with the image, and the whole thing is matted the way a camcorder
+    frame actually sat. That is why it does not look like a preset.</p>
+  </section>
+
+</main>`;
+
+  return layout({
+    title: 'Timestamp — one photo, fifteen seconds, 2003',
+    body,
+    bodyClass: 'is-landing',
+    account,
+    chrome: true,
+  });
+}
+
 export function homePage({
   places = [],
   outfits = [],
@@ -425,13 +591,29 @@ camcorder tape in a German suburb, some time around 2003.</p>
     </div>
     <div class="dots" aria-hidden="true">${dots}</div>
 
+    <!-- THE ESCAPE HATCHES, NAMED WHERE SOMEBODY WILL SEE THEM.
+         Both of these already existed and neither could be found. The upload
+         lives behind a display:none rule and is revealed only by checking
+         the pl-own radio -- a card sitting at the far end of a horizontally scrolling
+         rail, off the edge of the viewport on a phone and on most laptops. The
+         free-text box was inside a collapsed <details>. So the product's
+         headline capability -- "anyone uploads any photo, gives a location" --
+         was reachable only by scrolling a carousel to its end and guessing.
+         Paul reported it as a missing feature. It was a missing SIGNPOST.
+         The <label> is the whole trick: it targets #pl-own exactly as the card
+         does, so one line of prose selects the card, reveals the upload and
+         moves the carousel dot, with no JavaScript anywhere. -->
+    <p class="hint escape">Somewhere else in mind?
+      <label class="linky" for="pl-own">Upload a photo of it</label>
+      or <label class="linky" for="pl-own">describe it below</label> &mdash;
+      your actual childhood garden beats any description of one.</p>
+
     <div class="ownplace">
-      <p class="hint">A second photograph, used as a reference alongside your face.
-      Your actual childhood garden beats any description of one.</p>
+      <p class="hint">A second photograph, used as a reference alongside your face.</p>
       <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp">
     </div>
 
-    <details class="aside">
+    <details class="aside" ${values.place ? 'open' : ''}>
       <summary>Or describe the place</summary>
       <p class="hint">Used only when no card above is chosen.</p>
       <input type="text" name="placeText" maxlength="200" autocomplete="off" spellcheck="false"
@@ -443,8 +625,8 @@ camcorder tape in a German suburb, some time around 2003.</p>
     ${stepHead(4, 'The tape', 'One of these is a choice. The rest is what a camcorder tape is.')}
 
     <p class="eyebrow">Frame</p>
-    <div class="pills">${TAPE_FACTS.map((f) => `<span class="pill">${h(f)}</span>`).join('')}</div>
-    <p class="hint">4:3 is the true camcorder frame.</p>
+    <p class="hint hint--fact">Every tape is <strong>4:3</strong> and <strong>fifteen seconds</strong> —
+    the shape and length a camcorder actually recorded. Nothing to choose here yet.</p>
 
     <p class="eyebrow">Quality</p>
     <div class="quality">${qualityCards}</div>
@@ -459,8 +641,10 @@ camcorder tape in a German suburb, some time around 2003.</p>
     </dl>
 
     <div class="field">
-      <label for="stillCount">Frames to choose from</label>
-      <p class="hint">You pick one before the video is made. More costs more and takes longer.</p>
+      <label for="stillCount">How many looks to choose from</label>
+      <p class="hint">We make this many photos of you in the scene first. You pick your
+      favourite &mdash; only then is the video made, so a likeness you do not like
+      never costs you a tape.</p>
       <select id="stillCount" name="stillCount">
         <option value="1">1</option>
         <option value="3" selected>3</option>

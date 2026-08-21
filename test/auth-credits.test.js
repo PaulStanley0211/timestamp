@@ -128,10 +128,18 @@ test('the 720p anchor still matches the formula it was derived from', () => {
   }
 });
 
-test('the numbers: 51 credits at 480p, 152 at 720p, and the ratios Paul specified', () => {
-  assert.equal(creditCost({ resolution: '480p' }), 51);
-  assert.equal(creditCost({ resolution: '720p' }), 152);
-  assert.equal(TAPE, 51, 'the default is 480p, the cheap tier');
+test('the numbers: 16 credits at 480p, 46 at 720p, and the ratios Paul specified', () => {
+  // RESCALED 2026-08-21, when creditUSD moved from $0.03 to $0.10 at Paul's
+  // direction. The reason was legibility, not economics: 51 and 152 are ugly
+  // numbers that read as arbitrary. Every plan's creditsPerPeriod moved in the
+  // same edit, so a plan buys exactly the tapes it bought before -- which is
+  // why the RATIO assertions below are unchanged and still pass. They are the
+  // ones that matter: they encode the cost relationships, and a rescale must
+  // not touch them. If a future edit changes a ratio, that is a pricing
+  // decision and not a rescale, and it should be argued rather than absorbed.
+  assert.equal(creditCost({ resolution: '480p' }), 16);
+  assert.equal(creditCost({ resolution: '720p' }), 46);
+  assert.equal(TAPE, 16, 'the default is 480p, the cheap tier');
   assert.deepEqual(CREDIT_DEFAULTS, { resolution: '480p', seconds: 15, tier: 'standard' });
 
   const cr = (id) => CREDIT_COSTS[id].creditsPerReference;
@@ -174,15 +182,17 @@ test('480p and 720p ship; 1080p is present, deferred, and refused rather than su
 });
 
 test('cost is linear in seconds and rounds up', () => {
-  // 51 is a rounded-up 50.33, so two 15-second tapes cost one credit more than
+  // 16 is a rounded-up 15.1, so two 15-second tapes cost one credit more than
   // one 30-second one. Rounding up is deliberate: rounding down gives away a
   // fraction of a credit on every render, in the same direction every time, and
-  // no line item ever explains it.
-  assert.equal(creditCost({ resolution: '480p', seconds: 30 }), 101);
-  assert.equal(creditCost({ resolution: '480p', seconds: 15 }) * 2, 102);
-  assert.equal(creditCost({ resolution: '720p', seconds: 7.5 }), 76);
-  assert.equal(CREDIT_COSTS['720p'].creditsPerReference, 152);
-  assert.equal(estimatedUSD(51).toFixed(2), '1.53');
+  // no line item ever explains it. The property this asserts survived the
+  // 2026-08-21 rescale unchanged, which is the point of testing the behaviour
+  // rather than the arithmetic: 31 < 32 for the same reason 101 < 102 did.
+  assert.equal(creditCost({ resolution: '480p', seconds: 30 }), 31);
+  assert.equal(creditCost({ resolution: '480p', seconds: 15 }) * 2, 32);
+  assert.equal(creditCost({ resolution: '720p', seconds: 7.5 }), 23);
+  assert.equal(CREDIT_COSTS['720p'].creditsPerReference, 46);
+  assert.equal(estimatedUSD(16).toFixed(2), '1.60');
 });
 
 test('an unknown tier or duration is refused rather than defaulted', () => {
@@ -214,9 +224,9 @@ test('a new account opens with its plan first grant, and the balance is that sum
     planId: 'shelf',
   });
   assert.deepEqual(ledgerFor(account), [
-    { at: iso(T0), delta: 153, jobId: null, reason: 'grant:signup', balance: 153 },
+    { at: iso(T0), delta: 48, jobId: null, reason: 'grant:signup', balance: 48 },
   ]);
-  assert.equal(balanceForId({ root, accountId: account.accountId }).credits, 153);
+  assert.equal(balanceForId({ root, accountId: account.accountId }).credits, 48);
 });
 
 test('the balance is the sum of the ledger and is never stored as a number', (t) => {
@@ -269,27 +279,31 @@ test('a debit spends credits durably and refreshes the caller copy', (t) => {
 
   assert.equal(balanceOf(account).credits, PLANS.shelf.creditsPerPeriod - TAPE);
   assert.deepEqual(account.ledger.at(-1), {
-    at: iso(T0 + 1000), delta: -51, jobId: JOB(1), reason: 'render:480p',
+    at: iso(T0 + 1000), delta: -16, jobId: JOB(1), reason: 'render:480p',
   });
-  // And another process reading the record sees the same thing.
-  assert.equal(balanceForId({ root, accountId: account.accountId }).credits, 102);
+  // And another process reading the record sees the same thing. Derived from
+  // the plan and the tape rather than written as a literal, so that a rescale
+  // of what a credit is worth cannot strand this line while the assertion three
+  // rows above it keeps passing.
+  assert.equal(balanceForId({ root, accountId: account.accountId }).credits,
+    PLANS.shelf.creditsPerPeriod - TAPE);
 });
 
 test('a debit larger than the balance is refused, with a shortfall the page can act on', (t) => {
   const root = makeRoot(t);
-  const account = signUp(root); // free: 51 credits, exactly one 480p tape
+  const account = signUp(root); // free: 16 credits, exactly one 480p tape
 
   const err = grab(() => debitCredits(account, {
     jobId: JOB(1), credits: creditCost({ resolution: '720p' }), nowImpl: clock(),
   }));
   assert.equal(err.code, 'INSUFFICIENT_CREDITS');
-  assert.deepEqual(err.detail, { required: 152, balance: 51, shortfall: 101, planId: 'free' });
+  assert.deepEqual(err.detail, { required: 46, balance: 16, shortfall: 30, planId: 'free' });
   assert.match(err.userMessage, /Not enough credits/);
   assert.ok(!err.userMessage.includes(root), 'a user message must never leak a path');
 
   // A refused debit must not have half-spent anything.
   assert.equal(loadAccount({ root, accountId: account.accountId }).ledger.length, 1);
-  assert.equal(balanceOf(account).credits, 51);
+  assert.equal(balanceOf(account).credits, 16);
   // And the affordable version still goes through.
   debitCredits(account, { jobId: JOB(1), credits: TAPE, nowImpl: clock() });
   assert.equal(balanceOf(account).credits, 0);
@@ -306,7 +320,7 @@ test('debiting the same jobId twice charges once, at the price it was quoted', (
   debitCredits(account, { jobId: JOB(1), credits: TAPE, nowImpl: clock(T0 + 60_000) });
   // Even a later call quoting a different price is the same render, already
   // paid for -- a re-quote must not become a second charge.
-  debitCredits(account, { jobId: JOB(1), credits: 152, nowImpl: clock(T0 + 120_000) });
+  debitCredits(account, { jobId: JOB(1), credits: 46, nowImpl: clock(T0 + 120_000) });
 
   assert.equal(balanceOf(account).credits, PLANS.archive.creditsPerPeriod - TAPE);
   assert.equal(loadAccount({ root, accountId: account.accountId }).ledger.length, 2);
@@ -339,21 +353,21 @@ test('a grant is one more line, and a negative grant is a correction', (t) => {
   const account = signUp(root);
 
   grantCredits(account, { credits: 200, reason: 'grant:manual', nowImpl: clock(T0 + 1000) });
-  assert.equal(balanceOf(account).credits, 251);
+  assert.equal(balanceOf(account).credits, 216);
   assert.equal(balanceOf(account).grantedAt, iso(T0 + 1000));
 
   // The honest way to fix a ledger is another line, never an edit to an
   // existing one.
   grantCredits(account, { credits: -200, reason: 'correction:granted twice', nowImpl: clock(T0 + 2000) });
-  assert.equal(balanceOf(account).credits, 51);
+  assert.equal(balanceOf(account).credits, 16);
   assert.equal(ledgerFor(account).length, 3);
-  assert.deepEqual(ledgerFor(account).map((e) => e.balance), [51, 251, 51]);
+  assert.deepEqual(ledgerFor(account).map((e) => e.balance), [16, 216, 16]);
 
   // A negative balance is a debt this product has no way to collect and no page
   // that could explain it.
   const err = grab(() => grantCredits(account, { credits: -100, reason: 'oops', nowImpl: clock() }));
   assert.equal(err.code, 'GRANT_BELOW_ZERO');
-  assert.equal(balanceOf(account).credits, 51);
+  assert.equal(balanceOf(account).credits, 16);
 
   for (const credits of [0, 1.5, '10', undefined]) {
     assert.equal(grab(() => grantCredits(account, { credits, reason: 'x' })).code, 'BAD_CREDITS');
@@ -368,8 +382,8 @@ test('grantPlanPeriod grants exactly what the plan says, by name', (t) => {
   const account = signUp(root);
   setPlan(account, 'archive');
 
-  assert.equal(grantPlanPeriod(account, { planId: 'archive', nowImpl: clock(T0 + 1000) }), 204);
-  assert.equal(balanceOf(account).credits, 51 + 204);
+  assert.equal(grantPlanPeriod(account, { planId: 'archive', nowImpl: clock(T0 + 1000) }), 64);
+  assert.equal(balanceOf(account).credits, 16 + 64);
   assert.equal(account.ledger.at(-1).reason, 'grant:period:archive');
   assert.equal(grab(() => grantPlanPeriod(account, { planId: 'gold' })).code, 'BAD_PLAN');
 });
@@ -388,13 +402,13 @@ test('a job that died before the provider was called gets exactly what it paid',
   // ours.
   refundCredits(account, { jobId: JOB(1), reason: 'refund:intake-failed', spent: false, nowImpl: clock(T0 + 5000) });
 
-  assert.equal(balanceOf(account).credits, 153);
+  assert.equal(balanceOf(account).credits, 48);
   assert.deepEqual(account.ledger.at(-1), {
-    at: iso(T0 + 5000), delta: 51, jobId: JOB(1), reason: 'refund:intake-failed',
+    at: iso(T0 + 5000), delta: 16, jobId: JOB(1), reason: 'refund:intake-failed',
   });
   // Nothing was edited: the debit is still there, and the ledger explains itself.
   assert.equal(account.ledger.length, 3);
-  assert.deepEqual(ledgerFor(account).map((e) => e.delta), [153, -51, 51]);
+  assert.deepEqual(ledgerFor(account).map((e) => e.delta), [48, -16, 16]);
 });
 
 test('a job that failed AFTER the provider was called is refused a refund, loudly', (t) => {
@@ -417,11 +431,11 @@ test('a refund gives back what was charged, not what it would cost today', (t) =
   const root = makeRoot(t);
   const account = signUp(root, { plan: 'archive' });
   // Charged at the 480p price.
-  debitCredits(account, { jobId: JOB(1), credits: 51, nowImpl: clock() });
+  debitCredits(account, { jobId: JOB(1), credits: 16, nowImpl: clock() });
   refundCredits(account, { jobId: JOB(1), spent: false, nowImpl: clock(T0 + 1000) });
   // Refunding today's quote for yesterday's charge is how a ledger stops adding
   // up, so the refund is the exact amount taken.
-  assert.equal(account.ledger.at(-1).delta, 51);
+  assert.equal(account.ledger.at(-1).delta, 16);
   assert.equal(balanceOf(account).credits, PLANS.archive.creditsPerPeriod);
 
   // A second refund gives back nothing: there is nothing left to give back.
@@ -649,7 +663,7 @@ function stampede({ count, root, accountId, jobIdFor, credits, nowMs = T0 }) {
 
 test('12 threads debit at once against a balance that covers 3: exactly 3 get through', async (t) => {
   const root = makeRoot(t);
-  // Shelf grants 153 credits, which is exactly three 480p tapes at 51 each.
+  // Shelf grants 48 credits, which is exactly three 480p tapes at 16 each.
   const account = signUp(root, { plan: 'shelf' });
   assert.equal(PLANS.shelf.creditsPerPeriod, TAPE * 3);
 

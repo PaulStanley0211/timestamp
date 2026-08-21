@@ -63,6 +63,7 @@
 import process from 'node:process';
 import { hostname } from 'node:os';
 import { loadJob, saveJob, retryStep, setJobStatus } from '../render/job.mjs';
+import { planPurge, executePurge } from '../render/purge.mjs';
 import { isRetriable } from '../providers/errors.mjs';
 
 /** How long an idle worker waits before asking the queue again. One second is
@@ -70,10 +71,18 @@ import { isRetriable } from '../providers/errors.mjs';
  *  not a network call. */
 export const DEFAULT_POLL_MS = 1000;
 
+/** How often a long-lived worker re-runs the retention sweep. Retention is
+ *  measured in whole days, so hourly is far more often than it needs to be --
+ *  which is the point: the cost is one `readdir` plus a manifest read per job,
+ *  and the alternative is a promise that is only kept when somebody restarts
+ *  the worker. */
+export const DEFAULT_RETENTION_SWEEP_MS = 3_600_000;
+
 /** Every event type `onEvent` can emit. Exported so the CLI's renderer and a
  *  future web `/api/health` read from one list rather than two that drift. */
 export const EVENTS = Object.freeze([
   'reaped',            // startup recovery: dead leases returned to pending
+  'purged',            // retention: photos and jobs past their promised windows
   'claimed',           // this worker owns a job
   'revived',           // a failed manifest was reset so it can be resumed
   'step-started',
@@ -204,6 +213,10 @@ const isAbortError = (err) => err?.name === 'AbortError' || err?.code === 'ABORT
  * @param {Function} [opts.setIntervalImpl]
  * @param {Function} [opts.clearIntervalImpl]
  * @param {number}   [opts.heartbeatMs]       lease extension cadence
+ * @param {object|null} [opts.retention]     `{photoDays, jobDays}`; defaults to
+ *                                          `cfg.retention`. `null` disables the
+ *                                          sweep entirely.
+ * @param {number}   [opts.retentionSweepMs]  cadence of the repeat sweep
  * @param {boolean}  [opts.signals]           install SIGINT/SIGTERM handlers
  * @param {object}   [opts.processImpl]       the process to listen on and exit
  */
@@ -225,6 +238,8 @@ export function createWorker({
   setIntervalImpl = setInterval,
   clearIntervalImpl = clearInterval,
   heartbeatMs,
+  retention,
+  retentionSweepMs = DEFAULT_RETENTION_SWEEP_MS,
   signals = false,
   processImpl = process,
 } = {}) {
@@ -247,6 +262,25 @@ export function createWorker({
    * prints "maxInflight: 4" and renders one job at a time is worse than one
    * that says it cannot do that yet.
    */
+  /**
+   * The retention windows, or null.
+   *
+   * `retention` is read from `cfg` rather than defaulted here, because the
+   * numbers in `config/render.json` are the ones `scripts/safety/consent.mjs`
+   * quotes to the user -- inventing a fallback would mean a worker enforcing a
+   * policy nobody was shown. An explicit `null` disables the sweep, for an
+   * operator who runs `npm run purge` from a scheduler instead.
+   */
+  const windows = retention === null
+    ? null
+    : (() => {
+      const source = retention ?? cfg?.retention ?? null;
+      const photoDays = Number(source?.photoDays);
+      const jobDays = Number(source?.jobDays);
+      if (!Number.isFinite(photoDays) || !Number.isFinite(jobDays)) return null;
+      return { photoDays, jobDays };
+    })();
+
   const maxInflight = cfg?.provider?.maxInflight ?? 1;
   if (maxInflight !== 1) {
     throw new WorkerError(
@@ -592,6 +626,84 @@ export function createWorker({
     },
 
     /**
+     * The retention promise, kept.
+     *
+     * WHY THE WORKER AND NOT A CRON. `docs/security-review-2026-08-21.md` F1 is
+     * that the consent text promises a deletion nothing performs. A promise
+     * whose enforcement lives in a crontab somebody has to remember to install
+     * is the same finding one deployment later, so it runs here -- beside
+     * `reap()`, on the process that is already long-lived and already sweeping
+     * the queue on exactly this argument.
+     *
+     * `dryRun: false` is spelled out because `executePurge` defaults the other
+     * way, and this is one of the two places in the repo entitled to say it.
+     *
+     * Never throws. A sweep that cannot delete something must not take the
+     * worker down with it -- the renders are what the customer is waiting for --
+     * so the failure is emitted and the loop carries on. The `errors` array
+     * reaching an operator is the point; silence is what this whole finding was.
+     */
+    sweepRetention() {
+      if (!windows) return null;
+      // THE WORKER'S CLOCK, NOT THE WALL CLOCK. `nowImpl` is injected precisely
+      // so that time is a parameter here, and a sweep that reached for
+      // `new Date()` would be the one piece of this worker that cannot be
+      // tested and cannot be reasoned about on a machine whose clock is wrong.
+      const nowDate = () => new Date(now());
+
+      // AGE SAYS DELETE; A LIVE LEASE SAYS NOT YET, AND THE LEASE WINS.
+      // The nasty case is a job enqueued long ago and claimed for the FIRST time
+      // today: `createdAt` is past every window, so an unguarded sweep removes
+      // the directory out from under the worker rendering it and the customer
+      // loses a tape they paid for. It comes back on the next sweep, once
+      // whoever holds it has let go. `peek` also covers the other workers, not
+      // just this one's in-flight job -- and if the queue cannot answer, the
+      // safe reading of "unknown" is "somebody might", so nothing is swept.
+      let leased;
+      try {
+        leased = new Set(
+          (typeof queue.peek === 'function' ? queue.peek({ state: 'claimed' }) : [])
+            .filter((row) => !row.expired)
+            .map((row) => row.jobId),
+        );
+      } catch {
+        return null;
+      }
+      if (inFlight?.jobId) leased.add(inFlight.jobId);
+      const spare = (plan) => {
+        plan.entries = plan.entries.filter((e) => !leased.has(e.jobId));
+        return plan;
+      };
+
+      try {
+        const jobs = executePurge(
+          spare(planPurge({ root, olderThan: windows.jobDays, photosOnly: false, nowImpl: nowDate })),
+          { dryRun: false },
+        );
+        const gone = new Set(jobs.removed.map((r) => r.jobId));
+        const plan = spare(planPurge({ root, olderThan: windows.photoDays, photosOnly: true, nowImpl: nowDate }));
+        plan.entries = plan.entries.filter((e) => !gone.has(e.jobId));
+        const photos = executePurge(plan, { dryRun: false });
+
+        const summary = {
+          jobsDeleted: jobs.jobsDeleted,
+          photosDeleted: photos.photosDeleted,
+          retention: windows,
+          errors: [...jobs.errors, ...photos.errors],
+        };
+        // Only when something happened. An hourly "deleted nothing" line would
+        // bury the one that matters.
+        if (summary.jobsDeleted || summary.photosDeleted || summary.errors.length) {
+          emit('purged', summary);
+        }
+        return summary;
+      } catch (err) {
+        emit('purged', { jobsDeleted: 0, photosDeleted: 0, retention: windows, errors: [{ message: brief(err) }] });
+        return null;
+      }
+    },
+
+    /**
      * Claim at most one job and run it.
      * @returns {Promise<boolean>} whether there was any work to do
      */
@@ -630,6 +742,13 @@ export function createWorker({
       stopped = deferred();
 
       if (!hasReaped) this.reap();
+      this.sweepRetention();
+      // Unref'd where the runtime supports it: a retention timer must never be
+      // the reason a worker asked to stop is still alive.
+      const sweeper = windows
+        ? setIntervalImpl(() => { try { this.sweepRetention(); } catch { /* never fatal */ } }, retentionSweepMs)
+        : null;
+      if (typeof sweeper?.unref === 'function') sweeper.unref();
       if (signals) installSignalHandlers();
 
       try {
@@ -640,6 +759,7 @@ export function createWorker({
         }
       } finally {
         running = false;
+        if (sweeper) clearIntervalImpl(sweeper);
         if (removeSignalHandlers) { removeSignalHandlers(); removeSignalHandlers = null; }
         emit('stopped', { jobId: inFlight?.jobId ?? null });
         stopped.resolve();
