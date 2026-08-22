@@ -56,8 +56,25 @@ check. `docs/phase-0-validation.md` is the procedure.
 
 - **Retention is 7 days for the photo, 30 for the finished video** - exactly what
   the consent text already promised. Implemented; see section 3.
-- **Deployment/database REVERSED mid-session. The answer is SUPABASE.** Paul
-  first chose a single VPS with `node:sqlite`, then switched. Current position:
+- **THE ANSWER IS SUPABASE, AND THE REASON IS GOOGLE SIGN-IN.** Paul first chose
+  a single VPS with `node:sqlite`, then switched. Asked to justify it, he gave
+  the deciding fact: **he wants "sign in with Google" the way other apps have it,
+  plus password login, plus password reset.** That is three identity features,
+  not a database preference.
+
+  **DO NOT RE-OPEN THIS AS A DATABASE QUESTION.** It was already argued the other
+  way and lost on identity, not on data. SQLite was the better *database* answer
+  -- smaller change, keeps 45 tested auth tests and the isolation proof, and
+  `ledger_once` fixes the lock-file ledger completely. What it cannot do is rent
+  identity. Hand-building Google OAuth means the redirect round-trip, a `state`
+  parameter against CSRF, verifying Google's ID token against cached JWKS
+  (`iss`/`aud`/`exp`/`nonce`), and an account-linking decision where getting it
+  wrong is account takeover -- and it still would not provide password reset.
+
+  **Costs accepted deliberately:** 45 tests and the tenant-isolation proof get
+  deleted and rewritten against RLS. **Deployment moves earlier**, because Google
+  OAuth needs registered redirect URLs, so a real domain and TLS -- the sign-in
+  flow cannot be fully tested on localhost. Current position:
   - **Supabase Auth REPLACES login entirely** - `accounts.mjs` and `session.mjs`
     get deleted, users live in `auth.users`, sessions become JWTs, isolation
     becomes RLS. **This costs 45 tests and rewrites the tenant-isolation proof.**
