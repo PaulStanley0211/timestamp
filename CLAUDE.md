@@ -185,22 +185,160 @@ patterns, no hidden network calls. **`design` collides in name with a built-in
 skill.** **`ui-styling` is Tailwind + shadcn and is incompatible with this
 project's zero-dependency, zero-JavaScript rules - do not follow it here.**
 
-**The task Paul asked for and that is NOT finished: redesign the app UI using
-`ui-ux-pro-max`.** The real gap is four panels of identical width and weight
-behind the login, which is the remaining half of "it looks generic".
-
 **The first `--design-system` query MISROUTED** and was correctly rejected rather
 than applied: it returned an ops-telemetry landing pattern, indigo-on-near-white
 (this product is Kodak yellow `#FFB700` on `#0B0A09`), Google Fonts over CDN
 (the CSP has no external sources and VT323 is bundled for determinism), and a
 GSAP snippet (there is no JavaScript). **The skill's own contract says to verify
-fit and retry once with a narrower query - that retry had not happened yet.**
+fit and retry once with a narrower query.**
+
+### 6a. THE REDESIGN IS DONE - 2026-08-22, uncommitted, 991/989/0
+
+**The retry happened, and `--design-system` was NOT re-run** - the contract's
+narrower path was taken instead, two explicit `--domain ux` queries. Both came
+back mostly generic web guidance. **Three results were genuinely applicable and
+all three are used**: heading hierarchy, line length 65-75ch, heading line
+balance. Everything else in the redesign is reasoning from this repo's own
+existing decisions, and it is labelled that way rather than dressed up as a
+database match. **Do not re-run `--design-system` on this product hoping for a
+better roll** - it has now misrouted once and been declined once on contract.
+
+**The diagnosis was one defect readable two ways.** The page had **no `<h1>` at
+all**: it opened on a paragraph and then four sibling `<h2>`s of equal size, so
+a screen reader met four headings with nothing above them and an eye met four
+boxes with nothing above them. The landing page had already solved exactly this
+("one thing is the subject"); the signed-in page never got the same treatment.
+
+**What shipped, in `views.mjs` and `static.mjs`:**
+- **A real `<h1>`.** The copy is NOT new - it is the existing lede split at the
+  full stop that was already in it. Do not "improve" it into new marketing.
+- **A weight arc replacing one `.panel` rule**: `--anchor` (step 01, the photo),
+  `--choice` (steps 02/03, borderless and lightest), `--commit` (step 04, firm
+  again because that is where credits are spent), `--archive` (full width,
+  outside the form). A panel's treatment now states its job.
+- **Two columns above 62rem**, `#tape` as a grid: a 320px sticky anchor column
+  and a 640px flow column - **measured, exactly 1:2**, where all five panels
+  used to be one 44rem width. Sticky is the argument, not a flourish: the
+  photograph is the identity anchor for every choice made to the right of it.
+- **The step number is now a 44px VT323 numeral** in the header gutter, at
+  `accent-deep`, replacing an 11px eyebrow that was the smallest type on the
+  page while being the only thing distinguishing one panel from the next.
+- **Prose capped at 56-62ch** and headings given a bounded measure.
+
+**Zero JavaScript was added and zero npm dependencies.** But note, because a
+stale claim is worse than none: **this page is NOT zero-JavaScript and was not
+before.** There is an existing inline `<script>` doing two progressive-
+enhancement jobs (chosen filename, clearing the reason under an enabled button).
+It was not touched. **That makes the security note describing `script-src
+'unsafe-inline'` as sitting "in an app with zero scripts" STALE**, which changes
+how that finding should be judged when the rest of the report is worked through.
+
+**Measured, not asserted:** at `scrollY 1200` the anchor's top edge sits at 20px
+(its `1.25rem` offset); the 44px numeral contrasts **4.96:1** against its panel,
+clearing the 3:1 large-text bar and the 4.5:1 body bar; at 390px wide
+`scrollWidth == clientWidth` with the anchor computed back to `static`.
+
+**ONE TEST WAS CHANGED AND THAT IS WORTH SAYING OUT LOUD.**
+`test/web-api.test.js` asserted the literal substring `STEP 01`. The steps are
+still numbered and still in order, but the word and the number are now separate
+elements, so the substring is gone. The assertion was rewritten to check what
+the test is *named* for - numbered, in order - via the `.stepno-n` elements. It
+compares against `['01','02','03']`, so **it cannot pass vacuously** if the
+numbering disappears entirely.
+
+**Two traps this work re-confirmed the hard way, both already in this file:**
+backticks inside a comment inside a template literal broke `static.mjs` parsing
+(use plain quotes - it cost a restart), and a `&&` chain that short-circuited on
+a failed `node --check` left the OLD server holding port 3300 and serving stale
+CSS, which is the "editing CSS and expecting to see it" trap wearing a
+different hat. **Kill by PID and verify the port is free before restarting.**
+
+**Dead CSS caught in review:** a `.panel--choice:first-of-type` rule never
+matched anything, because the first `section` of its type inside the form is the
+ANCHOR, not a choice - and had it matched it would have broken the very
+alignment it was written to create. Removed, with the reason left in place.
+
+### 6b. THE CONSENT CHECKBOX WAS 16x16 AND IS NOW 24x24
+
+Found by reading the skill's `references/quick-reference.md` §1, which the first
+pass had skipped. **WCAG 2.2 AA (SC 2.5.8, target size minimum) asks 24x24 CSS
+px**, and `.check input` was `1rem` - the smallest hit area in the product, on
+the control that gates **both signing up and spending credits**, and the only
+element on the page failing an AA criterion. Now `1.5rem`, with `margin-top`
+dropped from `0.35rem` to `0` because that margin was compensating for a box 8px
+shorter; measured, the box centre now sits **2px** from the first consent line's
+centre. **One rule fixes both gates** - `views.mjs` and `views-auth.mjs` share
+`.check`.
+
+**The page now has ZERO SC 2.5.8 failures, verified rather than assumed.** Six
+targets are still under 24px and all six pass legitimately: two `.linky` labels
+are inline in a sentence (the criterion's inline exemption), and the rest clear
+the **spacing exception** - nearest centre-to-centre distance measured at
+**63px** against the 24px the criterion requires. Do not "fix" those six.
+
+**Also verified, because the redesign introduced a sticky element:**
+`focus-not-obscured` (SC 2.4.11 AA) - sticky UI must not hide the keyboard-
+focused control. **0 violations across 12 focusables.** The anchor is its own
+grid track, so it cannot overlap the flow column; that is geometry, not luck,
+but it had been assumed rather than measured until now.
+
+### 6c. THE LAYOUT, RE-DERIVED FROM THE SKILL ALONE - and what that proved
+
+Paul asked for the layout to be designed using **only** `ui-ux-pro-max`. Doing
+that properly meant stopping guessing at queries and reading the dataset.
+
+**THE MISROUTE IS THE DATASET, NOT THE QUERY. `--design-system` was re-run with
+a completely different query ("consumer creative video tool") and returned the
+IDENTICAL wrong answer as last session:** Real-Time / Operations Landing pattern,
+indigo `#6366F1`, Inter / Playfair Display, Google Fonts CDN. **Two unrelated
+queries, one output. Stop re-rolling it.**
+
+**The root cause, found by enumerating the data rather than guessing:**
+- `data/landing.csv` - **34 patterns, every one a marketing LANDING page**
+  (Hero + Features + CTA, Pricing Page, Waitlist, Bento Grid...). There is **no
+  application-screen pattern in the file at all.** The signed-in page is a
+  multi-step creation form behind a login, so the nearest match is always wrong.
+- `data/app-interface.csv` - **32 rows, every one `iOS/Android/React Native`**,
+  and it has no layout category. Its own header says it is not for web.
+
+**So the skill has no layout PATTERN for this page and cannot have one.** That
+is structural, not a bad search. What it does have is `ux-guidelines.csv`:
+**9 Layout rules + 8 Responsive rules**, stack-agnostic and genuinely applicable.
+The layout was audited against all 17. **Three real divergences, all fixed:**
+
+| Rule | Was | Now |
+|---|---|---|
+| **Breakpoint Testing** ("test at 320 375 414 768 1024 1440") | broke at `62rem`/992px - on no device list and no scale | **`64rem` = exactly 1024** |
+| **Viewport Units** ("use dvh, not 100vh") | `body { min-height: 100vh }` | **`100dvh`** (pre-existing bug) |
+| **Container Width** ("65-75ch for text") | lede at `62ch`, just under the band | **`66ch`** |
+
+**Verified at all six of the rule's own widths** - 320 / 375 / 414 / 768 / 1024 /
+1440: **no horizontal overflow at any**, single column below the break, two
+columns at and above. The 1:2 column ratio is exact at 1440 and **1:1.94 at
+1024**, where the wrap is viewport-constrained rather than at its 62rem max.
+
+**Two rules deliberately NOT actioned, both needing Paul:**
+- **Readable Font Size** wants **16px minimum body on mobile; this app is 15px.**
+  Real (it is also what triggers iOS input auto-zoom), but changing it reflows
+  every page in the product. **Typography, not layout - not done unasked.**
+- **Z-Index Management** wants a defined scale (10/20/30/50); the repo uses
+  `-2/-1/1/9`. Those four values are load-bearing for the background layer, the
+  scrim and the grain plate. **Rewriting them to satisfy a style rule risks the
+  full-bleed background for no user-visible gain.** Left alone on purpose.
+
+**A ruling about this repo's own trap, now confirmed twice in one session:**
+backticks inside a CSS comment inside `BASE_CSS` break parsing. It is already in
+the Common Mistakes list and it still caught two edits. **Run `node --check
+scripts/web/static.mjs` after every edit to that file** - and never chain it as
+`node --check X && kill-the-server`, because a failed check short-circuits the
+kill and leaves the OLD server serving stale CSS, which then looks like the edit
+did nothing.
 
 ### 7. NEXT, in the order it is worth doing
 
 1. **Phase 0**, the moment the key and the photo exist. Nothing else answers
    whether this is a product.
-2. **The UI redesign** (section 6) - unfinished, and Paul asked for it directly.
+2. ~~**The UI redesign**~~ **DONE 2026-08-22, uncommitted - see section 6a.**
 3. **The Supabase spec**, then a plan, then code. Not before.
 4. **The four sources of CI red** (section 4).
 5. **Three aspect ratios** - `docs/aspect-ratios-plan.md`, planned, not started.

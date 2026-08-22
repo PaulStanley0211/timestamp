@@ -268,11 +268,16 @@ export function presetCss({ places = [], outfits = [], resolutions = [] } = {}) 
  * The base sheet. Everything that is not a function of the catalog.
  *
  * Type scale, written down so it can be argued with rather than guessed at:
- * eyebrow 11px/0.22em uppercase, meta 12px/0.14em, hint 13px, body 15px,
- * section title 20px, headline 28px, wordmark 26px in the OSD face. Amber is
- * the eyebrow, the 24px rule, and a selected border -- and nothing else. The
- * product's thesis is that ordinary and quiet is the point; a page that glows
- * argues with it.
+ * step kicker 9px/0.20em uppercase, eyebrow 11px/0.22em uppercase, meta
+ * 12px/0.14em, hint 13px, body 15px, section title 20px, wordmark 26px OSD,
+ * headline 28px, page h1 clamp(29-40px), step numeral 44px OSD.
+ *
+ * The two OSD entries are the only large type on the signed-in page, and that
+ * is deliberate: the numeral and the wordmark are the tape's own character
+ * generator, so the biggest things on the page are spoken in the product's
+ * voice. Amber is the eyebrow, the 24px rule, a selected border, and the step
+ * numeral at accent-DEEP -- and nothing else. The product's thesis is that
+ * ordinary and quiet is the point; a page that glows argues with it.
  */
 export const BASE_CSS = `
 @font-face {
@@ -307,7 +312,7 @@ html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--ground);
   color: var(--ink);
   font-family: var(--sans);
@@ -534,8 +539,55 @@ body {
   border-radius: 0 var(--r-sm) var(--r-sm) 0;
 }
 
+/* --- the signed-in page's subject -------------------------------------- */
+
+/* The page used to open on a paragraph. See the comment in views.mjs where the
+   h1 is emitted for why that was a missing subject rather than a missing style.
+   The measure is bounded and the wrap is balanced as a progressive heuristic --
+   text-wrap:balance is ignored by browsers that do not have it and the natural
+   wrap is fine, which is the only reason it is safe to use on shipped copy. */
+.app-head { margin: 0 0 2.1rem; }
+
+.app-h1 {
+  font-size: clamp(29px, 4.4vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+  max-inline-size: 18ch;
+  text-wrap: balance;
+  margin: 0 0 0.55rem;
+}
+
+/* 65-75 characters is the readable measure. The lede used to run the full
+   44rem of the wrap. */
+.app-head .lede { max-width: 66ch; margin: 0; }
+
 /* --- frosted cards ----------------------------------------------------- */
 
+/* THE WEIGHT ARC, AND WHY THERE IS ONE.
+   Every panel used to be the same object: same frost, same 1px hairline, same
+   20px radius, same 1.5rem padding, same width. Five slabs down the page with
+   nothing to say which mattered. Now a panel's treatment states its job:
+
+     --anchor   step 01, the photograph. The identity anchor; nothing on the
+                page works without it. Firmest border, brightest surface, and
+                on a wide screen it is a NARROWER column that stays in view
+                while the choices scroll past it.
+     --choice   steps 02 and 03. Menus of options. Deliberately the lightest
+                things on the page -- no border box at all, just a hairline
+                above -- so they read as a continuous flow of choosing rather
+                than as two more cards competing with the anchor.
+     --commit   step 04. Where credits are actually spent. Firm again, because
+                the last panel before money leaves should not look like the
+                two browsing panels above it.
+     --archive  outside the form, and the full width of the wrap, so the
+                boundary between "making one" and "the ones you made" is a
+                change of shape and not just more vertical space.
+
+   The choice panels keep a faint background rather than none: the place
+   backdrop fades in behind this page, and body text sitting straight on a
+   backlit gradient is a contrast bug waiting for the first bright place
+   photograph to land in assets/places/. */
 .panel {
   background: var(--frost);
   -webkit-backdrop-filter: blur(20px);
@@ -546,7 +598,141 @@ body {
   margin: 0 0 1.15rem;
 }
 
-.step-head { margin: 0 0 1.2rem; }
+.panel--anchor {
+  background: var(--frost-lit);
+  border-color: var(--hairline-firm);
+}
+
+.panel--choice {
+  background: rgba(26, 22, 19, 0.34);
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  border-radius: 0;
+  padding: 1.5rem 0 0.4rem;
+  margin: 0 0 1.6rem;
+}
+
+.panel--commit {
+  background: var(--frost-lit);
+  border-color: var(--hairline-firm);
+  margin-top: 0.4rem;
+}
+
+.panel--archive { margin-top: 2.2rem; }
+
+/* --- the step header --------------------------------------------------- */
+
+/* Two columns: the number in a fixed gutter, everything said about the step in
+   the other. The gutter is what lines the four steps up as a sequence. */
+.step-head {
+  display: grid;
+  grid-template-columns: 2.9rem minmax(0, 1fr);
+  column-gap: 1rem;
+  align-items: start;
+  margin: 0 0 1.2rem;
+}
+
+.step-say { min-width: 0; }
+
+.stepno { margin: 0; text-align: right; }
+
+.stepno-k {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--faint);
+  margin: 0 0 0.15rem;
+}
+
+/* VT323, the same character generator the tape's own date stamp is drawn with.
+   accent-deep rather than accent: the sheet's rule is that amber is the
+   eyebrow, the rule and a selected border -- a 44px numeral in full #FFB700,
+   five times down the page, would be the page glowing at somebody, which is
+   the opposite of what this product is about. */
+.stepno-n {
+  display: block;
+  font-family: var(--osd);
+  font-size: 44px;
+  line-height: 0.82;
+  color: var(--accent-deep);
+}
+
+.stepno-n--mark { font-size: 26px; line-height: 1.4; color: var(--accent-deep); }
+
+/* The subtitle is prose and takes the readable measure with it. */
+.step-say .sub { max-width: 56ch; }
+
+/* --- the signed-in page's layout --------------------------------------- */
+
+/* WHY TWO COLUMNS, AND WHY ONLY HERE.
+   The four panels were not merely styled alike, they were the same WIDTH --
+   one 44rem column in a 1280px viewport, which is a phone layout centred on a
+   desktop and is most of why the page read as templated. Above 64rem the form
+   becomes a grid: the photograph on the left in a narrow sticky column, the
+   three panels that follow it stacked in a wider one.
+
+   Sticky is the point rather than a flourish. The photograph is the identity
+   anchor for every choice made to the right of it, and it is the one input a
+   visitor must supply; keeping it in view while they scroll the look and the
+   place is the layout saying so.
+
+   No JavaScript is involved in any of this, and none is added: it is CSS grid
+   plus position:sticky. Below 64rem every panel is full width and the order in
+   the DOM is already the order to read them in, so the whole block simply does
+   not apply and nothing needs unwinding.
+
+   64rem IS 1024px AND THAT IS THE WHOLE REASON IT IS 64 AND NOT 62. The first
+   version broke at 62rem/992px, which is on nobody's device list and on no
+   standard breakpoint scale -- it was picked because it was a bit wider than
+   the content needed, which is how a codebase ends up with five breakpoints
+   that each disagree with the others by twenty pixels. 1024 is a real tablet
+   landscape width and a real testing stop. Verified at 320 / 375 / 414 / 768 /
+   1024 / 1440: no horizontal overflow at any of them, single column below the
+   break, two columns at and above it. If this needs to move, move it to
+   another number on that list, not to whatever the content happens to want. */
+@media (min-width: 64rem) {
+  .page-home .wrap { max-width: 62rem; }
+
+  .page-home #tape {
+    display: grid;
+    grid-template-columns: 20rem minmax(0, 1fr);
+    column-gap: 2rem;
+    align-items: start;
+  }
+
+  .page-home .panel--anchor {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+    position: sticky;
+    top: 1.25rem;
+  }
+
+  .page-home .panel--choice,
+  .page-home .panel--commit { grid-column: 2; }
+
+  /* NOTE, so nobody "fixes" this later: step 02 keeps its top hairline, and it
+     is load-bearing. It lands on exactly the same y as the anchor panel's top
+     border, and because both boxes carry the same 1.5rem of padding under it,
+     "Your photo" and "The look" sit on the same baseline across the gutter.
+     That shared line is what makes two columns of different widths read as one
+     layout. An earlier version of this block cancelled that border and padding
+     on a ".panel--choice:first-of-type" selector, which never matched anything
+     -- the first section of its type inside the form is the ANCHOR, not a
+     choice -- and had it matched, it would have broken the very alignment it
+     was written to create. */
+
+  /* The dropzone no longer needs to be 15rem of empty box: in a 20rem column
+     it is already the tallest single thing on the page. */
+  .page-home .panel--anchor .drop { min-height: 11rem; }
+}
+
+/* A sticky element inside a scroll container taller than the viewport is fine,
+   but if the anchor ever grows past the viewport height it must be able to
+   scroll itself rather than trapping its own bottom edge off-screen. */
+@media (min-width: 64rem) and (max-height: 40rem) {
+  .page-home .panel--anchor { position: static; }
+}
 
 /* --- step 01, the dropzone --------------------------------------------- */
 
@@ -907,8 +1093,27 @@ input[type="file"]::file-selector-button {
 
 /* --- consent ----------------------------------------------------------- */
 
+/* 24x24 IS A FLOOR, NOT A PREFERENCE. WCAG 2.2 AA (target size, minimum) asks
+   for 24x24 CSS px on a pointer target, and this box was 16x16 -- the smallest
+   hit area in the product, on the one control that gates both signing up and
+   spending credits, and the only element on the page that failed an AA
+   criterion. The two ".linky" labels nearby are smaller still and are fine:
+   they sit inline inside a sentence, which the criterion exempts. This does
+   not, so it does not get the exemption.
+
+   "align-items: flex-start" on the row plus a near-zero top margin is what
+   keeps the taller box optically level with the first line of 13px consent
+   text; the old 0.35rem was compensating for a box 8px shorter than this one,
+   so it has to come down as the box goes up, or the tick floats below the
+   sentence it belongs to. */
 .check { display: flex; gap: 0.8rem; align-items: flex-start; cursor: pointer; }
-.check input { margin-top: 0.35rem; accent-color: var(--accent); flex: 0 0 auto; width: 1rem; height: 1rem; }
+.check input {
+  margin-top: 0;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+}
 .consent-text span { display: block; color: var(--muted); font-size: 13px; }
 .consent-text span + span { margin-top: 0.5rem; }
 

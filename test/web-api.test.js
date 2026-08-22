@@ -387,9 +387,15 @@ test('GET / renders the fourteen presets as cards, from the preset files', async
 test('the step flow is three numbered steps, one decision each', async () => {
   await withServer(async ({ base, cookieA }) => {
     const html = await (await get(base, '/', cookieA)).text();
-    assert.ok(html.includes('STEP 01'), 'STEP 01 eyebrow');
-    assert.ok(html.includes('STEP 02'));
-    assert.ok(html.includes('STEP 03'));
+    // The word STEP and the number are separate elements since the step header
+    // was rebuilt -- the number is a 44px OSD numeral in the header's gutter
+    // and the kicker rides above it, so "STEP 01" is no longer one contiguous
+    // string in the markup. See stepHead() in views.mjs. Assert what this test
+    // is named for -- that the steps are numbered, and in order -- rather than
+    // the exact string one layout happened to produce.
+    const numbered = [...html.matchAll(/class="stepno-n[^"]*"\s*>([^<]+)</g)].map((m) => m[1]);
+    assert.deepEqual(numbered.slice(0, 3), ['01', '02', '03'], 'the steps are numbered, in order');
+    assert.ok(html.includes('class="stepno-k">STEP<'), 'and each number is still announced as a step');
     assert.ok(html.includes('Your photo'));
     assert.ok(html.includes('The look'));
     assert.ok(html.includes('The place'));

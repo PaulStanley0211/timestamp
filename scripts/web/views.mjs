@@ -330,12 +330,34 @@ export function shortDetail(text, max = 58) {
   return `${(space > 20 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
+/**
+ * WHY THE NUMBER IS NOW THE BIGGEST THING IN THE HEADER, IN THE OSD FACE.
+ *
+ * The step number used to be an 11px amber eyebrow -- the smallest type on the
+ * page -- while it was the ONLY thing distinguishing one panel from the next.
+ * Four panels of identical width, identical padding and identical 20px titles,
+ * told apart by the smallest word in the layout. That is the shape that reads
+ * as templated: when everything is medium, nothing is the subject.
+ *
+ * So the number is promoted to a 44px VT323 numeral in the left gutter. It
+ * costs nothing -- `assets/fonts/tape-osd.ttf` is already bundled and already
+ * loaded for the date stamp -- and it is the same character generator the tape
+ * itself draws with, so the sequence is spoken in the product's own voice
+ * rather than in a generic step-wizard's.
+ *
+ * The word STEP rides above the numeral rather than being dropped, so a screen
+ * reader still hears "STEP 01" before the heading and the number is never bare.
+ */
 function stepHead(n, name, subtitle) {
   return `<div class="step-head">
-  <p class="eyebrow">${h(`STEP ${String(n).padStart(2, '0')}`)}</p>
-  <h2 class="title">${h(name)}</h2>
-  <p class="sub">${h(subtitle)}</p>
-  <hr class="rule">
+  <p class="stepno"><span class="stepno-k">STEP</span><span class="stepno-n">${
+  h(String(n).padStart(2, '0'))
+}</span></p>
+  <div class="step-say">
+    <h2 class="title">${h(name)}</h2>
+    <p class="sub">${h(subtitle)}</p>
+    <hr class="rule">
+  </div>
 </div>`;
 }
 
@@ -550,12 +572,24 @@ ${backgrounds}
 <main>
 ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
 
-<p class="lede">One photo, one look, one place. Fifteen seconds that look like they came off a
-camcorder tape in a German suburb, some time around 2003.</p>
+<!-- THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
+     markup and on the screen at once. It opened on a paragraph and then four
+     sibling <h2>s of equal size, so a screen reader met four headings with
+     nothing above them and an eye met four boxes with nothing above them: the
+     same defect, read two ways. The landing page had already solved this for
+     strangers ("one thing is the subject -- the sentence -- and it is several
+     times the size of everything else"); the signed-in page never got the same
+     treatment. The copy is not new: it is Paul's existing lede, split at the
+     full stop that was already in it. -->
+<div class="app-head">
+  <h1 class="app-h1">One photo, one look, one place.</h1>
+  <p class="lede">Fifteen seconds that look like they came off a camcorder tape in a
+  German suburb, some time around 2003.</p>
+</div>
 
 <form id="tape" method="post" action="/api/jobs" enctype="multipart/form-data">
 
-  <section class="panel">
+  <section class="panel panel--anchor">
     ${stepHead(1, 'Your photo', 'Uploaded once, kept in your library — the person in every tape.')}
     <label class="drop" for="photo">
       <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp" required>
@@ -566,7 +600,7 @@ camcorder tape in a German suburb, some time around 2003.</p>
     </label>
   </section>
 
-  <section class="panel">
+  <section class="panel panel--choice">
     ${stepHead(2, 'The look', 'Only what is on the body — the place carries everything else.')}
     <div class="looks">${lookCards}</div>
     <details class="aside">
@@ -577,7 +611,7 @@ camcorder tape in a German suburb, some time around 2003.</p>
     </details>
   </section>
 
-  <section class="panel">
+  <section class="panel panel--choice">
     ${stepHead(3, 'The place', 'Somewhere ordinary. That is the whole idea.')}
     <div class="rail">${placeCards}
     <label class="placecard placecard--own" for="pl-own">
@@ -621,7 +655,7 @@ camcorder tape in a German suburb, some time around 2003.</p>
     </details>
   </section>
 
-  <section class="panel">
+  <section class="panel panel--commit">
     ${stepHead(4, 'The tape', 'One of these is a choice. The rest is what a camcorder tape is.')}
 
     <p class="eyebrow">Frame</p>
@@ -674,12 +708,14 @@ camcorder tape in a German suburb, some time around 2003.</p>
 
 </form>
 
-<section class="panel">
+<section class="panel panel--archive">
   <div class="step-head">
-    <p class="eyebrow">Archive</p>
-    <h2 class="title">Your tapes</h2>
-    <p class="sub">Every recording stays on the shelf.</p>
-    <hr class="rule">
+    <p class="stepno"><span class="stepno-k">Archive</span><span class="stepno-n stepno-n--mark">&#9679;</span></p>
+    <div class="step-say">
+      <h2 class="title">Your tapes</h2>
+      <p class="sub">Every recording stays on the shelf.</p>
+      <hr class="rule">
+    </div>
   </div>
   ${tapes.length ? `<div class="shelf">${tapes.map(shelfTile).join('')}</div>` : `
   <div class="empty">
