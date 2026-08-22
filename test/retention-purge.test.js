@@ -31,6 +31,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { createJob, jobPaths } from '../scripts/render/job.mjs';
 import { OWNERS_DIR } from '../scripts/auth/accounts.mjs';
@@ -295,7 +296,7 @@ function runCli(root, args = []) {
   fs.writeFileSync(`${root}/config/render.json`,
     JSON.stringify({ retention: { photoDays: 7, jobDays: 30 } }));
   const cli = new URL('../scripts/render/purge-cli.mjs', import.meta.url);
-  return spawnSync(process.execPath, [cli.pathname.replace(/^\//, ''), `--root=${root}`, ...args], {
+  return spawnSync(process.execPath, [fileURLToPath(cli), `--root=${root}`, ...args], {
     encoding: 'utf8',
   });
 }
@@ -345,7 +346,7 @@ test('purge refuses to invent a retention policy when config has none', () => {
   const cli = new URL('../scripts/render/purge-cli.mjs', import.meta.url);
 
   const run = spawnSync(process.execPath,
-    [cli.pathname.replace(/^\//, ''), `--root=${root}`, '--apply'], { encoding: 'utf8' });
+    [fileURLToPath(cli), `--root=${root}`, '--apply'], { encoding: 'utf8' });
 
   assert.equal(run.status, 1);
   assert.match(run.stderr, /will not invent one/);
