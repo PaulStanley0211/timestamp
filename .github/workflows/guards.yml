@@ -1,0 +1,93 @@
+## Decisions this repository has already taken, made enforceable.
+##
+## Every check below exists because the thing it checks is invisible when it
+## breaks. A committed `.env` looks like nothing. A test script that quietly
+## gained `--env-file` looks like nothing -- right up until a pull request from a
+## stranger spends money. A security review that got `git add -f`'d into a public
+## repository looks like nothing until somebody reads it.
+##
+## These are cheap greps. They are here because the failure mode of each one is
+## silence, which is the same reason `scripts/render/purge.mjs` reports what it
+## could not delete.
+
+name: guards
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # `npm test` must not be able to spend money. CLAUDE.md names four
+      # independent guards; this is the one a well-meaning edit can undo in a
+      # single character. A bare `node --test` does NOT read `.env`, so FAL_KEY
+      # is not in the process during a test run.
+      - name: the test script stays bare
+        run: |
+          script="$(node -p "require('./package.json').scripts.test")"
+          echo "test script: $script"
+          if [ "$script" != "node --test" ]; then
+            echo "::error::package.json test script is '$script', not 'node --test'."
+            echo "::error::Anything that loads .env puts FAL_KEY into the test process."
+            exit 1
+          fi
+
+      # The provider has no default fetchImpl on purpose: a test that forgets to
+      # inject one gets a TypeError rather than a charge.
+      - name: the fal adapter has no default fetch
+        run: |
+          if grep -nE "fetchImpl\s*=\s*(globalThis\.)?fetch" scripts/providers/fal.mjs; then
+            echo "::error::fal.mjs gained a default fetchImpl. A test that forgets to inject one now spends money."
+            exit 1
+          fi
+
+      # This repository is public. An accurate list of a live system's open
+      # weaknesses is a roadmap; publish a review once its findings are closed.
+      - name: no security review in version control
+        run: |
+          if git ls-files | grep -E 'security-review'; then
+            echo "::error::A security review is tracked. It is gitignored for a reason -- this repo is public."
+            exit 1
+          fi
+
+      # Nothing that holds a credential, and nothing from out/ -- which is where
+      # photographs of real people's faces live.
+      - name: no secrets and no user data tracked
+        run: |
+          bad="$(git ls-files | grep -E '(^|/)\.env$|^out/' || true)"
+          if [ -n "$bad" ]; then
+            echo "::error::tracked files that must never be committed:"
+            echo "$bad"
+            exit 1
+          fi
+
+      # The promise and the enforcement are generated from one place. If they
+      # ever disagree, the direction they drift in is the one where users were
+      # told seven days and the photographs were kept for thirty.
+      - name: the consent promise matches the retention config
+        run: |
+          node -e "
+            const fs = require('node:fs');
+            const cfg = JSON.parse(fs.readFileSync('config/render.json', 'utf8')).retention;
+            import('./scripts/safety/consent.mjs').then(({ consentText }) => {
+              const text = consentText();
+              const ok = text.includes(\`deleted after \${cfg.photoDays} days\`)
+                && text.includes(\`video after \${cfg.jobDays} days\`);
+              if (!ok) {
+                console.error('consent text does not quote config/render.json retention:', cfg);
+                console.error(text);
+                process.exit(1);
+              }
+              console.log('consent promises', cfg.photoDays + '/' + cfg.jobDays, 'and config agrees');
+            });
+          "

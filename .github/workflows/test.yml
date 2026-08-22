@@ -1,0 +1,107 @@
+## The 991 tests, run by something other than Paul remembering to.
+##
+## WHY A MATRIX AND NOT ONE JOB. This repository's most expensive rulings were
+## measured on Windows and only on Windows -- that `openSync(path,'wx')` is the
+## only exclusive filesystem primitive, that `unlinkSync` reported the wrong
+## winner in 120 of 120 rounds, that `gblur` is nondeterministic on short frames.
+## The queue is built on those findings. Deployment is not Windows. Running the
+## same suite on both is the cheapest way to find out which of those rulings are
+## about libuv-on-Windows and which are about the code, BEFORE a migration
+## depends on the answer.
+##
+## Node 22 is the floor `package.json` declares; 24 is what the build machine
+## runs. Both, because "engines: >=22" is a claim nobody has tested.
+##
+## NO SECRETS ARE AVAILABLE TO THIS WORKFLOW, deliberately. `npm test` is a bare
+## `node --test` that does not load `.env`, and the only files permitted to spend
+## money self-skip without TIMESTAMP_LIVE=1. A CI run that could spend money is a
+## bill triggered by a pull request from a stranger.
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push supersedes the first; there is no value in finishing a run for
+# a commit nobody is looking at any more.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: node ${{ matrix.node }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false   # a Windows failure must not hide a Linux one
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['22', '24']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          # No cache key and no `npm ci`: there are zero dependencies and no
+          # lockfile. Nothing to install is the point, not an oversight.
+
+      # ffmpeg is a hard dependency of 11 of the 40 test files -- the entire look
+      # of this product is a filtergraph. Installed from each platform's own
+      # package manager rather than a third-party action, because a marketplace
+      # action is a supply-chain dependency and this repository has none.
+      - name: install ffmpeg (linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: install ffmpeg (windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg --no-progress -y
+
+      - run: ffmpeg -version
+
+      # The documented hard gate. It checks the filters the look actually uses,
+      # the frame-count contract, and the bundled font -- so a green doctor on a
+      # fresh runner is also proof the render is reproducible off this machine.
+      - name: doctor
+        run: npm run doctor
+
+      # Redirected rather than piped. Piping `npm test` into anything reports the
+      # PIPE's exit code, so a failing suite exits 0 and the summary still reads
+      # the way you hoped -- a trap documented in CLAUDE.md that has already
+      # caught somebody once.
+      - name: test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-output.txt
+          status=${PIPESTATUS[0]}
+          echo "runner exit: $status"
+          exit "$status"
+
+      - name: summarise
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### ${{ matrix.os }} · node ${{ matrix.node }}"
+            echo '```'
+            grep -E '^ℹ (tests|pass|fail|skipped|todo)' test-output.txt || echo 'no summary line found'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: upload output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output-${{ matrix.os }}-node${{ matrix.node }}
+          path: test-output.txt
+          retention-days: 7
