@@ -7,197 +7,187 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-21) — retention shipped; F1/F2 closed
+## START HERE (2026-08-22) - public repo, CI live, two specs waiting on you
 
-**991 tests, 989 pass, 0 fail, 2 skipped** (the skips are the `*-smoke.test.js`
-money guards, which self-skip without `TIMESTAMP_LIVE=1`). Everything below is
-uncommitted work sitting on top of `9bc24ea`.
+**991 tests / 989 pass / 0 fail / 2 skipped** (the skips are the `*-smoke.test.js`
+money guards, which self-skip without `TIMESTAMP_LIVE=1`).
+**Everything is committed and pushed.** `HEAD == origin/main == 50c5752`.
+
+**The repo is PUBLIC: https://github.com/PaulStanley0211/timestamp**
+`out/` is gitignored (0 tracked files - no faces, accounts, sessions or ledger),
+`.env` is gitignored, and **both security-review docs are gitignored on purpose**
+- see section 2. History was audited before the first push: `out/` and `.env`
+were never committed at any point.
 
 ```bash
 npm run web                              # terminal 1
 npm run worker -- --provider=fixture     # terminal 2
-# sign in as dev@example.com / timestamp-dev-password   (created 2026-08-21, plan: shelf)
+# sign in as dev@example.com / timestamp-dev-password
 ```
+`paul@example.com` cannot be signed into - scrypt hash, no reset endpoint, no
+`set-password` in the CLI. Use the dev account or make another.
 
-**`paul@example.com` cannot be signed into.** Its password is a scrypt hash,
-there is no reset endpoint and `accounts-cli` has no `set-password`. Use the dev
-account above, or make another.
+---
 
-### 1. The security review is finished — `docs/security-review-2026-08-21.md`
+### 1. THE THREE THINGS BLOCKING EVERYTHING, all needing Paul
 
-Run against the brief in `docs/security-review-brief.md`. **Cross-tenant
-isolation holds** — all ten job routes go through one `ownedJob` check in the
-order shape → ownership → disk, and not-yours is byte-identical to not-there.
-Re-derived independently in `test/tenant-isolation.test.js` (14 tests: method,
-role, body, URL/encoding tampering). No gap found.
+1. **`FAL_KEY` in `.env`.** Still does not exist. **$10 is enough.** Paul is
+   paying for fal credit and will paste the key into `.env` HIMSELF - never into
+   chat. `npm run doctor` confirms it is loaded and prints only the literal
+   string `present` (`doctor.mjs:131` is a `Boolean()` check, verified).
+2. **A photo at `assets/test-photos/face.jpg`.** Still empty. Front-ish, one
+   face, good light, 1024px+ short edge. **Never a stock/AI face or a
+   celebrity** - no ground truth in the first case, memorisation flattering the
+   result in the second.
+3. **The still model is unchosen.** `config/models.json` defaults to
+   `fal/UNVERIFIED-identity-still` deliberately, so an unconfigured fal render
+   **stops at compose instead of spending**. Three candidates, all
+   `verified: false`, all assessed from catalogue pages only: `fal-ai/uso`
+   (identity preservation is its advertised job - closest in purpose),
+   `fal-ai/bytedance/seedream/v4.5/edit` (~$0.04/edit), and
+   `fal-ai/nano-banana-pro/edit`. **Suggested: run one prompt through all three
+   - that is cents, and it replaces "the model page says so" with evidence.**
 
-**F1 and F2 are FIXED (2026-08-21).** Paul confirmed the policy is **7 days for
-the photo, 30 for the finished video** — exactly what the consent text already
-promised. What shipped:
+**Phase 0 is still unrun and still the only thing that decides whether this is a
+product.** It also needs two people who know Paul for the blind "who is this?"
+check. `docs/phase-0-validation.md` is the procedure.
 
-- **`scripts/render/purge.mjs`** — `planPurge` / `executePurge` to the signature
-  `docs/interfaces.md` §10 had already specified, `dryRun: true` by default,
-  plus `purgeJobMedia` for the on-request path.
-- **`npm run purge` runs.** Prints the plan; deletes nothing without `--apply`.
-- **The sweep is scheduled in the worker** — `sweepRetention()` at startup and
-  hourly, beside `reapExpired()`, so the promise does not depend on a crontab
-  anybody has to remember. `retention: null` disables it; a worker with no
-  `cfg.retention` sweeps nothing rather than inventing a policy.
-- **`DELETE /api/jobs/:id` deletes the video, stills, contact sheet, segments,
-  source and poster**, not just `input/`. The manifest survives as the record.
-- **The `202` path is honoured** — the worker performs the purge when it sees
-  the cancel sentinel at a step boundary, so `202` means "will be deleted".
-- **Two drift guards**, both proved to fail when their target is mutated:
-  `consentText()`'s numbers must equal `config/render.json`'s retention block,
-  and the web layer must write ownership entries where purge looks for them.
+### 2. DECISIONS TAKEN 2026-08-21/22 - do not re-litigate
 
-**A code review of the above found three things and they are fixed.** The worst
-was mine: `purgeJobMedia` swallowed a refused unlink with `catch { continue }`,
-so an `EBUSY` -- which is what Windows gives you when `getVideo` is streaming
-the very file being deleted -- returned a flat 200 and told a person their face
-was gone while it sat on disk. **F2 recurring inside the fix for F2.** Everything
-that deletes now returns `errors`, and `DELETE` carries `mediaDeleted`.
-The other two: the worker's sweep returned `null` silently when `queue.peek`
-threw, so retention could stop forever with nothing saying so (now emits
-`purged` with the error, and a malformed `cfg.retention` is refused at
-construction like `maxInflight` is); and the job-then-photo ordering rule lived
-in both `purge-cli.mjs` and the worker, so it is now one exported
-`sweepRetention` that both call.
+- **Retention is 7 days for the photo, 30 for the finished video** - exactly what
+  the consent text already promised. Implemented; see section 3.
+- **Deployment/database REVERSED mid-session. The answer is SUPABASE.** Paul
+  first chose a single VPS with `node:sqlite`, then switched. Current position:
+  - **Supabase Auth REPLACES login entirely** - `accounts.mjs` and `session.mjs`
+    get deleted, users live in `auth.users`, sessions become JWTs, isolation
+    becomes RLS. **This costs 45 tests and rewrites the tenant-isolation proof.**
+  - **PostgREST over `fetch` + Postgres functions**, NOT `@supabase/supabase-js`.
+    This is what keeps **zero npm dependencies** alive. Atomicity comes from SQL
+    functions (`debit_credits(...)` as one RPC is atomic by definition).
+  - **The service-role key bypasses RLS.** If the Node server holds it and uses
+    it for everything, RLS is decorative and isolation is back in app code. For
+    RLS to be load-bearing the server must forward the USER's JWT on user-scoped
+    reads and reserve service-role for the Stripe webhook, which acts with no
+    user present.
+- **Stripe: subscriptions on the existing plans**, credits granted only on
+  `invoice.paid`, **unused credits expire each period as an explicit negative
+  ledger row**. Checkout is hosted, so "card details never touch this codebase"
+  stays literally true.
+- **The security review and its brief are gitignored** (`docs/security-review-*.md`).
+  This repo is public and an accurate list of open weaknesses is a roadmap. Both
+  files are on Paul's disk. `docs/security-review-brief.md` was already committed
+  in `9bc24ea`, so that commit was amended to drop it. **The vuln list was also
+  redacted out of this file** - do not copy it back in.
 
-**Age is measured from `createdAt`, never `updatedAt`** — `updatedAt` is
-restamped by every `saveJob`, so a retried job would push its own deletion date
-forward forever. Documented at the top of `purge.mjs`; do not "improve" it.
+### 3. WHAT SHIPPED THIS SESSION
 
-**A live lease beats age.** The worker's sweep skips any job with an unexpired
-claim. The case that forced it: a job old enough to be due, claimed for the
-*first* time today — the unguarded sweep deleted the directory out from under
-its own render, and the test that caught it did so on the first run. Deferred,
-not spared; the next sweep after the lease is released takes it.
+**F1/F2 retention - the promise the consent text makes is now performed.**
+`scripts/render/purge.mjs` (`planPurge` / `executePurge`, **`dryRun: true` by
+default**, plus `purgeJobMedia` and the canonical `sweepRetention`),
+`purge-cli.mjs` so `npm run purge` runs and refuses to delete without `--apply`,
+a worker sweep at startup and hourly, and `DELETE /api/jobs/:id` now removing the
+video, stills, contact sheet, segments, source and poster rather than `input/`
+alone. The `202` path is honoured - the worker purges at the cancel sentinel.
 
-**`npm run ledger` still fails and that is deliberate.** `scripts/render/ledger.mjs`
-is *cost reconciliation* (manifest actuals vs `config/pricing.json`), not the
-credit ledger, and it is waiting on real spend — every price in the repo is an
-estimate today. The credit ledger is built: `npm run accounts -- ledger`.
-**The remaining findings are NOT listed in this file, on purpose.** F3 and the
-rest of the open items — each with evidence, impact, a fix and a regression test
-— live in `docs/security-review-2026-08-21.md`, which is **gitignored and stays
-on this machine**. This repo is public, and an accurate list of a system's open
-weaknesses is a roadmap the day it goes live. Read the local file; do not copy
-its contents back into a tracked one.
+**Three rulings from that work worth not rediscovering:**
+- **Age is measured from `createdAt`, never `updatedAt`.** `updatedAt` is
+  restamped by every `saveJob`, so a retried job would defer its own deletion
+  forever.
+- **A live lease beats age.** A long-pending job claimed for the *first* time
+  today was having its directory deleted out from under its own render.
+  Deferred, not spared.
+- **Everything that deletes reports what it could not delete.** The first version
+  swallowed a refused unlink with `catch { continue }` - an `EBUSY` while
+  `getVideo` streams the same file - and answered a flat 200. **That was F2
+  recurring inside the fix for F2**, found by a code review, proved with an
+  injected `fs` before being fixed.
 
-### 2. Fixed this session
+**CI exists - `.github/workflows/test.yml` and `guards.yml`.** 991 tests on
+ubuntu + windows, node 22 + 24. `guards.yml` enforces decisions that are
+invisible when they break: the test script must stay a bare `node --test`,
+`fal.mjs` must keep having no default `fetchImpl`, no security review may be
+tracked, no `.env` or `out/`, and the consent text must still quote the retention
+config.
 
-- **Clicking any card threw the page to the top.** The 17 hoisted `.statehook`
-  radios were `position: absolute`, so they sat at document offset -1; clicking
-  a `<label for>` focused one and the browser scrolled it into view. Measured
-  1641px at step 4, 1062px on the carousel, 449px on the outfits. Now `position:
-  fixed` — measured 0px on all six targets. **Do not "tidy" it back**;
-  `test/web-static.test.js` exists to stop exactly that.
-- **Credits rescaled.** `creditUSD` $0.03 → $0.10, so **480p is 16 CR and 720p
-  is 46 CR** (was 51/152). Plans moved in the same edit — free 16, shelf 48,
-  archive 64 — so **every plan buys the same number of tapes as before and
-  margins are unchanged.** Paul asked for 720p at ~100 CR; that would have sold
-  it 52 CR below provider cost, so the unit was scaled instead of the tape
-  discounted. **Existing account balances were NOT migrated** and are therefore
-  worth 3.19x what they were. Deliberate — dev data.
-- **Colour.** Accent `#C8A15A` → **`#FFB700`** (Kodak yellow). The eight places
-  now span the whole hue wheel (26° to 294°) instead of a 28° wedge of brown,
-  via `PLACE_HUES` in `static.mjs`; saturation floor 24-36% → 46-61%. This is
-  the change that answers "it looks generic".
-- **A real bug found on the way:** `hash32` returns unsigned, but `placeGradient`
-  shifted it with `>>` (signed). Any place hashing above 2^31 got a negative
-  remainder, which *subtracts* from the saturation floor — `balkon-waesche` was
-  rendering at 37% against a floor of 46%. Fixed with `>>>`.
-- **The place-photo upload was already built and unreachable.** `.ownplace` is
-  `display:none`, revealed only by a card at the far end of a scrolling rail.
-  Added a visible signpost (`.escape` / `.linky`) that reveals it, CSS-only.
-- **A credit meter** — a ring that empties as credits are spent, with three
-  states (ok / low / spent). The fraction rides on `stroke-dasharray`, an SVG
-  presentation attribute, **because `style-src 'self'` has no `'unsafe-inline'`
-  and must not gain one for a progress ring.**
-- **Step 4 copy.** "Frames to choose from" → "How many looks to choose from",
-  and the four unclickable `4:3 / PAL / 25 fps / 15.000s` chips are gone — they
-  sat above the quality cards, which *are* clickable and look nearly identical.
-- **A landing page, and `/` is now public.** It used to 303 a stranger to
-  `/login`, so the whole product was a password box with nowhere to say what it
-  is. `homePage` branches on the session: signed out it renders
-  `landingPage()`, built from the preset catalog and nothing else. **Two tests
-  used to assert `homePage` must never be public; they were replaced with a
-  stronger assertion** — that the landing page carries no shelf, no balance, no
-  upload form and no `CR` figure. The old guarantee was a redirect; the new one
-  checks the output.
+### 4. CI IS RED ON LINUX - two known, pre-existing, NOT product defects
 
-### 3. Next, in the order it is worth doing
-
-1. **`FAL_KEY` in `.env`** — the only thing blocking. `$10 is enough`; every
-   price in the repo is an estimate and the first real calls are what settle
-   them. Unblocks the **eight place photographs**, which are the single biggest
-   visual gap — the carousel and landing shelf render gradients today because
-   `assets/places/` is empty. **Higgsfield cannot be used for these** (see the
-   ruling below); fal is the licensed path.
-2. **Three aspect ratios — `docs/aspect-ratios-plan.md`.** Paul asked twice for
-   4:3, 9:16 and 16:9 with the picture *filling* the frame. Verified: Seedance
-   2.0 takes `aspect_ratio` (`21:9, 16:9, 4:3, 1:1, 3:4, 9:16`), so the 4:3-only
-   `FAL_RESOLUTIONS` is our product choice, not a provider limit. The design
-   holds the **short edge at 576** in every shape, which keeps every pixel
-   constant correct and makes the upscale exactly 1.875x in all three, so grain
-   is arithmetically identical. **The 4:3 path does not move at all.** Not
-   started. Step 3 of that plan is the honest gate.
-3. **The app layout.** Four panels of identical width and weight behind the
-   login — that is the remaining half of "it looks generic", and colour did not
-   touch it.
-4. ~~**F1/F2 retention.**~~ **DONE 2026-08-21** — see the top of this file.
-5. **The rest of the security report** — `docs/security-review-2026-08-21.md`,
-   local only. Four items worth doing before anything is deployed; each carries
-   its evidence, its fix and its regression test in that file.
-
-### 4. Open, needs Paul
-
-- **`FAL_KEY`.** `.env` does not exist yet.
-- **Does the matted 9:16 survive as a fourth option?** "Picture fills the frame"
-  deletes the `#0B0A09` surround, and the surround plus the final vignette is
-  what currently fuses tape and background into one photographed object.
-- ~~**Is 7/30 days the intended retention?**~~ **ANSWERED 2026-08-21: yes, 7/30
-  as promised.** Implemented against `config/render.json`, so changing it is a
-  config edit — and the drift guard fails if the consent text stops agreeing.
-- **The logo.** Paul is handling it. The existing `● TIMESTAMP` wordmark in
-  VT323 is already good and a drawn mark risks a second visual language
-  arguing with the tape.
-
-### 5. CI exists now, and it is RED on Linux for two known reasons
-
-`.github/workflows/test.yml` runs all 991 tests on **ubuntu and windows, node 22
-and 24**. `guards.yml` enforces decisions that are invisible when they break.
-
-**Windows: 991/991 green. Linux: 989/991.** The matrix paid for itself on its
-first run by catching a Windows-only assumption in the purge CLI tests — a
-file: URL pathname with its leading slash stripped, which is a valid path on
-Windows and a *relative* one on Linux. Fixed in `d15f71c`.
-
-The two that remain are **pre-existing, deterministic, and Linux-only** — not the
-flaky pair below, which is a different problem:
+**Windows 991/991 green. Linux 989/991.** The matrix paid for itself on its first
+run by catching a Windows-only assumption in the purge CLI tests (a `file:` URL
+pathname with its leading slash stripped - valid on Windows, *relative* on
+Linux). Fixed in `d15f71c`.
 
 | Test | What is actually wrong |
 |---|---|
-| `the fixture really does carry EXIF and GPS…` | Asserts `meta.sideData.includes('EXIF metadata')`. That is a claim about how one **ffprobe build names its side_data**, not about the file. **The byte-level assertion on the next line passes, and so does the real strip test** — `ingestPhoto writes a copy with no metadata anywhere`, byte-grep and all. So EXIF stripping genuinely works on Linux; the meta-test is over-specified to the ffmpeg on Paul's machine. Fix: assert the bytes, or accept either spelling. |
-| `a broken filtergraph fails loudly with the ffmpeg error attached` | Asserts on ffmpeg's error text, which differs between the gyan.dev Windows build (8.1.1) and Debian's. Fix: assert the failure and the presence of *some* stderr, not the wording. |
+| `the fixture really does carry EXIF and GPS...` | Asserts `meta.sideData.includes('EXIF metadata')` - a claim about how one **ffprobe build names side_data**, not about the file. **The real strip test passes on Linux, byte-grep and all**, so EXIF stripping genuinely works. Fix: assert the bytes, or accept either spelling. |
+| `a broken filtergraph fails loudly...` | Asserts ffmpeg's error *wording*, which differs between the gyan.dev Windows build and Debian's. Fix: assert the failure and that stderr is non-empty, not the text. |
 
-**Neither is a defect in the product.** Both are tests that pinned one build's
-output. Worth fixing before they train anybody to ignore a red build.
-
-### 6. Two pre-existing flaky tests, neither caused by this session's work
-
-Both only fire when `node --test` runs files in parallel and several ffmpegs
-compete — the shape CLAUDE.md already documents under "a test whose timing
-margin is narrower than the machine's variance".
+**Plus two pre-existing FLAKY tests** (different problem - these fire only when
+`node --test` runs files in parallel and several ffmpegs compete):
 
 | Test | Rate across 8 full runs |
 |---|---|
-| `[fal] a 720p request downloads a 960x720 clip…` (`empty_download`) | ~3 in 8 |
+| `[fal] a 720p request downloads a 960x720 clip...` (`empty_download`) | ~3 in 8 |
 | `a concurrent reader never sees a truncated or invalid manifest` | ~2 in 8 |
 
-Passing 3/3 in isolation is not evidence they are fine; they need the
-publish-your-progress fix, not a widened timeout.
+Passing 3/3 in isolation is not evidence they are fine. They need the
+publish-your-progress fix, **not a widened timeout** - a test whose timing margin
+is narrower than machine variance tests the machine.
+
+**Four sources of red is how a build gets ignored - fixing these is worth doing
+early.** They were
+deliberately NOT papered over with retries or `continue-on-error`.
+
+### 5. SPECS WRITTEN - one needs rewriting before any code
+
+`docs/superpowers/specs/`:
+- **`2026-08-21-sqlite-identity-money-design.md` - SUPERSEDED.** Kept because
+  most of its reasoning survives Postgres: the repository-seam approach and its
+  **191-test acceptance gate** (counted, not estimated), `ledger_once` as a
+  partial unique index, balance derived by `SUM(delta)` and never stored, expiry
+  as an explicit negative row, the never-delete-anything migration with a
+  per-account parity check, and jobs/queue staying on files.
+- **`2026-08-21-stripe-subscriptions-design.md` - current, approved, not
+  started.** Two guards against double payout, the raw-body signature trap
+  (`server.mjs` already parses bodies - a reserialise breaks every signature),
+  replay window vs idempotency as separate concerns.
+- **NOT WRITTEN: the Supabase design.** Sub-project 1 needs a fresh spec for
+  "Supabase Auth replaces login + PostgREST over fetch". That is the next
+  writing task, and **no code should be written before it exists.**
+
+**Still needs Paul before Stripe Prices are created:** `annualUSD: 100` is
+flagged in `config/credits.json` as *"ten months for twelve - an interpretation
+of Paul's words, NEEDS PAUL"*. **A Stripe Price amount is immutable once
+created**, so changing it later means a new Price and migrating subscribers.
+
+### 6. IN FLIGHT, UNFINISHED - the UI redesign
+
+Paul installed a third-party skill pack at `~/.claude/skills/` (user-level, NOT
+in this repo): `ui-ux-pro-max`, `ui-styling`, `design-system`, `brand`, `design`,
+`slides`, `banner-design`. Reviewed before installing - MIT, no injection
+patterns, no hidden network calls. **`design` collides in name with a built-in
+skill.** **`ui-styling` is Tailwind + shadcn and is incompatible with this
+project's zero-dependency, zero-JavaScript rules - do not follow it here.**
+
+**The task Paul asked for and that is NOT finished: redesign the app UI using
+`ui-ux-pro-max`.** The real gap is four panels of identical width and weight
+behind the login, which is the remaining half of "it looks generic".
+
+**The first `--design-system` query MISROUTED** and was correctly rejected rather
+than applied: it returned an ops-telemetry landing pattern, indigo-on-near-white
+(this product is Kodak yellow `#FFB700` on `#0B0A09`), Google Fonts over CDN
+(the CSP has no external sources and VT323 is bundled for determinism), and a
+GSAP snippet (there is no JavaScript). **The skill's own contract says to verify
+fit and retry once with a narrower query - that retry had not happened yet.**
+
+### 7. NEXT, in the order it is worth doing
+
+1. **Phase 0**, the moment the key and the photo exist. Nothing else answers
+   whether this is a product.
+2. **The UI redesign** (section 6) - unfinished, and Paul asked for it directly.
+3. **The Supabase spec**, then a plan, then code. Not before.
+4. **The four sources of CI red** (section 4).
+5. **Three aspect ratios** - `docs/aspect-ratios-plan.md`, planned, not started.
+6. **The rest of the security report** - local file only.
 
 ---
 
