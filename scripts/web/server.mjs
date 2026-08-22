@@ -1317,13 +1317,25 @@ export function createServer({
         markCancelled(job, 'cancelled by the person who uploaded it');
         saveJob(job);
       }
-      const { photosDeleted, filesDeleted } = purgeJobMedia(paths);
+      // REPORTED, NOT ASSUMED. `purgeJobMedia` returns what it could not delete
+      // -- an unlink refused while `getVideo` streams the same file is EBUSY on
+      // Windows, and answering a flat 200 to that told a person their face was
+      // gone when it was still on disk. The status stays 200 because the cancel
+      // itself succeeded; `mediaDeleted` is the field that carries the part that
+      // may not have.
+      const { photosDeleted, filesDeleted, errors } = purgeJobMedia(paths);
+      if (errors.length) {
+        logImpl(`purge on ${job.jobId} could not remove ${errors.length} file(s): `
+          + errors.map((e) => `${e.path} (${e.code ?? 'unknown'})`).join(', '));
+      }
       return sendJson(req, res, 200, {
         jobId: job.jobId,
         status: job.status,
         cancelRequested: true,
         photosDeleted,
         filesDeleted,
+        mediaDeleted: errors.length === 0,
+        errors,
       });
     },
   };

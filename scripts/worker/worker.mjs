@@ -63,7 +63,7 @@
 import process from 'node:process';
 import { hostname } from 'node:os';
 import { loadJob, saveJob, retryStep, setJobStatus } from '../render/job.mjs';
-import { planPurge, executePurge } from '../render/purge.mjs';
+import { sweepRetention as runRetentionSweep } from '../render/purge.mjs';
 import { isRetriable } from '../providers/errors.mjs';
 
 /** How long an idle worker waits before asking the queue again. One second is
@@ -271,15 +271,31 @@ export function createWorker({
    * policy nobody was shown. An explicit `null` disables the sweep, for an
    * operator who runs `npm run purge` from a scheduler instead.
    */
-  const windows = retention === null
-    ? null
-    : (() => {
-      const source = retention ?? cfg?.retention ?? null;
-      const photoDays = Number(source?.photoDays);
-      const jobDays = Number(source?.jobDays);
-      if (!Number.isFinite(photoDays) || !Number.isFinite(jobDays)) return null;
-      return { photoDays, jobDays };
-    })();
+  const windows = (() => {
+    // `null` is the one way to say "not here" and it has to be said out loud.
+    if (retention === null) return null;
+    const source = retention ?? cfg?.retention ?? null;
+    // Nothing configured anywhere is not a misconfiguration -- it is a worker
+    // that was never asked to sweep, e.g. every test rig that predates this.
+    if (source == null) return null;
+
+    const photoDays = Number(source.photoDays);
+    const jobDays = Number(source.jobDays);
+    if (!Number.isFinite(photoDays) || !Number.isFinite(jobDays)) {
+      // REFUSED AT CONSTRUCTION, exactly as `cfg.provider.maxInflight` is a few
+      // lines below. Returning null here instead would mean a typo in the
+      // retention block silently disables the deletion this system promises
+      // every user -- the promise going quietly unkept, which is the finding
+      // `scripts/render/purge.mjs` exists to close. `purge-cli.mjs` refuses the
+      // same input loudly; the scheduled path must not be the lenient one.
+      throw new WorkerError(
+        `retention must be {photoDays, jobDays} as numbers, got ${JSON.stringify(source)}. `
+        + 'Pass retention: null to switch the sweep off deliberately.',
+        { code: 'BAD_RETENTION', detail: { retention: source } },
+      );
+    }
+    return { photoDays, jobDays };
+  })();
 
   const maxInflight = cfg?.provider?.maxInflight ?? 1;
   if (maxInflight !== 1) {
@@ -645,20 +661,18 @@ export function createWorker({
      */
     sweepRetention() {
       if (!windows) return null;
-      // THE WORKER'S CLOCK, NOT THE WALL CLOCK. `nowImpl` is injected precisely
-      // so that time is a parameter here, and a sweep that reached for
-      // `new Date()` would be the one piece of this worker that cannot be
-      // tested and cannot be reasoned about on a machine whose clock is wrong.
-      const nowDate = () => new Date(now());
 
       // AGE SAYS DELETE; A LIVE LEASE SAYS NOT YET, AND THE LEASE WINS.
       // The nasty case is a job enqueued long ago and claimed for the FIRST time
       // today: `createdAt` is past every window, so an unguarded sweep removes
       // the directory out from under the worker rendering it and the customer
       // loses a tape they paid for. It comes back on the next sweep, once
-      // whoever holds it has let go. `peek` also covers the other workers, not
-      // just this one's in-flight job -- and if the queue cannot answer, the
-      // safe reading of "unknown" is "somebody might", so nothing is swept.
+      // whoever holds it has let go. `peek` covers the other workers, not just
+      // this one -- and if the queue cannot answer, the safe reading of
+      // "unknown" is "somebody might", so nothing is swept THIS pass.
+      //
+      // THE CLOCK IS THE WORKER'S, NOT THE WALL'S. `nowImpl` is injected exactly
+      // so that time is a parameter here.
       let leased;
       try {
         leased = new Set(
@@ -666,31 +680,25 @@ export function createWorker({
             .filter((row) => !row.expired)
             .map((row) => row.jobId),
         );
-      } catch {
+      } catch (err) {
+        // SAID OUT LOUD, NOT RETURNED SILENTLY. A queue that cannot answer stops
+        // retention running, and a retention sweep that stops running without
+        // saying so is the finding this whole module exists to close, wearing a
+        // different hat.
+        const { code, message } = brief(err);
+        emit('purged', {
+          jobsDeleted: 0, photosDeleted: 0, skipped: 0, retention: windows,
+          errors: [{ code, message: `queue.peek failed, nothing swept this pass: ${message}` }],
+        });
         return null;
       }
       if (inFlight?.jobId) leased.add(inFlight.jobId);
-      const spare = (plan) => {
-        plan.entries = plan.entries.filter((e) => !leased.has(e.jobId));
-        return plan;
-      };
 
       try {
-        const jobs = executePurge(
-          spare(planPurge({ root, olderThan: windows.jobDays, photosOnly: false, nowImpl: nowDate })),
-          { dryRun: false },
-        );
-        const gone = new Set(jobs.removed.map((r) => r.jobId));
-        const plan = spare(planPurge({ root, olderThan: windows.photoDays, photosOnly: true, nowImpl: nowDate }));
-        plan.entries = plan.entries.filter((e) => !gone.has(e.jobId));
-        const photos = executePurge(plan, { dryRun: false });
-
-        const summary = {
-          jobsDeleted: jobs.jobsDeleted,
-          photosDeleted: photos.photosDeleted,
-          retention: windows,
-          errors: [...jobs.errors, ...photos.errors],
-        };
+        const summary = runRetentionSweep({
+          root, retention: windows, nowImpl: () => new Date(now()),
+          dryRun: false, skip: leased,
+        });
         // Only when something happened. An hourly "deleted nothing" line would
         // bury the one that matters.
         if (summary.jobsDeleted || summary.photosDeleted || summary.errors.length) {
@@ -698,7 +706,10 @@ export function createWorker({
         }
         return summary;
       } catch (err) {
-        emit('purged', { jobsDeleted: 0, photosDeleted: 0, retention: windows, errors: [{ message: brief(err) }] });
+        emit('purged', {
+          jobsDeleted: 0, photosDeleted: 0, skipped: 0, retention: windows,
+          errors: [brief(err)],
+        });
         return null;
       }
     },

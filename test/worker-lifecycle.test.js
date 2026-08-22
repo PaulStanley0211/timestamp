@@ -474,3 +474,72 @@ test('the sweep never deletes a job somebody holds a live lease on', async (t) =
     'once nobody holds it, the promise applies again');
   assert.equal(freed.jobsDeleted, 1);
 });
+
+test('a queue that cannot answer stops the sweep LOUDLY, not silently', async (t) => {
+  // The first version returned null here with no event. A queue that throws
+  // every time would have stopped retention running forever, and nothing
+  // anywhere would have said so -- which is F1 wearing a different hat: a
+  // promise with nothing enforcing it and no signal that it stopped.
+  const rig = makeRig(t, { retention: { photoDays: 7, jobDays: 30 } });
+  rig.worker.queueForTest = null;
+  const broken = { ...rig.queue, peek() { throw new Error('queue index unreadable'); } };
+  const worker = createWorker({
+    root: rig.dir, cfg: CFG, provider: PROVIDER, queue: broken,
+    retention: { photoDays: 7, jobDays: 30 },
+    nowImpl: () => rig.clock.now, onEvent: (e) => rig.events.push(e),
+    runPipelineImpl: async (job) => job,
+  });
+  createJob({
+    root: rig.dir, jobId: '20260101-120000-00aa11', provider: 'fixture', cfg: CFG, input: INPUT,
+    nowImpl: () => new Date(T0 - 400 * 86_400_000),
+  });
+
+  const result = worker.sweepRetention();
+
+  assert.equal(result, null, 'nothing was swept, because "unknown" reads as "somebody might"');
+  const [purged] = rig.of('purged');
+  assert.ok(purged, 'but it is REPORTED -- silence here is the bug');
+  assert.match(purged.errors[0].message, /queue index unreadable/);
+  assert.ok(fs.existsSync(jobPaths(rig.dir, '20260101-120000-00aa11').dir),
+    'and the 400-day-old job survives this pass rather than being swept blind');
+});
+
+test('a malformed retention block is refused at construction, not silently ignored', () => {
+  // `purge-cli.mjs` refuses loudly -- "will not invent one". The worker is the
+  // path that actually runs on a schedule, so it must not be the lenient one:
+  // a typo in cfg.retention that silently disables retention is the promise
+  // quietly going unkept, which is exactly F1.
+  assert.throws(
+    () => createWorker({
+      root: 'C:/tmp/nope', cfg: CFG, provider: PROVIDER, queue: makeQueueStub(),
+      retention: { photoDays: 7 },
+    }),
+    { code: 'BAD_RETENTION' },
+    'half a retention policy is not a retention policy',
+  );
+
+  assert.throws(
+    () => createWorker({
+      root: 'C:/tmp/nope', cfg: { ...CFG, retention: { photoDays: 'seven', jobDays: 30 } },
+      provider: PROVIDER, queue: makeQueueStub(),
+    }),
+    { code: 'BAD_RETENTION' },
+  );
+});
+
+test('retention: null is still an explicit, allowed way to switch the sweep off', () => {
+  const worker = createWorker({
+    root: 'C:/tmp/nope', cfg: { ...CFG, retention: { photoDays: 7, jobDays: 30 } },
+    provider: PROVIDER, queue: makeQueueStub(), retention: null,
+  });
+  assert.equal(worker.sweepRetention(), null, 'off on purpose is not the same as misconfigured');
+});
+
+/** The six methods createWorker asserts on a queue, and nothing else. */
+function makeQueueStub() {
+  const noop = () => {};
+  return {
+    claim: () => null, heartbeat: noop, complete: noop,
+    fail: noop, release: noop, reapExpired: () => [],
+  };
+}

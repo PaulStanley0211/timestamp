@@ -1318,6 +1318,24 @@ test('a finished job that was deleted stays deleted and reports it, rather than 
   });
 });
 
+test('DELETE tells the truth about whether the media actually went', async () => {
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA });
+    const paths = jobPaths(root, job.jobId);
+    fs.writeFileSync(paths.video, Buffer.from('the finished tape'));
+
+    const body = await (await get(base, `/api/jobs/${job.jobId}`, cookieA, {}, { method: 'DELETE' })).json();
+
+    // The handler must report what purge actually achieved rather than assume
+    // it succeeded. A refused unlink -- EBUSY while the browser streams the
+    // video -- used to be swallowed, and the person was told a face was deleted
+    // that was still on disk.
+    assert.equal(body.mediaDeleted, true, 'a clean delete says so explicitly');
+    assert.deepEqual(body.errors, [], 'and carries the field that would name a failure');
+    assert.equal(fs.existsSync(paths.video), false);
+  });
+});
+
 test('an expired lease is not a claim', async () => {
   await withServer(async ({ base, root, queue, app, accountA, cookieA }) => {
     const job = seedJob(app, root, { status: 'running', owner: accountA });

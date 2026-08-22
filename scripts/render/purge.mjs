@@ -189,6 +189,88 @@ export function executePurge(plan, { dryRun = true, fsImpl = fs } = {}) {
   return { dryRun, at: plan.at, photosDeleted, jobsDeleted, filesRemoved, removed, errors };
 }
 
+/**
+ * Both retention windows, in the one order that makes the totals honest.
+ *
+ * WHY THIS EXISTS RATHER THAN LIVING AT THE CALL SITES. This ordering rule --
+ * sweep whole jobs first, collect what went, then subtract those from the photo
+ * plan -- was written out twice, once in `purge-cli.mjs` and once in the
+ * worker's `sweepRetention()`. Two copies of one correctness rule is two places
+ * for it to drift, and only one of the two knew about leases. It is a rule about
+ * retention, so it belongs in the retention module, and both callers now get the
+ * lease guard for free.
+ *
+ * The order is not cosmetic: a job past `jobDays` is removed whole, so planning
+ * the photo pass against it would count one job twice and report a `photosDeleted`
+ * that never happened.
+ *
+ * @param {object}   args
+ * @param {string}   args.root
+ * @param {{photoDays: number, jobDays: number}} args.retention
+ * @param {Function} [args.nowImpl]
+ * @param {boolean}  [args.dryRun=true]  the module-wide default: acting is opt-in
+ * @param {Set}      [args.skip]         job ids to leave alone this pass -- the
+ *   worker passes everything holding a live lease, because age says delete and a
+ *   lease says not yet, and the lease wins. Deferred, never spared.
+ * @param {object}   [args.fsImpl]
+ * @returns {{dryRun: boolean, at: string, retention: object, scanned: number,
+ *            jobsDeleted: number, photosDeleted: number, filesRemoved: number,
+ *            skipped: number, removed: Array<object>, errors: Array<object>}}
+ */
+export function sweepRetention({
+  root, retention, nowImpl = defaultNow, dryRun = true, skip = null, fsImpl = fs,
+} = {}) {
+  const photoDays = Number(retention?.photoDays);
+  const jobDays = Number(retention?.jobDays);
+  if (!Number.isFinite(photoDays) || !Number.isFinite(jobDays)) {
+    throw new PurgeError(
+      `retention must be {photoDays, jobDays} as numbers, got ${JSON.stringify(retention)} -- `
+      + 'purge will not invent a policy nobody was shown',
+      { code: 'BAD_RETENTION' },
+    );
+  }
+
+  // DISTINCT job ids, not a per-pass tally. A job past BOTH windows appears in
+  // both plans, so incrementing a counter in each pass reports one deferred job
+  // as two -- which is the same class of lie the job-first ordering exists to
+  // prevent.
+  const deferred = new Set();
+  const spare = (plan) => {
+    if (skip?.size) {
+      plan.entries = plan.entries.filter((e) => {
+        if (!skip.has(e.jobId)) return true;
+        deferred.add(e.jobId);
+        return false;
+      });
+    }
+    return plan;
+  };
+
+  const jobs = executePurge(
+    spare(planPurge({ root, olderThan: jobDays, photosOnly: false, nowImpl })),
+    { dryRun, fsImpl },
+  );
+
+  const gone = new Set(jobs.removed.map((r) => r.jobId));
+  const photoPlan = spare(planPurge({ root, olderThan: photoDays, photosOnly: true, nowImpl }));
+  photoPlan.entries = photoPlan.entries.filter((e) => !gone.has(e.jobId));
+  const photos = executePurge(photoPlan, { dryRun, fsImpl });
+
+  return {
+    dryRun,
+    at: jobs.at,
+    root: photoPlan.root,
+    retention: { photoDays, jobDays },
+    scanned: photoPlan.scanned,
+    jobsDeleted: jobs.jobsDeleted,
+    photosDeleted: photos.photosDeleted,
+    filesRemoved: jobs.filesRemoved + photos.filesRemoved,
+    skipped: deferred.size,
+    removed: [...jobs.removed, ...photos.removed],
+    errors: [...jobs.errors, ...photos.errors],
+  };
+}
+
 /** Absolute paths of the plain files directly inside `dir`, or `[]`. A missing
  *  directory is not an error here: a job cancelled before its photo landed has
  *  no `input/`, and that is the state purge exists to arrive at. */
@@ -255,20 +337,43 @@ export function purgeJobMedia(paths, { dryRun = false, fsImpl = fs } = {}) {
   if (!paths?.dir) throw new PurgeError('purgeJobMedia takes a jobPaths object', { code: 'BAD_PATHS' });
 
   const removed = [];
+  const errors = [];
   let photosDeleted = 0;
+
+  /**
+   * A FILE THAT WOULD NOT DELETE IS REPORTED, NEVER SWALLOWED.
+   *
+   * The first version of this swallowed the failure with `catch { continue }`,
+   * so a refused unlink was indistinguishable from a file that was not there --
+   * the handler answered 200 and a person was told a face had been deleted that
+   * was still on disk. That is the shape of the very finding this module exists
+   * to close, recurring inside the fix for it.
+   *
+   * The trigger is not exotic on Windows: `getVideo` streams `timestamp.mp4` to
+   * the browser, and an unlink of a file another handle is reading is refused
+   * with EBUSY. Watch your tape, click delete.
+   */
+  const remove = (file) => {
+    if (dryRun) { removed.push(file); return; }
+    try {
+      fsImpl.rmSync(file, { force: true });
+      removed.push(file);
+    } catch (err) {
+      errors.push({ path: file, message: err.message, code: err.code ?? null });
+    }
+  };
 
   for (const dir of [paths.input, paths.stills, paths.segments, paths.review]) {
     for (const file of listFiles(fsImpl, dir)) {
-      if (!dryRun) { try { fsImpl.rmSync(file, { force: true }); } catch { continue; } }
-      if (dir === paths.input) photosDeleted += 1;
-      removed.push(file);
+      const before = removed.length;
+      remove(file);
+      if (dir === paths.input && removed.length > before) photosDeleted += 1;
     }
   }
   for (const file of [paths.source, paths.video, paths.poster]) {
     if (!fsImpl.existsSync(file)) continue;
-    if (!dryRun) { try { fsImpl.rmSync(file, { force: true }); } catch { continue; } }
-    removed.push(file);
+    remove(file);
   }
 
-  return { filesDeleted: removed.length, photosDeleted, removed };
+  return { filesDeleted: removed.length, photosDeleted, removed, errors };
 }

@@ -36,7 +36,7 @@ import { createJob, jobPaths } from '../scripts/render/job.mjs';
 import { OWNERS_DIR } from '../scripts/auth/accounts.mjs';
 import { consentText, RETENTION_DEFAULTS } from '../scripts/safety/consent.mjs';
 import { createSessions } from '../scripts/web/session-middleware.mjs';
-import { planPurge, executePurge, purgeJobMedia } from '../scripts/render/purge.mjs';
+import { planPurge, executePurge, purgeJobMedia, sweepRetention } from '../scripts/render/purge.mjs';
 
 // ---------------------------------------------------------------------------
 // harness
@@ -349,4 +349,106 @@ test('purge refuses to invent a retention policy when config has none', () => {
 
   assert.equal(run.status, 1);
   assert.match(run.stderr, /will not invent one/);
+});
+
+test('purgeJobMedia reports a deletion it could not perform, rather than counting it as done', () => {
+  const root = tmpRoot();
+  const { paths } = seedJob(root, { ageDays: 0 });
+
+  // On Windows this is not exotic: the browser is streaming the tape from
+  // `getVideo` at the moment its owner clicks delete, so the unlink is refused.
+  // Before this test, the failure was swallowed by `catch { continue; }`, the
+  // handler returned 200, and the person was told a face was deleted that was
+  // still on disk -- F2 recurring inside the fix for F2.
+  const locked = {
+    ...fs,
+    rmSync(file, opts) {
+      if (String(file).endsWith('timestamp.mp4')) {
+        const err = new Error('EBUSY: resource busy or locked'); err.code = 'EBUSY'; throw err;
+      }
+      return fs.rmSync(file, opts);
+    },
+  };
+
+  const result = purgeJobMedia(paths, { fsImpl: locked });
+
+  assert.equal(result.errors.length, 1, 'the one file that survived is reported');
+  assert.equal(result.errors[0].code, 'EBUSY');
+  assert.match(result.errors[0].path, /timestamp\.mp4$/);
+  assert.ok(fs.existsSync(paths.video), 'and it really is still there');
+  assert.ok(!result.removed.includes(paths.video), 'a file that survived is not listed as removed');
+  assert.equal(result.filesDeleted, 7, 'eight files, one refused');
+});
+
+test('a clean purge reports no errors, so the field is a signal rather than noise', () => {
+  const root = tmpRoot();
+  const { paths } = seedJob(root, { ageDays: 0 });
+
+  const result = purgeJobMedia(paths);
+
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.filesDeleted, 8);
+});
+
+// ---------------------------------------------------------------------------
+// the canonical sweep: one ordering rule, used by both the CLI and the worker
+// ---------------------------------------------------------------------------
+
+test('sweepRetention runs both windows in the documented order and reports both', () => {
+  const root = tmpRoot();
+  const { paths: old } = seedJob(root, { ageDays: 400 });
+  const { paths: middling } = seedJob(root, { ageDays: 10 });
+  const { paths: fresh } = seedJob(root, { ageDays: 1 });
+
+  const result = sweepRetention({
+    root, retention: { photoDays: 7, jobDays: 30 }, nowImpl: NOW, dryRun: false,
+  });
+
+  assert.equal(fs.existsSync(old.dir), false, 'past jobDays: the whole job');
+  assert.deepEqual(fs.readdirSync(middling.input), [], 'past photoDays: the upload');
+  assert.ok(fs.existsSync(middling.video), 'and not the video, which has longer');
+  assert.ok(fs.existsSync(`${fresh.input}/photo.jpg`), 'inside both windows: untouched');
+  assert.equal(result.jobsDeleted, 1);
+  assert.equal(result.photosDeleted, 1);
+  assert.deepEqual(result.errors, []);
+});
+
+test('a job removed whole is not also counted as a photo removal -- the totals must not lie', () => {
+  const root = tmpRoot();
+  seedJob(root, { ageDays: 400 });   // past BOTH windows
+
+  const result = sweepRetention({
+    root, retention: { photoDays: 7, jobDays: 30 }, nowImpl: NOW, dryRun: false,
+  });
+
+  assert.equal(result.jobsDeleted, 1);
+  assert.equal(result.photosDeleted, 0,
+    'this is the ordering rule that used to live in two places and could drift apart');
+});
+
+test('sweepRetention skips what the caller says is off limits', () => {
+  const root = tmpRoot();
+  const { jobId, paths } = seedJob(root, { ageDays: 400 });
+
+  const result = sweepRetention({
+    root, retention: { photoDays: 7, jobDays: 30 }, nowImpl: NOW, dryRun: false,
+    skip: new Set([jobId]),
+  });
+
+  assert.ok(fs.existsSync(paths.dir), 'the worker passes its leased jobs here');
+  assert.equal(result.jobsDeleted, 0);
+  assert.equal(result.skipped, 1, 'and a deferral is reported rather than looking like nothing was due');
+});
+
+test('sweepRetention honours dryRun, so the CLI and the worker share one destructive path', () => {
+  const root = tmpRoot();
+  const { paths } = seedJob(root, { ageDays: 400 });
+
+  const result = sweepRetention({
+    root, retention: { photoDays: 7, jobDays: 30 }, nowImpl: NOW, dryRun: true,
+  });
+
+  assert.ok(fs.existsSync(paths.dir), 'nothing deleted');
+  assert.equal(result.jobsDeleted, 1, 'but it still reports what would go');
+  assert.equal(result.dryRun, true);
 });

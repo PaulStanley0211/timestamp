@@ -8,11 +8,11 @@
  * `config/render.json` were read only by the code that WRITES the promise --
  * `docs/security-review-2026-08-21.md` F1.
  *
- * IT PRINTS AND EXITS WITHOUT DELETING UNLESS TOLD TWICE. `executePurge`
- * defaults to a dry run and this command does not override that default; an
- * operator has to pass `--apply`. The asymmetry is deliberate and it is the
- * house rule from `docs/interfaces.md` §10: deleting faces is not a thing that
- * happens because somebody hit up-arrow and return.
+ * IT PRINTS AND EXITS WITHOUT DELETING UNLESS TOLD TWICE. Everything in
+ * `purge.mjs` defaults to a dry run and this command does not override that
+ * default; an operator has to pass `--apply`. The asymmetry is deliberate and it
+ * is the house rule from `docs/interfaces.md` §10: deleting faces is not a thing
+ * that happens because somebody hit up-arrow and return.
  *
  * The windows come from `config/render.json` and are not flags by default,
  * because a flag that overrides retention is a flag that quietly makes the app
@@ -31,7 +31,7 @@ import fs from 'node:fs';
 import process from 'node:process';
 
 import { REPO_ROOT } from '../ffmpeg/run.mjs';
-import { planPurge, executePurge } from './purge.mjs';
+import { sweepRetention } from './purge.mjs';
 
 function parseArgs(argv) {
   const args = { flags: new Set() };
@@ -95,30 +95,29 @@ async function main() {
     return 2;
   }
 
-  // The job sweep runs FIRST. A job past `jobDays` is removed whole, so running
-  // it first means the photo sweep never plans work on a directory that is
-  // about to disappear -- which would be harmless but would report two actions
-  // for one job and make the totals lie.
-  const jobPlan = planPurge({ root, olderThan: jobDays, photosOnly: false });
-  const jobResult = executePurge(jobPlan, { dryRun: !apply });
-  const goneIds = new Set(jobResult.removed.map((r) => r.jobId));
-
-  const photoPlan = planPurge({ root, olderThan: photoDays, photosOnly: true });
-  photoPlan.entries = photoPlan.entries.filter((e) => !goneIds.has(e.jobId));
-  const photoResult = executePurge(photoPlan, { dryRun: !apply });
+  // The ordering rule -- whole jobs first, then photos minus whatever just went --
+  // lives in `sweepRetention` rather than here. It used to be written out in this
+  // file AND in the worker, which is two places for one correctness rule to drift
+  // apart, and only one of the two knew about leases.
+  //
+  // THIS COMMAND HAS NO QUEUE, so it passes no `skip` set and cannot defer a job
+  // somebody is rendering. That is why the worker is the scheduled path and this
+  // is the manual one: run `--apply` by hand while a render is in flight and you
+  // can pull a directory out from under it.
+  const swept = sweepRetention({ root, retention: { photoDays, jobDays }, dryRun: !apply });
 
   const report = {
-    at: jobPlan.at,
-    root: jobPlan.root,
+    at: swept.at,
+    root: swept.root,
     applied: apply,
-    retention: { photoDays, jobDays },
+    retention: swept.retention,
     fromConfig: photoDays === configured.photoDays && jobDays === configured.jobDays,
-    scanned: jobPlan.scanned,
-    jobsDeleted: jobResult.jobsDeleted,
-    photosDeleted: photoResult.photosDeleted,
-    filesRemoved: photoResult.filesRemoved,
-    errors: [...jobResult.errors, ...photoResult.errors],
-    removed: [...jobResult.removed, ...photoResult.removed],
+    scanned: swept.scanned,
+    jobsDeleted: swept.jobsDeleted,
+    photosDeleted: swept.photosDeleted,
+    filesRemoved: swept.filesRemoved,
+    errors: swept.errors,
+    removed: swept.removed,
   };
 
   if (asJson) {

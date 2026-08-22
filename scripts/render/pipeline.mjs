@@ -1442,6 +1442,12 @@ export async function runPipeline(job, {
       // files rather than a running job with none.
       const purged = purgeJobMedia(paths);
       if (purged.filesDeleted > 0) log(`  purged ${purged.filesDeleted} file(s) on cancel`);
+      // A refused unlink is said out loud. The whole point of this call is a
+      // promise being kept, and a promise that quietly was not kept is the
+      // finding it exists to close.
+      for (const err of purged.errors) {
+        log(`  COULD NOT DELETE ${err.path} (${err.code ?? 'unknown'}) -- retention will retry`);
+      }
       return job;
     }
     checkCancelled();

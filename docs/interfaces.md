@@ -582,9 +582,25 @@ export function formatLedger(ledger): string
 // scripts/render/purge.mjs                                    BUILT 2026-08-21
 export function planPurge({ root, olderThan, photosOnly, nowImpl? }): PurgePlan
 export function executePurge(plan, { dryRun = true, fsImpl? }): PurgeResult
-export function purgeJobMedia(paths, { dryRun = false, fsImpl? }): { filesDeleted, photosDeleted, removed }
+export function purgeJobMedia(paths, { dryRun = false, fsImpl? }): { filesDeleted, photosDeleted, removed, errors }
+export function sweepRetention({ root, retention, nowImpl?, dryRun = true, skip?, fsImpl? }): SweepResult
 export function ageInDays(createdAt, now): number | null
 ```
+
+**`sweepRetention` is the canonical entry point** and the only place the ordering
+rule lives: whole jobs first, then photos minus whatever just went. It was
+written out twice — once in `purge-cli.mjs`, once in the worker — which is two
+places for one correctness rule to drift, and only one of them knew about
+leases. `npm run purge` and `worker.sweepRetention()` both call it now; the
+worker passes `skip` (its leased job ids), the CLI passes none and therefore
+cannot defer a job somebody is rendering.
+
+**Every function that deletes reports what it could not delete.** `purgeJobMedia`
+and `executePurge` both return `errors`. A refused unlink — `EBUSY` on Windows
+while `getVideo` streams the same file — must never be swallowed: answering a
+flat `200` to that tells a person their face is gone when it is still on disk,
+which is the finding this module exists to close, recurring inside the fix for
+it. `DELETE /api/jobs/:id` carries `mediaDeleted` and `errors` for exactly this.
 
 `scripts/render/ledger.mjs` is **NOT built.** `npm run ledger` therefore fails.
 It is cost reconciliation — manifest actuals against `config/pricing.json`
@@ -607,8 +623,16 @@ forward indefinitely.
 The scheduled half runs in the worker: `worker.sweepRetention()` at startup and
 every `DEFAULT_RETENTION_SWEEP_MS` (1 h), beside `reapExpired()`. Pass
 `retention: null` to disable it and drive `npm run purge` from a scheduler
-instead. A worker with no `cfg.retention` and no explicit `retention` sweeps
-nothing rather than inventing a policy.
+instead. A worker with no retention configured anywhere sweeps nothing — it was
+never asked to. But a retention block that is *present and malformed* is refused
+at construction with `BAD_RETENTION`, exactly as `cfg.provider.maxInflight` is:
+a typo that silently disables the deletion this system promises every user is
+the promise going quietly unkept. `null` is the one way to say "not here", and
+it has to be said out loud.
+
+A queue that cannot answer `peek` stops that pass and **emits `purged` carrying
+the error**. Returning silently would mean retention stopping forever with
+nothing anywhere saying so.
 
 **A live lease beats age.** The sweep skips any job in `queue.peek({state:
 'claimed'})` that has not expired, plus its own in-flight job. The case is a job

@@ -9,7 +9,7 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-08-21) — retention shipped; F1/F2 closed
 
-**981 tests, 979 pass, 0 fail, 2 skipped** (the skips are the `*-smoke.test.js`
+**991 tests, 989 pass, 0 fail, 2 skipped** (the skips are the `*-smoke.test.js`
 money guards, which self-skip without `TIMESTAMP_LIVE=1`). Everything below is
 uncommitted work sitting on top of `9bc24ea`.
 
@@ -50,6 +50,19 @@ promised. What shipped:
 - **Two drift guards**, both proved to fail when their target is mutated:
   `consentText()`'s numbers must equal `config/render.json`'s retention block,
   and the web layer must write ownership entries where purge looks for them.
+
+**A code review of the above found three things and they are fixed.** The worst
+was mine: `purgeJobMedia` swallowed a refused unlink with `catch { continue }`,
+so an `EBUSY` -- which is what Windows gives you when `getVideo` is streaming
+the very file being deleted -- returned a flat 200 and told a person their face
+was gone while it sat on disk. **F2 recurring inside the fix for F2.** Everything
+that deletes now returns `errors`, and `DELETE` carries `mediaDeleted`.
+The other two: the worker's sweep returned `null` silently when `queue.peek`
+threw, so retention could stop forever with nothing saying so (now emits
+`purged` with the error, and a malformed `cfg.retention` is refused at
+construction like `maxInflight` is); and the job-then-photo ordering rule lived
+in both `purge-cli.mjs` and the worker, so it is now one exported
+`sweepRetention` that both call.
 
 **Age is measured from `createdAt`, never `updatedAt`** — `updatedAt` is
 restamped by every `saveJob`, so a retried job would push its own deletion date
