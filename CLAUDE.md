@@ -164,7 +164,28 @@ its contents back into a tracked one.
   VT323 is already good and a drawn mark risks a second visual language
   arguing with the tape.
 
-### 5. Two pre-existing flaky tests, neither caused by this session's work
+### 5. CI exists now, and it is RED on Linux for two known reasons
+
+`.github/workflows/test.yml` runs all 991 tests on **ubuntu and windows, node 22
+and 24**. `guards.yml` enforces decisions that are invisible when they break.
+
+**Windows: 991/991 green. Linux: 989/991.** The matrix paid for itself on its
+first run by catching a Windows-only assumption in the purge CLI tests — a
+file: URL pathname with its leading slash stripped, which is a valid path on
+Windows and a *relative* one on Linux. Fixed in `d15f71c`.
+
+The two that remain are **pre-existing, deterministic, and Linux-only** — not the
+flaky pair below, which is a different problem:
+
+| Test | What is actually wrong |
+|---|---|
+| `the fixture really does carry EXIF and GPS…` | Asserts `meta.sideData.includes('EXIF metadata')`. That is a claim about how one **ffprobe build names its side_data**, not about the file. **The byte-level assertion on the next line passes, and so does the real strip test** — `ingestPhoto writes a copy with no metadata anywhere`, byte-grep and all. So EXIF stripping genuinely works on Linux; the meta-test is over-specified to the ffmpeg on Paul's machine. Fix: assert the bytes, or accept either spelling. |
+| `a broken filtergraph fails loudly with the ffmpeg error attached` | Asserts on ffmpeg's error text, which differs between the gyan.dev Windows build (8.1.1) and Debian's. Fix: assert the failure and the presence of *some* stderr, not the wording. |
+
+**Neither is a defect in the product.** Both are tests that pinned one build's
+output. Worth fixing before they train anybody to ignore a red build.
+
+### 6. Two pre-existing flaky tests, neither caused by this session's work
 
 Both only fire when `node --test` runs files in parallel and several ffmpegs
 compete — the shape CLAUDE.md already documents under "a test whose timing
