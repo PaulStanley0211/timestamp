@@ -175,7 +175,12 @@ test('a preset that did not come through loadCatalog is rejected rather than hal
 test('the motion prompt uses the place motion hint and forbids a cut', () => {
   const { prompt, negativePrompt } = composeMotionPrompt({ place, outfit });
   assert.ok(prompt.includes(place.motionHint));
-  assert.match(prompt, /No zoom, no cut, one continuous take/);
+  // CHANGED 2026-08-24. Was /No zoom, no cut, one continuous take/. The rule it
+  // was protecting is intact -- a cut still breaks the illusion outright and is
+  // still forbidden -- but the prohibition now lives ONLY on negativePrompt,
+  // which is the channel built for it, and the prose says what should happen
+  // instead. Same instruction, one channel, positive form.
+  assert.match(prompt, /One continuous take at real speed/);
   assert.match(prompt, /Nothing dramatic happens/);
   for (const n of MOTION_NEGATIVES) assert.ok(negativePrompt.includes(n), `missing motion negative "${n}"`);
 });
@@ -188,7 +193,8 @@ test('segment 1 starts from the still and every later segment says it is continu
   // Without this clause the model has licence to re-stage the shot between
   // takes, which is exactly what phase-0 criterion 5 is looking for.
   assert.match(second.prompt, /Take 2 of 3\. Continue from the final frame of the previous take/);
-  assert.match(second.prompt, /the same place, the same wardrobe, the same light, no cut/);
+  // Same change, same reason: "no cut" became "one unbroken take".
+  assert.match(second.prompt, /the same place, the same wardrobe, the same light, one unbroken take/);
 });
 
 test('a segment outside the run is a thrown error, not a silently clamped one', () => {
@@ -229,5 +235,56 @@ test('prompt.mjs and seed.mjs import nothing and read nothing', () => {
     for (const forbidden of [/Math\.random/, /Date\.now/, /new Date/, /node:fs/, /fetch\s*\(/, /process\./]) {
       assert.ok(!forbidden.test(code), `${file} must not use ${forbidden}`);
     }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// motion: the craft rules
+//
+// Extracted from the `seedance-clean` skill (Paul, 2026-08-23) and adapted --
+// most of that skill's technical-style vocabulary is REFUSED here, see the
+// header of prompt.mjs. What survives is the part about writing the visible.
+// ---------------------------------------------------------------------------
+
+test('the motion prompt inherits the lens and framing the still already describes', () => {
+  // Both were written for every place preset and BOTH WERE DISCARDED by the
+  // motion prompt, which asked only for scene, light and motionHint. The still
+  // and the video were being shot on different lenses from the same preset.
+  const { prompt } = composeMotionPrompt({ place, outfit });
+  assert.ok(prompt.includes(place.prompt.framing), 'framing is carried');
+  assert.ok(prompt.includes(place.prompt.lens), 'lens is carried');
+});
+
+test('the motion prompt states the target, never the prohibition', () => {
+  // The hardest rule in the skill: positive phrasing only. This prompt used to
+  // say "No zoom, no cut" IN THE PROMPT TEXT while ALSO listing both in
+  // negativePrompt -- the same instruction on two channels, one of them in the
+  // form the model handles worst. The negatives channel keeps them; the prose
+  // states what should happen instead.
+  const { prompt, negativePrompt } = composeMotionPrompt({ place, outfit });
+  assert.doesNotMatch(prompt, /\bno (zoom|cut|camera cut|jump cut)\b/i, 'prohibitions leave the prose');
+  assert.ok(negativePrompt.includes('camera cut'), 'and stay on the channel built for them');
+  assert.ok(negativePrompt.includes('zoom'));
+});
+
+test('the camera is described with a field of view, an axis and a white balance', () => {
+  // Vague camera direction produces random motion. FOV comes from the skill's
+  // discrete anchor table -- 63 degrees is the 28-35mm "observational" step,
+  // which is where a consumer camcorder actually sat.
+  const { prompt } = composeMotionPrompt({ place, outfit });
+  assert.match(prompt, /63°/, 'field of view, from the anchor table');
+  assert.match(prompt, /\d{4}K/, 'white balance in Kelvin, fixed for the scene');
+});
+
+test('no quality marker ever reaches the motion prompt', () => {
+  // THE INVERSION THIS PRODUCT RUNS ON. Every prompt skill wants 8K, photoreal,
+  // film grain, cinematic. Asking for those lands model grain at 1080 on top of
+  // ffmpeg grain at 576 -- two grain structures at different scales, which is
+  // the texture people read as AI. The correct style instruction here is the
+  // ABSENCE of style: a clean, plainly-exposed frame that ffmpeg then degrades
+  // on purpose.
+  const { prompt } = composeMotionPrompt({ place, outfit });
+  for (const marker of ['8K', '4K', 'photoreal', 'film grain', 'cinematic', 'filmic', 'Kodak', 'bokeh', 'anamorphic']) {
+    assert.ok(!new RegExp(marker, 'i').test(prompt), `"${marker}" must never appear`);
   }
 });

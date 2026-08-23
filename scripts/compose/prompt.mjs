@@ -62,6 +62,40 @@
  * way twice. Both belong in the pipeline; only one belongs in a prompt.
  */
 
+/**
+ * The five things a 2003 handheld camcorder can physically do.
+ *
+ * Adapted from the camera-movement library at https://aicameramovements.com/,
+ * which catalogues 46 moves in a four-part shape -- movement, speed, framing,
+ * end state. THE OTHER FORTY-ONE ARE EXCLUDED ON PURPOSE. Crane, orbit, FPV,
+ * whip-pan, dolly, slider and speed ramp are all things a camera on a tripod,
+ * a rig or a drone does, and asking a model for one is asking it to make an
+ * advertisement. The illusion this product sells is that somebody's dad was
+ * holding the camera, and his shoulder is the only stabiliser in the room.
+ *
+ * Each string carries movement AND speed. Framing and end state come from the
+ * preset's own `framing` clause and from the locks, so the four parts are all
+ * present without any of them being written twice.
+ */
+export const CAMCORDER_MOVES = Object.freeze({
+  drift: 'drifts a few centimetres and settles, the operator standing in one place and breathing',
+  reframe: "reframes once, overshoots by a hand's width and comes back",
+  walk: 'walks slowly forward, the frame rising and falling a little with each step',
+  rest: 'sits on a surface and stays there, with only the smallest settle',
+  follow: 'turns to follow, half a beat late, and catches up',
+});
+
+/**
+ * White balance, fixed for the scene, stated in Kelvin.
+ *
+ * The skill's rule is that a scene has ONE colour temperature and says so --
+ * "warm light" is a mood, 3900K is an instruction. This is a first
+ * approximation off the preset's `climate`; a preset that needs something
+ * else (a tungsten stairwell, a fluorescent swimming hall) sets
+ * `whiteBalanceK` and this defers to it.
+ */
+export const WHITE_BALANCE_K = Object.freeze({ warm: 3900, cold: 6000 });
+
 /** The only reference to the person, anywhere in this module. */
 export const SUBJECT = 'The person in the reference image';
 
@@ -90,7 +124,11 @@ export const BASE_NEGATIVES = Object.freeze([
  *  that decides to cut has produced footage that cannot be used at all. */
 export const MOTION_NEGATIVES = Object.freeze([
   'cut to another shot', 'camera cut', 'jump cut', 'slow motion', 'speed ramp',
-  'time lapse', 'zoom', 'morphing', 'the location changing', 'a change of wardrobe',
+  // NOT the bare word `zoom`. Every place preset's lens clause describes a
+  // consumer ZOOM lens, and the motion prompt now carries that clause -- a bare
+  // negative would contradict the prose on the same generation. The forbidden
+  // thing was always the MOVE, so the negative names the move.
+  'time lapse', 'the camera zooming', 'morphing', 'the location changing', 'a change of wardrobe',
 ]);
 
 const isNonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
@@ -178,7 +216,7 @@ export function composeStillPrompt({ place, outfit, era = DEFAULT_ERA, count = 1
  *
  * @returns {{prompt: string, negativePrompt: string}}
  */
-export function composeMotionPrompt({ place, outfit, segment = 1, totalSegments = 1 } = {}) {
+export function composeMotionPrompt({ place, outfit, segment = 1, totalSegments = 1, cameraMove = null } = {}) {
   requirePreset(place, 'place', ['id', 'label', 'timeOfDay', 'motionHint', 'prompt.scene', 'prompt.light']);
   requirePreset(outfit, 'outfit', ['id', 'label', 'wardrobe']);
   if (!Number.isInteger(totalSegments) || totalSegments < 1) {
@@ -188,20 +226,33 @@ export function composeMotionPrompt({ place, outfit, segment = 1, totalSegments 
     throw new TypeError(`segment must be an integer in 1..${totalSegments}, got ${JSON.stringify(segment)}`);
   }
 
+  const move = CAMCORDER_MOVES[cameraMove ?? place.cameraMove] ?? CAMCORDER_MOVES.drift;
+  const kelvin = Number.isFinite(place.whiteBalanceK)
+    ? place.whiteBalanceK
+    : (WHITE_BALANCE_K[place.climate] ?? WHITE_BALANCE_K.warm);
+
   const continuity = segment === 1
     ? `Take 1 of ${totalSegments}. Begin on the supplied frame and carry straight on from it.`
     : `Take ${segment} of ${totalSegments}. Continue from the final frame of the previous take: ` +
-      'the same place, the same wardrobe, the same light, no cut.';
+      'the same place, the same wardrobe, the same light, one unbroken take.';
 
+  // ORDER IS LOAD-BEARING. The camera sits third, immediately after who and
+  // where: pushed to the end its direction gets ignored, pulled to the front it
+  // argues with the reference image over identity. Subject motion and camera
+  // motion are stated in separate clauses so neither is read as the other.
   const lines = [
     `${SUBJECT}, wearing ${outfit.wardrobe}.`,
     `Place: ${place.prompt.scene}.`,
-    `Light: ${place.prompt.light}.`,
+    `Camera: hand-held at 63°, chest height, the operator standing on the shadow side. ` +
+      `It ${move}. One continuous take at real speed, first frame to last.`,
+    `Lens: ${place.prompt.lens}.`,
+    `Framing: ${place.prompt.framing}.`,
+    `Light: ${place.prompt.light}. White balance ${kelvin}K, fixed for the whole take.`,
     `Motion: ${place.motionHint}.`,
-    'Camera: hand-held, a slow drift and one small correction. No zoom, no cut, one continuous take.',
     `Nothing dramatic happens. This is an ordinary ${place.timeOfDay} and it simply continues.`,
     continuity,
-    'Exactly one person in frame.',
+    'Exactly one person in frame. The place, the wardrobe and the light hold exactly as described ' +
+      'from the first frame to the last.',
   ];
 
   return {
