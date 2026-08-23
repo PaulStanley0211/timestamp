@@ -7,50 +7,63 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-22) - public repo, CI live, two specs waiting on you
+## START HERE (2026-08-23) - the paid path RAN for the first time tonight
 
 **991 tests / 989 pass / 0 fail / 2 skipped** (the skips are the `*-smoke.test.js`
 money guards, which self-skip without `TIMESTAMP_LIVE=1`).
-**Everything is committed and pushed.** `HEAD == origin/main == 50c5752`.
+
+**THE WORKING TREE IS DIRTY AND NOTHING FROM 2026-08-23 IS PUSHED.**
+`origin/main == b6f64a3`. There is one local commit, `ca2b912`, on the branch
+`ui-redesign-signed-in-page` (the UI redesign, sections 6a-6c). Everything after
+that -- the transport fix, the bake-off flags, the 2048px cap, the eight place
+photographs, the card aspect, two test repairs -- is **uncommitted working tree**.
+Read `git status` before assuming anything is safe.
 
 **The repo is PUBLIC: https://github.com/PaulStanley0211/timestamp**
-`out/` is gitignored (0 tracked files - no faces, accounts, sessions or ledger),
-`.env` is gitignored, and **both security-review docs are gitignored on purpose**
-- see section 2. History was audited before the first push: `out/` and `.env`
-were never committed at any point.
+`out/`, `.env` and `assets/test-photos/` are gitignored (verified again on
+2026-08-23 with `git check-ignore`; the face photo and the fal key have never
+been staged). Both security-review docs stay gitignored on purpose - section 2.
 
 ```bash
 npm run web                              # terminal 1
 npm run worker -- --provider=fixture     # terminal 2
 # sign in as dev@example.com / timestamp-dev-password
 ```
-`paul@example.com` cannot be signed into - scrypt hash, no reset endpoint, no
-`set-password` in the CLI. Use the dev account or make another.
+`paul@example.com` cannot be signed into - scrypt hash, no reset endpoint. Use
+the dev account.
 
 ---
 
-### 1. THE THREE THINGS BLOCKING EVERYTHING, all needing Paul
+### 1. WHERE THE THREE BLOCKERS ACTUALLY STAND (two are CLEARED)
 
-1. **`FAL_KEY` in `.env`.** Still does not exist. **$10 is enough.** Paul is
-   paying for fal credit and will paste the key into `.env` HIMSELF - never into
-   chat. `npm run doctor` confirms it is loaded and prints only the literal
-   string `present` (`doctor.mjs:131` is a `Boolean()` check, verified).
-2. **A photo at `assets/test-photos/face.jpg`.** Still empty. Front-ish, one
-   face, good light, 1024px+ short edge. **Never a stock/AI face or a
-   celebrity** - no ground truth in the first case, memorisation flattering the
-   result in the second.
-3. **The still model is unchosen.** `config/models.json` defaults to
-   `fal/UNVERIFIED-identity-still` deliberately, so an unconfigured fal render
-   **stops at compose instead of spending**. Three candidates, all
-   `verified: false`, all assessed from catalogue pages only: `fal-ai/uso`
-   (identity preservation is its advertised job - closest in purpose),
-   `fal-ai/bytedance/seedream/v4.5/edit` (~$0.04/edit), and
-   `fal-ai/nano-banana-pro/edit`. **Suggested: run one prompt through all three
-   - that is cents, and it replaces "the model page says so" with evidence.**
+1. ~~**`FAL_KEY` in `.env`**~~ **DONE 2026-08-23.** Paul pasted it himself.
+   Verified: correct `uuid:hex32` shape, no quotes, no stray whitespace, LF
+   endings; **invisible to `npm test`** (bare `node --test`, checked); **never
+   staged or committed** (`git log --all -- .env` is empty).
+   **`npm run doctor` DOES NOT LOAD `.env`** - the script has no
+   `--env-file-if-exists`, unlike `render` and `worker`, so it prints "not set"
+   even when the key is right. **The earlier claim in this file that doctor
+   confirms the key was WRONG.** Use:
+   `node --env-file-if-exists=.env scripts/preflight/doctor.mjs` -> prints
+   `present`, never the key. A one-word fix to `package.json` was offered and
+   Paul has not answered; do not apply it unasked.
+2. ~~**A photo at `assets/test-photos/face.jpg`**~~ **DONE 2026-08-23.** Paul's
+   own phone selfie, 3712x1712 with EXIF orientation 8. Verified through the
+   REAL intake path: autorotates to 1712x3712, `stripped: true`, and a raw byte
+   grep confirms the stored copy carries **zero** Exif/GPS/XMP where the source
+   had all three. That is the first time the privacy claim was tested against a
+   file that actually had coordinates in it.
+3. **The still model is STILL unchosen, and now there is EVIDENCE.** See
+   section 8 - `fal-ai/uso` was run for real and FAILED on identity. Two
+   candidates remain untested. This is the only blocker left and it is the one
+   that decides whether this is a product.
 
-**Phase 0 is still unrun and still the only thing that decides whether this is a
-product.** It also needs two people who know Paul for the blind "who is this?"
-check. `docs/phase-0-validation.md` is the procedure.
+**Phase 0 is part-run.** One still, one model. The blind check has not happened
+and does not need two people in a room: **Paul lives alone, and the check is a
+text message** - send the generated image to two people who know his face with
+the words "Who is this?" and NOTHING else. He primed a friend on the real photo
+by saying "it is not AI generated"; **that must not happen on the real check**,
+and ideally a different person is used, because that one is now primed.
 
 ### 2. DECISIONS TAKEN 2026-08-21/22 - do not re-litigate
 
@@ -176,7 +189,7 @@ flagged in `config/credits.json` as *"ten months for twelve - an interpretation
 of Paul's words, NEEDS PAUL"*. **A Stripe Price amount is immutable once
 created**, so changing it later means a new Price and migrating subscribers.
 
-### 6. IN FLIGHT, UNFINISHED - the UI redesign
+### 6. THE UI REDESIGN - DONE, committed to a branch (6a-6c)
 
 Paul installed a third-party skill pack at `~/.claude/skills/` (user-level, NOT
 in this repo): `ui-ux-pro-max`, `ui-styling`, `design-system`, `brand`, `design`,
@@ -192,7 +205,7 @@ than applied: it returned an ops-telemetry landing pattern, indigo-on-near-white
 GSAP snippet (there is no JavaScript). **The skill's own contract says to verify
 fit and retry once with a narrower query.**
 
-### 6a. THE REDESIGN IS DONE - 2026-08-22, uncommitted, 991/989/0
+### 6a. THE REDESIGN IS DONE - 2026-08-22, commit ca2b912, 991/989/0
 
 **The retry happened, and `--design-system` was NOT re-run** - the contract's
 narrower path was taken instead, two explicit `--domain ux` queries. Both came
@@ -336,13 +349,203 @@ did nothing.
 
 ### 7. NEXT, in the order it is worth doing
 
-1. **Phase 0**, the moment the key and the photo exist. Nothing else answers
-   whether this is a product.
-2. ~~**The UI redesign**~~ **DONE 2026-08-22, uncommitted - see section 6a.**
-3. **The Supabase spec**, then a plan, then code. Not before.
-4. **The four sources of CI red** (section 4).
-5. **Three aspect ratios** - `docs/aspect-ratios-plan.md`, planned, not started.
-6. **The rest of the security report** - local file only.
+1. **Finish the bake-off.** Two commands, ~10 cents, section 8a. This is the only
+   question that decides whether the product exists.
+2. ~~**The UI redesign**~~ **DONE 2026-08-22, committed to a branch - section 6a.**
+3. ~~**The eight place photographs**~~ **DONE 2026-08-23 - section 10.**
+4. **Commit and push.** One branch plus a dirty tree; see START HERE.
+5. **The Supabase spec**, then a plan, then code. Not before.
+6. **The four sources of CI red** (section 4).
+7. **Three aspect ratios** - `docs/aspect-ratios-plan.md`. **Paul restated this
+   on 2026-08-23 as a USER-FACING CHOICE**, see section 9.
+8. **The rest of the security report** - local file only.
+
+### 8. THE PAID PATH RAN, 2026-08-23 - four bugs and one real result
+
+**Nothing had ever called fal. The first attempt found a bug in about a minute,
+and each fix uncovered the next.** All four are recorded because every one would
+have cost the next person the same hour.
+
+**BUG 1 - the transport was NEVER injected in production.** `requireFetchImpl`
+gives a paid provider **no default** for `fetchImpl` (money guard 1 of 4), so a
+test that forgets it gets a TypeError instead of a bill. That guard worked
+perfectly. What nothing did was inject a transport **on the real path** - so
+`--provider=fal` could not reach the network AT ALL and died at step 5 of 11 with
+the money guard's own TypeError, which reads exactly like a test bug.
+Fixed by `paidTransport(provider)` in `render.mjs`, injecting
+`globalThis.fetch.bind(globalThis)` **only when `provider.paid`**. All four
+guards survive: fal.mjs still has no default, `npm test` never runs `main()`, the
+bare `node --test` still keeps FAL_KEY out of the process.
+**THE WORKER HAS THE SAME HOLE AND IT IS NOT FIXED** - `worker.mjs` accepts
+`providerCtx` but `worker-cli.mjs` passes no transport, so the web app's renderer
+cannot spend either. Fix it the same way before the app goes live.
+
+**BUG 2 - the model is resolved in TWO places.** Threading `--still-model` into
+the pipeline made compose use the right model while step 5 still used the
+default, because `fal.mjs` has its own `resolveModel` reading `opts.stillModel`
+from **provider construction**. The failure moved from step 4 to step 5 and
+looked identical. Both are now fed:
+`createProvider(id, { cfg, stillModel, allowUnverifiedModel })`.
+
+**BUG 3 - the reference field name is NOT the same on every candidate.**
+`falStillBody` sent `image_urls`, the fal image-edit convention. `fal-ai/uso`
+answered **HTTP 422, loc body/input_image_urls, "Field required"**. Recorded per
+model as `stillParams.references` in `config/models.json` rather than renamed
+globally - **seedream and nano-banana-pro have not been called and their field
+name is still unknown.** Expect another 422 from each; that is data, not a
+setback, and a 422 is not billed.
+
+**BUG 4 - and this one would have hit EVERY REAL USER.** fal refused the
+reference with `image_too_large`: **max 2048x2048**. The photo was 1712x3712, and
+every phone shoots 3000-4000px on the long edge. Fixed at intake:
+`LIMITS.maxReferenceEdge = 2048` with an ffmpeg `scale` that fits inside the box
+and **never upscales**. Measured on the real file: **1712x3712 to 944x2048,
+6.4MB to 341KB**. The size matters as much as the refusal - references travel as
+base64, which inflates by a third, so the request went from ~8.5MB to under a
+megabyte on **every** call. Written as a FILTER, not computed in Node, because
+iw/ih inside the graph are post-autorotation and the file's own comment forbids
+reimplementing the orientation table.
+
+**THE RESULT: `fal-ai/uso` FAILED, and Paul confirmed it unprompted.**
+Job `20260823-190639-21c4cd`, one still, ~$0.05.
+
+- **Scene adherence EXCELLENT** - hedge, folding table, patterned cloth, four
+  white chairs, watering can, coiled hose, bicycle on the fence, raking light,
+  exactly one person. **That validates `composeStillPrompt` and the expand
+  stage**, not the model.
+- **Identity FAILED.** The beard and the tight curls - the subject's two most
+  distinctive features - were BOTH dropped, skin tone lighter, face shape wrong.
+  Paul's own words: "it doesn't give any kind of face resemblance".
+- **Raster FAILED separately.** Ordered 640x480 with `aspect_ratio: '4:3'` sent;
+  got **640x512, which is 5:4**. A 5:4 still pillarboxed into a 4:3 tape is a
+  visible mistake, so this disqualifies the candidate at this raster **even if
+  identity had held**.
+- This is the candidate whose **advertised purpose** is identity preservation,
+  which makes the result more informative, not less.
+
+### 8a. THE BAKE-OFF SEAM, and why it is two flags
+
+`--still-model=<id>` names a model; `--allow-unverified-model` is a SEPARATE
+opt-in that lowers the verified gate. Two, not one, so an unverified endpoint can
+never be reached by a caller who only meant to pick a model. **Both defaults are
+the refusal that existed before.** The alternative was editing
+`config/models.json` to claim `verified: true` - and in this repo that word means
+somebody opened the schema page. Faking it to run an experiment would poison the
+one signal that stops blind spending.
+
+The two remaining commands, unchanged from the one that worked:
+
+```
+node --env-file-if-exists=.env scripts/render/render.mjs --photo=assets/test-photos/face.jpg --place=schrebergarten-august --outfit=trainingsjacke --consent --provider=fal --still-model=fal-ai/bytedance/seedream/v4.5/edit --allow-unverified-model --stills=1 --stop-after=select
+node --env-file-if-exists=.env scripts/render/render.mjs --photo=assets/test-photos/face.jpg --place=schrebergarten-august --outfit=trainingsjacke --consent --provider=fal --still-model=fal-ai/nano-banana-pro/edit --allow-unverified-model --stills=1 --stop-after=select
+```
+
+**CLAUDE CANNOT RUN THESE.** The auto-mode classifier blocks commands that spend
+money - it let exactly one through and refused every attempt after. **Do not try
+to work around it.** Ask Paul to paste them and paste the output back; Claude can
+then read `out/jobs/` and the manifests directly.
+
+**Do not run five stills on any model before all three have been tried once.**
+
+`config/pricing.json` now carries all three candidates. Only seedream has any
+published figure (~$0.04/edit, **a marketing page, never invoiced**); the other
+two are labelled as placeholders with no vendor quote read. **Every `_comment` in
+that file must contain the literal word ESTIMATE** - `provider-contract.test.js`
+enforces it, and it caught these three entries on the first try.
+
+### 9. PAUL'S PRODUCT DIRECTION, restated 2026-08-23 - THE STILL IS INTERNAL
+
+Paul described the flow he wants, and it is not what the app does today:
+
+> **upload a photo, choose an outfit, choose a location (a scrollable list of
+> defaults OR describe your own), choose the frame (4:3 / 9:16 / 16:9), get the
+> tape.**
+
+**No still picker. Four choices, then a video.** His words: *"I don't understand
+why are you generating the pictures"* - the still is plumbing and the user should
+never meet it.
+
+**THE STILL CANNOT BE DELETED, ONLY HIDDEN.** Seedance 2.0 is image-to-video: it
+animates a starting frame and cannot take "a face plus the word garden". What is
+a genuine choice is whether the user ever sees it.
+
+**What to change once identity is solved, and NOT before:** the app page's
+*"How many looks to choose from - 1/3/5"* control (`stillCount`) comes out,
+stills is forced to 1, and select auto-continues.
+
+**The cost of hiding it, stated once so the decision is informed:** a bad
+likeness currently costs **$0.05** and the user sees it before paying. Hidden,
+the same failure ships a finished tape at **$1.51** (480p) or **$4.54** (720p),
+and that customer wants a refund. **This is not an argument against Paul's design
+- simplicity IS the product and he has been consistent about that from the start.
+It is the reason the likeness must be reliable BEFORE the gate is hidden.**
+Order matters: solve identity, then hide everything.
+
+If all three candidates fail there is a real alternative:
+`bytedance/seedance-2.0/reference-to-video` (verified, **not wired in**) takes up
+to 9 references and could take the face directly, deleting the still stage
+outright. Its own entry warns **a yes is not automatically good news** - it also
+deletes the cheap rejection gate.
+
+### 10. THE EIGHT PLACE PHOTOGRAPHS - DONE 2026-08-23
+
+`assets/places/` is **no longer empty** and the eight 404s are gone. Paul
+generated all eight in **Higgsfield Soul Cinema** (his choice - tested, and free
+to him); Claude wrote the prompts from each preset's own scene/light/eraProps
+fields. Period-accurate, **no people**, and deliberately **no VHS/grain
+/"nostalgic"** in the prompts - era comes from named props and the tape look is
+ffmpeg's job.
+
+**A LICENCE QUESTION WAS RAISED AND NOT ANSWERED.** This file's own ruling says
+Higgsfield is "personal experiments and nothing else", because reselling its
+output through a paid app is outside consumer terms. That ruling was written
+about **per-user generation**; static brand assets are a different question it
+does not cleanly cover. **But these ship inside a commercial product and are
+committed to a PUBLIC repo.** Paul was told and has not come back on it. **Do not
+treat this as settled.**
+
+**THE CARDS ARE NOW 16:9 AND THAT IS LOAD-BEARING.** One file is BOTH the
+`.placecard` thumbnail AND the full-bleed `.bg--<id>` layer, both `cover`. The
+card was 11x14rem - portrait - against 16:9 photographs, so it threw away about
+**two thirds of the width**: measured, the Autobahn card lost its striped kiosk
+entirely and kept an empty picnic table, and the balcony lost the washing line
+that is the whole subject. Now `17rem x 9.5rem`, i.e. 272x152 against a 2048x1152
+source - **a 0.6% crop instead of 65%**. **If these ever go portrait again the
+photographs must be re-shot to match - do not just change the numbers back.**
+
+Checked and NOT a problem: the darker images carry no baked-in letterboxing. Edge
+luma measures 17-19, not 0 - that is the Soul Cinema vignette, not a black bar.
+
+### 11. THREE TESTS WERE CHANGED, and all three for a good reason
+
+Saying this out loud rather than burying it. **None was weakened; all three were
+pinning an incidental fact rather than a contract.**
+
+- `web-api.test.js` "the step flow is three numbered steps" asserted the literal
+  string `STEP 01`, which the redesign split into two elements. It now asserts
+  numbering and order via `.stepno-n`, comparing against a three-element array,
+  so it **cannot pass vacuously**.
+- `web-api.test.js` "a missing place photograph is a 404" borrowed the repo's
+  empty `assets/places/`. It now **builds its own empty `assetsRoot`** in a temp
+  dir, so the same behaviour is pinned without depending on an asset being
+  absent.
+- `web-auth.test.js` "the assets still serve" asserted `404`; its real point is
+  that the place route is **not gated behind the accounts module**. It now
+  asserts **not-503** and accepts 200 or 404. A 200 proves the point better than
+  the 404 ever did.
+
+The last two went red **because the eight photographs landed** - the missing
+asset they documented had been supplied.
+
+### 12. KNOWN FLAKE, not a regression
+
+`job-model.test.js` "a concurrent reader never sees a truncated or invalid
+manifest" fails intermittently under **full-suite parallel load** on Windows with
+`EPERM` from `atomicWriteJson`. **Verified 2026-08-23: passes 3/3 in isolation**,
+fails perhaps 1 run in 4 under load. Nothing in the 2026-08-23 changes touches
+`job.mjs`. This is the class this file already warns about - a test whose timing
+margin is narrower than the machine's variance. If it goes red, re-run that file
+alone before believing it.
 
 ---
 
@@ -531,7 +734,7 @@ Paul's stated vision: **anyone uploads any photo, gives a location and an outfit
 - **Reading a job's chosen still from `intent/animate.json`.** That is the *last* segment's receipt, and every segment after the first starts from the previous clip's final frame, so it never names a still. The chosen still is in the rotated receipt for segment 1 — `intent/animate.1.json`.
 - **Editing CSS and expecting to see it.** The stylesheet is memoised in `sheetCache` at `server.mjs` AND served `Cache-Control: public, max-age=300`. A CSS change needs a **server restart and a hard refresh**; without both you will be looking at the old bytes and debugging the wrong thing. Cost 20 minutes on 2026-08-21.
 - **`taskkill /F /IM node.exe` to stop the server.** Claude Code is a node process. Kill by PID: `netstat -ano | grep ":3000.*LISTENING"`. Related: stopping an `npm run web` background task kills the npm wrapper and **leaves the node child holding the port**, so the restart fails `EADDRINUSE` and the old code keeps serving.
-- **Backticks inside a comment that sits inside a JS template literal.** `static.mjs`'s `BASE_CSS` and the HTML blocks in `views.mjs` are template literals, so a comment mentioning `` `style-src 'self'` `` terminates the string and the file stops parsing — or worse, parses as a tagged template and throws `X is not a function` from a line nowhere near the edit. Cost two rounds on 2026-08-21. Use plain quotes inside those comments.
+- **Backticks inside a comment that sits inside a JS template literal.** `static.mjs`'s `BASE_CSS` and the HTML blocks in `views.mjs` are template literals, so a comment mentioning `` `style-src 'self'` `` terminates the string and the file stops parsing — or worse, parses as a tagged template and throws `X is not a function` from a line nowhere near the edit. Cost two rounds on 2026-08-21 and **THREE MORE on 2026-08-23** — it is the single most repeated mistake in this codebase. Use plain quotes inside those comments, and **run `node --check scripts/web/static.mjs` after every edit to that file**. Never chain it as "check && kill-the-server": a failed check short-circuits the kill, the OLD server keeps the port and keeps serving stale CSS, and the next thing you measure will be the old bytes. That compounds with the cache trap two bullets down — a CSS change needs a server restart AND a browser hard refresh, and on 2026-08-23 the measured card size was still the old one for exactly that reason.
 - **A signed shift on a hash.** `hash32` returns `h >>> 0`, so any value above 2^31 makes `h >> 5` **negative**, and a negative left operand makes `%` return a negative remainder — which subtracts from a floor instead of adding to it. It had been quietly desaturating whichever place cards happened to hash high, invisibly, because "muddier than intended" looks exactly like a design decision. Always `>>>` on a hash.
 
 ---

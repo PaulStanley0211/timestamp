@@ -187,15 +187,30 @@
       "provider": "fal",
       "kind": "still",
       "endpoint": "fal-ai/uso",
+      "stillParams": {
+        "_comment": "VERIFIED 2026-08-23 BY THE ENDPOINT ITSELF, which is a better source than any docs page. A request carrying the fal image-edit convention `image_urls` came back HTTP 422 with {\"type\":\"missing\",\"loc\":[\"body\",\"input_image_urls\"],\"msg\":\"Field required\"}. That is the schema speaking. It is recorded per model rather than renamed globally in falStillBody because the three Phase 0 candidates are three different vendors and there is no reason to assume they agree -- seedream and nano-banana-pro have NOT been called yet and their field name is still unknown.",
+        "references": "input_image_urls",
+        "verifiedOn": "2026-08-23",
+        "verifiedFrom": "live HTTP 422 from the endpoint, job 20260823-184443-56e44f"
+      },
       "capabilities": {
         "stillSizes": null,
         "maxReferences": null,
         "supportsPlaceReference": null
       },
+      "phase0": {
+        "_comment": "FIRST REAL RESULT, 2026-08-23, job 20260823-190639-21c4cd. One still, one reference photo, ~$0.05. SCENE ADHERENCE WAS EXCELLENT -- hedge, shed, folding table and cloth, four white chairs, two watering cans, coiled hose, bicycle on the fence, low raking sun, one person -- which validates composeStillPrompt and the expand stage rather than this model. IDENTITY FAILED, and Paul confirmed it on his own face unprompted: the two most distinctive features of the subject, a full dark beard and tight dark curls, were BOTH dropped, skin tone came back lighter, and the face shape does not match. It produced a plausible stranger in the right garden. Note this is the candidate whose ADVERTISED PURPOSE is identity preservation, which makes the result more informative, not less. ONE still is not the phase-0 gate -- criterion 1 wants five at rung 3 plus a two-person blind check -- but nothing here justifies spending that on this model before the other two candidates have been tried once each.",
+        "ranAt": "2026-08-23",
+        "jobId": "20260823-190639-21c4cd",
+        "sceneAdherence": "excellent",
+        "identityHeld": false,
+        "judgedBy": "subject, unprompted"
+      },
       "openQuestions": [
-        "Face identity, or whole-figure subject transfer?",
+        "ANSWERED 2026-08-23: face identity does NOT hold from one reference photo at 640x480. Beard and curls both lost.",
+        "ANSWERED 2026-08-23: raster control is NEITHER exact NOR aspect-honouring. Ordered 640x480 (4:3) with aspect_ratio 4:3 sent; got 640x512, which is 5:4. A 5:4 still pillarboxed into a 4:3 tape is a visible mistake, so this alone disqualifies the model at this raster even if identity had held.",
         "Can it take a place reference at all, or is a second image a style input?",
-        "Raster, seed, price -- none of it read."
+        "Price still unmeasured -- cost.actual is null because nothing meters yet."
       ]
     }
   }

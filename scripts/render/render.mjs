@@ -35,6 +35,17 @@ import { createProvider, PROVIDER_IDS } from '../providers/index.mjs';
 import { loadCatalog, listCatalog } from '../catalog/catalog.mjs';
 import { STEPS, createJob, loadJob, saveJob, retryStep, jobPaths } from './job.mjs';
 import { runPipeline, dryRun, PipelineError } from './pipeline.mjs';
+import { aspectIds } from '../tapedeck/frame.mjs';
+
+/** Which shape, refused rather than defaulted when it is not one we make. */
+function cleanAspect(value, cfg) {
+  if (value === undefined) return cfg.defaultAspect;
+  const known = aspectIds(cfg);
+  if (!known.includes(value)) {
+    throw new PipelineError(`--aspect must be one of ${known.join(', ')}, got "${value}"`, { code: 'BAD_ARG' });
+  }
+  return value;
+}
 
 function parseArgs(argv) {
   const args = { flags: new Set(), rest: [] };
@@ -67,6 +78,10 @@ function usage(catalog) {
     '  --stills=<n>          how many stills to choose between (1..8, default 3).',
     '  --stop-after=select   write the contact sheet and stop, before video prices apply.',
     '  --still=<n>           which still to animate, 1-based, matching the filenames.',
+    '  --still-model=<id>    override the still model for this run (Phase 0 bake-off).',
+    '  --allow-unverified-model',
+    '                        required alongside --still-model for a candidate that',
+    '                        nobody has schema-checked. Two flags on purpose.',
     '  --retry-step=<step>   deliberately re-run a step on a resumed job.',
     '  --dry-run             name every call and its projected cost. Charges nothing.',
     '  --consent             confirm the person in the photo agreed to this. Required.',
@@ -111,6 +126,38 @@ async function requireConsent(args) {
   return recordConsent({ granted: true });
 }
 
+/**
+ * THE TRANSPORT, INJECTED AT THE ONE PLACE THAT IS ALLOWED TO SPEND.
+ *
+ * `requireFetchImpl` gives a paid provider NO DEFAULT for `fetchImpl` -- guard
+ * 1 of the four in CLAUDE.md -- so that a test which forgets to inject one gets
+ * a TypeError instead of a bill. That guard was doing its job perfectly and
+ * nothing was doing the other half: **no production caller injected a transport
+ * either**, so `--provider=fal` could not reach the network at all. It failed
+ * at step 5 of 11 with the money guard's own TypeError, which reads like a test
+ * bug and was in fact a missing wire. Found on 2026-08-23, the first time
+ * anybody ran the paid path.
+ *
+ * Injecting it HERE, and only for `provider.paid`, keeps all four guards
+ * intact: fal.mjs still has no default, `npm test` still never runs this file's
+ * `main()`, the bare `node --test` still keeps `FAL_KEY` out of the process,
+ * and the smoke-test convention is untouched. What changes is only that the
+ * command whose entire design is "spending is a deliberate act" now actually
+ * carries the thing that lets it spend.
+ */
+function paidTransport(provider) {
+  if (!provider?.paid) return {};
+  if (typeof globalThis.fetch !== 'function') {
+    throw new PipelineError(
+      'this Node build has no global fetch, and the fal provider needs one. Node 18+ has it built in.',
+      { code: 'NO_FETCH' },
+    );
+  }
+  // Bound, because `fetch` detached from `globalThis` throws "Illegal invocation"
+  // in some runtimes and the symptom would surface deep inside a retry loop.
+  return { fetchImpl: globalThis.fetch.bind(globalThis) };
+}
+
 function reportJob(job, root) {
   const paths = jobPaths(root, job.jobId);
   console.log('');
@@ -145,7 +192,28 @@ async function main() {
     return;
   }
 
-  const provider = createProvider(providerId, { cfg });
+  // Phase 0's bake-off. See runPipeline's signature for why the gate needs two
+  // flags rather than one. Refused early and by name here, rather than letting
+  // `--allow-unverified-model` sit on a command line doing nothing visible.
+  //
+  // Parsed BEFORE createProvider because the fal provider resolves its own
+  // model at construction time -- `resolveModel` in fal.mjs reads
+  // `opts.stillModel`, independently of anything the pipeline froze. Threading
+  // the override only into the pipeline moved the failure from compose to
+  // still and looked like a fix; the provider is the second place that has to
+  // be told.
+  const stillModelOverride = args['still-model'] ?? null;
+  const allowUnverifiedModel = args.flags.has('allow-unverified-model');
+  if (allowUnverifiedModel && !stillModelOverride) {
+    console.error('\n--allow-unverified-model does nothing on its own. It lowers the verified gate for'
+      + '\nthe model named by --still-model, and there is no --still-model here.\n');
+    process.exitCode = 1;
+    return;
+  }
+
+  const provider = createProvider(providerId, {
+    cfg, stillModel: stillModelOverride, allowUnverifiedModel,
+  });
   const stillIndex = args.still === undefined ? null : positiveInt(args.still, null, 'still');
 
   // ---- resume --------------------------------------------------------------
@@ -157,7 +225,12 @@ async function main() {
       console.log(`\n  ${args['retry-step']} put back to pending -- it will be run again, deliberately.`);
     }
     console.log(`\ntimestamp render · resuming ${job.jobId} · provider ${providerId}`);
-    await runPipeline(job, { provider, root, cfg, stopAfter, stillIndex, log: console.log });
+    await runPipeline(job, {
+      provider, root, cfg, stopAfter, stillIndex,
+      stillModelOverride, allowUnverifiedModel,
+      providerCtx: paidTransport(provider),
+      log: console.log,
+    });
     reportJob(job, root);
     return;
   }
@@ -195,6 +268,7 @@ async function main() {
     const plan = await dryRun({
       provider, cfg,
       input: { place: { ...place, photoPath: placePhoto }, outfit, stillCount },
+      stillModelOverride, allowUnverifiedModel,
     });
     console.log(`\ntimestamp render · DRY RUN · provider ${plan.provider}`);
     console.log('  nothing below is submitted and nothing is charged\n');
@@ -227,6 +301,10 @@ async function main() {
       place: { kind: place.kind, value: place.value, photoPath: placePhoto ? 'input/place.jpg' : null },
       outfit,
       stillCount,
+      // Validated here rather than left to the job model, which deliberately
+      // records what it is given without consulting the catalog. A typo that
+      // reaches the pipeline costs a render; caught here it costs a line.
+      aspect: cleanAspect(args.aspect, cfg),
       consent,
     },
   });
@@ -239,6 +317,8 @@ async function main() {
 
   await runPipeline(job, {
     provider, root, cfg, stopAfter, stillIndex,
+    stillModelOverride, allowUnverifiedModel,
+    providerCtx: paidTransport(provider),
     sources: { photo, placePhoto },
     log: console.log,
   });

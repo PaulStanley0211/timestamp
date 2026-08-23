@@ -882,7 +882,15 @@ test('a missing scripts/auth/ is a 503 with a sentence, and the assets still ser
     // The parts that do not need an account keep working.
     assert.equal((await fetch(`${base}/styles.css`)).status, 200);
     assert.equal((await fetch(`${base}/api/health`)).status, 200);
-    assert.equal((await fetch(`${base}/places/ostsee-strand.jpg`)).status, 404);
+    // NOT 503 is the assertion, and the status itself is deliberately not
+    // pinned. What this line exists to prove is that the place-photo route is
+    // not gated behind the accounts module -- it asserted 404 only because
+    // `assets/places/` happened to be empty, and it went red on 2026-08-23 when
+    // the eight photographs landed and it started answering 200. A 200 proves
+    // the point better than a 404 did; a 503 would be the actual regression.
+    const placeRes = await fetch(`${base}/places/ostsee-strand.jpg`);
+    assert.notEqual(placeRes.status, 503, 'the place route must not need the accounts module');
+    assert.ok([200, 404].includes(placeRes.status), `unexpected ${placeRes.status} from the place route`);
 
     // And the plans are public prose: 503-ing a marketing page because an
     // unrelated module will not load is a worse answer than showing it.

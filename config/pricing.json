@@ -47,6 +47,30 @@
       "source": "order-of-magnitude placeholder, no vendor quote, UNVERIFIED"
     },
 
+    "fal-ai/uso": {
+      "_comment": "ESTIMATE, and a PHASE 0 BAKE-OFF CANDIDATE. NO VENDOR QUOTE HAS BEEN READ FOR THIS ENDPOINT -- the number below is the same order-of-magnitude stand-in as fal/still-UNVERIFIED and is here only so the estimator has something to divide by. The real figure comes out of the bake-off as balance-before minus balance-after (phase-0 criterion 6), and it replaces this in the same edit that records the result.",
+      "estimate": true,
+      "unit": "image",
+      "usd": 0.05,
+      "source": "placeholder, no vendor quote read, UNVERIFIED"
+    },
+
+    "fal-ai/bytedance/seedream/v4.5/edit": {
+      "_comment": "ESTIMATE, and a PHASE 0 BAKE-OFF CANDIDATE. fal's model page quotes roughly $0.04 per edit and that is where this number comes from -- a MARKETING PAGE, not an invoice, which is the exact distinction this file's header exists to make. It is the only one of the three candidates with any published figure at all. Treat it as unproven until a metered run says otherwise.",
+      "estimate": true,
+      "unit": "image",
+      "usd": 0.04,
+      "source": "fal model page, ~$0.04/edit, read 2026-08-20 -- marketing page, never invoiced"
+    },
+
+    "fal-ai/nano-banana-pro/edit": {
+      "_comment": "ESTIMATE, and a PHASE 0 BAKE-OFF CANDIDATE. NO PRICE HAS BEEN READ for this endpoint at all. The number is the same stand-in as the others and is not attributed to Google or to fal. If this model wins, its price is measured before it becomes the default.",
+      "estimate": true,
+      "unit": "image",
+      "usd": 0.05,
+      "source": "placeholder, no vendor quote read, UNVERIFIED"
+    },
+
     "fal/video-UNVERIFIED": {
       "_comment": "ESTIMATE, and a placeholder: the video model has NOT been chosen. Per-second because that is the common shape for image-to-video billing, not because any specific vendor was checked. 15 seconds at this rate is $3.00 per finished video, which is the number that decides whether this product has a price -- so it is exactly the number that must be replaced by a measurement rather than argued about.",
       "estimate": true,

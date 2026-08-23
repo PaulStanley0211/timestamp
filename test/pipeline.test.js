@@ -30,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { REPO_ROOT } from '../scripts/ffmpeg/run.mjs';
+import { resolveRaster } from '../scripts/render/pipeline.mjs';
 import { createJob, loadJob, jobPaths, STEPS } from '../scripts/render/job.mjs';
 import { runPipeline, dryRun, renderSummary } from '../scripts/render/pipeline.mjs';
 
@@ -784,4 +785,19 @@ test('progress phases stay inside the closed set the status page renders', async
   for (const phase of phases) {
     assert.ok(['submit', 'queued', 'running', 'download', 'done'].includes(phase), `unknown phase ${phase}`);
   }
+});
+
+test('a paid provider refuses a shape it cannot be asked for, rather than rendering the wrong one', () => {
+  // fal.mjs still sends a hardcoded `aspect_ratio: '4:3'` on every call. The
+  // TAPE stage would happily render a 9:16 frame around a 4:3 source, and every
+  // assertion downstream would pass, because they all read the same resolved
+  // config. Nobody would see it until the file came out with the wrong picture
+  // in it -- after it had been billed. Refuse at the money boundary instead.
+  const paid = { id: 'fal', paid: true, capabilities: { stillSizes: [{ width: 960, height: 720 }] } };
+  assert.throws(
+    () => resolveRaster({ resolution: '720p', provider: paid, aspect: '9:16', defaultAspect: '4:3' }),
+    /ASPECT_UNSUPPORTED|only renders 4:3/,
+  );
+  // and the shape it CAN do is untouched
+  assert.doesNotThrow(() => resolveRaster({ resolution: '720p', provider: paid, aspect: '4:3', defaultAspect: '4:3' }));
 });

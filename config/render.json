@@ -5,6 +5,9 @@
   "fps": 25,
   "totalFrames": 375,
 
+  "_comment_aspect": "THE SHORT EDGE IS HELD AT 576 IN EVERY SHAPE and only the long edge varies. That single constraint is why there is one set of tuning constants and not three: a 14px head-switch band is 14px of a 576-high picture whichever shape it is in, and the short edge always scales 576 -> 1080, so the grain is not merely similar across aspects, it is arithmetically identical. `tape` and `delivery` below ARE the 4:3 contract -- the default shape is the base, not an entry in `aspects`, so it is structurally impossible for the 4:3 path to drift while adding a new shape. See docs/aspect-ratios-plan.md.",
+  "defaultAspect": "4:3",
+
   "tape": {
     "_comment": "The tape raster itself. SAR 16/15 on 720x576 gives DAR 4:3, which is what PAL 4:3 actually was. work* carries jitter headroom so the transport wobble has pixels to steal from instead of exposing an edge; both work dimensions must stay divisible by 4 for chroma subsampling.",
     "width": 720,
@@ -23,6 +26,56 @@
     "tapeDisplayWidth": 1080,
     "tapeDisplayHeight": 810,
     "surroundColor": "0x0B0A09"
+  },
+
+  "aspects": {
+    "_comment": "The shapes that are NOT the default. Each one replaces `tape` and `delivery` wholesale; there is no partial inheritance, so a half-filled entry fails loudly instead of quietly borrowing 4:3's delivery frame.",
+
+    "16:9": {
+      "_comment": "Offered. The delivery block below is what makes this shape finishable; `available` and that block land together, which is the whole reason the flag is written down rather than inferred.",
+      "available": true,
+      "tape": {
+        "_comment": "Square pixels, unlike 4:3. 1024x576 is 16:9 exactly, and the work raster carries the SAME 8x6 jitter headroom as PAL because the headroom is about transport wobble, not about the shape.",
+        "width": 1024,
+        "height": 576,
+        "sar": "1/1",
+        "workWidth": 1040,
+        "workHeight": 588,
+        "jitterOriginX": 8,
+        "jitterOriginY": 6
+      },
+      "delivery": {
+        "_comment": "1920x1080, picture edge to edge. THE FILE IS THE SHAPE YOU CHOSE -- this one exists so the tape can go straight to a landscape platform, and a 16:9 picture matted into a portrait canvas would be useless there. The short edge goes 576 -> 1080, the same 1.875x the 4:3 path uses, so the grain is arithmetically identical across shapes. surroundColor is kept and never seen: the tape covers the whole canvas, so the colour layer under it is a backstop, not a border.",
+        "width": 1920,
+        "height": 1080,
+        "tapeDisplayWidth": 1920,
+        "tapeDisplayHeight": 1080,
+        "surroundColor": "0x0B0A09"
+      }
+    },
+
+    "9:16": {
+      "_comment": "Offered. The delivery block below is what makes this shape finishable; `available` and that block land together, which is the whole reason the flag is written down rather than inferred.",
+      "available": true,
+      "tape": {
+        "_comment": "The short edge is the WIDTH here, and it is still 576. The jitter headroom stays 8 horizontal / 6 vertical rather than rotating with the shape: transport wobble is a line-timing artefact and is horizontal in a real deck no matter what shape the picture is.",
+        "width": 576,
+        "height": 1024,
+        "sar": "1/1",
+        "workWidth": 592,
+        "workHeight": 1036,
+        "jitterOriginX": 8,
+        "jitterOriginY": 6
+      },
+      "delivery": {
+        "_comment": "1080x1920, picture edge to edge -- what a reel actually wants. The 4:3 tape already delivers a 1080x1920 FILE, so this shape does not add portrait output; what it adds is portrait output with no bands, which is the difference between a tape that reads as footage on a phone and one that reads as a video of a video.",
+        "width": 1080,
+        "height": 1920,
+        "tapeDisplayWidth": 1080,
+        "tapeDisplayHeight": 1920,
+        "surroundColor": "0x0B0A09"
+      }
+    }
   },
 
   "encode": {

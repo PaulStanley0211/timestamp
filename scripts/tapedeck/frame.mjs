@@ -16,6 +16,46 @@
  * noticeably, less convincing.
  */
 
+/**
+ * Pick the shape. Returns a config whose `tape` and `delivery` are the ones for
+ * the requested aspect, so every consumer downstream -- the filtergraph, the
+ * burn-in, the geometry functions below -- keeps reading the single pair of
+ * keys it has always read and needs no aspect argument of its own.
+ *
+ * WHY THE DEFAULT SHAPE IS THE BASE AND NOT AN ENTRY IN `aspects`. The 4:3 path
+ * is the PAL contract and roughly two hundred tests assert it. If it were one
+ * key in a map beside the others it could be edited while adding a new shape
+ * and nothing structural would stop it. As the base it cannot move by accident:
+ * asking for the default aspect returns the config unchanged, so "4:3 does not
+ * move" is a property of the code rather than a promise a test has to police.
+ */
+/**
+ * Every shape the product offers, default first.
+ *
+ * `_comment` keys are how this repo documents JSON, so they sit beside real
+ * entries everywhere. Filtering them here rather than at each call site is what
+ * stops a comment from ever being offered to a customer as a fourth option.
+ */
+export function aspectIds(cfg) {
+  const extra = Object.keys(cfg.aspects ?? {}).filter((k) => !k.startsWith('_'));
+  return [cfg.defaultAspect, ...extra];
+}
+
+export function resolveAspect(cfg, aspect = cfg.defaultAspect) {
+  if (aspect === cfg.defaultAspect) return { ...cfg, aspect };
+
+  // Membership is decided by aspectIds, not by a raw lookup: `cfg.aspects` also
+  // holds `_comment`, and a raw lookup would hand back the comment STRING as a
+  // shape, whose `.tape` is undefined -- a wrong render instead of a refusal.
+  const entry = aspectIds(cfg).includes(aspect) ? cfg.aspects?.[aspect] : undefined;
+  if (!entry) throw new Error(`unknown aspect ${JSON.stringify(aspect)}`);
+
+  // Replaced wholesale, never merged. A partial entry leaves the missing key
+  // undefined so the geometry function throws, rather than quietly rendering
+  // the new shape into the default shape's delivery frame.
+  return { ...cfg, aspect, tape: entry.tape, delivery: entry.delivery };
+}
+
 /** The work raster carries jitter headroom so transport wobble has pixels to
  *  steal from. Without it, a two-pixel horizontal shift exposes a hard edge at
  *  the frame boundary and the illusion dies instantly. */
@@ -54,11 +94,20 @@ export function tapeGeometry(cfg) {
 export function deliveryGeometry(cfg) {
   const { width, height, tapeDisplayWidth, tapeDisplayHeight, surroundColor } = cfg.delivery;
 
+  // The displayed picture must be the shape that was asked for. This used to be
+  // hardcoded to 4:3, which was correct while 4:3 was the only shape; now the
+  // aspect comes off the resolved config. A raw cfg that never went through
+  // `resolveAspect` has no `aspect`, so it falls back to the default and the
+  // original assertion is exactly what it was.
+  const wanted = cfg.aspect ?? cfg.defaultAspect ?? '4:3';
+  const [aw, ah] = String(wanted).split(':').map(Number);
+  if (!(aw > 0 && ah > 0)) throw new Error(`aspect ${JSON.stringify(wanted)} is not a ratio`);
+
   const ratio = tapeDisplayWidth / tapeDisplayHeight;
-  if (Math.abs(ratio - 4 / 3) > 0.001) {
+  if (Math.abs(ratio - aw / ah) > 0.001) {
     throw new Error(
-      `tape display ${tapeDisplayWidth}x${tapeDisplayHeight} is ${ratio.toFixed(4)}:1, not 4:3 -- ` +
-      'the whole point of the letterbox is that the tape image stays honestly 4:3',
+      `tape display ${tapeDisplayWidth}x${tapeDisplayHeight} is ${ratio.toFixed(4)}:1, not ${wanted} -- ` +
+      'the displayed picture must be honestly the shape that was chosen',
     );
   }
   if (tapeDisplayHeight > height) {

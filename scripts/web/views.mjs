@@ -36,7 +36,7 @@
  */
 
 import { STEPS } from '../render/job.mjs';
-import { placeSlug, outfitSlug, qualitySlug } from './static.mjs';
+import { placeSlug, outfitSlug, qualitySlug, aspectSlug } from './static.mjs';
 
 // ---------------------------------------------------------------------------
 // escaping
@@ -97,6 +97,15 @@ export const STEP_COPY = Object.freeze({
   publish: { title: 'Finishing', note: 'Almost there.' },
 });
 
+/** What each shape is FOR, in the words somebody choosing would use. The list
+ *  of shapes itself comes from config/render.json -- only the human label for
+ *  one lives here, the same division the resolution rows already follow. */
+const ASPECT_DETAIL = Object.freeze({
+  '4:3': 'The camcorder shape',
+  '16:9': 'Widescreen',
+  '9:16': 'Phone',
+});
+
 const STATUS_COPY = Object.freeze({
   queued: 'Waiting for a machine',
   running: 'Working',
@@ -127,9 +136,29 @@ const STATUS_COPY = Object.freeze({
  * by roughly two hundred tests, and the place they are written down is the
  * output contract in CLAUDE.md.
  *
- * WHEN THE ASPECT SELECTOR LANDS this becomes a real control with 4:3, 9:16 and
- * 16:9, and the sentence loses its "nothing to choose here yet". Until the
- * renderer can actually fill those rasters, offering the choice would sell
+ * REPLACED AGAIN 2026-08-23, and this time it IS a control. Paul: "it should
+ * only contain three options. That's it." The row now draws all three shapes --
+ * each with its ratio sketched as a little outline in the real proportion,
+ * because "tall" and "wide" read faster than two numbers do.
+ *
+ * ALL THREE ARE REAL CHOICES as of the same day. They shipped dimmed for about
+ * an hour first, which was the honest state while the renderer could only fill
+ * the 4:3 raster; the deferred-option machinery below is kept because it is how
+ * a shape gets added in future, not because anything currently uses it.
+ *
+ * WHY EACH SHAPE EXISTS, since it is the thing a customer is actually choosing
+ * between: the file that comes out IS the shape you picked. 9:16 delivers
+ * 1080x1920 full-bleed because that is what Reels and TikTok want and bands are
+ * what make a reel look amateur; 16:9 delivers 1920x1080 because a landscape
+ * picture matted into a portrait file is useless on YouTube; 4:3 stays matted on
+ * the dark surface, unchanged, because that surround and the vignette over it
+ * are what make the tape read as a photographed object rather than a filter.
+ *
+ * Which shapes exist comes from `config/render.json` and which are offered comes
+ * from an `available` flag beside the reason in that same file, so a shape is
+ * switched on by the commit that gives it a `delivery` block, never by an edit
+ * here. The rule that governed the old placeholder sentence is unchanged and is
+ * what gates that flag: offering a shape the renderer cannot fill would sell
  * something that cannot be delivered.
  */
 
@@ -468,6 +497,7 @@ export function homePage({
   outfits = [],
   resolutions = [],
   resolution = null,
+  aspects = [],
   consentText = '',
   balance = { credits: 0, planId: 'free' },
   account = null,
@@ -476,6 +506,8 @@ export function homePage({
   values = {},
 } = {}) {
   const offered = resolutions.filter((r) => r.available);
+  const offeredAspects = aspects.filter((a) => a.available);
+  const chosenAspect = offeredAspects[0]?.id ?? null;
   const chosen = offered.some((r) => r.id === resolution) ? resolution : (offered[0]?.id ?? null);
   // The radios, hoisted out of the form. `form="tape"` is what puts them back
   // into the submission; the CSS needs them here.
@@ -495,6 +527,12 @@ export function homePage({
     // browser -- there is nothing for a hand-written POST to name either.
     ...offered.map((r) => (
       `<input class="statehook" type="radio" form="tape" name="resolution" id="${h(qualitySlug(r.id))}" value="${h(r.id)}"${r.id === chosen ? ' checked' : ''}>`
+    )),
+    // Same rule for the frame. A shape the renderer cannot finish gets no
+    // radio, so it is not merely unclickable in a browser -- there is no
+    // control for a hand-written POST to name either.
+    ...offeredAspects.map((a) => (
+      `<input class="statehook" type="radio" form="tape" name="aspect" id="${h(aspectSlug(a.id))}" value="${h(a.id)}"${a.id === chosenAspect ? ' checked' : ''}>`
     )),
   ].join('\n');
 
@@ -526,6 +564,26 @@ ${backgrounds}
     </label>`).join('');
 
   const dots = [...places.map((p) => `<span class="dot dot--${h(placeSlug(p.id))}"></span>`), '<span class="dot dot--own"></span>'].join('');
+
+  const frameCards = aspects.map((a) => {
+    const slug = aspectSlug(a.id);
+    const detail = ASPECT_DETAIL[a.id] ?? '';
+    if (!a.available) {
+      return `
+    <span class="framecard framecard--soon framecard--${h(slug)}">
+      <span class="shape" aria-hidden="true"></span>
+      <span class="ratio">${h(a.id)}</span>
+      <span class="flag">Not yet</span>
+    </span>`;
+    }
+    return `
+    <label class="framecard framecard--${h(slug)}" for="${h(slug)}">
+      <span class="tick" aria-hidden="true"></span>
+      <span class="shape" aria-hidden="true"></span>
+      <span class="ratio">${h(a.id)}</span>
+      <span class="detail">${h(detail)}</span>
+    </label>`;
+  }).join('');
 
   const qualityCards = resolutions.map((r) => {
     const detail = h(resolutionDetail(r));
@@ -659,8 +717,10 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
     ${stepHead(4, 'The tape', 'One of these is a choice. The rest is what a camcorder tape is.')}
 
     <p class="eyebrow">Frame</p>
-    <p class="hint hint--fact">Every tape is <strong>4:3</strong> and <strong>fifteen seconds</strong> —
-    the shape and length a camcorder actually recorded. Nothing to choose here yet.</p>
+    <div class="frames">${frameCards}</div>
+    <p class="hint">Every tape is <strong>fifteen seconds</strong>. 4:3 is what a camcorder
+    actually recorded; 9:16 fills a phone screen for Reels and TikTok, and 16:9 is the
+    landscape shape YouTube wants.</p>
 
     <p class="eyebrow">Quality</p>
     <div class="quality">${qualityCards}</div>

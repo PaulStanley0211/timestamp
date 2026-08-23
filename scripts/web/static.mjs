@@ -193,6 +193,8 @@ export const outfitSlug = (id) => `of-${id}`;
 /** `480p` -> `q-480p`. The prefix is not decoration: `#480p` is not a valid CSS
  *  selector, because an identifier may not start with a digit. */
 export const qualitySlug = (id) => `q-${id}`;
+/** `4:3` is not a CSS identifier -- the colon would start a pseudo-class. */
+export const aspectSlug = (id) => `a-${String(id).replace(':', 'x')}`;
 
 /** A CSS identifier is not an HTML-escaping problem, it is a *syntax* problem:
  *  a `}` in a preset id would end the rule and everything after it is attacker
@@ -206,7 +208,7 @@ const CSS_IDENT_RE = /^[a-z0-9][a-z0-9-]{0,62}$/i;
  *
  * @param {{places: Array<{id,timeOfDay}>, outfits: Array<{id}>}} menu
  */
-export function presetCss({ places = [], outfits = [], resolutions = [] } = {}) {
+export function presetCss({ places = [], outfits = [], resolutions = [], aspects = [] } = {}) {
   const out = [];
   for (const place of places) {
     if (!CSS_IDENT_RE.test(String(place.id))) continue;
@@ -247,6 +249,19 @@ export function presetCss({ places = [], outfits = [], resolutions = [] } = {}) 
       `#${slug}:checked~.wrap .qualitycard--${slug} .tick{opacity:1;}`,
       `#${slug}:checked~.wrap .cost--${slug}{display:inline;}`,
       `#${slug}:checked~.wrap .why--${slug}{display:block;}`,
+    );
+  }
+
+  // The frame row. Same mechanism again -- and same rule about unavailable
+  // options: a shape with no radio can have no `:checked` rule, because a rule
+  // that can never match is a claim that it could.
+  for (const a of aspects) {
+    if (a.available === false) continue;
+    const slug = aspectSlug(a.id);
+    if (!CSS_IDENT_RE.test(slug)) continue;
+    out.push(
+      `#${slug}:checked~.wrap .framecard--${slug}{border-color:var(--accent);background:var(--frost-lit);}`,
+      `#${slug}:checked~.wrap .framecard--${slug} .tick{opacity:1;}`,
     );
   }
 
@@ -798,10 +813,22 @@ body {
   scrollbar-width: thin;
 }
 
+/* LANDSCAPE, AND THE REASON IS THAT ONE FILE DOES TWO JOBS.
+   "assets/places/<id>.jpg" is BOTH this card's thumbnail AND the full-bleed
+   ".bg--<id>" layer behind the whole page, and both use "cover". The card was
+   11x14rem -- portrait, roughly 4:5 -- against 16:9 source photographs, so
+   "cover" threw away about two thirds of the width and centred on whatever
+   happened to be in the middle. Measured on the real images: the Autobahn card
+   lost its striped kiosk entirely and kept an empty picnic table, and the
+   balcony lost the washing line that is the whole subject.
+   16:9 cards show the photograph the place actually is, and the same file then
+   fills a 16:9-ish viewport as a background with no crop fighting either. If
+   these ever become portrait again, the images have to be re-shot to match --
+   do not just change the numbers back. */
 .placecard {
   position: relative;
   flex: 0 0 auto;
-  width: 11rem; height: 14rem;
+  width: 17rem; height: 9.5rem;
   scroll-snap-align: center;
   border: 1px solid var(--hairline);
   border-radius: var(--r-sm);
@@ -916,6 +943,44 @@ input[type="file"]::file-selector-button {
   border-radius: 999px;
   padding: 0.3rem 0.8rem;
 }
+
+/* --- the frame row -------------------------------------------------------
+   Three shapes, and the aspect ratio is drawn rather than only named: a little
+   outline in the real proportion says "tall" or "wide" faster than the numbers
+   do, and it costs one empty span. The 4:3 box is the reference the other two
+   are read against, so all three are scaled to the same HEIGHT budget and only
+   the width varies -- which is also, not coincidentally, exactly what the
+   renderer does. */
+
+.frames { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 0.6rem; }
+
+.framecard {
+  position: relative; display: flex; align-items: center; gap: 0.6rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: rgba(11, 10, 9, 0.32);
+  padding: 0.55rem 0.85rem;
+  cursor: pointer;
+  transition: border-color 140ms, background 140ms;
+}
+.framecard:hover { border-color: var(--hairline-firm); }
+.framecard .ratio { font-family: var(--osd); font-size: 16px; letter-spacing: 0.08em; color: var(--ink); }
+.framecard .detail { font-size: 12px; color: var(--faint); }
+.framecard .tick { color: var(--accent); font-size: 11px; opacity: 0; transition: opacity 140ms; }
+.framecard .tick::before { content: "●"; }
+
+/* The drawn shape. Height is fixed at 18px and the width carries the ratio. */
+.framecard .shape { display: block; border: 1px solid var(--accent-deep); height: 18px; flex: none; }
+.framecard--a-4x3 .shape { width: 24px; }
+.framecard--a-16x9 .shape { width: 32px; }
+.framecard--a-9x16 .shape { width: 10px; }
+.framecard--soon .shape { border-color: var(--hairline-firm); }
+
+/* Same rule as the deferred quality card: a <span>, no radio behind it, so
+   there is nothing to select and nothing that can be posted. */
+.framecard--soon { cursor: default; opacity: 0.45; border-style: dashed; }
+.framecard--soon:hover { border-color: var(--hairline); }
+.framecard--soon .flag { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
 
 /* --- the quality row: a real choice, and it must not look like the pills --- */
 

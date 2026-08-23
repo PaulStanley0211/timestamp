@@ -820,3 +820,17 @@ test('JobError carries the code and the job id', () => {
   assert.equal(err.jobId, ID);
   assert.deepEqual(err.detail, { a: 1 });
 });
+
+test('the chosen shape is recorded on the job, and an old manifest still means 4:3', () => {
+  // Same rule the resolution field follows: the job model records what was
+  // asked for and does not validate it against the catalog -- the web layer
+  // validates on the way in, the pipeline asserts before it spends.
+  const { job } = makeJob({ input: baseInput({ aspect: '9:16' }) });
+  assert.equal(job.input.aspect, '9:16');
+
+  // EVERY MANIFEST WRITTEN BEFORE TODAY has no aspect field. Defaulting to the
+  // camcorder shape is what keeps those jobs meaning exactly what they meant
+  // when they were made, rather than resuming into a different shape.
+  const { job: old } = makeJob({ input: baseInput() });
+  assert.equal(old.input.aspect, '4:3');
+});

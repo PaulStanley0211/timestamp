@@ -441,13 +441,19 @@ test('the FRAME row states the two facts a customer needs, and no jargon', async
     assert.ok(!html.includes('25 fps'), 'the frame rate is not a customer-facing fact');
     assert.ok(!/<span class="pill">/.test(html), 'the unclickable chips are gone');
 
-    // UNCHANGED AND STILL THE POINT: nothing may offer an aspect the renderer
-    // cannot fill. When the aspect selector lands these become assertions that
-    // the control EXISTS -- but not before the raster work, because offering a
-    // shape we cannot deliver sells something that does not exist.
-    assert.ok(!html.includes('16:9'), '16:9 is not offered');
-    assert.ok(!html.includes('9:16'), '9:16 is not offered');
-    assert.ok(!/name="aspect"|name="fps"/.test(html), 'no aspect or fps field exists anywhere');
+    // CHANGED 2026-08-23, DELIBERATELY. This used to assert that 16:9 and 9:16
+    // appeared NOWHERE on the page. The aspect selector has now landed as far
+    // as the raster work goes, and the two unbuilt shapes are shown -- dimmed,
+    // as <span>s with no radio behind them, exactly the way the deferred 1080p
+    // quality card has always been shown.
+    //
+    // The rule this test exists to protect did NOT change: nothing may offer an
+    // aspect the renderer cannot fill. What changed is that "offer" now means
+    // "is postable", not "is visible", because a dimmed shape with no control
+    // behind it sells nothing. That stronger claim -- exactly one postable
+    // shape -- is asserted in its own test below, which is where it belongs;
+    // duplicating it here would leave two tests to update in lockstep.
+    assert.ok(!/name="fps"/.test(html), 'the frame rate is never a form field');
   });
 });
 
@@ -635,8 +641,23 @@ test('every place has an image URL and a gradient underneath it in one declarati
 });
 
 test('a missing place photograph is a 404 and never a path the client chose', async () => {
-  await withServer(async ({ base }) => {
-    // In the catalog, but no file on disk yet: the designed state.
+  // THE EMPTY DIRECTORY IS NOW BUILT, NOT BORROWED. This used to point at the
+  // repo's own `assets/places/` and assert 404 on a real catalog id, with the
+  // comment "no file on disk yet: the designed state". That state ended on
+  // 2026-08-23 when the eight place photographs landed, and the test went red
+  // for the best possible reason -- the missing asset it was documenting had
+  // been supplied. The behaviour it MEANT to pin is unchanged and still worth
+  // pinning: a place that is in the catalog but has no file 404s, and a path
+  // the client invented is refused before the filesystem is touched at all.
+  // So the empty assets root is created here rather than assumed of the repo.
+  const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-noassets-'));
+  fs.mkdirSync(`${assets}/places`, { recursive: true });
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), assetsRoot: assets });
+  const port = await app.listen();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    // In the catalog, but no file on disk: the designed state, now constructed.
     assert.equal((await fetch(`${base}/places/schrebergarten-august.jpg`)).status, 404);
     // Not in the catalog: refused before the filesystem is consulted at all.
     for (const target of ['/places/nope.jpg', '/places/..%2f..%2fpackage.json', '/places/manifest.json']) {
@@ -644,7 +665,9 @@ test('a missing place photograph is a 404 and never a path the client chose', as
       assert.ok(res.status === 400 || res.status === 404, `${target} -> ${res.status}`);
       assert.ok(!(await res.text()).includes('"name": "timestamp"'), 'a repo file was served');
     }
-  });
+  } finally {
+    await app.close();
+  }
 });
 
 test('a real place photograph is served when it is there', async () => {
@@ -1421,5 +1444,30 @@ test('HEAD works wherever GET does and sends no body', async () => {
     const res = await get(base, `/api/jobs/${job.jobId}`, cookieA, {}, { method: 'HEAD' });
     assert.equal(res.status, 200);
     assert.equal((await res.text()).length, 0);
+  });
+});
+
+test('the frame row offers three shapes and all three are real choices', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+
+    // Paul, 2026-08-23: "it should only contain three options. That's it."
+    for (const shape of ['4:3', '9:16', '16:9']) {
+      assert.ok(html.includes(`>${shape}<`), `${shape} is offered`);
+    }
+    assert.ok(!html.includes('Nothing to choose here yet'), 'the placeholder sentence is gone');
+    assert.ok(!html.includes('Not yet'), 'nothing is deferred any more');
+
+    // WIDENED 2026-08-23. This asserted exactly ONE postable shape while the
+    // renderer could only fill the 4:3 raster. All three now have a delivery
+    // frame and the aspect is threaded from the form to the filtergraph, so
+    // all three are postable. The rule underneath did not move: the number of
+    // postable shapes must equal the number the renderer can actually finish,
+    // and that is what this counts.
+    const radios = [...html.matchAll(/<input[^>]*name="aspect"[^>]*>/g)].map((m) => m[0]);
+    assert.equal(radios.length, 3, 'every offered shape is postable');
+    const checked = radios.filter((r) => /checked/.test(r));
+    assert.equal(checked.length, 1, 'exactly one starts selected');
+    assert.match(checked[0], /value="4:3"/, 'and it is the camcorder shape -- the product premise');
   });
 });

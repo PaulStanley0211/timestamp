@@ -354,14 +354,25 @@ export function falDataUri(file, { readImpl = fs.readFileSync } = {}) {
  * silently share a seed are three copies of one picture and a human clicking
  * "this one" for no reason.
  */
-export function falStillBody({ prompt, references, seed, size, dataUriImpl = falDataUri }) {
+export function falStillBody({
+  prompt, references, seed, size, dataUriImpl = falDataUri,
+  // The field that carries the reference images, because IT IS NOT THE SAME ON
+  // EVERY CANDIDATE. `image_urls` is the fal image-edit convention and it is
+  // still the default, but fal-ai/uso rejected it 422 with
+  // {"loc":["body","input_image_urls"],"msg":"Field required"} on
+  // 2026-08-23 -- the endpoint's own schema, which is a better source than any
+  // docs page. Per-model rather than renamed outright: the three Phase 0
+  // candidates are three different vendors and there is no reason to think
+  // they agree. The name lives in config/models.json next to the endpoint id.
+  referencesParam = 'image_urls',
+}) {
   const urls = references.map((ref) => dataUriImpl(ref.path));
   return {
     // @Image1 is the face and @Image2, when present, is the place. The prompt
     // itself never describes the person -- CLAUDE.md, "Prompt rules" -- so the
     // reference marker is the only thing that points at them.
     prompt,
-    image_urls: urls,
+    [referencesParam]: urls,
     aspect_ratio: FAL_ASPECT_RATIO,
     num_images: 1,
     seed,
@@ -566,7 +577,14 @@ export function createFalProvider(opts = {}) {
     const { modelEntry, defaultModels } = await registry();
     const override = kind === 'still' ? opts.stillModel : opts.videoModel;
     const id = override ?? defaultModels(table, FAL_ID)[kind];
-    const entry = modelEntry(table, id);
+    // `allowUnverifiedModel` lowers the verified gate for a NAMED override and
+    // nothing else -- Phase 0's bake-off needs to call candidates whose schema
+    // pages nobody has read yet, and the alternative was editing
+    // config/models.json to claim `verified: true`, which in this repo means
+    // "somebody read the schema". Faking that to run an experiment would poison
+    // the one signal that stops blind spending. Defaults to false, so every
+    // path that does not deliberately opt in still gets the refusal.
+    const entry = modelEntry(table, id, { requireVerified: !opts.allowUnverifiedModel });
     const endpoint = entry.endpoint;
     if (!isNonEmptyString(endpoint)) {
       throw new CapabilityError(
@@ -781,7 +799,7 @@ export function createFalProvider(opts = {}) {
         }
       }
 
-      const { id: model, endpoint } = await resolveModel('still');
+      const { id: model, endpoint, entry: stillEntry } = await resolveModel('still');
       const key = credential();
 
       const report = progressReporter(ctx);
@@ -820,6 +838,7 @@ export function createFalProvider(opts = {}) {
           seed,
           size: req.size,
           dataUriImpl,
+          referencesParam: stillEntry?.stillParams?.references ?? 'image_urls',
         });
 
         const { requestId, result } = await runQueued({

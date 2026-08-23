@@ -75,7 +75,7 @@ import { runFfmpeg, probe, REPO_ROOT } from '../ffmpeg/run.mjs';
 import {
   assertDeliveryContract, assertComposite, assertTapeGrade, assertBurnIn,
 } from '../ffmpeg/assert.mjs';
-import { tapeGeometry, deliveryGeometry, frameCount } from '../tapedeck/frame.mjs';
+import { tapeGeometry, deliveryGeometry, frameCount, resolveAspect } from '../tapedeck/frame.mjs';
 import { loadLookProfile, buildVideoFilter } from '../tapedeck/look.mjs';
 import { burnInFilters, burnInProbeRegion, deriveStamp } from '../tapedeck/burn-in.mjs';
 import { buildAudioFilter, clampAudio } from '../audio/bed.mjs';
@@ -164,7 +164,29 @@ const stepOutput = (job, name) => job.steps.find((s) => s.name === name)?.output
  * every pipeline test in this repo runs through it, and there is no invoice
  * behind a local ffmpeg call to be wrong about.
  */
-function resolveRaster({ resolution, provider, log = noop }) {
+export function resolveRaster({ resolution, provider, aspect = null, defaultAspect = '4:3', log = noop }) {
+  // THE PAID PATH ONLY RENDERS THE DEFAULT SHAPE SO FAR. `fal.mjs` sends a
+  // hardcoded `aspect_ratio` on every call, so a job ordered at 9:16 would get
+  // a 4:3 source rendered into a 9:16 tape frame -- and nothing downstream
+  // would notice, because every assertion reads the same resolved config the
+  // filtergraph does. Refused here, at the same boundary and for the same
+  // reason an unavailable raster is: a paid render that delivers a different
+  // thing from the one ordered is invisible to the customer AND the ledger.
+  // Lift this when FAL_RESOLUTIONS gains the aspect dimension.
+  if (provider.paid && aspect && aspect !== defaultAspect) {
+    throw new PipelineError(
+      `this job was ordered at ${aspect} and ${provider.id} only renders ${defaultAspect} so far.\n`
+      + `  Refusing rather than substituting: the tape stage would build the ordered frame around a`
+      + ` ${defaultAspect} source and every check downstream would agree with it.`,
+      {
+        code: 'ASPECT_UNSUPPORTED',
+        step: 'compose',
+        userMessage: 'That frame shape is not available from this renderer yet.',
+        detail: { aspect, supported: [defaultAspect], provider: provider.id },
+      },
+    );
+  }
+
   const id = resolution ?? null;
   // A CLI render has no order behind it and no account to charge, so it takes
   // the provider's first offer -- the same shape this file had before there
@@ -662,7 +684,10 @@ async function stepCompose(ctx) {
   // ordered and charged for; this is the raster that answer means. It goes into
   // `resolved` so that nothing downstream re-derives it from a config file, a
   // default or a provider that may all have moved on by the time a job resumes.
-  const resolution = resolveRaster({ resolution: job.input.resolution, provider, log });
+  const resolution = resolveRaster({
+    resolution: job.input.resolution, provider, log,
+    aspect: job.input.aspect, defaultAspect: cfg.defaultAspect,
+  });
   log(`  ${resolution.id ?? 'no resolution ordered'} -> ${resolution.size.width}x${resolution.size.height} (4:3)`);
 
   const segments = planSegments({
@@ -678,8 +703,12 @@ async function stepCompose(ctx) {
   // Held to `verified: true` and to the layer-2 audio rule HERE, before a
   // request exists -- a model nobody has checked must not reach a paid call.
   const modelsFile = await (await dep('loadModels'))();
-  const models = defaultModels(modelsFile, provider.id);
-  modelEntry(modelsFile, models.still);
+  // A copy, because the override rewrites `still` and the frozen `resolved`
+  // block downstream must record the model that was ACTUALLY used -- a bake-off
+  // whose manifests all name the default proves nothing.
+  const models = { ...defaultModels(modelsFile, provider.id) };
+  if (ctx.stillModelOverride) models.still = ctx.stillModelOverride;
+  modelEntry(modelsFile, models.still, { requireVerified: !ctx.allowUnverifiedModel });
   modelEntry(modelsFile, models.video);
 
   const pricing = await (await dep('loadPricing'))();
@@ -1129,15 +1158,22 @@ async function stepTape(ctx) {
   const cfg = r.cfg;
   const runFfmpegImpl = await dep('runFfmpeg');
 
-  const tape = tapeGeometry(cfg);
-  const delivery = deliveryGeometry(cfg);
+  // The shape the job asked for, resolved ONCE and then used for everything
+  // below. `buildVideoFilter` reads `cfg.tape` and `cfg.delivery` off the
+  // config it is handed rather than taking the geometry objects, so handing it
+  // the unresolved cfg would render the new shape into the default shape's
+  // frame -- and every assertion downstream would agree with it, because they
+  // would be reading the same wrong config.
+  const acfg = resolveAspect(cfg, job.input.aspect);
+  const tape = tapeGeometry(acfg);
+  const delivery = deliveryGeometry(acfg);
 
   // The profile was merged, clamped and frozen at compose. Re-merging it from
   // `config/` and the preset here would let an edited preset redefine a render
   // that is already half paid for.
   const osd = r.look.osd;
   const burnIn = burnInFilters(osd, { tape, delivery });
-  const videoFilter = buildVideoFilter({ ...r.look, osd }, cfg, { burnIn });
+  const videoFilter = buildVideoFilter({ ...r.look, osd }, acfg, { burnIn });
   const audioFilter = buildAudioFilter(r.look, cfg);
   const filterComplex = joinGraphs(videoFilter, audioFilter);
 
@@ -1185,8 +1221,9 @@ async function stepVerify(ctx) {
   const { job, paths, dep, log } = ctx;
   const r = job.resolved;
   const cfg = r.cfg;
-  const delivery = deliveryGeometry(cfg);
-  const tape = tapeGeometry(cfg);
+  const acfg = resolveAspect(cfg, job.input.aspect);
+  const delivery = deliveryGeometry(acfg);
+  const tape = tapeGeometry(acfg);
 
   const deliveryContract = await dep('assertDeliveryContract');
   const composite = await dep('assertComposite');
@@ -1195,7 +1232,7 @@ async function stepVerify(ctx) {
   const runFfmpegImpl = await dep('runFfmpeg');
 
   const checks = [];
-  const info = await deliveryContract(paths.video, cfg, { expectAudio: true });
+  const info = await deliveryContract(paths.video, acfg, { expectAudio: true });
   checks.push('delivery');
 
   await composite(paths.video, delivery);
@@ -1369,6 +1406,24 @@ export async function runPipeline(job, {
   sources = {},
   stillIndex = null,
   segmentMode = 'continuous',
+  /**
+   * PHASE 0'S BAKE-OFF SEAM, AND WHY IT IS TWO OPTIONS RATHER THAN ONE.
+   *
+   * The still model is chosen at Phase 0 by comparing candidates on the same
+   * face, and there was no way to say which one to use: it came from
+   * `defaults.fal.still` in config/models.json, which is the UNVERIFIED
+   * placeholder on purpose. Editing that file between runs would mean marking a
+   * candidate `verified: true` to get it to run -- and in this repo that word
+   * means somebody opened the schema page. Faking it to run an experiment
+   * poisons the one signal that stops blind spending.
+   *
+   * So: `stillModelOverride` names the model, and `allowUnverifiedModel` is a
+   * SEPARATE opt-in that lowers the verified gate. Two, not one, so an
+   * unverified endpoint can never be reached by a caller who only meant to pick
+   * a model. The default of both is the refusal that exists today.
+   */
+  stillModelOverride = null,
+  allowUnverifiedModel = false,
   log = noop,
 } = {}) {
   if (!job || typeof job !== 'object') throw new PipelineError('runPipeline needs a job', { code: 'BAD_JOB' });
@@ -1472,6 +1527,7 @@ export async function runPipeline(job, {
     const ctx = {
       job, paths, root: job.root ?? root, cfg: job.resolved?.cfg ?? renderCfg, baseLook,
       provider, dep, log, sources, stopAfter, stillIndex, signal, segmentMode,
+      stillModelOverride, allowUnverifiedModel,
       catalog, wasRunning, step: name, emit, checkCancelled,
       providerCtx: { ...providerCtx, outDir: name === 'still' ? paths.stills : paths.segments, signal,
         onProgress: (e) => onProgress?.({ step: name, ...e }) },
@@ -1559,7 +1615,13 @@ export async function runPipeline(job, {
  * The seeds it prints are NOT the seeds the real render will use: those derive
  * from a job id, and there is deliberately no job here to derive them from.
  */
-export async function dryRun({ provider, input, cfg, deps = {}, segmentMode = 'continuous' } = {}) {
+export async function dryRun({
+  provider, input, cfg, deps = {}, segmentMode = 'continuous',
+  // Same two options as runPipeline, same reasoning -- see its signature. A dry
+  // run that could not name the candidate would be useless for the one job it
+  // has here: showing what a bake-off round costs BEFORE it is authorised.
+  stillModelOverride = null, allowUnverifiedModel = false,
+} = {}) {
   const dep = makeResolver(deps);
   const renderCfg = cfg ?? readJson(path.join(REPO_ROOT, CONFIG_RENDER));
   const baseLook = deps.baseLook ?? readJson(path.join(REPO_ROOT, CONFIG_BASE_LOOK));
@@ -1581,8 +1643,9 @@ export async function dryRun({ provider, input, cfg, deps = {}, segmentMode = 'c
     cfg: renderCfg, capabilities: provider.capabilities, mode: segmentMode, size: resolution.size,
   });
   const modelsFile = await (await dep('loadModels'))();
-  const models = defaultModels(modelsFile, provider.id);
-  modelEntry(modelsFile, models.still);
+  const models = { ...defaultModels(modelsFile, provider.id) };
+  if (stillModelOverride) models.still = stillModelOverride;
+  modelEntry(modelsFile, models.still, { requireVerified: !allowUnverifiedModel });
   modelEntry(modelsFile, models.video);
   const pricing = await (await dep('loadPricing'))();
   const estimate = estimateJob({

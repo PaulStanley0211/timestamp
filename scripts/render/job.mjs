@@ -582,6 +582,12 @@ function normalizeInput(input, jobId) {
     // manifests. The web layer validates on the way in and the pipeline
     // asserts before it spends; this field just has to arrive intact.
     resolution: input.resolution ?? null,
+    // WHICH SHAPE, and why the default is not null the way resolution's is.
+    // Every manifest written before 2026-08-23 has no aspect field at all, and
+    // a null here would resume those jobs into "no shape decided" rather than
+    // into the shape they were actually rendered in. `4:3` is not a fallback,
+    // it is what those jobs mean.
+    aspect: input.aspect ?? '4:3',
     tier: input.tier ?? null,
     // Nullable, and null is the honest value for a CLI render: `npm run render`
     // has no account behind it. Ownership for web jobs is additionally indexed

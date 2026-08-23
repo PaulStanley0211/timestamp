@@ -85,6 +85,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 import { matchRoute, isPublicRoute } from './router.mjs';
 import { boundaryFromContentType, parseMultipart, fileSink, MultipartError } from './multipart.mjs';
 import { createStylesheet, sendFile } from './static.mjs';
+import { aspectIds } from '../tapedeck/frame.mjs';
 import { homePage, landingPage, statusPage, selectPage, resultPage, errorPage } from './views.mjs';
 import { loginPage, signupPage, pricingPage, authUnavailablePage } from './views-auth.mjs';
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
@@ -360,7 +361,7 @@ export function createServer({
     } catch (err) {
       logImpl(`[web] stylesheet built without the quality rules: ${err?.message ?? err}`);
     }
-    const built = createStylesheet({ ...cards, resolutions });
+    const built = createStylesheet({ ...cards, resolutions, aspects: aspectRows() });
     if (complete) sheetCache = built;
     return built;
   }
@@ -622,6 +623,22 @@ export function createServer({
    * restart.
    */
   let resolutionCache = { at: 0, rows: null };
+  /**
+   * The shapes, straight out of `config/render.json`.
+   *
+   * A shape is offered as a CHOICE only when the renderer can finish it, which
+   * today is the default shape alone. The other two are declared `available:
+   * false` in the config beside the reason, so switching one on is a config
+   * change in the same commit that gives it a `delivery` block -- never an edit
+   * here.
+   */
+  function aspectRows() {
+    return aspectIds(cfg).map((id) => ({
+      id,
+      available: id === cfg.defaultAspect || cfg.aspects?.[id]?.available === true,
+    }));
+  }
+
   async function resolutionRows() {
     const now = Date.now();
     if (resolutionCache.rows && now - resolutionCache.at < 60_000) return resolutionCache.rows;
@@ -702,6 +719,7 @@ export function createServer({
         outfits: cards.outfits,
         resolutions,
         resolution,
+        aspects: aspectRows(),
         consentText,
         balance,
         account,
@@ -1032,6 +1050,18 @@ export function createServer({
             code: 'BAD_RESOLUTION', detail: { available: offered.map((r) => r.id) },
           });
         }
+        // SAME RULE FOR THE SHAPE. Membership in the offered set, refused rather
+        // than downgraded. A shape that is merely SHOWN on the page has no
+        // radio, so it cannot arrive here from the form at all -- but this
+        // endpoint takes hand-written POSTs too, and "it isn't in the HTML" has
+        // never been a check.
+        const aspect = firstFilled(fields.aspect) || cfg.defaultAspect;
+        if (!aspectRows().some((a) => a.available && a.id === aspect)) {
+          throw new HttpError(400, 'That frame shape is not available.', {
+            code: 'BAD_ASPECT', detail: { available: aspectRows().filter((a) => a.available).map((a) => a.id) },
+          });
+        }
+
         const credits = await costOf(resolution);
         if (before.credits < credits) {
           throw new HttpError(402,
@@ -1053,6 +1083,7 @@ export function createServer({
             : { kind: placeId ? 'preset' : 'text', value: placeId ?? placeText, photoPath: null, photoSha256: null },
           outfit: { kind: outfitId ? 'preset' : 'text', value: outfitId ?? outfitText },
           stillCount,
+          aspect,
           // What was charged for, carried where the worker can actually read it.
           // `normalizeInput` used to drop unknown fields, which is why ownership
           // went to a side index and the resolution had nowhere to go at all --
