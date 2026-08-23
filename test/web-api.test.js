@@ -624,7 +624,16 @@ test('every place has an image URL and a gradient underneath it in one declarati
     // The quality row switches its own cost line, with no script involved.
     assert.ok(css.includes('#q-720p:checked~.wrap .cost--q-720p{display:inline;}'),
       'the estimated cost must follow the selection without JavaScript');
-    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p{border-color:var(--accent);'));
+    // CHANGED 2026-08-24 with the STRUCK world. This asserted the selected card
+    // gained `border-color:var(--accent)`. DESIGN.md forbids borders outright --
+    // grouping is depth and gauze density, never a line -- so selection is now
+    // expressed as a strike: the ghost comes to full opacity and its name burns
+    // cathode orange. The rule this test protects did not move: the selection is
+    // still carried entirely by CSS with no script involved.
+    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p{opacity:1;}'),
+      'the selected quality card must be struck by CSS alone');
+    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p .name{color:var(--accent);'),
+      'and the strike must be visible as colour, not only as opacity');
     assert.ok(!css.includes('#q-1080p:checked'), 'a deferred resolution gets no selection rule');
 
     // The cross-fade is a CSS transition, not a script -- which is why it works

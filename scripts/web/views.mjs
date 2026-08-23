@@ -426,59 +426,94 @@ function stepHead(n, name, subtitle) {
  * everything is medium, nothing is the subject. Here one thing is the subject --
  * the sentence -- and it is several times the size of everything else.
  */
+/**
+ * The page a stranger sees, in the world DESIGN.md calls STRUCK.
+ *
+ * WHY THE PLACE LIST IS A REAL CONTROL AND NOT A PICTURE OF ONE. The world's
+ * central idea is that every possible value is already present, unlit, and one
+ * is struck forward. That is not a metaphor here: these are the same hoisted
+ * `:checked` radios the signed-in page runs on, so a stranger operates the
+ * actual mechanic of the product before signing up for anything. It costs no
+ * JavaScript, and the technique was already in the codebase.
+ *
+ * THE READ-OUT SHOWS THE PLACE AND ITS TIME OF DAY, NOT A DATE. A burnt-in
+ * "AUG 17 2003" under a photograph would assert that a particular tape exists.
+ * The preset's own `timeOfDay` is true, and in the OSD face it reads as a
+ * camcorder read-out just as well.
+ */
 export function landingPage({ places = [], account = null } = {}) {
-  const spines = places.map((p) => `
-    <span class="spine">
-      <span class="spine-face thumb--${h(placeSlug(p.id))}"></span>
-      <span class="spine-name">${h(p.label)}</span>
-    </span>`).join('');
+  const first = places[0]?.id ?? null;
+
+  // Hoisted so `#id:checked ~ .wrap` can reach the stack and the veils. Fixed
+  // rather than absolute, for the same reason as the signed-in page: an input
+  // at document offset -1 makes every click scroll the page to the top.
+  const hooks = places.map((p) => (
+    `<input class="lstate" type="radio" name="lplace" id="${h(placeSlug(p.id))}" value="${h(p.id)}"${p.id === first ? ' checked' : ''}>`
+  )).join('\n');
+
+  const preBody = `${hooks}
+<div class="bloom" aria-hidden="true"></div>
+<div class="gauze" aria-hidden="true"></div>`;
+
+  const stack = places.map((p, i) => `
+      <li><label class="lopt lopt--${h(placeSlug(p.id))}" for="${h(placeSlug(p.id))}"><span class="lidx">${String(i + 1).padStart(2, '0')}</span>${h(p.label)}</label></li>`).join('');
+
+  const veils = places.map((p) => `
+      <div class="veil veil--${h(placeSlug(p.id))}" aria-hidden="true"><span class="veil-img thumb--${h(placeSlug(p.id))}"></span></div>`).join('');
+
+  const osds = places.map((p) => `
+      <span class="losd losd--${h(placeSlug(p.id))}" aria-hidden="true">${h(p.timeOfDay || '')}</span>`).join('');
 
   const body = `
 <main class="landing">
 
-  <section class="hero">
-    <h1 class="hero-line">You, somewhere<br>ordinary, in 2003.</h1>
-    <p class="hero-sub">One photograph becomes fifteen seconds of camcorder tape &mdash;
-    grain, chroma bleed, and the date burned into the corner.</p>
-    <p class="hero-do">
-      <a class="cta" href="/signup">Make a tape</a>
-      <a class="cta cta--quiet" href="/login">I have an account</a>
-    </p>
-  </section>
+  <section class="strike">
+    <div>
+      <h1 class="hero-line">One photograph.<span class="lit">Fifteen seconds</span>of 2003.</h1>
+      <p class="hero-sub">Every place here is somewhere ordinary, and every one is
+      already present, unlit. Strike one and it is the afternoon you are standing in.</p>
 
-  <section class="shelf-strip">
-    <p class="eyebrow">Somewhere ordinary</p>
-    <div class="spines">${spines}</div>
-    <p class="hint">Or your own photograph of the place. Your actual childhood
-    garden beats any description of one.</p>
+      <ul class="stack">${stack}
+      </ul>
+      <p class="strike-hint">Strike one</p>
+
+      <p class="hero-do">
+        <a class="cta" href="/signup">Make a tape &rarr;</a>
+        <a class="cta cta--quiet" href="/login">I have an account</a>
+      </p>
+    </div>
+
+    <div class="veils">${veils}${osds}
+    </div>
   </section>
 
   <section class="how">
-    <div class="how-step">
+    <div>
       <p class="how-n">01</p>
-      <h2 class="how-t">Your photograph</h2>
-      <p class="how-d">One picture of a face. The location and camera data are
-      stripped before anything else happens.</p>
+      <h2 class="how-t">Content</h2>
+      <p class="how-d">A plausible person, a plausible place, an outfit, and motion that
+      goes nowhere in particular. Your photograph is the only authority on the face.</p>
     </div>
-    <div class="how-step">
+    <div>
       <p class="how-n">02</p>
-      <h2 class="how-t">A place and a look</h2>
-      <p class="how-d">Pick from the shelf, describe somewhere in your own words,
-      or upload a photograph of it.</p>
+      <h2 class="how-t">Texture</h2>
+      <p class="how-d">Chroma bleed, grain, the head-switch band, transport jitter, the
+      date burnt into the corner. All of it deterministic, none of it asked of a model.</p>
     </div>
-    <div class="how-step">
+    <div>
       <p class="how-n">03</p>
-      <h2 class="how-t">Fifteen seconds</h2>
-      <p class="how-d">375 frames at 25fps. You approve a still before the video
-      is ever made, so a likeness you do not like costs you nothing.</p>
+      <h2 class="how-t">Consent</h2>
+      <p class="how-d">Location and camera data stripped the moment your photograph
+      arrives. The photograph is deleted after seven days, the tape after thirty.</p>
     </div>
   </section>
 
   <section class="plain">
-    <p>It is not a filter. The picture is generated, then run through a real tape
-    chain in ffmpeg &mdash; the grain goes on before the upscale, the date stamp
-    degrades with the image, and the whole thing is matted the way a camcorder
-    frame actually sat. That is why it does not look like a preset.</p>
+    <p>It is not a filter. The picture is generated, then run through a real tape chain
+    in ffmpeg &mdash; the grain goes on before the upscale, the date stamp degrades with
+    the image, and the frame is matted the way a camcorder frame actually sat. You
+    approve a still before any video is made, so a likeness you do not recognise costs
+    you nothing.</p>
   </section>
 
 </main>`;
@@ -486,6 +521,7 @@ export function landingPage({ places = [], account = null } = {}) {
   return layout({
     title: 'Timestamp — one photo, fifteen seconds, 2003',
     body,
+    preBody,
     bodyClass: 'is-landing',
     account,
     chrome: true,
@@ -544,7 +580,9 @@ export function homePage({
 <div class="bgs" aria-hidden="true">
 ${backgrounds}
 </div>
-<div class="scrim" aria-hidden="true"></div>`;
+<div class="scrim" aria-hidden="true"></div>
+<div class="bloom" aria-hidden="true"></div>
+<div class="gauze" aria-hidden="true"></div>`;
 
   const lookCards = outfits.map((o) => `
     <label class="lookcard lookcard--${h(outfitSlug(o.id))}" for="${h(outfitSlug(o.id))}">
