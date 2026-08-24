@@ -11,9 +11,10 @@ Warm, grainy, quiet.
 
 **1111 tests / 1109 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
-**Nothing is pushed.** `origin/main == b6f64a3`; branch
-`ui-redesign-signed-in-page` is **thirteen** commits ahead, plus the worker
-transport fix below, which is uncommitted.
+**The tree is clean. Nothing is pushed.** `origin/main == b6f64a3`; branch
+`ui-redesign-signed-in-page` is **fifteen** commits ahead as of this line.
+The push is blocked on the Higgsfield licence question, item 3 below -- not on
+the code.
 
 ### The one thing to know
 
@@ -438,7 +439,8 @@ did nothing.
    question that decides whether the product exists.
 2. ~~**The UI redesign**~~ **DONE 2026-08-22, committed to a branch - section 6a.**
 3. ~~**The eight place photographs**~~ **DONE 2026-08-23 - section 10.**
-4. **Commit and push.** One branch plus a dirty tree; see START HERE.
+4. ~~**Commit and push.**~~ **COMMITTED, NOT PUSHED.** The tree is clean; the
+   push waits on the licence question in section 10.
 5. **The Supabase spec**, then a plan, then code. Not before.
 6. **The four sources of CI red** (section 4).
 7. **Three aspect ratios** - `docs/aspect-ratios-plan.md`. **Paul restated this
