@@ -533,6 +533,18 @@ function normalizeInput(input, jobId) {
       { code: 'BAD_INPUT', jobId });
   }
 
+  // DIRECT MODE: the tape is generated from the photographs, with no still and
+  // no gate. It lives on the INPUT rather than in `resolved` because it is a
+  // product choice the user made, not something the pipeline worked out -- and
+  // because the manifest is the ONLY channel between the web process and the
+  // worker. A mode that lived in a CLI flag could not survive into the renderer
+  // and a resumed job would silently change shape halfway through.
+  const direct = input.direct ?? false;
+  if (typeof direct !== 'boolean') {
+    throw new JobError(`input.direct must be a boolean, got ${JSON.stringify(direct)}`,
+      { code: 'BAD_INPUT', jobId });
+  }
+
   let consent = null;
   if (input.consent != null) {
     if (input.consent.granted !== true) {
@@ -568,6 +580,7 @@ function normalizeInput(input, jobId) {
       value: outfit.value ?? null,
     },
     stillCount,
+    direct,
     // What was asked for, and therefore what was charged for. These have to
     // survive into the manifest because the manifest is the ONLY channel
     // between the web process and the worker -- the worker never sees the

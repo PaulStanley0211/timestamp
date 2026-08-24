@@ -31,8 +31,8 @@ import path from 'node:path';
 
 import { REPO_ROOT } from '../scripts/ffmpeg/run.mjs';
 import { resolveRaster } from '../scripts/render/pipeline.mjs';
-import { createJob, loadJob, jobPaths, STEPS } from '../scripts/render/job.mjs';
-import { runPipeline, dryRun, renderSummary } from '../scripts/render/pipeline.mjs';
+import { createJob, loadJob, jobPaths, STEPS, stepStatus } from '../scripts/render/job.mjs';
+import { runPipeline, dryRun, renderSummary, assembleFrameWarnings } from '../scripts/render/pipeline.mjs';
 
 // ---------------------------------------------------------------------------
 // harness
@@ -79,13 +79,13 @@ export const CONSENT = Object.freeze({
  * record exists for. The two are separate hooks because the pipeline is
  * required to behave differently about them.
  */
-export function makeProvider({ beforeCall, afterSubmit, videoAudioStreams = 0 } = {}) {
+export function makeProvider({ beforeCall, afterSubmit, videoAudioStreams = 0, maxClipSeconds = 8 } = {}) {
   const calls = { still: 0, video: 0, stillRequests: [], videoRequests: [] };
   const provider = {
     id: 'fake',
     paid: false,
     capabilities: {
-      maxClipSeconds: 8,
+      maxClipSeconds,
       stillSizes: [{ width: 1024, height: 768 }],
       maxReferences: 2,
       supportsNativeAudioOff: true,
@@ -228,7 +228,7 @@ export function makeDeps({ ffmpeg = makeFfmpeg(), overrides = {} } = {}) {
   };
 }
 
-export function makeJob(root, { place, outfit, stillCount = 3, jobId } = {}) {
+export function makeJob(root, { place, outfit, stillCount = 3, jobId, direct = false } = {}) {
   return createJob({
     root,
     jobId,
@@ -238,6 +238,7 @@ export function makeJob(root, { place, outfit, stillCount = 3, jobId } = {}) {
       place: place ?? { kind: 'preset', value: 'schrebergarten-august' },
       outfit: outfit ?? { kind: 'preset', value: 'trainingsjacke' },
       stillCount,
+      direct,
       consent: CONSENT,
     },
   });
@@ -255,6 +256,7 @@ export async function runFake(opts = {}) {
     provider, root, deps,
     sources: { photo, placePhoto: opts.placePhoto ?? null },
     stopAfter: opts.stopAfter ?? null,
+    videoModelOverride: opts.videoModelOverride ?? null,
     stillIndex: opts.stillIndex ?? null,
     onProgress: opts.onProgress,
     log: opts.log,
@@ -511,13 +513,19 @@ test('the tape reads the FROZEN look, so editing a preset cannot redefine a paid
   // it merged, not the bare base.json value.
   const base = readJson(path.join(REPO_ROOT, 'config', 'look', 'base.json'));
   const override = readJson(path.join(REPO_ROOT, 'presets', 'places', 'schrebergarten-august.json')).lookOverride ?? {};
-  for (const [group, values] of Object.entries(override)) {
-    if (group.startsWith('_')) continue;
-    for (const [key, value] of Object.entries(values)) {
+  // RECURSIVE, because a lookOverride is not always two levels deep. It was
+  // when this was written; place ambience (2026-08-24) is three levels --
+  // `audio.ambience.amplitude` -- and a two-level walk compared an OBJECT
+  // against an object by identity and failed for the wrong reason.
+  const assertMerged = (want, got, at = '') => {
+    for (const [key, value] of Object.entries(want)) {
       if (key.startsWith('_')) continue;
-      assert.equal(resolved.look[group][key], value, `${group}.${key} was not merged from the preset`);
+      const where = at ? `${at}.${key}` : key;
+      if (value && typeof value === 'object' && !Array.isArray(value)) assertMerged(value, got?.[key], where);
+      else assert.equal(got?.[key], value, `${where} was not merged from the preset`);
     }
-  }
+  };
+  assertMerged(override, resolved.look);
   assert.equal(resolved.look.audioSeed, resolved.seeds.audio);
   assert.notEqual(resolved.look.seed, base.seed, 'every job must get its own tape, not base.json\'s');
 });
@@ -800,4 +808,187 @@ test('a paid provider refuses a shape it cannot be asked for, rather than render
   );
   // and the shape it CAN do is untouched
   assert.doesNotThrow(() => resolveRaster({ resolution: '720p', provider: paid, aspect: '4:3', defaultAspect: '4:3' }));
+});
+
+// ---------------------------------------------------------------------------
+// direct mode: four choices and a tape
+//
+// Paul's product direction, stated on 2026-08-23 and again on 2026-08-24:
+// upload a photo, pick an outfit, a place and a frame shape, get fifteen
+// seconds. "I don't understand why are you generating the pictures."
+//
+// The still was never wanted for its own sake. It existed because `animate` is
+// image-to-video and needs a start frame, which made it structural rather than
+// a feature. `bytedance/seedance-2.0/reference-to-video` takes the photographs
+// themselves, so the stage stops existing instead of being hidden behind a
+// spinner -- and `skipped` was already a first-class step status precisely
+// because a skipped step produced nothing and cost nothing.
+// ---------------------------------------------------------------------------
+
+test('a direct job never makes a still, and never asks anybody to choose one', async () => {
+  const { job, calls } = await runFake({ input: { direct: true }, provider: { maxClipSeconds: 15 } });
+
+  assert.equal(stepStatus(job, 'still'), 'skipped', 'no still is generated');
+  assert.equal(stepStatus(job, 'select'), 'skipped', 'and there is nothing to choose between');
+  assert.equal(calls.still, 0, 'nothing was paid for a picture nobody was going to see');
+  assert.equal(job.status, 'done', 'the job still finishes; the tape is the product');
+});
+
+test('a direct job animates from the photographs, not from a start frame', async () => {
+  const { calls } = await runFake({ input: { direct: true }, provider: { maxClipSeconds: 15 } });
+
+  const req = calls.videoRequests[0];
+  assert.ok(Array.isArray(req.references) && req.references.length > 0,
+    'the face photograph goes to the model directly');
+  assert.equal(req.references.filter((r) => r.role === 'face').length, 1,
+    'exactly one face, which is the whole product');
+  assert.equal(req.imagePath, undefined,
+    'and no start frame -- assertVideoRequest refuses a request carrying both');
+});
+
+test('the ordinary path is untouched and still runs through the still and the gate', async () => {
+  // The direct path is unproven against a real model: the open question in
+  // config/models.json -- does @Image1 hold a FACE as well as image-to-video
+  // holds a start frame? -- has not been answered by a paid call. Until it has,
+  // deleting the still path outright would be betting the product on it.
+  const { job, calls } = await runFake();
+  assert.equal(stepStatus(job, 'still'), 'done');
+  assert.equal(stepStatus(job, 'select'), 'done');
+  assert.ok(calls.still > 0);
+  assert.equal(calls.videoRequests[0].references, undefined, 'still-based requests carry no references');
+});
+
+test('a direct job records the mode it ran in, because a manifest is the only channel', async () => {
+  // The worker never sees the request that created the job. A mode that lives
+  // only in a CLI flag cannot survive into the renderer, and a resumed job
+  // would silently change shape halfway through.
+  const { job } = await runFake({ input: { direct: true }, provider: { maxClipSeconds: 15 } });
+  assert.equal(job.input.direct, true);
+});
+
+test('a direct job is ONE call for the whole take, never a chain of segments', async () => {
+  // PAUL'S WORDS, 2026-08-24: "I don't want ... one frame, second frame, third
+  // frame, combining these three things". On the still path a chain is at least
+  // continuous -- each segment starts from the previous clip's final frame. On
+  // the direct path it would be far worse: every segment is an INDEPENDENT
+  // generation from the same photographs, so the joins are jump cuts between
+  // takes that never shared a frame. One call or nothing.
+  const { calls, job } = await runFake({
+    input: { direct: true },
+    provider: { maxClipSeconds: 15 },
+  });
+  assert.equal(calls.videoRequests.length, 1, 'exactly one generation');
+  assert.equal(calls.videoRequests[0].seconds, job.resolved.cfg.durationSeconds,
+    'and it covers the whole tape');
+});
+
+test('a direct job is refused outright when the model cannot do the whole take at once', async () => {
+  // Refused, and not quietly chunked. The fixture provider caps at 8s ON
+  // PURPOSE -- its own comment says a fixture claiming 15 would let the
+  // pipeline skip the segment-chaining path -- so this is a real combination
+  // somebody will hit, and the message has to say which number was too small.
+  await assert.rejects(
+    runFake({ input: { direct: true }, provider: { maxClipSeconds: 8 } }),
+    (err) => {
+      assert.match(String(err.message), /one call|whole take|15/i);
+      assert.match(String(err.message), /8/, 'the number that was too small is named');
+      return true;
+    });
+});
+
+test('a direct job does not care that the still model is unverified, because it makes no still', async () => {
+  // THE BUG, FOUND BY PAUL ON THE FIRST REAL RUN, 2026-08-24. `stepCompose`
+  // held the STILL model to `verified: true` unconditionally, so a direct job
+  // -- which never makes a still -- died at compose naming
+  // `fal/UNVERIFIED-identity-still`. That entry is unverified ON PURPOSE, so
+  // an unconfigured fal render stops before it spends; the gate is right and
+  // it was simply being applied to a stage that no longer runs.
+  //
+  // The harness maps `defaults.fake` to the FIXTURE defaults, whose still model
+  // is verified, which is exactly why the first three direct tests passed while
+  // the real command did not.
+  const deps = makeDeps({
+    overrides: {
+      loadModels: () => {
+        const models = readJson(path.join(REPO_ROOT, 'config', 'models.json'));
+        models.defaults.fake = { ...models.defaults.fixture, still: 'fal/UNVERIFIED-identity-still' };
+        return models;
+      },
+    },
+  });
+
+  const { job } = await runFake({
+    input: { direct: true }, provider: { maxClipSeconds: 15 }, deps: deps,
+  });
+  assert.equal(job.status, 'done');
+  assert.equal(stepStatus(job, 'still'), 'skipped');
+});
+
+test('the ordinary path STILL refuses an unverified still model, which is the whole point of the gate', async () => {
+  // The direct fix must not become a hole in the money guard. A still job with
+  // an unverified model has to keep failing at compose, before anything is
+  // submitted.
+  await assert.rejects(
+    runFake({
+      deps: {
+        loadModels: () => {
+          const models = readJson(path.join(REPO_ROOT, 'config', 'models.json'));
+          models.defaults.fake = { ...models.defaults.fixture, still: 'fal/UNVERIFIED-identity-still' };
+          return models;
+        },
+      },
+    }),
+    /UNVERIFIED/i);
+});
+
+test('a direct job freezes the video model it was actually told to use', async () => {
+  // The provider is constructed with the override and the pipeline froze the
+  // DEFAULT, so the manifest would name image-to-video while the call went to
+  // reference-to-video. A bake-off whose manifests all name the default proves
+  // nothing -- the same reasoning the still override already carries.
+  const { job } = await runFake({
+    input: { direct: true },
+    provider: { maxClipSeconds: 15 },
+    videoModelOverride: 'bytedance/seedance-2.0/reference-to-video',
+  });
+  assert.equal(job.resolved.models.video, 'bytedance/seedance-2.0/reference-to-video');
+});
+
+// ---------------------------------------------------------------------------
+// the assemble warning, and why a false one is worse than none
+// ---------------------------------------------------------------------------
+
+test('a source at a different frame rate is not reported as too short', () => {
+  // FOUND ON THE FIRST DIRECT RUN, 2026-08-24. seedance's reference-to-video
+  // returned 361 frames over 15.04 SECONDS -- 24fps, where the contract is 25.
+  // The check compared frame COUNT against 375 and announced "the tape stage
+  // will loop the source to reach 15s and the repeat may be visible", which was
+  // simply untrue: there is more than fifteen seconds of material, ffmpeg
+  // retimed it, and the finished tape ends on the last frame of the action.
+  // Verified by eye on the delivered file before this test was written.
+  //
+  // A warning that cries wolf is how a real one gets ignored -- and the real
+  // one matters, because a genuinely short source IS looped by `-stream_loop`
+  // and the jump back really is visible.
+  const cfg = { totalFrames: 375, fps: 25, durationSeconds: 15 };
+  assert.deepEqual(assembleFrameWarnings({ frames: 361, seconds: 15.041667, cfg }), [],
+    '24fps over the full duration is a retime, not a shortfall');
+});
+
+test('a genuinely short source still warns about the loop, by name', () => {
+  const cfg = { totalFrames: 375, fps: 25, durationSeconds: 15 };
+  const [warning] = assembleFrameWarnings({ frames: 300, seconds: 12, cfg });
+  assert.match(warning, /loop/i, 'the mechanism is named');
+  assert.match(warning, /12/, 'and so is the duration that was actually delivered');
+});
+
+test('a long source says the tail is truncated', () => {
+  const cfg = { totalFrames: 375, fps: 25, durationSeconds: 15 };
+  const [warning] = assembleFrameWarnings({ frames: 500, seconds: 20, cfg });
+  assert.match(warning, /truncat/i);
+});
+
+test('an exact source says nothing at all', () => {
+  const cfg = { totalFrames: 375, fps: 25, durationSeconds: 15 };
+  assert.deepEqual(assembleFrameWarnings({ frames: 375, seconds: 15, cfg }), []);
 });

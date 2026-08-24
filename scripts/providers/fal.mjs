@@ -413,6 +413,56 @@ export function falVideoBody({ prompt, imagePath, seconds, seed, size, nativeAud
   };
 }
 
+/**
+ * The reference-to-video request body: the path with no still in it.
+ *
+ * WHY THIS EXISTS AT ALL. `animate` has always started from an approved still,
+ * which made the still stage structural rather than optional. Paul's product is
+ * four choices and a tape -- upload a photo, pick an outfit, a place and a
+ * frame shape -- and a picture the user has to look at and approve is not in
+ * that list. `bytedance/seedance-2.0/reference-to-video` takes the photographs
+ * THEMSELVES, up to nine of them, so the still stops existing rather than being
+ * hidden behind a spinner.
+ *
+ * WHAT IT COSTS, STATED ONCE. The still was also the cheap rejection gate: a
+ * likeness that missed cost $0.04 and the user saw it before paying. On this
+ * path the same miss costs a finished video. That trade was put to Paul three
+ * times and taken three times; it is a product decision, not an oversight.
+ *
+ * THE ORDER OF `references` IS A CONTRACT. The prompt names them @Image1 and
+ * @Image2, so element 0 is the face and element 1, when present, is the place.
+ * The prompt still never describes the person -- CLAUDE.md, "Prompt rules" --
+ * which makes the reference marker the only thing pointing at them.
+ */
+export function falReferenceVideoBody({
+  prompt, references, seconds, seed, size, nativeAudio,
+  // Per model, for the reason falStillBody carries the same parameter: on
+  // 2026-08-23 `fal-ai/uso` answered 422 because the field it wanted was
+  // `input_image_urls`. Three vendors, no reason to assume they agree.
+  referencesParam = 'image_urls',
+  dataUriImpl = falDataUri,
+}) {
+  if (!Array.isArray(references) || references.length === 0) {
+    // The face IS the product. An empty array is a paid call that cannot
+    // return the right person, and it would read as a model failure rather
+    // than the caller bug it is.
+    throw new TypeError('a reference video request needs at least one reference image');
+  }
+  return {
+    prompt,
+    [referencesParam]: references.map((ref) => dataUriImpl(ref.path)),
+    resolution: falResolutionFor(size),
+    aspect_ratio: FAL_ASPECT_RATIO,
+    // A STRING enum here exactly as on image-to-video.
+    duration: String(Math.round(seconds)),
+    // LAYER 1 ON THE WIRE. config/models.json records this endpoint as having
+    // "the same parameter with the same TRUE default", so omitting it ships
+    // the model's own ambience underneath a bed whose entire spec is "quiet".
+    generate_audio: nativeAudio === true,
+    seed,
+  };
+}
+
 /** `https://queue.fal.run/<endpoint>`. Sub-paths are part of the model id and
  *  the queue appends `/requests/...` to the whole thing. */
 export function falSubmitUrl(endpoint, { base = FAL_QUEUE_BASE } = {}) {
@@ -900,11 +950,18 @@ export function createFalProvider(opts = {}) {
       const outDir = requireOutDir(ctx);
       throwIfAborted(ctx.signal);
 
-      if (!existsImpl(req.imagePath)) {
-        throw fail('missing_image', `${FAL_ID}: start image not found: ${req.imagePath}`, { path: req.imagePath });
+      // TWO SHAPES, and the request already said which. `assertVideoRequest`
+      // has refused anything carrying both, so this is a branch and not a
+      // precedence rule.
+      const direct = req.references !== undefined;
+
+      for (const missing of direct
+        ? req.references.filter((r) => !existsImpl(r.path)).map((r) => r.path)
+        : (existsImpl(req.imagePath) ? [] : [req.imagePath])) {
+        throw fail('missing_image', `${FAL_ID}: ${direct ? 'reference' : 'start'} image not found: ${missing}`, { path: missing });
       }
 
-      const { id: model, endpoint } = await resolveModel('video');
+      const { id: model, endpoint, entry: videoEntry } = await resolveModel('video');
       const key = credential();
 
       const report = progressReporter(ctx);
@@ -918,15 +975,29 @@ export function createFalProvider(opts = {}) {
 
       fs.mkdirSync(outDir, { recursive: true });
 
-      const body = falVideoBody({
-        prompt: req.prompt,
-        imagePath: req.imagePath,
-        seconds: req.seconds,
-        seed: req.seed,
-        size,
-        nativeAudio: req.nativeAudio,
-        dataUriImpl,
-      });
+      const body = direct
+        ? falReferenceVideoBody({
+          prompt: req.prompt,
+          references: req.references,
+          seconds: req.seconds,
+          seed: req.seed,
+          size,
+          nativeAudio: req.nativeAudio,
+          // Per model, for the reason the still path carries the same lookup:
+          // `fal-ai/uso` answered 422 in 2026-08-23 because its field was
+          // called `input_image_urls`. Absent means the fal convention.
+          referencesParam: videoEntry?.videoParams?.references ?? 'image_urls',
+          dataUriImpl,
+        })
+        : falVideoBody({
+          prompt: req.prompt,
+          imagePath: req.imagePath,
+          seconds: req.seconds,
+          seed: req.seed,
+          size,
+          nativeAudio: req.nativeAudio,
+          dataUriImpl,
+        });
 
       const { requestId, result } = await runQueued({
         ctx,

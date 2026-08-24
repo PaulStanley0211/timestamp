@@ -166,7 +166,15 @@ export function estimateVideo({ pricing, model, seconds }) {
  */
 export function estimateJob({ pricing, stillModel, videoModel, stillCount, segments = [] }) {
   const lines = [
-    { step: 'still', model: stillModel, quantity: stillCount, usd: estimateStill({ pricing, model: stillModel, count: stillCount }) },
+    // NO STILL LINE WHEN THERE IS NO STILL STAGE. `stillCount: 0` is the direct
+    // path -- the tape is generated from the photographs and no image is ever
+    // bought -- and quoting a line for it would overstate the price of every
+    // direct render. An estimate that names a call nobody will be billed for is
+    // worse than no estimate: --dry-run exists so a spend can be authorised
+    // against real numbers.
+    ...(stillCount > 0
+      ? [{ step: 'still', model: stillModel, quantity: stillCount, usd: estimateStill({ pricing, model: stillModel, count: stillCount }) }]
+      : []),
     ...segments.map((seg, i) => ({
       step: 'animate',
       model: videoModel,

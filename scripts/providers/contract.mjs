@@ -193,23 +193,35 @@ export function assertStillRequest(req) {
     throw bad('invalid_request', `StillRequest.count must be an integer in 1..${MAX_STILL_COUNT}, got ${JSON.stringify(req.count)}`, { count: req.count });
   }
 
-  if (!Array.isArray(req.references) || req.references.length === 0) {
-    throw bad('invalid_request', 'StillRequest.references must be a non-empty array', { references: req.references });
+  requireReferences(req.references, 'StillRequest');
+}
+
+/**
+ * The reference images, wherever they are attached.
+ *
+ * Shared between the still request and the video request rather than written
+ * twice: `reference-to-video` takes exactly the same photographs the still
+ * stage used to, so a rule that held for one and not the other would be an
+ * accident. Extracted when the direct path landed, 2026-08-24.
+ */
+function requireReferences(references, what) {
+  if (!Array.isArray(references) || references.length === 0) {
+    throw bad('invalid_request', `${what}.references must be a non-empty array`, { references });
   }
-  req.references.forEach((ref, i) => {
-    if (!isPlainObject(ref)) throw bad('invalid_request', `StillRequest.references[${i}] must be an object`, { ref });
+  references.forEach((ref, i) => {
+    if (!isPlainObject(ref)) throw bad('invalid_request', `${what}.references[${i}] must be an object`, { ref });
     if (ref.role !== 'face' && ref.role !== 'place') {
-      throw bad('invalid_request', `StillRequest.references[${i}].role must be 'face' or 'place', got ${JSON.stringify(ref.role)}`, { ref });
+      throw bad('invalid_request', `${what}.references[${i}].role must be 'face' or 'place', got ${JSON.stringify(ref.role)}`, { ref });
     }
-    requireAbsolutePath(ref, 'path', `StillRequest.references[${i}]`);
+    requireAbsolutePath(ref, 'path', `${what}.references[${i}]`);
   });
 
   // Exactly one face, and it is the whole product. The photo is the identity
   // anchor; two faces is an averaging instruction and zero faces is a stock
   // photo generator. Neither is a thing anyone asked for.
-  const faces = req.references.filter((r) => r.role === 'face').length;
+  const faces = references.filter((r) => r.role === 'face').length;
   if (faces !== 1) {
-    throw bad('invalid_request', `StillRequest.references must contain exactly one reference with role 'face', found ${faces}`, { faces });
+    throw bad('invalid_request', `${what}.references must contain exactly one reference with role 'face', found ${faces}`, { faces });
   }
 }
 
@@ -218,7 +230,29 @@ export function assertVideoRequest(req) {
   if (!isPlainObject(req)) throw bad('invalid_request', `VideoRequest must be an object, got ${JSON.stringify(req)}`);
   requireString(req, 'prompt', 'VideoRequest');
   requireString(req, 'negativePrompt', 'VideoRequest', { allowEmpty: true });
-  requireAbsolutePath(req, 'imagePath', 'VideoRequest');
+  // EXACTLY ONE OF THE TWO, and never both.
+  //
+  // `imagePath` is image-to-video's start frame: the still a human approved.
+  // `references` is `reference-to-video`, which has no start frame at all and
+  // generates the whole take from the photographs -- the path with no still in
+  // it, which is the product Paul actually described.
+  //
+  // Both together is refused rather than resolved by precedence, because which
+  // one a model honours would differ per vendor, and discovering that costs a
+  // paid call. The same ambiguity is refused again in falReferenceVideoBody.
+  const hasReferences = req.references !== undefined;
+  const hasImage = req.imagePath !== undefined;
+  if (hasReferences && hasImage) {
+    throw bad('invalid_request',
+      'VideoRequest carries both imagePath and references; exactly one is allowed',
+      { imagePath: req.imagePath });
+  }
+  if (!hasReferences && !hasImage) {
+    throw bad('invalid_request',
+      'VideoRequest needs either imagePath (a start frame) or references (the photographs)', {});
+  }
+  if (hasReferences) requireReferences(req.references, 'VideoRequest');
+  else requireAbsolutePath(req, 'imagePath', 'VideoRequest');
   requireSeed(req, 'VideoRequest');
   requireString(req, 'idempotencyKey', 'VideoRequest');
 

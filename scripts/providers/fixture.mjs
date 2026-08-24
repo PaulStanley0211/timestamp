@@ -354,6 +354,11 @@ export function fixtureVideoArgs({ imagePath, filter, output, cfg, frames, outLa
     '-c:v', encode.videoCodec,
     '-profile:v', 'high',
     '-pix_fmt', encode.pixFmt,
+    // LIMITED RANGE, ALWAYS. A JPEG source decodes to yuvj420p and x264 then
+    // tags the output full-range, which the delivery contract refuses by name.
+    // Only reachable since the direct path let a face PHOTOGRAPH be the source
+    // instead of a PNG still.
+    '-color_range', 'tv',
     '-crf', String(encode.crf),
     '-preset', encode.preset,
     '-x264-params', encode.x264Params,
@@ -538,8 +543,16 @@ export function createFixtureProvider(opts = {}) {
       const outDir = requireOutDir(ctx);
       throwIfAborted(ctx.signal);
 
-      if (!existsImpl(req.imagePath)) {
-        throw fail('missing_image', `${FIXTURE_ID}: start image not found: ${req.imagePath}`, { path: req.imagePath });
+      // DIRECT MODE has no start frame: `reference-to-video` takes the
+      // photographs. The fixture animates the FACE photograph instead, which is
+      // honest about what it is -- this provider exists to prove the plumbing
+      // for $0, never to prove that a model holds a likeness. Only a paid call
+      // can answer that, and config/models.json records it as an open question.
+      const sourceImage = req.references
+        ? req.references.find((r) => r.role === 'face')?.path
+        : req.imagePath;
+      if (!sourceImage || !existsImpl(sourceImage)) {
+        throw fail('missing_image', `${FIXTURE_ID}: ${req.references ? 'face reference' : 'start image'} not found: ${sourceImage}`, { path: sourceImage });
       }
 
       const frames = Math.round(req.seconds * cfg.fps);
@@ -561,7 +574,7 @@ export function createFixtureProvider(opts = {}) {
       // The clip is literally the approved still in motion, which is the point:
       // it exercises the image -> video seam, and the last frame of segment N
       // is a real frame that segment N+1 can be started from.
-      const size = await stillSize(req.imagePath, { probeImpl: opts.probeImpl });
+      const size = await stillSize(sourceImage, { probeImpl: opts.probeImpl });
       const output = path.join(outDir, fixtureClipName(req));
       const filter = fixtureVideoFilter({
         seed: req.seed,
@@ -571,7 +584,7 @@ export function createFixtureProvider(opts = {}) {
         size,
         fontPath,
       });
-      await runFfmpegImpl(fixtureVideoArgs({ imagePath: req.imagePath, filter, output, cfg, frames }));
+      await runFfmpegImpl(fixtureVideoArgs({ imagePath: sourceImage, filter, output, cfg, frames }));
       throwIfAborted(ctx.signal);
 
       progress(ctx, 'download', 90);

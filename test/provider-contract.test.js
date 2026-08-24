@@ -56,6 +56,7 @@ import {
   assertProvider,
   assertStillResult,
   assertVideoResult,
+  assertVideoRequest,
   assertProgressEvent,
   requireFetchImpl,
 } from '../scripts/providers/contract.mjs';
@@ -70,7 +71,7 @@ import { createProvider, loadModels, modelEntry, PROVIDER_IDS } from '../scripts
 // provider -- one import and one array entry, and the shared body below
 // untouched. If that ever stops being true, the edit is the bug report.
 import { falContractCase } from './provider-fal.test.js';
-import { loadPricing, assertPricingTable, estimateStill, estimateVideo, divergence, diverges } from '../scripts/providers/pricing.mjs';
+import { loadPricing, assertPricingTable, estimateStill, estimateVideo, estimateJob, divergence, diverges } from '../scripts/providers/pricing.mjs';
 
 const cfg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config', 'render.json'), 'utf8'));
 
@@ -646,4 +647,76 @@ test('an UNVERIFIED fal model cannot be handed out', () => {
   assert.equal(video.audioOffParam.name, 'generate_audio');
   assert.equal(video.audioOffParam.value, false);
   assert.equal(video.capabilities.maxClipSeconds, 15, 'fifteen seconds in one call is why there is no seam');
+});
+
+// ---------------------------------------------------------------------------
+// a video request with no start frame
+//
+// `reference-to-video` has no start frame at all: it takes the photographs and
+// generates the whole take from them. So `imagePath` -- which has always meant
+// "the still somebody approved" -- stops being the only way to describe a video
+// request, and EXACTLY ONE of the two must be present.
+// ---------------------------------------------------------------------------
+
+const aVideoReq = (over = {}) => ({
+  prompt: 'p',
+  negativePrompt: '',
+  imagePath: path.resolve('still-01.png'),
+  seconds: 15,
+  seed: 1,
+  nativeAudio: false,
+  idempotencyKey: 'k',
+  ...over,
+});
+
+test('a video request may carry references instead of a start frame', () => {
+  const req = aVideoReq({
+    imagePath: undefined,
+    references: [{ role: 'face', path: path.resolve('face.jpg') }],
+  });
+  assert.doesNotThrow(() => assertVideoRequest(req),
+    'the direct path has no still, so imagePath cannot be mandatory');
+});
+
+test('a video request with neither a start frame nor references is refused', () => {
+  // Not a default and not a guess: a request that names no picture at all
+  // cannot produce the right person, and it must fail before it is billed.
+  assert.throws(() => assertVideoRequest(aVideoReq({ imagePath: undefined })),
+    /imagePath|references/i);
+});
+
+test('a video request carrying BOTH a start frame and references is refused', () => {
+  // The two describe different endpoints. Sending both leaves which one the
+  // model honours up to the model, and the answer would differ per vendor --
+  // exactly the class of ambiguity that cost a 422 and a round trip in BUG 3.
+  assert.throws(
+    () => assertVideoRequest(aVideoReq({ references: [{ role: 'face', path: path.resolve('f.jpg') }] })),
+    /both|exactly one/i);
+});
+
+test('references on a video request are held to the same shape as on a still', () => {
+  assert.throws(() => assertVideoRequest(aVideoReq({ imagePath: undefined, references: [] })),
+    /at least one|references/i);
+  assert.throws(
+    () => assertVideoRequest(aVideoReq({ imagePath: undefined, references: [{ role: 'face', path: 'relative.jpg' }] })),
+    /absolute/i);
+});
+
+test('a job with no still stage is estimated without a still line', () => {
+  // DIRECT MODE. Quoting a still line on a job that will never make one
+  // overstates the price of every direct render, and an estimate that names a
+  // call nobody will be billed for is worse than no estimate at all -- the
+  // whole point of `--dry-run` is authorising a spend against real numbers.
+  const pricing = loadPricing();
+  const segments = [{ index: 1, seconds: 15, startsFrom: 'references' }];
+  const est = estimateJob({
+    pricing,
+    videoModel: 'bytedance/seedance-2.0/reference-to-video',
+    stillCount: 0,
+    segments,
+  });
+
+  assert.equal(est.lines.filter((l) => l.step === 'still').length, 0, 'no still line at all');
+  assert.equal(est.lines.length, 1, 'one call, and it is the video');
+  assert.equal(est.estimated, est.lines[0].usd, 'the total is the video and nothing else');
 });

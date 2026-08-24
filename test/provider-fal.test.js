@@ -46,6 +46,7 @@ import {
   FAL_QUEUE_BASE,
   falStillBody,
   falVideoBody,
+  falReferenceVideoBody,
   falRequestId,
   falResolutionFor,
   falMimeType,
@@ -992,4 +993,88 @@ test('[fal] a 720p request downloads a 960x720 clip from the url the queue named
   assert.equal(res.clip.path, path.join(outDir, 'seg-01.mp4'));
   assert.ok(fs.statSync(res.clip.path).size > 1000);
   assert.equal(res.meta.resolution, '720p');
+});
+
+// ---------------------------------------------------------------------------
+// reference-to-video: the path with no still in it
+//
+// Paul's product direction, restated three times and finally built: upload a
+// photo, pick an outfit, a place and a frame shape, get a tape. No generated
+// still, nothing to choose from, no picture the user ever meets.
+//
+// `bytedance/seedance-2.0/reference-to-video` was VERIFIED on 2026-08-20 and
+// never wired in, because `animate` started from the approved still. It takes
+// up to 9 reference images as `image_urls` and refers to them from the prompt
+// as @Image1, @Image2 -- so the face photo goes in directly and the still stage
+// stops existing rather than being hidden.
+// ---------------------------------------------------------------------------
+
+test('[fal] the reference video body carries the photos, not a start frame', () => {
+  const body = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'face.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    dataUriImpl: (f) => `data:image/jpeg;base64,${f}`,
+  });
+
+  assert.deepEqual(body.image_urls, ['data:image/jpeg;base64,face.jpg']);
+  // SENDING BOTH WOULD BE AMBIGUOUS. `image_url` is image-to-video's start
+  // frame; this endpoint has no start frame at all, and a body carrying both
+  // invites the model to pick one.
+  assert.ok(!Object.hasOwn(body, 'image_url'), 'no singular start frame on this endpoint');
+});
+
+test('[fal] a second reference is the place, and it rides in the same array', () => {
+  // The strongest version of this product -- "your actual childhood garden" --
+  // and the reason the endpoint was recorded in the first place.
+  const body = falReferenceVideoBody({
+    prompt: 'p',
+    references: [{ role: 'face', path: 'f.jpg' }, { role: 'place', path: 'p.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    dataUriImpl: (f) => `data:x;base64,${f}`,
+  });
+  assert.deepEqual(body.image_urls, ['data:x;base64,f.jpg', 'data:x;base64,p.jpg'],
+    'order is the @Image1/@Image2 contract the prompt refers to');
+});
+
+test('[fal] the reference field name is per-model, exactly as it is for stills', () => {
+  // BUG 3, 2026-08-23: `fal-ai/uso` answered 422 because the field was called
+  // `input_image_urls`. Three vendors, no reason to assume they agree, and a
+  // 422 costs a round trip to discover. The name lives in config/models.json.
+  const body = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    referencesParam: 'input_image_urls',
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  assert.deepEqual(body.input_image_urls, ['data:x;base64,AA==']);
+  assert.ok(!Object.hasOwn(body, 'image_urls'), 'one field, never both');
+});
+
+test('[fal] the reference video body keeps every guard the image path already had', () => {
+  const body = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['720p'], nativeAudio: false,
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  // Layer 1 on the wire. `generate_audio` DEFAULTS TO TRUE on this endpoint too
+  // -- the config's own note says "the same parameter with the same TRUE
+  // default" -- so omitting it ships the model's ambience under our bed.
+  assert.equal(body.generate_audio, false);
+  assert.ok(Object.hasOwn(body, 'generate_audio'), 'omitted is not the same as false');
+  assert.equal(body.duration, '15', 'a STRING enum, not a number');
+  assert.equal(typeof body.duration, 'string');
+  assert.equal(body.resolution, '720p');
+  assert.equal(body.seed, 7);
+});
+
+test('[fal] a reference video request with no references is refused before it is sent', () => {
+  // The face IS the product. A body with an empty array is a paid call that
+  // cannot possibly return the right person, and it would look like a model
+  // failure rather than a caller bug.
+  assert.throws(
+    () => falReferenceVideoBody({
+      prompt: 'p', references: [], seconds: 15, seed: 1,
+      size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    }),
+    /at least one reference/i);
 });

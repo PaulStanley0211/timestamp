@@ -78,6 +78,12 @@ function usage(catalog) {
     '  --stills=<n>          how many stills to choose between (1..8, default 3).',
     '  --stop-after=select   write the contact sheet and stop, before video prices apply.',
     '  --still=<n>           which still to animate, 1-based, matching the filenames.',
+    '  --direct              NO STILL. The tape is generated from the photographs',
+    '                        themselves via reference-to-video: upload a photo,',
+    '                        pick an outfit, a place and a shape, get fifteen',
+    '                        seconds. Nothing to approve, and no cheap rejection',
+    '                        gate either -- a miss costs a whole video.',
+    '  --video-model=<id>    override the video model (pair with --direct).',
     '  --still-model=<id>    override the still model for this run (Phase 0 bake-off).',
     '  --allow-unverified-model',
     '                        required alongside --still-model for a candidate that',
@@ -202,17 +208,32 @@ async function main() {
   // the override only into the pipeline moved the failure from compose to
   // still and looked like a fix; the provider is the second place that has to
   // be told.
+  // DIRECT MODE: no still, no gate, the tape straight from the photographs.
+  // `--video-model` exists for the same reason `--still-model` does -- the
+  // provider resolves its own model at construction time, so telling only the
+  // pipeline would move the failure rather than fix it.
+  const direct = args.flags.has('direct');
+  const videoModelOverride = args['video-model'] ?? null;
+
   const stillModelOverride = args['still-model'] ?? null;
   const allowUnverifiedModel = args.flags.has('allow-unverified-model');
-  if (allowUnverifiedModel && !stillModelOverride) {
+  if (allowUnverifiedModel && !stillModelOverride && !videoModelOverride) {
     console.error('\n--allow-unverified-model does nothing on its own. It lowers the verified gate for'
-      + '\nthe model named by --still-model, and there is no --still-model here.\n');
+      + '\nthe model named by --still-model or --video-model, and neither is here.\n');
+    process.exitCode = 1;
+    return;
+  }
+  if (direct && stillModelOverride) {
+    // A contradiction, not a preference: --direct is the mode with no still in
+    // it, so there is no still model for --still-model to name.
+    console.error('\n--direct generates the tape from the photographs and makes no still at all,'
+      + '\nso --still-model has nothing to name. Drop one of the two.\n');
     process.exitCode = 1;
     return;
   }
 
   const provider = createProvider(providerId, {
-    cfg, stillModel: stillModelOverride, allowUnverifiedModel,
+    cfg, stillModel: stillModelOverride, videoModel: videoModelOverride, allowUnverifiedModel,
   });
   const stillIndex = args.still === undefined ? null : positiveInt(args.still, null, 'still');
 
@@ -227,7 +248,7 @@ async function main() {
     console.log(`\ntimestamp render · resuming ${job.jobId} · provider ${providerId}`);
     await runPipeline(job, {
       provider, root, cfg, stopAfter, stillIndex,
-      stillModelOverride, allowUnverifiedModel,
+      stillModelOverride, videoModelOverride, allowUnverifiedModel,
       providerCtx: paidTransport(provider),
       log: console.log,
     });
@@ -267,8 +288,8 @@ async function main() {
   if (args.flags.has('dry-run')) {
     const plan = await dryRun({
       provider, cfg,
-      input: { place: { ...place, photoPath: placePhoto }, outfit, stillCount },
-      stillModelOverride, allowUnverifiedModel,
+      input: { place: { ...place, photoPath: placePhoto }, outfit, stillCount, direct },
+      stillModelOverride, videoModelOverride, allowUnverifiedModel,
     });
     console.log(`\ntimestamp render · DRY RUN · provider ${plan.provider}`);
     console.log('  nothing below is submitted and nothing is charged\n');
@@ -298,6 +319,7 @@ async function main() {
       // The destination, not the source: `intake` stages the upload into the job
       // directory and writes the stripped copy here.
       photo: { path: 'input/photo.jpg' },
+      direct,
       place: { kind: place.kind, value: place.value, photoPath: placePhoto ? 'input/place.jpg' : null },
       outfit,
       stillCount,
@@ -317,7 +339,7 @@ async function main() {
 
   await runPipeline(job, {
     provider, root, cfg, stopAfter, stillIndex,
-    stillModelOverride, allowUnverifiedModel,
+    stillModelOverride, videoModelOverride, allowUnverifiedModel,
     providerCtx: paidTransport(provider),
     sources: { photo, placePhoto },
     log: console.log,
