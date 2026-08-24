@@ -49,7 +49,6 @@ export function loginPage({ error = null, email = '', next = '', notice = null }
     <p class="eyebrow">Sign in</p>
     <h1 class="headline">Welcome back</h1>
     <p class="sub">Your tapes are on the shelf where you left them.</p>
-    <hr class="rule">
 
     ${notice ? `<p class="notice">${h(notice)}</p>` : ''}
     ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
@@ -76,7 +75,6 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
     <h1 class="headline">Start a shelf</h1>
     <p class="sub">A free credit allowance every month. No card, and nowhere on this
     site to type one.</p>
-    <hr class="rule">
 
     ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
 
@@ -167,7 +165,6 @@ export function pricingPage({
     <p class="sub">A tape is fifteen seconds of generated video put through the tape deck.
     You spend credits, and how many depends on the size the video is generated at before
     the tape gets hold of it.</p>
-    <hr class="rule">
     <p class="hint">${costs || 'Costs are unavailable right now.'}</p>
     <p class="hint">There is no payment form here and there is not one anywhere else either.
     When paid plans open, checkout is hosted by the payment provider and this application
@@ -200,7 +197,6 @@ export function authUnavailablePage() {
   <section class="panel">
     <p class="eyebrow">503</p>
     <h1 class="headline">Accounts are not wired up yet</h1>
-    <hr class="rule">
     <p class="sub">This build has no <code>scripts/auth/</code> module, so there is nothing to
     sign in to. It is specified in <code>docs/interfaces-app.md</code> section A.</p>
   </section>

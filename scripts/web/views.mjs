@@ -385,7 +385,6 @@ function stepHead(n, name, subtitle) {
   <div class="step-say">
     <h2 class="title">${h(name)}</h2>
     <p class="sub">${h(subtitle)}</p>
-    <hr class="rule">
   </div>
 </div>`;
 }
@@ -812,7 +811,6 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
     <div class="step-say">
       <h2 class="title">Your tapes</h2>
       <p class="sub">Every recording stays on the shelf.</p>
-      <hr class="rule">
     </div>
   </div>
   ${tapes.length ? `<div class="shelf">${tapes.map(shelfTile).join('')}</div>` : `
@@ -912,7 +910,6 @@ export function statusPage({ view, account = null, labels = {} }) {
   <p class="eyebrow">Recording</p>
   <h1 class="headline" id="headline">${h(copy ? copy.title : STATUS_COPY[view.status] ?? view.status)}</h1>
   <p class="sub" id="subline">${h(copy ? copy.note : '')}</p>
-  <hr class="rule">
 
   <ol class="bar" id="bar" aria-label="Progress">
     ${view.steps.map((s) => `<li class="seg seg-${h(s.status)}" title="${h((STEP_COPY[s.name] ?? {}).title ?? s.name)}"></li>`).join('')}
@@ -1013,7 +1010,6 @@ export function selectPage({ view, stills, account = null }) {
   <h1 class="headline">Pick a frame</h1>
   <p class="sub">The video is built out of one of these. Choose the one that looks most like you &mdash;
   sharpness matters less than likeness.</p>
-  <hr class="rule">
 
   <form class="sheet" method="post" action="/api/jobs/${h(view.jobId)}/select">
     ${stills.map((s) => `
@@ -1050,7 +1046,6 @@ export function resultPage({ view, account = null, labels = {} }) {
   <p class="stamp">${h(view.jobId)}</p>
   <p class="eyebrow">${h(stampDate(view.jobId))}</p>
   <h1 class="headline">Here it is</h1>
-  <hr class="rule">
 
   <div class="player">
     <video controls playsinline preload="metadata"
@@ -1092,7 +1087,6 @@ export function errorPage({ status, title, detail = null, jobId = null }) {
   ${jobId ? `<p class="stamp">${h(jobId)}</p>` : ''}
   <p class="eyebrow">${h(status)}</p>
   <h1 class="headline">${h(title)}</h1>
-  <hr class="rule">
   ${detail ? `<p class="sub">${h(detail)}</p>` : ''}
   <p class="actions"><a class="go" href="/">Start again</a></p>
   </section>
