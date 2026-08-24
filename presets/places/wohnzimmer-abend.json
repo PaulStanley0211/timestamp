@@ -10,6 +10,8 @@
     "light": "the television carrying most of it, cold and shifting across the room, one warm standard lamp behind, the ceiling almost dark",
     "lens": "wide and close in a small space, the corners going dark",
     "framing": "seated on the sofa, chest-up, the wall unit and the television behind",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "sunk back into the sofa and only half turning round, one arm along the back of it",
     "eraProps": "a CRT television with a rounded screen, a row of unlabelled black cassette boxes, a wired telephone on the side table, a glass ashtray, a crocheted blanket over the arm of the sofa"
   },
   "negatives": [
@@ -22,9 +24,28 @@
   "motionHint": "light from the television shifts across the room as the picture changes, and the leaves of the plant stir in the draught from the window",
   "lookOverride": {
     "_comment": "The largest override in the menu, and every value has a reason. grainStrength 30 against base 20: a CCD at full gain in a room lit by a television. cbRedMid 0.1 for the tungsten lamp. saturation 0.74 because gain washes colour out rather than saturating it. headSwitchNoise 64 because the band sits in near-black here and at the base 58 it stops being visible at all.",
-    "tape": { "grainStrength": 30 },
-    "grade": { "cbRedMid": 0.1, "saturation": 0.74 },
-    "optics": { "bloomStrength": 0.5 },
-    "transport": { "headSwitchNoise": 64 }
+    "tape": {
+      "grainStrength": 30
+    },
+    "grade": {
+      "cbRedMid": 0.1,
+      "saturation": 0.74
+    },
+    "optics": {
+      "bloomStrength": 0.5
+    },
+    "transport": {
+      "headSwitchNoise": 64
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "A room with a television in it, heard through the room rather than from the speaker. Heavily lowpassed so it reads as muffled sound next door, which is what a camcorder mic across a living room actually got.",
+        "amplitude": 0.24,
+        "color": "brown",
+        "highpass": 200,
+        "lowpass": 900,
+        "volume": 0.13
+      }
+    }
   }
 }

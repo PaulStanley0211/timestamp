@@ -10,6 +10,8 @@
     "light": "grey early light through the net curtains and one warm bulb over the table still switched on, the two colours plainly not matching",
     "lens": "wide in a small space, the near edge of the table close to the camera and the counter behind going soft",
     "framing": "seated at the table, chest-up, turned towards the window",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "a cup halfway up and stopped there, mid-sentence, by whoever picked the camera up",
     "eraProps": "a filter coffee machine with a glass jug, a wired telephone on the wall, a tin of loose tea, a folded newspaper, a wall clock with hands"
   },
   "negatives": [
@@ -22,8 +24,25 @@
   "motionHint": "steam lifts off the cup, the net curtain breathes at the window, and the second hand moves on the clock",
   "lookOverride": {
     "_comment": "A dim interior on a consumer CCD meant gain, and gain meant grain -- this is the reason the override mechanism exists at all. Amber up for the tungsten bulb, saturation down because gain washes colour out, halation open for the bulb itself.",
-    "tape": { "grainStrength": 24 },
-    "grade": { "cbRedMid": 0.09, "saturation": 0.78 },
-    "optics": { "bloomStrength": 0.46 }
+    "tape": {
+      "grainStrength": 24
+    },
+    "grade": {
+      "cbRedMid": 0.09,
+      "saturation": 0.78
+    },
+    "optics": {
+      "bloomStrength": 0.46
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "A fridge and a small room. Almost nothing: breakfast at a kitchen table is the quietest place in the catalog and should sound like it.",
+        "amplitude": 0.18,
+        "color": "brown",
+        "highpass": 200,
+        "lowpass": 500,
+        "volume": 0.11
+      }
+    }
   }
 }

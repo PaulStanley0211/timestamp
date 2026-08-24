@@ -10,6 +10,8 @@
     "light": "flat midday brightness through thin high cloud, the concrete pale, no strong shadow anywhere",
     "lens": "wide and close in a tight space, the far balconies falling slightly out of focus",
     "framing": "chest-up, turned back towards the flat, one hand still up at the line",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "still pegging one corner up, the other arm already dropping back down",
     "eraProps": "wooden pegs, a red plastic washing-up bowl, a satellite dish two balconies along, a small grey mobile phone with a monochrome screen on the ledge"
   },
   "negatives": [
@@ -21,7 +23,24 @@
   "motionHint": "the bedsheets lift and fall on the line and the brightness shifts as thin cloud passes",
   "lookOverride": {
     "_comment": "Flat overcast has no highlight to bloom and no colour to push, so this pulls saturation down and leans the midtones very slightly cold. Grain drops a touch: bright flat scenes show it far more than a dark interior does.",
-    "grade": { "saturation": 0.76, "cbBlueMid": -0.03 },
-    "tape": { "grainStrength": 16 }
+    "grade": {
+      "saturation": 0.76,
+      "cbBlueMid": -0.03
+    },
+    "tape": {
+      "grainStrength": 16
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "Wind across a balcony with washing on the line. The swell is the sheets lifting and falling, which the preset already names as the thing that moves.",
+        "amplitude": 0.26,
+        "color": "pink",
+        "highpass": 250,
+        "lowpass": 1600,
+        "volume": 0.15,
+        "swellHz": 0.22,
+        "swellDepth": 0.5
+      }
+    }
   }
 }

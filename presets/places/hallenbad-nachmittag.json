@@ -8,8 +8,10 @@
     "_comment": "Condensation on the high windows is doing two jobs -- it dates the building and it explains why the daylight is diffuse. Do not trade it for a cleaner description.",
     "scene": "a municipal indoor swimming pool, pale blue tiles, lane ropes across the water, a high ceiling of ribbed panels, a lifeguard chair at the side, condensation on the high windows",
     "light": "diffuse daylight through the misted windows plus rows of fluorescent fittings overhead, reflections off the water crawling across the ceiling",
-    "lens": "wide with deep focus down the length of the pool, everything a little flattened",
+    "lens": "wide down the length of the pool, everything a little flattened, the far end losing its edges",
     "framing": "waist-up at the tiled edge, the lanes running away behind",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "just up out of the water at the tiled edge, one hand still on the rail and water running off",
     "eraProps": "a stopwatch on a lanyard, a plastic locker key on a wrist band, a scratched vending machine, a tiled mosaic on the far wall"
   },
   "negatives": [
@@ -22,8 +24,29 @@
   "motionHint": "the water surface never stops moving and its reflections travel slowly across the ceiling and the tiles",
   "lookOverride": {
     "_comment": "Every hard highlight on moving water is a halation source, so this is the one preset that opens bloom furthest. Saturation stays fairly high because the tiles carry the only real colour in the frame.",
-    "grade": { "cbBlueMid": -0.02, "saturation": 0.82 },
-    "optics": { "bloomStrength": 0.5 },
-    "tape": { "grainStrength": 18 }
+    "grade": {
+      "cbBlueMid": -0.02,
+      "saturation": 0.82
+    },
+    "optics": {
+      "bloomStrength": 0.5
+    },
+    "tape": {
+      "grainStrength": 18
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "A tiled hall. The echo IS the room -- every hard surface, nothing soft anywhere -- and the swell is the water surface the preset already describes as never stopping.",
+        "amplitude": 0.26,
+        "color": "pink",
+        "highpass": 250,
+        "lowpass": 2200,
+        "volume": 0.16,
+        "swellHz": 0.15,
+        "swellDepth": 0.4,
+        "echoDelayMs": 180,
+        "echoDecay": 0.45
+      }
+    }
   }
 }

@@ -10,6 +10,8 @@
     "light": "flat overcast with no shadow at all, the water and the sky nearly the same grey, the sand slightly brighter than both",
     "lens": "wide and low with a lot of sky, the horizon almost straight across the frame",
     "framing": "waist-up against the empty sand, the groyne running away over one shoulder",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "walking back up the sand and only just noticing the camera, one arm still out for balance",
     "eraProps": "roofed wicker beach chairs, a striped canvas wind-break, a metal thermos flask, a fold-out paper map weighted down with a stone"
   },
   "negatives": [
@@ -22,8 +24,28 @@
   "motionHint": "the water moves in slow flat lines up the sand, the marram grass bends steadily, and the canvas of the wind-break snaps",
   "lookOverride": {
     "_comment": "The coldest and flattest thing in the menu. Saturation well down, warmth backed almost out (remember bm negative = yellow, so raising cbBlueMid towards zero cools it), halation nearly off because a flat overcast sky has no specular highlight to halate, and the least grain of any preset because there is nothing here for it to hide in.",
-    "grade": { "saturation": 0.7, "cbRedMid": 0.02, "cbBlueMid": -0.01 },
-    "tape": { "grainStrength": 15 },
-    "optics": { "bloomStrength": 0.3 }
+    "grade": {
+      "saturation": 0.7,
+      "cbRedMid": 0.02,
+      "cbBlueMid": -0.01
+    },
+    "tape": {
+      "grainStrength": 15
+    },
+    "optics": {
+      "bloomStrength": 0.3
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "Surf and onshore wind. The swell is the waves: 0.18 Hz is about one every five and a half seconds, which is what the preset means by \"slow flat lines up the sand\". Lowpassed hard because a camcorder mic in wind has no top end left.",
+        "amplitude": 0.3,
+        "color": "brown",
+        "highpass": 200,
+        "lowpass": 900,
+        "volume": 0.2,
+        "swellHz": 0.18,
+        "swellDepth": 0.7
+      }
+    }
   }
 }

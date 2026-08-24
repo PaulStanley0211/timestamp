@@ -10,6 +10,8 @@
     "light": "hard daylight from one small landing window at one end and a flickering fluorescent tube at the other, the two fighting each other across the landing",
     "lens": "wide and close, the flight of stairs running away behind, edges bending slightly",
     "framing": "standing on the half-landing, waist-up, the handrail cutting across the lower frame",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "half a step down and turning back, one hand flat on the handrail",
     "eraProps": "dented aluminium letterboxes, a coir doormat, a bicycle chained to the rail, a hand-written notice pinned to the wall"
   },
   "negatives": [
@@ -22,7 +24,25 @@
   "motionHint": "the fluorescent tube flickers unevenly and the entrance door swings shut somewhere below",
   "lookOverride": {
     "_comment": "Concrete and fluorescent light: desaturate hard and back the warmth off, which is the one place in this menu where the base profile's amber is actively wrong. Note the sign -- colorbalance bm NEGATIVE adds yellow, so pulling cbBlueMid UP from the base -0.05 towards zero is what makes it cooler. More grain because the interior is dim without being warm.",
-    "grade": { "saturation": 0.72, "cbBlueMid": -0.01, "cbRedMid": 0.01 },
-    "tape": { "grainStrength": 22 }
+    "grade": {
+      "saturation": 0.72,
+      "cbBlueMid": -0.01,
+      "cbRedMid": 0.01
+    },
+    "tape": {
+      "grainStrength": 22
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "Concrete and a long stairwell. A much longer echo than the swimming hall and no swell at all: nothing in a stairwell moves except the door somewhere below. The fluorescent buzz the preset mentions wants a TONE and this layer only makes noise -- see CLAUDE.md.",
+        "amplitude": 0.2,
+        "color": "brown",
+        "highpass": 200,
+        "lowpass": 1800,
+        "volume": 0.14,
+        "echoDelayMs": 320,
+        "echoDecay": 0.35
+      }
+    }
   }
 }

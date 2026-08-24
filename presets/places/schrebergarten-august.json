@@ -8,8 +8,10 @@
     "_comment": "Named props beat adjectives. 'A glass bottle of mineral water with a foil label' places the decade on its own; 'nostalgic summer atmosphere' places nothing and costs a generation to find that out.",
     "scene": "a small German allotment garden behind a clipped privet hedge, a folding table with a patterned plastic tablecloth, four white plastic chairs, a watering can and a coiled green hose beside a wooden shed",
     "light": "low late-August sun coming through the hedge from the left, long shadows across uneven grass, warm and completely ordinary",
-    "lens": "a consumer zoom near its wide end, deep focus from the table all the way to the shed, a little barrel bend at the edges",
+    "lens": "a consumer zoom near its wide end, sharp on the table with the shed behind it already going soft, a little barrel bend at the edges",
     "framing": "waist-up, three-quarters to the camera, standing at the end of the table with the shed behind",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "reaching across to move the bottle out of the sun, half turned back at being called",
     "eraProps": "a glass bottle of mineral water with a foil label, a green hose reel, a bicycle with a dynamo leaning on the fence, a tin watering can"
   },
   "negatives": [
@@ -22,7 +24,24 @@
   "motionHint": "the hedge and the tablecloth move a little in the breeze, and a wasp turns slowly around the bottle",
   "lookOverride": {
     "_comment": "Warm, bright, open air: the base grain is already right, so this only pushes the amber a little and opens the halation on the low sun through the hedge.",
-    "grade": { "cbRedMid": 0.08, "saturation": 0.84 },
-    "optics": { "bloomStrength": 0.44 }
+    "grade": {
+      "cbRedMid": 0.08,
+      "saturation": 0.84
+    },
+    "optics": {
+      "bloomStrength": 0.44
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "A hedge moving in a light breeze and nothing else. Quiet on purpose -- an allotment in late August has almost no sound in it, and that absence is the register the whole product is aiming at.",
+        "amplitude": 0.22,
+        "color": "pink",
+        "highpass": 300,
+        "lowpass": 1400,
+        "volume": 0.1,
+        "swellHz": 0.12,
+        "swellDepth": 0.35
+      }
+    }
   }
 }
