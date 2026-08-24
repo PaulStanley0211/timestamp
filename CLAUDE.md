@@ -7,30 +7,93 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-23) - the paid path RAN for the first time tonight
+## START HERE (2026-08-24) - the bake-off is HALF ANSWERED
 
-**991 tests / 989 pass / 0 fail / 2 skipped** (the skips are the `*-smoke.test.js`
-money guards, which self-skip without `TIMESTAMP_LIVE=1`).
+**1010 tests / 1008 pass / 0 fail / 2 skipped** (the skips are the
+`*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`).
 
-**THE WORKING TREE IS DIRTY AND NOTHING FROM 2026-08-23 IS PUSHED.**
-`origin/main == b6f64a3`. There is one local commit, `ca2b912`, on the branch
-`ui-redesign-signed-in-page` (the UI redesign, sections 6a-6c). Everything after
-that -- the transport fix, the bake-off flags, the 2048px cap, the eight place
-photographs, the card aspect, two test repairs -- is **uncommitted working tree**.
-Read `git status` before assuming anything is safe.
+**THE TREE IS CLEAN AND NOTHING IS PUSHED.** `origin/main == b6f64a3`. Branch
+`ui-redesign-signed-in-page` is **five commits ahead**:
 
-**The repo is PUBLIC: https://github.com/PaulStanley0211/timestamp**
-`out/`, `.env` and `assets/test-photos/` are gitignored (verified again on
-2026-08-23 with `git check-ignore`; the face photo and the fal key have never
-been staged). Both security-review docs stay gitignored on purpose - section 2.
+```
+e7e8557  The eight place photographs
+db4e3c5  Replace the visual world: STRUCK, on both surfaces
+b2f213d  Write the visible: the motion prompt gets the craft rules
+3162e19  Three user-selectable frame shapes, and the paid path's first real run
+ca2b912  Give the signed-in page a subject and three panel weights
+```
+
+**THE ONE LIVE QUESTION: does seedream hold Paul's likeness?** He ran it for
+real on 2026-08-24 (job `20260824-093906-d39675`, ~$0.04 estimated, not metered)
+and **has not given a verdict yet.** Everything else below is settled.
+
+### What seedream proved, objectively
+
+- **Reference field is `image_urls`** -- accepted with no 422, unlike `uso`
+  which demanded `input_image_urls`. Recorded in `config/models.json`.
+- **Aspect control HOLDS.** `aspect_ratio: '4:3'` was sent, 2560x1920 came back,
+  which is exactly 4:3. **This is the check `uso` failed at 5:4.**
+- **The raster is NOT honoured.** 640x480 ordered, 2560x1920 returned -- 16x the
+  pixels. Harmless (the tape raster is 736x588, so headroom not waste) but the
+  $0.04 may be quoted for a different size. ESTIMATE until a `--meter` run.
+- **Scene adherence EXCELLENT** -- every named prop, light direction correct,
+  exactly one person, wardrobe down to the chest crest.
+- **The framing clause was IGNORED.** "waist-up, three-quarters" was asked for;
+  full-body front-on came back. Matters more once the still is hidden, because
+  framing then becomes the model's decision alone.
+- The two features `uso` dropped -- the beard and the tight curls -- are both
+  present. **That is an observation about the image, NOT a verdict on
+  resemblance. Only Paul can call that and he has not.**
+
+### The next two moves, in order
+
+1. **Paul's verdict on the face**, then the blind check: text the image to two
+   people who know him with "Who is this?" and NOTHING else. **Not the friend he
+   primed** by saying it was not AI generated.
+2. **Run the third candidate before choosing** -- the repo's own rule is not to
+   run five stills on any model until all three have been tried once:
+
+```
+node --env-file-if-exists=.env scripts/render/render.mjs --photo=assets/test-photos/face.jpg --place=schrebergarten-august --outfit=trainingsjacke --consent --provider=fal --still-model=fal-ai/nano-banana-pro/edit --allow-unverified-model --stills=1 --stop-after=select
+```
+
+**CLAUDE CANNOT RUN PAID COMMANDS.** Paul pastes them and pastes the output back.
+
+### What shipped 2026-08-24 (see sections 13-15)
+
+- **THREE FRAME SHAPES: 4:3, 16:9, 9:16** -- section 13.
+- **The motion prompt was rewritten** to craft rules -- section 14.
+- **THE VISUAL WORLD WAS REPLACED. It is called STRUCK** -- section 15.
+  **`DESIGN.md` and `PRODUCT.md` are NEW, in the repo, and authoritative.**
+
+### Open, and none of it blocking the bake-off
+
+- **19 of 20 keyboard stops have NO visible focus indicator** -- WCAG 2.4.7,
+  **Level A**. The hoisted `.statehook` radios are 1x1px with
+  `clip-path: inset(50%)`, so the global `:focus-visible` outline paints
+  nothing. Section 6b's "0 violations across 12 focusables" UNDERCOUNTED: the
+  page has ~34 focusables and the hoisted radios sat outside `.wrap`.
+- **The Higgsfield licence question is STILL unanswered** and
+  `assets/places/` is now COMMITTED (Paul said "commit everything" twice after
+  being told twice). **Nothing is pushed, and the push is the irreversible line,
+  not the commit.** Settle it before this branch goes up. Section 10.
+- **The worker still cannot spend** -- `worker-cli.mjs` passes no transport, so
+  the web app's renderer cannot reach the network. CLI only. Section 8, bug 1.
+- **The paid path renders 4:3 ONLY** and refuses the other two shapes loudly --
+  section 13.
+- **Login, signup, status, result and pricing still wear the superseded
+  frost-and-amber world** and now clash with the landing and app pages.
 
 ```bash
 npm run web                              # terminal 1
 npm run worker -- --provider=fixture     # terminal 2
 # sign in as dev@example.com / timestamp-dev-password
 ```
-`paul@example.com` cannot be signed into - scrypt hash, no reset endpoint. Use
-the dev account.
+`paul@example.com` cannot be signed into - scrypt hash, no reset endpoint.
+
+**The repo is PUBLIC: https://github.com/PaulStanley0211/timestamp**
+`out/`, `.env` and `assets/test-photos/` are gitignored. Both security-review
+docs stay gitignored on purpose - section 2.
 
 ---
 
@@ -547,6 +610,106 @@ fails perhaps 1 run in 4 under load. Nothing in the 2026-08-23 changes touches
 margin is narrower than the machine's variance. If it goes red, re-run that file
 alone before believing it.
 
+### 13. THREE FRAME SHAPES SHIP - 4:3, 16:9, 9:16 (2026-08-24)
+
+**The design is one constraint: every shape holds its SHORT EDGE at 576 and
+varies only the long edge.** That is what keeps ONE set of filtergraph tuning
+constants correct in all three -- a 14px head-switch band is 14px of a 576-high
+picture whichever shape it is in -- and the short edge always scales 576 -> 1080,
+so the grain is not merely similar across shapes, it is arithmetically identical.
+
+| Shape | Tape raster | SAR | Delivery |
+|---|---|---|---|
+| 4:3 | 720x576 | 16/15 | 1080x1920, **matted, UNCHANGED** |
+| 16:9 | 1024x576 | 1:1 | 1920x1080 full-bleed |
+| 9:16 | 576x1024 | 1:1 | 1080x1920 full-bleed |
+
+**THE FILE IS THE SHAPE YOU CHOSE.** Paul's reasoning, and it decided the
+delivery question: a 16:9 picture matted into a portrait file is useless on
+YouTube, and bands are what make a reel look amateur. **4:3 is untouched** --
+still matted on the dark surface, because that surround and the vignette over it
+are what make the tape read as a photographed object rather than a filter.
+
+**4:3 stays the BASE, not an entry in the `aspects` map**, so the PAL contract
+cannot move while somebody adds a shape. Verified by rendering all three and
+probing the files: edge luma 79-84 on the new shapes (picture) against 24 on
+4:3 (surround).
+
+**THE PAID PATH REFUSES THE NEW SHAPES, DELIBERATELY.** `fal.mjs` still sends a
+hardcoded `aspect_ratio`, so a paid 9:16 render would fetch a 4:3 source and
+build a 9:16 frame around it -- and every check downstream would agree, because
+they all read the same resolved config. `resolveRaster` now throws
+`ASPECT_UNSUPPORTED` for a paid provider on any non-default aspect. **Fixture
+does all three; paid does 4:3 and refuses the rest.** Lift it when
+`FAL_RESOLUTIONS` gains the aspect dimension -- which reopens pricing, because
+16:9 at 1024x576 is FEWER pixels than 4:3 720p.
+
+### 14. THE MOTION PROMPT WAS REWRITTEN (2026-08-24)
+
+Adapted from a Seedance prompt-engineering skill Paul supplied, with most of its
+technical-style vocabulary REFUSED.
+
+**The biggest win cost nothing to find: every place preset already carried a
+`lens` and a `framing` clause and `composeMotionPrompt` DISCARDED BOTH.** The
+still and the video were being shot on different lenses from the same preset.
+
+- **Positive phrasing only.** "No zoom, no cut" was in the prompt text while
+  ALSO in `negativePrompt` -- the same instruction on two channels, one of them
+  in the form a model handles worst. Prohibitions stay on the negatives channel.
+- **A collision the negatives had all along:** `MOTION_NEGATIVES` contained the
+  bare word `zoom` while every lens clause describes a consumer ZOOM lens. The
+  forbidden thing was always the MOVE; it now reads `the camera zooming`.
+- **`CAMCORDER_MOVES` is a whitelist of five** -- drift, reframe, walk, rest,
+  follow. The source library has 46; the other 41 are excluded in a comment
+  saying why. Credit to https://aicameramovements.com/ is in the file.
+- **63 degrees** is the 28-35mm "observational" step from the skill's own anchor
+  table, which is where a consumer camcorder sat. White balance in Kelvin off
+  the preset's `climate`, with a `whiteBalanceK` override.
+
+**A TEST NOW FAILS if 8K, photoreal, film grain, cinematic, filmic, Kodak, bokeh
+or anamorphic reaches the motion prompt.** Asking for those lands model grain at
+1080 on top of ffmpeg grain at 576 -- two grain structures at different scales,
+which is the texture people read as AI. This is the split at the top of this
+file, finally enforced rather than remembered.
+
+### 15. THE VISUAL WORLD WAS REPLACED - it is called STRUCK (2026-08-24)
+
+**`DESIGN.md` and `PRODUCT.md` are new, in the repo, and authoritative. Read
+them before touching any UI.** The frost-and-amber world is SUPERSEDED, not
+polished.
+
+**ITS ONE RULE: no borders, no rules, no dividers, anywhere.** Grouping is
+depth, gauze density and space. Verified mechanically on both pages: zero
+elements with a visible border. **Two exceptions are NAMED in DESIGN.md so they
+cannot become drift** -- focus outlines, and the small rectangle depicting each
+aspect ratio, which is a glyph and not a device for separating two things.
+
+**ORANGE MEANS EXACTLY ONE THING: STRUCK.** It was previously labels, prices,
+links, flags, the credit ring, an eyebrow and a 24px divider -- ten jobs at six
+sizes, which is precisely why colour could not answer "what have I chosen?".
+The old tokens now POINT AT the new values rather than being renamed across 300
+rules, so there is one place a colour is decided.
+
+Every option sits unlit at **0.5 opacity**; the chosen one burns cathode orange
+and haloes. **Ghosts do NOT go dimmer than 0.5** -- the catalogued grammar wanted
+far darker and that measures ~1.4:1, a control nobody can read. At 0.5 it is
+4.55:1. That adaptation is permanent and is written into DESIGN.md.
+
+**A spacing scale landed first and made the rest possible.** The page used 34
+distinct rem values, 18 inside a 14.4px span, seven stepping by 0.8px. Panel
+gaps ran 26/32/54 on a laptop and 18/26/26/35 on a phone; both now measure
+32/32/32/48. Separation is `margin-bottom` ONLY, because margins collapse
+between block siblings and do not between grid items -- the same declarations
+were producing different rhythm either side of the breakpoint.
+
+**VT323 is the display face** -- already committed and licensed, behaves like a
+cathode readout when it glows, and means no network font, which the CSP and the
+zero-dependency rule both require.
+
+**Only the landing and app pages are converted.** Login, signup, status, result
+and pricing still wear the superseded world.
+
+---
 ---
 
 ## Where things stand (2026-08-20, later the same day)

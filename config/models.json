@@ -1,20 +1,22 @@
 {
   "_comment": "The model registry. THE VIDEO MODEL IS NOW VERIFIED AND THE STILL MODEL IS NOT, and those two facts must not be read as one statement. VERIFIED here means somebody opened the model's own schema page on fal and copied the endpoint id, the parameter names and the limits out of it: done on 2026-08-20 for `bytedance/seedance-2.0/image-to-video` and `bytedance/seedance-2.0/reference-to-video`. Everything carrying `verified: false` is a CANDIDATE -- a real endpoint id out of fal's catalogue with the question that would decide it written underneath -- and `modelEntry` refuses to hand one out, so `--provider=fal` stops at `compose` by name instead of spending an afternoon debugging a 404 that was a guess. The still model is Paul's choice and it is downstream of Phase 0 (docs/phase-0-validation.md).",
-
   "schemaVersion": 1,
-
   "nativeAudio": {
     "_comment": "One boolean, three layers, because a model version bump can quietly re-enable audio and the symptom is a week of shipped videos with two ambiences arguing -- our designed bed from audio/bed.mjs, and whatever the model decided a Schrebergarten sounds like. LAYER 1: VideoRequest.nativeAudio is a REQUIRED field that must be exactly false; enforced by assertVideoRequest in scripts/providers/contract.mjs, where a MISSING field is a failure rather than a default. LAYER 2: the provider shape -- capabilities.supportsNativeAudioOff must be true (assertProvider), and every entry below with kind 'video' must name the parameter that turns audio off (assertAudioOff). Both live in contract.mjs. LAYER 3: an ffprobe assertion that the file that actually came back has ZERO audio streams. That layer is NOT in the provider package and cannot be -- only the pipeline sees the downloaded file -- it lives in scripts/render/pipeline.mjs, step 'assemble' (docs/interfaces.md section 7, step 8). If you are reading this because you are adding a model: layers 1 and 2 are config and code, layer 3 is the one that catches the vendor changing their mind. Seedance 2.0's `generate_audio` DEFAULTS TO TRUE, which is exactly the case the three layers were written for.",
     "required": false,
     "layer3": "scripts/render/pipeline.mjs, step 'assemble' -- ffprobe must report zero audio streams"
   },
-
   "defaults": {
     "_comment": "What each provider uses when nothing else is asked for. The fal STILL default is deliberately the entry whose id says UNVERIFIED: a default is what somebody gets when they did not choose, and what they must get here is a refusal naming the decision, not a silent paid call against a model nobody has read the schema of. Fill it in with one of the candidates below -- in the same edit that marks that candidate verified -- and not before.",
-    "fixture": { "still": "fixture/still-v1", "video": "fixture/video-v1" },
-    "fal": { "still": "fal/UNVERIFIED-identity-still", "video": "bytedance/seedance-2.0/image-to-video" }
+    "fixture": {
+      "still": "fixture/still-v1",
+      "video": "fixture/video-v1"
+    },
+    "fal": {
+      "still": "fal/UNVERIFIED-identity-still",
+      "video": "bytedance/seedance-2.0/image-to-video"
+    }
   },
-
   "models": {
     "fixture/still-v1": {
       "_comment": "The local ffmpeg still generator. Verified in the sense that we wrote it: scripts/providers/fixture.mjs. Sizes are 4:3 because the tape raster is DAR 4:3 and anything else gets silently cropped downstream.",
@@ -23,12 +25,16 @@
       "kind": "still",
       "endpoint": null,
       "capabilities": {
-        "stillSizes": [{ "width": 1024, "height": 768 }],
+        "stillSizes": [
+          {
+            "width": 1024,
+            "height": 768
+          }
+        ],
         "maxReferences": 2,
         "supportsPlaceReference": true
       }
     },
-
     "fixture/video-v1": {
       "_comment": "The local ffmpeg clip generator. kind 'video', so it is held to the layer-2 audio rule like any paid model would be -- and it passes for the strongest possible reason: its filtergraph has no audio source at all and its argv carries -an. audioOffParam names that -an flag so the shape assertion has something real to check rather than an exemption to skip.",
       "verified": true,
@@ -47,7 +53,6 @@
         "supportsNativeAudioOff": true
       }
     },
-
     "bytedance/seedance-2.0/image-to-video": {
       "_comment": "VERIFIED 2026-08-20 against fal's own schema page for this endpoint. THE ONE THAT MATTERS: `generate_audio` DEFAULTS TO TRUE, so not sending it ships every video with the model's idea of what the scene sounds like underneath the bed from audio/bed.mjs -- two ambiences arguing, in a product whose entire audio spec is the word 'quiet'. `duration` is a STRING enum ('4'..'15', plus 'auto'), so fifteen seconds is ONE call: no last-frame chaining, no seam, and phase-0 criterion 5 is simply not asked of this model. `aspect_ratio` includes '4:3', which is the tape's native frame, so nothing is cropped away. Offered here at 480p and 720p only -- fal's enum also lists 1080p and 4k, and 1080p is DEFERRED for the reasons config/credits.json records.",
       "verified": true,
@@ -67,8 +72,13 @@
         "maxClipSeconds": 15,
         "minClipSeconds": 4,
         "supportsNativeAudioOff": true,
-        "aspectRatios": ["4:3"],
-        "resolutions": ["480p", "720p"]
+        "aspectRatios": [
+          "4:3"
+        ],
+        "resolutions": [
+          "480p",
+          "720p"
+        ]
       },
       "openQuestions": [
         "Two of fal's own pages disagree about whether `seed` is an input on this endpoint -- the model-api-reference schema lists it as an optional integer and the model page's parameter table omits it. fal.mjs SENDS it, because a honoured seed is the difference between a retry reproducing a take and inventing a new one. If the first live call returns 422 naming `seed`, that is why, and the fix is to stop sending it and to record here that retries do not reproduce.",
@@ -77,7 +87,6 @@
         "There is NO negative_prompt parameter on this endpoint. composeMotionPrompt still produces one and fal.mjs deliberately does not smuggle it into the prompt -- a model with no negative channel reads 'no text, no watermark' as a list of things the scene contains. Whether the absence costs anything visible is a Phase 0 observation."
       ]
     },
-
     "bytedance/seedance-2.0/reference-to-video": {
       "_comment": "VERIFIED 2026-08-20 against fal's schema page. The TWO-REFERENCE path, and the strongest version of this product: `image_urls` takes up to 9 images, referenced from the prompt as @Image1, @Image2 -- so the face photo AND the uploaded photo of the actual place can go into one generation, and no preset-menu competitor can match 'your actual childhood garden'. NOT wired into the pipeline: `animate` starts from the approved still, so the place reference belongs to the STILL stage today, and moving it here is a decision about where identity is anchored rather than a config change. Recorded now, while the schema was open, so the option is written down rather than re-derived.",
       "verified": true,
@@ -98,15 +107,19 @@
         "minClipSeconds": 4,
         "supportsNativeAudioOff": true,
         "maxReferences": 9,
-        "aspectRatios": ["4:3"],
-        "resolutions": ["480p", "720p"]
+        "aspectRatios": [
+          "4:3"
+        ],
+        "resolutions": [
+          "480p",
+          "720p"
+        ]
       },
       "openQuestions": [
         "Does @Image1 hold a FACE as well as image-to-video holds a start frame? That is phase-0 criterion 1 asked of a different endpoint, and the answer decides whether the still stage can be skipped entirely -- which would also delete the cheap rejection gate, so a yes is not automatically good news.",
         "`video_urls` and `audio_urls` also exist. We never send audio: the bed is ours. And CLAUDE.md's rule about never asking the model for the look applies to a reference video exactly as it does to a prompt."
       ]
     },
-
     "bytedance/seedance-2.0/fast/image-to-video": {
       "_comment": "UNVERIFIED, and it is the obvious cost lever, which is precisely why it is not being guessed at. The fast tier exists in fal's catalogue and tops out at 720p, and that is ALL that has been checked -- nobody has opened its schema page, so nothing here says what its parameters are called or whether `generate_audio` behaves identically. `audioOffParam` is null, which is not a shrug: assertAudioOff throws a CapabilityError on this entry today and the registry refuses to hand it out. Filling it in is a deliberate act performed after reading the schema, which is the only moment anyone will ever actually read it.",
       "verified": false,
@@ -118,14 +131,16 @@
       "capabilities": {
         "maxClipSeconds": null,
         "supportsNativeAudioOff": null,
-        "resolutions": ["480p", "720p"]
+        "resolutions": [
+          "480p",
+          "720p"
+        ]
       },
       "openQuestions": [
         "What does it actually cost against the standard tier? config/credits.json already prices 480p at about a third of 720p rather than the 0.44 pixel count suggests, precisely because the tiers are priced differently -- one --meter run on each settles both numbers.",
         "Is the identity hold as good? A cheaper tier that loses the likeness is not cheaper, it is a refund."
       ]
     },
-
     "fal/UNVERIFIED-identity-still": {
       "_comment": "UNVERIFIED PLACEHOLDER, AND THE DEFAULT ON PURPOSE. The still model has NOT been chosen -- it is Paul's decision and it is downstream of Phase 0. Naming this as defaults.fal.still means an unconfigured fal render stops at `compose` with `unverified_model` and this id in the message, rather than quietly spending. What the chosen model must do: hold identity from ONE reference photo well enough that two people who know the subject call 3 of 5 stills 'you' (phase-0 criterion 1), take a prompt that never describes the person (CLAUDE.md, 'Prompt rules'), and emit a 4:3 raster -- 640x480 or 960x720 -- because a 1:1 still pillarboxed into a 4:3 tape is a visible mistake. The still is the identity anchor AND the cheap rejection gate, and at roughly $3.63 a video the gate matters more, not less. Candidates researched on 2026-08-20 are recorded below as their own entries.",
       "verified": false,
@@ -133,7 +148,16 @@
       "kind": "still",
       "endpoint": null,
       "capabilities": {
-        "stillSizes": [{ "width": 640, "height": 480 }, { "width": 960, "height": 720 }],
+        "stillSizes": [
+          {
+            "width": 640,
+            "height": 480
+          },
+          {
+            "width": 960,
+            "height": 720
+          }
+        ],
         "maxReferences": 2,
         "supportsPlaceReference": null
       },
@@ -144,7 +168,6 @@
         "What does one image cost? config/pricing.json's `fal/still-UNVERIFIED` is an order-of-magnitude stand-in and nothing more."
       ]
     },
-
     "fal-ai/nano-banana-pro/edit": {
       "_comment": "CANDIDATE, UNVERIFIED. WHAT WAS CHECKED, 2026-08-20, from fal's catalogue and model page ONLY: the endpoint exists, it is the image-EDIT route of Google's Nano Banana Pro, it takes `prompt` plus `image_urls` and is documented as accepting many reference images, and its `aspect_ratio` enum includes '4:3'. WHAT REMAINS UNPROVEN is everything that would decide it: whether it holds a specific person's likeness from ONE photo at criterion 1's bar, whether an exact 640x480 or 960x720 raster can be pinned or only the ratio requested, whether it takes and honours an integer seed, what one image costs, and how often it refuses a real face on content grounds. NO STILL HAS BEEN GENERATED THROUGH IT. Do not make this the default without five stills and the blind check.",
       "verified": false,
@@ -162,9 +185,8 @@
         "Is a seed accepted, and is it honoured?"
       ]
     },
-
     "fal-ai/bytedance/seedream/v4.5/edit": {
-      "_comment": "CANDIDATE, UNVERIFIED. WHAT WAS CHECKED, 2026-08-20, from the catalogue and model page ONLY: the endpoint exists, it is a multi-reference image-edit route documented as taking up to 10 reference images, and fal's page quotes roughly $0.04 per edit -- which, if that is the real per-image number, makes a three-still contact sheet about twelve cents and the rejection gate nearly free next to a $3.63 video. WHAT REMAINS UNPROVEN: identity hold from one photo, 4:3 raster control, seed behaviour, and whether a price on a marketing page is the price on an invoice -- config/pricing.json's entire header is about that difference. It is the same vendor as the video model, which is worth nothing on its own: a shared vendor is not a shared identity model.",
+      "_comment": "CANDIDATE, UNVERIFIED. WHAT WAS CHECKED, 2026-08-20, from the catalogue and model page ONLY: the endpoint exists, it is a multi-reference image-edit route documented as taking up to 10 reference images, and fal's page quotes roughly $0.04 per edit -- which, if that is the real per-image number, makes a three-still contact sheet about twelve cents and the rejection gate nearly free next to a $3.63 video. WHAT REMAINS UNPROVEN: identity hold from one photo, 4:3 raster control, seed behaviour, and whether a price on a marketing page is the price on an invoice -- config/pricing.json's entire header is about that difference. It is the same vendor as the video model, which is worth nothing on its own: a shared vendor is not a shared identity model. CALLED FOR REAL 2026-08-24, job 20260824-093906-d39675, about $0.04 ESTIMATED and NOT metered. The reference field is image_urls -- the fal image-edit convention, accepted with no 422, unlike uso which demanded input_image_urls. ASPECT CONTROL HOLDS: aspect_ratio 4:3 was sent and 2560x1920 came back, which is exactly 4:3 -- the check uso failed at 5:4. THE RASTER IS NOT HONOURED: 640x480 was ordered and 2560x1920 returned, 16x the pixels. Harmless here, because the tape raster is 736x588 so that is headroom rather than waste, but it means the $0.04 may be quoted for a different size than we asked for and it stays an ESTIMATE until a --meter run. Scene adherence EXCELLENT: every named prop present, light direction correct, exactly one person, wardrobe right down to the chest crest. THE FRAMING CLAUSE WAS IGNORED -- waist-up three-quarters was asked for, full-body front-on came back. Identity is Paul's call and is deliberately not recorded here.",
       "verified": false,
       "provider": "fal",
       "kind": "still",
@@ -178,9 +200,11 @@
         "Identity from one photo, at criterion 1's bar.",
         "Is ~$0.04 per edit per IMAGE, or per call regardless of how many are asked for?",
         "Does it hold a 4:3 raster, or only an aspect ratio?"
-      ]
+      ],
+      "stillParams": {
+        "references": "image_urls"
+      }
     },
-
     "fal-ai/uso": {
       "_comment": "CANDIDATE, UNVERIFIED, and the one whose stated PURPOSE is closest to what this product needs. WHAT WAS CHECKED, 2026-08-20, from the catalogue ONLY: USO is described as subject-driven generation from a reference image -- identity preservation is the model's advertised job rather than a side effect of an edit model. WHAT REMAINS UNPROVEN is everything else: reference count, whether a second 'place' reference is even a concept it has, raster control, seed, price, and whether the subject it preserves is the FACE or the whole figure, which are different products. Listed because a model built for the problem deserves to be in the five-still comparison, not because it is the answer.",
       "verified": false,
