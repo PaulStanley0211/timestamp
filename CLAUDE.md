@@ -13,7 +13,7 @@ Warm, grainy, quiet.
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 **The tree is clean, and as of 2026-08-24 THE BRANCH IS PUSHED.**
 `origin/ui-redesign-signed-in-page` exists and tracks; `origin/main` is still
-`b6f64a3`, so the branch is **twenty** commits ahead of main as of this line
+`b6f64a3`, so the branch is **twenty-one** commits ahead of main as of this line
 and **nothing has been merged**. GitHub offers a PR at
 `/pull/new/ui-redesign-signed-in-page`; opening one is Paul's call, not a
 prerequisite. The Higgsfield licence question that used to block this is
@@ -1326,6 +1326,48 @@ and the page that answers "which plan am I on?" is the one page not using it.
 **That is precisely the failure the palette rule was written against** -- colour
 losing the ability to answer "what have I chosen?". The fix is to strike the
 current plan, ghost the others at `.5`, and delete the pill.
+
+### 24. ONLY 480p HAD EVER BEEN ORDERED, AND NOW A TIER CAN BE (2026-08-24)
+
+**`render.mjs` had no `--resolution` flag.** `job.input.resolution` has been
+honoured by the whole pipeline since `resolveRaster` was written, the web app's
+quality picker sets it, and **nothing could set it from a command line** -- so
+every CLI render silently took the provider's cheapest offer. That is why the
+first metered run could not answer the question that decides the price list:
+**a 720p job could not be made.** The web app can order one and the web app
+cannot spend (section 8).
+
+`--resolution=480p|720p` now exists, validated against `AVAILABLE_RESOLUTIONS`
+so a typo costs a line rather than a render. It is left `null` when omitted
+rather than defaulted to 480p, because null already means something here -- "no
+order behind this render" -- and `resolveRaster` prints a different line for it.
+
+**A JOB IS PARKED AND UNPAID AT `20260824-225641-f34b4f`.** Every free step ran;
+`--stop-after=compose` stopped it before the money. It froze
+`720p -> 960x720 (4:3)`, one 15s segment, reference-to-video. Resume it and the
+only remaining step is the paid one:
+
+```bash
+npm run render -- --resume=20260824-225641-f34b4f
+```
+
+**WHAT THAT RUN ANSWERS, and it is the whole price list.** Both metered jobs
+ordered 480p and were delivered 752x560. If a 720p order also comes back
+752x560, then **480p and 720p are the same product** and a customer paying 46 CR
+receives the identical file as one paying 16 CR. The forecast if the raster IS
+honoured is 243000 tokens, **$3.40**. The 480p order delivered 148461 tokens,
+$2.08. Those two numbers being equal is the finding.
+
+**A DEFECT THE DRY RUN EXPOSED AND THIS DID NOT FIX.** `--dry-run` quotes the
+**identical $2.079 at both tiers**. Section 22 corrected the RATE in
+config/pricing.json; it did not give that table a resolution dimension, and
+`estimateVideo` still prices per second and nothing else. So the command whose
+entire job is authorising a spend cannot tell a 480p order from a 720p one --
+and by the formula those differ by 2.25x. **The real fix is to price video by
+the token formula rather than per second**, since fal bills tokens and
+config/credits.json already carries the formula and it is confirmed correct to
+seven figures. Not done; it changes `estimateVideo`'s signature and every
+caller.
 
 ---
 ---

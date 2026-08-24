@@ -36,6 +36,7 @@ import { loadCatalog, listCatalog } from '../catalog/catalog.mjs';
 import { STEPS, createJob, loadJob, saveJob, retryStep, jobPaths } from './job.mjs';
 import { runPipeline, dryRun, PipelineError } from './pipeline.mjs';
 import { aspectIds } from '../tapedeck/frame.mjs';
+import { AVAILABLE_RESOLUTIONS, DEFAULT_RESOLUTION } from '../animate/plan.mjs';
 
 /** Which shape, refused rather than defaulted when it is not one we make. */
 function cleanAspect(value, cfg) {
@@ -43,6 +44,35 @@ function cleanAspect(value, cfg) {
   const known = aspectIds(cfg);
   if (!known.includes(value)) {
     throw new PipelineError(`--aspect must be one of ${known.join(', ')}, got "${value}"`, { code: 'BAD_ARG' });
+  }
+  return value;
+}
+
+/**
+ * Which raster to ORDER, refused rather than defaulted when it is not one we
+ * sell.
+ *
+ * WHY THIS FLAG EXISTS AT ALL, ADDED 2026-08-24. `job.input.resolution` has been
+ * honoured by the whole pipeline since resolveRaster was written, and nothing
+ * could ever set it from a command line -- so every CLI render silently took
+ * the provider's cheapest offer and **only 480p had ever been ordered in the
+ * life of this project**. That is why the first metered run could not answer
+ * whether the tiers are real: a 720p job could not be made. The web app can
+ * order one, and the web app cannot spend (section 8).
+ *
+ * Left as `null` rather than defaulted to 480p, because null already means
+ * something here -- "no order behind this render" -- and resolveRaster prints a
+ * different line for it. A CLI run with no resolution is not a customer buying
+ * the cheap tier.
+ */
+function cleanResolution(value) {
+  if (value === undefined) return null;
+  if (!AVAILABLE_RESOLUTIONS.includes(value)) {
+    throw new PipelineError(
+      `--resolution must be one of ${AVAILABLE_RESOLUTIONS.join(', ')}, got "${value}"` +
+      `${value === DEFAULT_RESOLUTION ? '' : ' -- 1080p is deferred, see config/credits.json'}`,
+      { code: 'BAD_ARG' },
+    );
   }
   return value;
 }
@@ -88,6 +118,9 @@ function usage(catalog) {
     '  --allow-unverified-model',
     '                        required alongside --still-model for a candidate that',
     '                        nobody has schema-checked. Two flags on purpose.',
+    '  --resolution=<id>     which raster to ORDER: 480p or 720p. Omitted, a CLI',
+    '                        render takes the provider first offer and no order is',
+    '                        recorded -- which is why only 480p had ever been run.',
     '  --retry-step=<step>   deliberately re-run a step on a resumed job.',
     '  --dry-run             name every call and its projected cost. Charges nothing.',
     '  --consent             confirm the person in the photo agreed to this. Required.',
@@ -295,6 +328,7 @@ async function main() {
       // records what it is given without consulting the catalog. A typo that
       // reaches the pipeline costs a render; caught here it costs a line.
       aspect: cleanAspect(args.aspect, cfg),
+      resolution: cleanResolution(args.resolution),
       consent,
     },
   });
