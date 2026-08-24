@@ -109,6 +109,18 @@
       "flutterDepth": 0.35,
       "lowpass": 900
     },
+    "ambience": {
+      "_comment": "THE SOUND OF THE PLACE, as opposed to the sound of the machine above it. Silent by default -- amplitude 0 emits no chain at all -- so a place that names nothing is bit-identical to the bed before this existed, and the still path, which has no place, is untouched. Every shipped place sets its own in `lookOverride.audio.ambience`. Synthesised for the same reason the hiss is: a sample would need a licence to reason about and a normalisation pass, where a generator's loudness is known before it renders. NOTE the noise seed is deliberately NOT `audioSeed`: two anoisesrc on one seed produce identical noise, and summing that is not two layers, it is one layer 6 dB louder and perfectly correlated -- which sounds exactly like the hiss being turned up, and is invisible in the graph.",
+      "amplitude": 0,
+      "color": "brown",
+      "highpass": 200,
+      "lowpass": 1200,
+      "volume": 0.5,
+      "swellHz": 0,
+      "swellDepth": 0.5,
+      "echoDelayMs": 0,
+      "echoDecay": 0
+    },
     "bus": {
       "_comment": "Band-limit the sum a second time, apply the one fixed makeup gain, end in a real ceiling. The 190 Hz highpass is authentic -- a camcorder built-in mic had no low end -- which is why the capstan is voiced as harmonics above it rather than as its fundamental below it.",
       "highpass": 190,

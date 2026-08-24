@@ -334,8 +334,23 @@ test('climate is a term in the score, so a warm request prefers a warm skeleton'
 
 test('a lookOverride tuned for one light is carried one step along the time axis and no further', () => {
   // dusk -> night is the same sodium lamps; midday -> night is not.
-  assert.deepEqual(place('a car park at night').lookOverride,
-    { grade: { cbRedMid: 0.07, cbBlueMid: -0.06, saturation: 0.8 }, optics: { bloomStrength: 0.52 }, tape: { grainStrength: 26 } });
+  //
+  // THE AUDIO BLOCK JOINED THIS EXPECTATION on 2026-08-24 and it belongs here:
+  // a car park at night borrowing the Autobahn's motorway rumble is the same
+  // one-step rule the grade follows, applied to the other half of the tape.
+  // The `_comment` arguing for those numbers is stripped at every depth -- see
+  // the test below.
+  assert.deepEqual(place('a car park at night').lookOverride, {
+    grade: { cbRedMid: 0.07, cbBlueMid: -0.06, saturation: 0.8 },
+    optics: { bloomStrength: 0.52 },
+    tape: { grainStrength: 26 },
+    audio: {
+      ambience: {
+        amplitude: 0.34, color: 'brown', highpass: 200, lowpass: 600,
+        volume: 0.22, swellHz: 0.25, swellDepth: 0.4,
+      },
+    },
+  });
   assert.deepEqual(place('a stairwell at night').lookOverride, {});
 });
 
@@ -417,4 +432,24 @@ test('the id is derived from the request, not from the expander', () => {
 
 test('an unknown kind is a programmer error, not a silent default', () => {
   assert.throws(() => localExpander({ kind: 'weather', text: 'a beach', seed: 0, catalog }), TypeError);
+});
+
+test('a borrowed lookOverride leaves the argument behind at EVERY depth', () => {
+  // `withoutDocs` filtered the top level only, which was enough while every
+  // lookOverride was two levels deep -- `grade.saturation`, `optics.bloom`.
+  // Place ambience (2026-08-24) is three: `audio.ambience._comment`, and that
+  // comment argues about a specific place. Borrowed onto somebody's typed text
+  // it becomes a manifest quoting "motorway rumble from behind the kiosk" over
+  // a scene with no kiosk in it -- exactly the misleading record this function
+  // exists to prevent, one level down where it was not looking.
+  const nested = (obj, hits = []) => {
+    for (const [k, v] of Object.entries(obj ?? {})) {
+      if (k.startsWith('_')) hits.push(k);
+      if (v && typeof v === 'object' && !Array.isArray(v)) nested(v, hits);
+    }
+    return hits;
+  };
+  for (const text of SAMPLES) {
+    assert.deepEqual(nested(place(text).lookOverride), [], `${text} carried a comment through`);
+  }
 });

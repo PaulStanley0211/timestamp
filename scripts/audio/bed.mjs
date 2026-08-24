@@ -114,6 +114,16 @@ export const AUDIO_CLAMPS = {
   'audio.capstan.flutterHz': [0.1, 30],
   'audio.capstan.flutterDepth': [0, 1],
   'audio.capstan.lowpass': [100, 20000],
+  'audio.ambience.amplitude': [0, 1],
+  'audio.ambience.volume': [0, 4],
+  'audio.ambience.highpass': [20, 4000],
+  'audio.ambience.lowpass': [200, 20000],
+  // tremolo REFUSES f below 0.1 with an ffmpeg error rather than a warning, and
+  // the graph omits the filter entirely at 0 -- so this range is "off, or legal".
+  'audio.ambience.swellHz': [0, 20],
+  'audio.ambience.swellDepth': [0, 1],
+  'audio.ambience.echoDelayMs': [0, 2000],
+  'audio.ambience.echoDecay': [0, 0.9],
   'audio.bus.highpass': [20, 4000],
   'audio.bus.lowpass': [1000, 20000],
   // alimiter rejects anything outside this range outright, with an ffmpeg error
@@ -226,6 +236,32 @@ export function buildAudioFilter(look, cfg, { outLabel = 'aout' } = {}) {
       `lowpass=f=${n(capstan.lowpass)}[capstan]`,
     );
     busInputs.push('capstan');
+  }
+
+  // ---- the place ------------------------------------------------------------
+  // Filtered noise, optionally swelling, optionally in a room. That vocabulary
+  // covers every shipped place: surf and wind are a slow swell over brown
+  // noise, traffic is the same without the swell, and a swimming hall or a
+  // stairwell is the same again with an echo on it.
+  //
+  // THE SEED IS NOT audioSeed. Two anoisesrc on one seed emit identical noise,
+  // and summing identical noise is not two layers -- it is one layer 6 dB
+  // louder and perfectly correlated, which sounds precisely like the hiss
+  // turned up. Nothing in the graph would look wrong.
+  const amb = audio.ambience;
+  if (amb && Number(amb.amplitude) > 0) {
+    const parts = [
+      `anoisesrc=c=${amb.color ?? 'brown'}:a=${n(amb.amplitude)}:r=${rate}:d=${n(seconds)}:seed=${Number(look.audioSeed) + 1}`,
+      `highpass=f=${n(amb.highpass)}`,
+      `lowpass=f=${n(amb.lowpass)}`,
+    ];
+    // Omitted rather than zeroed: tremolo=f=0 is a failed render, not a still
+    // bed, and aecho with no delay is a filter doing nothing at a cost.
+    if (Number(amb.swellHz) > 0) parts.push(`tremolo=f=${n(amb.swellHz)}:d=${n(amb.swellDepth)}`);
+    if (Number(amb.echoDelayMs) > 0) parts.push(`aecho=0.8:0.85:${n(amb.echoDelayMs)}:${n(amb.echoDecay)}`);
+    parts.push(`volume=${n(amb.volume)}`);
+    chains.push(`${parts.join(',')}[amb]`);
+    busInputs.push('amb');
   }
 
   // ---- mix bus --------------------------------------------------------------

@@ -119,7 +119,7 @@ export const LIGHT_BY_CLIMATE = Object.freeze({
  *  because a guessed lens is worse than a borrowed one. */
 export const LENS_OVERRIDES = Object.freeze({
   close: 'a consumer zoom pushed in, shallow focus with the far side of the frame going soft, a little barrel bend at the edges',
-  wide: 'a consumer zoom at its wide end, deep focus from the front of the frame all the way to the back, a little barrel bend at the edges',
+  wide: 'a consumer zoom at its wide end, sharp near the middle of the frame with the far side going soft, a little barrel bend at the edges',
 });
 
 /**
@@ -824,8 +824,16 @@ const shotSizeOf = (framing) => (/chest-up/i.test(framing) ? 'chest-up' : 'waist
  *  coldest and flattest thing in the menu" attached to a warm beach. The values
  *  are still right (see the one-step rule below); the argument for them is not,
  *  and a manifest that quotes it would mislead whoever reads it next. */
-const withoutDocs = (override) =>
-  Object.fromEntries(Object.entries(override).filter(([k]) => !k.startsWith('_')));
+/*  RECURSIVE, because a lookOverride is not always two levels deep. It was when
+ *  this was written -- `grade.saturation`, `optics.bloomStrength` -- and place
+ *  ambience made it three: `audio.ambience._comment`. A top-level filter left
+ *  that in, so a borrowed override could put "motorway rumble from behind the
+ *  kiosk" into the manifest of a scene with no kiosk anywhere in it. */
+const withoutDocs = (override) => Object.fromEntries(
+  Object.entries(override)
+    .filter(([k]) => !k.startsWith('_'))
+    .map(([k, v]) => [k, (v && typeof v === 'object' && !Array.isArray(v)) ? withoutDocs(v) : v]),
+);
 
 /** `a beach` -> `the beach`, for the clause that says what is behind the
  *  person. The framing fragment is the second place the user's own words have
@@ -1061,7 +1069,7 @@ function placeFromPhotoDraft({ text, photoPath }) {
       prompt: {
         scene: 'the place shown in the second reference image, unchanged: its own surfaces, its own objects, its own proportions, exactly as they appear there',
         light: 'the light the second reference image already has, matched rather than replaced',
-        lens: 'a consumer zoom near its wide end, deep focus from the front of the frame to the back, a little barrel bend at the edges',
+        lens: 'a consumer zoom near its wide end, sharp near the middle of the frame with the far side going soft, a little barrel bend at the edges',
         framing: 'waist-up, three-quarters to the camera, standing in the place the second reference image shows',
         eraProps: 'only what the second reference image already contains, and nothing added that was manufactured later than the period',
       },

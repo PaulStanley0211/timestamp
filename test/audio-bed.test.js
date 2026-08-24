@@ -314,3 +314,73 @@ test('loudness responds only to masterGain, not to the ceiling', () => {
   assert.equal(levelChainOf(loose), levelChainOf(tight));
   assert.ok(loose.includes('limit=0.95') && tight.includes('limit=0.25'));
 });
+
+// ---------------------------------------------------------------------------
+// place ambience
+//
+// The bed built the sound of the MACHINE -- hiss and capstan -- and nothing of
+// the PLACE, so a Baltic beach and a concrete stairwell came out sounding
+// identical. Paul asked for sound "according to the video" on 2026-08-24.
+//
+// SYNTHESISED, for exactly the reasons the header already gives for the hiss:
+// no sample means no licence to reason about and no normalisation pass, because
+// a generated layer's loudness is known before it is rendered. Every place's
+// ambience is filtered noise, optionally swelling, optionally in a room.
+// ---------------------------------------------------------------------------
+
+const withAmbience = (over) => {
+  const { look } = loadLookProfile(base, { audio: { ambience: over } });
+  return buildAudioFilter(look, cfg);
+};
+
+test('a place with no ambience configured changes the graph not at all', () => {
+  // The default is silence, so every existing calibration -- and the still
+  // path, which has no place at all -- is untouched by this feature existing.
+  const { look } = loadLookProfile(base);
+  const graph = buildAudioFilter(look, cfg);
+  assert.ok(!graph.includes('[amb]'), 'no ambience chain');
+  assert.match(graph, /amix=inputs=2:normalize=0,\s*aformat/,
+    'the bus still mixes exactly the two machine layers');
+});
+
+test('ambience is a separate noise source and joins the bus', () => {
+  const graph = withAmbience({ amplitude: 0.3 });
+  assert.ok(graph.includes('[amb]'), 'the chain is emitted');
+  assert.match(graph, /\[hiss\]\[capstan\]\[amb\]amix=inputs=3:normalize=0/,
+    'and is mixed, with normalize=0 like every other amix here');
+});
+
+test('ambience does NOT share the hiss seed, which would make it louder hiss', () => {
+  // Two `anoisesrc` on the same seed generate the SAME noise. Summed, that is
+  // not two layers -- it is one layer 6 dB louder, perfectly correlated, and it
+  // would sound like the hiss had simply been turned up. The bug would be
+  // invisible in the graph and obvious only by ear.
+  const graph = withAmbience({ amplitude: 0.3 });
+  const seeds = [...graph.matchAll(/anoisesrc=[^,[]*seed=(-?\d+)/g)].map((m) => m[1]);
+  assert.equal(seeds.length, 2, 'two noise sources');
+  assert.notEqual(seeds[0], seeds[1], 'on different seeds');
+});
+
+test('the swell is optional, and off means absent rather than zero', () => {
+  // `tremolo` refuses f below 0.1 with an ffmpeg error, so a swellHz of 0 must
+  // not reach the graph as `tremolo=f=0` -- that is a failed render, not a
+  // still bed.
+  assert.ok(!withAmbience({ amplitude: 0.3, swellHz: 0 }).includes('tremolo=f=0'),
+    'no zero-frequency tremolo anywhere');
+  const swelling = withAmbience({ amplitude: 0.3, swellHz: 0.2, swellDepth: 0.7 });
+  assert.match(swelling, /tremolo=f=0\.2:d=0\.7/, 'and a real one when asked for');
+});
+
+test('a room is optional too, and only the places that have one get it', () => {
+  assert.ok(!withAmbience({ amplitude: 0.3, echoDelayMs: 0 }).includes('aecho'),
+    'a beach is not a room');
+  assert.match(withAmbience({ amplitude: 0.3, echoDelayMs: 180, echoDecay: 0.4 }),
+    /aecho=[\d.]+:[\d.]+:180:0\.4/, 'a tiled swimming hall is');
+});
+
+test('every shipped place that names an ambience names a real path', () => {
+  // `assertLookOverride` already refuses a path that is not in base.json, so
+  // this asserts the other half: that the block exists to be overridden at all.
+  assert.ok(base.audio.ambience, 'base.json carries an ambience block');
+  assert.equal(base.audio.ambience.amplitude, 0, 'and it is silent by default');
+});
