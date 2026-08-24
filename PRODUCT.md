@@ -9,6 +9,13 @@ Upload one photograph of your own face, choose a place and an outfit, and get
 back fifteen seconds of video that looks like it was found on a camcorder tape
 from 2003.
 
+**A NOTE ON "WARM, GRAINY, QUIET", which is how this product described itself
+until 2026-08-24.** The picture is no longer quiet: it cuts six times in fifteen
+seconds and the camera walks. That was a deliberate change of direction by the
+owner, not drift. **The TEXTURE is still warm, grainy and quiet** -- the bed
+sits at -27 LUFS and every tape artefact is unchanged. What moved is the
+content: the tape is now somebody's vlog rather than somebody's held breath.
+
 ## The mechanism, which is the whole architecture
 
 **The model does content; ffmpeg does texture.** A generation model produces a
@@ -47,13 +54,26 @@ it. A landing page that explains before it shows has already lost the argument.
 
 ## What the visitor actually does
 
+**FOUR CHOICES AND A TAPE. Restated by the owner four times on 2026-08-24 and
+built the same day:**
+
 1. Upload one photograph of their face (the only irreversible act)
 2. Choose an outfit from six presets, or describe one
 3. Choose a place from eight presets, upload a photo of one, or describe one
-4. Choose a frame shape (4:3, 16:9, 9:16), a quality, and how many stills to
-   choose from; consent; record
-5. Pick the still where their likeness survived, before any video is paid for
-6. Receive the tape; it appears on an archive shelf
+4. Choose a frame shape (4:3, 16:9, 9:16) and a quality; consent; record
+5. Receive the tape; it appears on an archive shelf
+
+**There is no still to approve, and no picture the visitor ever meets.** The
+owner's words: *"I don't understand why are you generating the pictures."*
+
+The still was never wanted for its own sake -- it existed because `animate` is
+image-to-video and needs a start frame, which made it structural rather than a
+feature. `bytedance/seedance-2.0/reference-to-video` takes the photographs
+themselves, so the stage stops existing rather than being hidden.
+
+**The old path still works and is still the CLI default**, because whether that
+endpoint holds a likeness as well as the still endpoint does has been proven
+exactly once. Direct mode is `--direct`.
 
 ## Product truths that constrain any design
 
@@ -61,9 +81,25 @@ it. A landing page that explains before it shows has already lost the argument.
 - **Three frame shapes.** 4:3 is the camcorder shape and the default; 9:16 is
   full-bleed for Reels and TikTok; 16:9 is landscape for YouTube. The delivered
   file IS the shape chosen.
-- **The still is a rejection gate, not a feature.** A likeness the visitor
-  dislikes costs cents; a tape costs dollars. The gate exists so a bad face
-  never becomes a paid tape.
+- ~~**The still is a rejection gate, not a feature.**~~ **SUPERSEDED
+  2026-08-24, deliberately and with the cost stated.** The gate meant a likeness
+  the visitor disliked cost cents instead of dollars. It is gone because four
+  choices and a tape is the product, and a picture to approve is not one of the
+  four. **The consequence is real and was accepted knowingly: a miss now costs a
+  whole video (~$4.54 estimated) instead of $0.04, and the visitor finds out
+  afterwards.** The order that made this safe was always "solve identity first,
+  then hide everything" -- and identity was confirmed on the still endpoint the
+  same morning.
+- **Fifteen seconds is a SHOT LIST, not one continuous take.** Six beats off the
+  seedance-prompt skill's own table -- arrive, look around, notice a thing, do
+  the thing, react, settle. The owner rejected the first single-take tape for
+  pacing: *"no engagement, no enthusiasm ... placing the bottle is taking five
+  to six seconds."* In-camera cuts are period-honest anyway; a 2003 tape is full
+  of them because you pressed record and stopped again.
+- **The bed knows where it is.** Every place carries its own synthesised
+  ambience -- surf, motorway rumble, a tiled echo, a fridge -- on top of the
+  hiss and the capstan. Measured at -26.4 to -27.1 LUFS against a -27 target, so
+  the place is felt rather than heard.
 - **The prompt says nothing about the person.** Only "the person in the
   reference image". Any demographic adjective blends with the photograph and
   produces "that isn't me, it looks like my cousin" — and it is a demographic

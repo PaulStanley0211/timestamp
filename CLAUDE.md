@@ -7,93 +7,101 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-24) - the bake-off is HALF ANSWERED
+## START HERE (2026-08-24, end of day) — THE PREMISE IS PROVEN
 
-**1010 tests / 1008 pass / 0 fail / 2 skipped** (the skips are the
-`*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`).
+**1108 tests / 1106 pass / 0 fail / 2 skipped.** The skips are the
+`*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
+**The tree is clean. Nothing is pushed.** `origin/main == b6f64a3`; branch
+`ui-redesign-signed-in-page` is now **twelve** commits ahead.
 
-**THE TREE IS CLEAN AND NOTHING IS PUSHED.** `origin/main == b6f64a3`. Branch
-`ui-redesign-signed-in-page` is **five commits ahead**:
+### The one thing to know
 
-```
-e7e8557  The eight place photographs
-db4e3c5  Replace the visual world: STRUCK, on both surfaces
-b2f213d  Write the visible: the motion prompt gets the craft rules
-3162e19  Three user-selectable frame shapes, and the paid path's first real run
-ca2b912  Give the signed-in page a subject and three panel weights
-```
+**A model can put Paul in a place recognisably, from one photograph, and hold it
+through fifteen seconds of video with no intermediate image at all.** That was
+the only question that decided whether this is a product. It is answered.
 
-**THE ONE LIVE QUESTION: does seedream hold Paul's likeness?** He ran it for
-real on 2026-08-24 (job `20260824-093906-d39675`, ~$0.04 estimated, not metered)
-and **has not given a verdict yet.** Everything else below is settled.
+- `fal-ai/bytedance/seedream/v4.5/edit` held the likeness where `fal-ai/uso`
+  dropped the beard and the hair. Paul's words: *"it looks like me. Each and
+  every bit looks like me. It is perfect."*
+- `bytedance/seedance-2.0/reference-to-video` then held it through a whole tape.
 
-### What seedream proved, objectively
+### What the product IS now — read PRODUCT.md, it was rewritten today
 
-- **Reference field is `image_urls`** -- accepted with no 422, unlike `uso`
-  which demanded `input_image_urls`. Recorded in `config/models.json`.
-- **Aspect control HOLDS.** `aspect_ratio: '4:3'` was sent, 2560x1920 came back,
-  which is exactly 4:3. **This is the check `uso` failed at 5:4.**
-- **The raster is NOT honoured.** 640x480 ordered, 2560x1920 returned -- 16x the
-  pixels. Harmless (the tape raster is 736x588, so headroom not waste) but the
-  $0.04 may be quoted for a different size. ESTIMATE until a `--meter` run.
-- **Scene adherence EXCELLENT** -- every named prop, light direction correct,
-  exactly one person, wardrobe down to the chest crest.
-- **The framing clause was IGNORED.** "waist-up, three-quarters" was asked for;
-  full-body front-on came back. Matters more once the still is hidden, because
-  framing then becomes the model's decision alone.
-- The two features `uso` dropped -- the beard and the tight curls -- are both
-  present. **That is an observation about the image, NOT a verdict on
-  resemblance. Only Paul can call that and he has not.**
+**Four choices and a tape: photo, outfit, place, frame shape.** No still, no
+gate, nothing to approve. `--direct`. Section 18.
 
-### The next two moves, in order
+**Fifteen seconds is a SHOT LIST**, six beats, not one continuous take.
+Section 19. **The bed knows where it is** — per-place ambience. Section 20.
 
-1. **Paul's verdict on the face**, then the blind check: text the image to two
-   people who know him with "Who is this?" and NOTHING else. **Not the friend he
-   primed** by saying it was not AI generated.
-2. **Run the third candidate before choosing** -- the repo's own rule is not to
-   run five stills on any model until all three have been tried once:
-
-```
-node --env-file-if-exists=.env scripts/render/render.mjs --photo=assets/test-photos/face.jpg --place=schrebergarten-august --outfit=trainingsjacke --consent --provider=fal --still-model=fal-ai/nano-banana-pro/edit --allow-unverified-model --stills=1 --stop-after=select
+```bash
+node --env-file-if-exists=.env scripts/render/render.mjs --photo=assets/test-photos/face.jpg --place=ostsee-strand --outfit=hemd-jeans --consent --provider=fal --direct --video-model=bytedance/seedance-2.0/reference-to-video
 ```
 
-**CLAUDE CANNOT RUN PAID COMMANDS.** Paul pastes them and pastes the output back.
+**Add `--dry-run` to price it for free. Add `--stop-after=compose` to run every
+free step and stop before the money.** Both were used today and both work.
 
-### What shipped 2026-08-24 (see sections 13-15)
+### PICK UP HERE — in this order
 
-- **THREE FRAME SHAPES: 4:3, 16:9, 9:16** -- section 13.
-- **The motion prompt was rewritten** to craft rules -- section 14.
-- **THE VISUAL WORLD WAS REPLACED. It is called STRUCK** -- section 15.
-  **`DESIGN.md` and `PRODUCT.md` are NEW, in the repo, and authoritative.**
+1. **METER A RUN. This is the highest-value thing left and it is nearly free.**
+   Every price in this repo is a guess: `config/pricing.json` quotes a flat
+   per-second rate that produces **$4.54** for a render that actually orders
+   **480p**, which `config/credits.json` prices at **$1.51**. Nobody has ever
+   read a real invoice. **Paul's fal.ai billing page settles it in one look**,
+   and one number corrects every estimate, the credit table and the dry run.
+   Four paid calls exist to check against: `20260824-093906-d39675` and
+   `20260824-114051-4209a6` (stills, ~$0.04 each), `20260824-122201-af8b0d` and
+   `20260824-130457-a2e9ac` (videos, ~$4.54 each).
+2. **The blind check, which STILL has not happened.** Send a frame to two people
+   who know Paul's face with "Who is this?" and NOTHING else. **Not the friend
+   he primed** by saying it was not AI generated. This is the only test that
+   distinguishes "holds a likeness" from "looks like him to him".
+3. **The Higgsfield licence question, because it blocks the push.**
+   `assets/places/` is committed to a PUBLIC repo and the ruling in this file
+   says Higgsfield is "personal experiments and nothing else". Section 10.
+   **The commit already happened; the push is the irreversible line.**
+4. **The aspect ratios on the direct path.** `config/models.json` records
+   `aspectRatios: ["4:3"]` for reference-to-video and Paul's product list has
+   the user picking the shape. Nobody has read fal's schema page for the other
+   two. Free to check.
+5. **The web app cannot spend.** `worker-cli.mjs` passes no transport, so the
+   browser path still cannot reach the network — CLI only. Section 8, bug 1.
+   **This blocks the product being usable by anyone but Paul.**
+6. **Login, signup, status, result and pricing still wear the superseded
+   frost-and-amber world** and clash with the two converted pages.
+7. **The Supabase spec**, then a plan, then code. Not before. Section 5.
 
-### Open, and none of it blocking the bake-off
+### Two cheap wins nobody has taken
 
-- **19 of 20 keyboard stops have NO visible focus indicator** -- WCAG 2.4.7,
-  **Level A**. The hoisted `.statehook` radios are 1x1px with
-  `clip-path: inset(50%)`, so the global `:focus-visible` outline paints
-  nothing. Section 6b's "0 violations across 12 focusables" UNDERCOUNTED: the
-  page has ~34 focusables and the hoisted radios sat outside `.wrap`.
-- **The Higgsfield licence question is STILL unanswered** and
-  `assets/places/` is now COMMITTED (Paul said "commit everything" twice after
-  being told twice). **Nothing is pushed, and the push is the irreversible line,
-  not the commit.** Settle it before this branch goes up. Section 10.
-- **The worker still cannot spend** -- `worker-cli.mjs` passes no transport, so
-  the web app's renderer cannot reach the network. CLI only. Section 8, bug 1.
-- **The paid path renders 4:3 ONLY** and refuses the other two shapes loudly --
-  section 13.
-- **Login, signup, status, result and pricing still wear the superseded
-  frost-and-amber world** and now clash with the landing and app pages.
+- **A fluorescent buzz and a kitchen clock tick.** The ambience layer makes
+  noise only; both want a TONE. The capstan already proves tones work, so it is
+  an extension rather than a new idea. Section 20.
+- **The camera zooming is still a negative.** A punch-in zoom is the most
+  characteristic home-recording move there is and would add real energy. It was
+  left alone so the vlog run measured one change. Section 19.
+
+### Things that will bite you
+
+- **Read the prompt before blaming the model.** Twice today the model was doing
+  exactly what it was told: `Nothing dramatic happens` produced a tape with
+  nothing happening, and `deep focus from the table all the way to the shed`
+  produced the edge-to-edge sharpness that reads as AI.
+- **Backticks in a comment inside a template literal** break `static.mjs` and
+  `views.mjs`. Most repeated mistake in this codebase. `node --check` after
+  every edit.
+- **`job-model` and `queue-race` fail under full parallel load on Windows** and
+  pass in isolation. Known, documented in section 12, not a regression.
+- **CLAUDE CANNOT RUN PAID COMMANDS.** Paste them and paste the output back.
 
 ```bash
 npm run web                              # terminal 1
 npm run worker -- --provider=fixture     # terminal 2
 # sign in as dev@example.com / timestamp-dev-password
 ```
-`paul@example.com` cannot be signed into - scrypt hash, no reset endpoint.
+`paul@example.com` cannot be signed into — scrypt hash, no reset endpoint.
 
 **The repo is PUBLIC: https://github.com/PaulStanley0211/timestamp**
 `out/`, `.env` and `assets/test-photos/` are gitignored. Both security-review
-docs stay gitignored on purpose - section 2.
+docs stay gitignored on purpose — section 2.
 
 ---
 
@@ -708,6 +716,334 @@ zero-dependency rule both require.
 
 **Only the landing and app pages are converted.** Login, signup, status, result
 and pricing still wear the superseded world.
+
+### 16. THE KEYBOARD FOCUS INDICATOR (2026-08-24)
+
+**WCAG 2.4.7 Focus Visible is Level A and the signed-in page was failing it on
+19 of its 20 hoisted radios.** `.statehook` is 1x1px with
+`clip-path: inset(50%)` -- deliberate, and what keeps the CSS-only selection in
+the tab order -- so the global `:focus-visible` outline matched, painted, and
+was invisible. The visible control is the `<label>` further down the page, so
+the indicator had to be drawn there. `presetCss` now emits one `focusRing()`
+rule per catalog entry for **placecard, lookcard, qualitycard and framecard**.
+`pl-own` already had one on `.linky` and was the twentieth.
+
+**TWO RULES WERE DELETED, AND THEY WERE THE WRONG INSTINCT WRITTEN DOWN TWICE:**
+`.statehook:focus-visible ~ .wrap .placecard { outline: none }` appeared at two
+places in the sheet. DESIGN.md names `outline` for `:focus-visible` as the
+first of exactly two permitted borders and says it is **never to be removed**.
+
+**THE FIRST VERSION OF THE TEST PASSED WHILE THE PAGE WAS STILL BROKEN, and
+that is the part worth remembering.** Asserting only that `#pl-x:focus-visible`
+appeared somewhere in a focus selector went green off the LANDING page's
+`.lopt--pl-x` rule -- a class that does not exist on the signed-in page at all.
+The assertion now requires the rule's target class to be one the page actually
+renders. **A focus test that does not tie the rule to the page it is tabbing
+through is not testing anything.**
+
+**Measured in a real browser, not asserted** -- a `focusin` probe over a real
+Tab sweep of the whole signed-in page:
+
+| | Before | After |
+|---|---|---|
+| Keyboard stops | 37 | 37 |
+| Stops with no visible indicator | 19 | **0** |
+| Ring against the ground | -- | **8.4:1** (1.4.11 asks 3:1) |
+
+**The ring also lifts the ghost to full opacity**, because `opacity` applies to
+an element's outline too -- a ring on a 0.5 ghost is drawn at half strength on
+exactly the controls that most need it.
+
+**A TRAP THIS COST TIME ON: the Browser pane reports `visibilityState: hidden`,
+and a hidden tab does not tick CSS transitions.** `.lookcard` has
+`transition: opacity 160ms`, so `getComputedStyle` kept returning the 0.5 the
+transition started from and the fix looked broken for three rounds of
+measurement. Setting `transition: none` on the element before reading resolves
+the cascade instead of the animation. **Screenshots need the pane displayed;
+measurement does not.**
+
+**Also checked while in there, and it holds:** the only visibly-bordered
+elements inside `.wrap` are the three `.shape` glyphs, which is DESIGN.md's
+second named exception. The ten `<hr class="rule">` that used to sit in
+`views.mjs` and `views-auth.mjs` are **gone**, along with the `.rule` block
+that hid them. They were `display: none`, so the mechanical border check
+always passed -- which is precisely what let dead markup from the superseded
+world survive review, one stale comment away from being switched back on.
+`test/web-static.test.js` now fails if an `<hr>` reappears in either file, and
+it reads the module source rather than a rendered page so that dividers hiding
+in error and notice branches are covered too.
+
+### 17. THE AI-SLOP FIX (2026-08-24) - and where the slop actually lived
+
+**Paul said the still looked like him AND still read as AI generated. Those are
+two different problems and only one of them was ffmpeg's.**
+
+**THE DIAGNOSIS COST NOTHING AND SHOULD ALWAYS BE RUN FIRST.** The still was
+looped to 375 frames and pushed through the real tape chain with `npm run look`
+-- no new generation, no money. Every TEXTURE tell died in the grade: waxy skin,
+hyper-detail on the hose reel and the chain-link, lifted shadows, clinical
+sharpness. **That half of the architecture works.** What came out the other side
+was: dead-centre symmetry, a posed stance with nothing happening, golden-hour
+hero light through the hedge, and a too-clean tableau.
+
+**ALL FOUR ARE COMPOSITION, AND COMPOSITION IS CONTENT.** Grain does not move a
+subject off the centre line. So the fix is the prompt, and the prompt was asking
+for three of the four by name.
+
+| Change | Where | Why |
+|---|---|---|
+| Framing moved to **third** | `composeStillPrompt` | It sat FIFTH and seedream ignored it outright. `composeMotionPrompt` already carried this exact ruling in a comment. Second time paid for. |
+| **`Moment:` clause**, optional per place | `prompt.mjs` + schema + all 8 presets | A brief with no action is a portrait brief, and the model answers it with a portrait. `DEFAULT_MOMENT` is the floor; a place may author its own. |
+| **Snapshot rule** rides with framing | `prompt.mjs` | "Set off centre, not quite level." Centring is the tell no amount of grain removes. |
+| **`STILL_NEGATIVES`** | `prompt.mjs` | centred / symmetrical / posed portrait / staged tableau / stock photo. BASE_NEGATIVES guarded the period and the anatomy and said nothing about staging. |
+| **"deep focus" deleted everywhere** | 2 presets, `_template`, both `local.mjs` fallbacks | **The single biggest AI-image tell, and it was house vocabulary.** A frame where the near table and the far shed are equally sharp is not a photograph. |
+
+**THE CATALOG ALREADY KNEW BETTER IN THREE PLACES** -- "the far balconies
+falling slightly out of focus", "the counter behind going soft",
+`LENS_OVERRIDES.close`. The fix made that the only phrasing rather than
+inventing a new one. Note `soft focus`, `blurry` and `bokeh` are all BANNED look
+vocabulary, so falloff has to be described without naming it.
+
+**A COINCIDENCE WORTH KNOWING: `schrebergarten-august` was one of the two worst
+presets in the catalog on this axis** -- it had "deep focus ... all the way to
+the shed" AND a framing clause with no action in it. `balkon-waesche` and
+`kuechentisch-fruehstueck` already had candid framing. **Some of what Paul saw
+is preset-specific, not systemic**, so do not read the re-run as a verdict on
+all eight.
+
+**NOT CHANGED, DELIBERATELY: the light.** The golden-hour hero light is
+per-preset prose across eight files and it is third-order next to framing and
+focus. Rewriting the catalog's lighting on a hunch, in the same change as four
+other levers, would make the re-run unreadable. **If slop survives this fix, the
+light is the next lever.**
+
+**THE RE-RUN IS NOT SEED-MATCHED.** `deriveSeed(jobId, ...)` takes the job id, so
+a new job is a new seed and there is no `--seed` flag. Same model, same place,
+same outfit, different noise. **It is a prompt comparison, not a controlled
+single-variable test**, and a difference could be the seed.
+
+```
+node --env-file-if-exists=.env scripts/render/render.mjs --photo=assets/test-photos/face.jpg --place=schrebergarten-august --outfit=trainingsjacke --consent --provider=fal --still-model=fal-ai/bytedance/seedream/v4.5/edit --allow-unverified-model --stills=1 --stop-after=select
+```
+
+### 18. DIRECT MODE -- THE STILL IS GONE, NOT HIDDEN (2026-08-24)
+
+**Paul, for the third time and then a fourth: "I don't understand why are you
+generating the pictures."** Upload a photo, pick an outfit, a place and a frame
+shape, get a tape. Section 9 recorded this as "the still cannot be deleted, only
+hidden" and that was WRONG -- it was true of `image-to-video` and of nothing
+else. `bytedance/seedance-2.0/reference-to-video` was **verified on 2026-08-20,
+recorded in config/models.json, and never wired in.** It takes the photographs.
+
+```bash
+node --env-file-if-exists=.env scripts/render/render.mjs --photo=assets/test-photos/face.jpg --place=schrebergarten-august --outfit=trainingsjacke --consent --provider=fal --direct --video-model=bytedance/seedance-2.0/reference-to-video
+```
+
+**`--dry-run` on that command works today and charges nothing.**
+
+| Piece | Where |
+|---|---|
+| `falReferenceVideoBody` | `image_urls`, never `image_url`; `referencesParam` per model, same lesson as BUG 3 |
+| `composeReferencePrompt` | @Image1 = face, @Image2 = uploaded place. Carries every ruling the other two prompts paid for |
+| `assertVideoRequest` | **exactly one** of `imagePath` / `references`, never both |
+| `SKIP_CHECKS.still` / `.select` | `skipped`, which is not `done` -- the ledger can tell the difference |
+| `input.direct` | on the INPUT, because the manifest is the only channel to the worker |
+| `estimateJob` | no still line at `stillCount: 0`, so a direct render is not over-quoted |
+
+**DIRECT MODE IS ONE CALL OR IT IS REFUSED, and that guard is the point rather
+than a detail.** On the still path a chain is continuous -- segment N+1 starts on
+segment N's last frame. On this path there is no frame to continue from, so a
+second segment would be an INDEPENDENT generation from the same photographs,
+joined by a jump cut between takes that never shared a frame. That is exactly
+what Paul described not wanting. `stepCompose` throws `DIRECT_NEEDS_ONE_CALL`
+naming both numbers.
+
+**A CONSEQUENCE WORTH KNOWING: `--provider=fixture --direct` REFUSES.** The
+fixture caps at 8s deliberately -- its own comment says a fixture claiming 15
+would let the pipeline skip segment chaining -- so 15s needs two calls and the
+guard fires. **Direct mode cannot be smoke-tested for free through the fixture.**
+It is covered end to end by `test/pipeline.test.js` against a 15s fake, and the
+first real proof has to be a paid call. Do not "fix" this by raising the
+fixture's cap; that trades a real guard for a convenience.
+
+**IT RAN, END TO END, 2026-08-24. Job `20260824-122201-af8b0d`, ~$4.54
+estimated, not metered.** Photograph in, finished tape out, and the still stage
+never happened: steps 5 and 6 both printed `skipped`. **375 frames, 15s,
+-27.4 LUFS, every contract assertion green.** The direct path is real.
+
+**@Image1 DOES CARRY A FACE.** The open question in `config/models.json` since
+2026-08-20 has an answer: the beard, the curls and the features arrive, and the
+person in the clip is recognisably the person in the earlier seedream still. The
+Moment clause landed too -- he reaches across for the bottle, then turns back.
+**Paul's own verdict on THIS clip is still owed; the observation above is about
+the image, not a judgement of resemblance, and only he can make that call.**
+
+**WHAT THE MODEL ACTUALLY RETURNED: 752x560 at 24fps, 361 frames, 15.04s.**
+- The **raster is not honoured**, exactly as on the still endpoint: 640x480 was
+  ordered. 752x560 is also 47:35, marginally wider than 4:3. Harmless -- the
+  tape stage scales -- but the price may be quoted for a different size.
+- **24fps, where the whole contract is 25.** ffmpeg retimes it; nothing is lost.
+
+**A FALSE WARNING THAT WAS WORTH FIXING PROPERLY.** `assemble` compared frame
+COUNT against 375 and announced *"the tape stage will loop the source to reach
+15s and the repeat may be visible"*. **Untrue here**: 15.04s is MORE than fifteen
+seconds of material, and the delivered tape ends on the last frame of the action
+-- checked frame by frame on the file, not assumed. The check now asks whether
+there is enough TIME to fill the contract (`assembleFrameWarnings`, exported and
+tested), so a frame-rate difference is silent while a genuinely short source
+still warns about the loop by name. **A warning that cries wolf is how the real
+one stops being read**, and the real one matters because `-stream_loop -1` does
+repeat a short source visibly.
+
+**TWO BUGS PAUL'S FIRST REAL RUN FOUND, both at compose, neither billed:**
+
+1. **`stepCompose` held the STILL model to `verified: true` unconditionally**,
+   so a direct job died naming `fal/UNVERIFIED-identity-still` -- an entry that
+   is unverified ON PURPOSE so an unconfigured fal render stops before it
+   spends. The gate is right; it was being asked about a stage that no longer
+   runs. **The test suite missed it because the harness maps `defaults.fake` to
+   the FIXTURE defaults, whose still model IS verified.** There is now a test
+   that points it at the real unverified entry, and a second one asserting the
+   ordinary path still refuses -- the fix must not become a hole in the guard.
+2. **`videoModelOverride` was never threaded into `runPipeline`.** The provider
+   was built with the override and the manifest froze the DEFAULT, so it would
+   have recorded image-to-video while calling reference-to-video. Same reasoning
+   the still override already carried; the video half simply never got it.
+
+**`--stop-after=compose` PROVES THE WHOLE FREE HALF FOR $0** and is the right
+check before any direct run: it writes a manifest showing `direct: true`, the
+frozen video model, `1 segment = 15s`, an estimate carrying only an `animate`
+line, `stillPrompt: null` and a `referencePrompt`. Verified 2026-08-24.
+
+**WHAT THIS COSTS, AND IT IS THE WHOLE RISK.** The still was also the cheap
+rejection gate: a likeness that missed cost **$0.04** and the user saw it before
+paying. Here the same miss costs a whole video -- **~$4.54 estimated at the flat
+per-second rate**, which is itself derived from a 720p figure nobody has ever
+been invoiced for. The trade was put to Paul four times and taken four times.
+**It is a product decision, not an oversight, and section 9's cost analysis
+still stands: solve identity first, then hide everything.** Identity IS solved
+as of this morning -- seedream held the likeness -- but on the STILL endpoint,
+and `config/models.json` still carries the open question in its own words:
+
+> "Does @Image1 hold a FACE as well as image-to-video holds a start frame? ...
+> a yes is not automatically good news."
+
+**That question is unanswered and only a paid call answers it.** The old path is
+untouched and still the default precisely because of that.
+
+**ASPECT RATIOS: UNVERIFIED ON THIS ENDPOINT.** `config/models.json` records
+`aspectRatios: ["4:3"]` for reference-to-video. Paul's product list includes the
+user picking the shape, and the picker already exists in the app. Whether the
+endpoint accepts 16:9 and 9:16 has NOT been checked against fal's schema page.
+Section 13's refusal still applies on the paid path.
+
+### 19. THE VLOG REWRITE (2026-08-24) -- the direct tape has beats now
+
+**Paul watched the first direct tape and diagnosed it exactly:** *"there is no
+engagement, no enthusiasm ... the character is placing the bottle on the table,
+it is taking around five to six seconds ... it should be like a vlog. If I am on
+a beach it has to be running toward the streets, the beach view, and everything.
+It should have some content."*
+
+**THE PROMPT WAS ASKING FOR PRECISELY WHAT HE DID NOT WANT.** In its own words:
+`It drifts a few centimetres and settles, the operator standing in one place and
+breathing`, and `Nothing dramatic happens ... it simply continues for the whole
+15 seconds`. The model obeyed both perfectly. **Read the prompt before blaming
+the model** -- that is now the second time on this project.
+
+**`composeReferencePrompt` IS NOW A NUMBERED SHOT LIST**, six beats for 15s off
+the `seedance-prompt` skill's own 2-2.5s-per-shot table (`shotCountFor`). The
+arc is the order a home recording actually goes: **arrive, look around, notice a
+thing, do the thing, react, settle.** Shot 2 pans the whole place and shot 3
+pushes in on a named prop -- that is "the beach view, and everything", the half
+Paul said was missing. A shorter runtime drops the middle and keeps the ends.
+
+**CUTS ARE NOW ALLOWED ON THIS PATH AND STILL FORBIDDEN ON THE OTHER**, which is
+why `MOTION_NEGATIVES` was split into `CUT_NEGATIVES` + `PACE_NEGATIVES`:
+- A motion SEGMENT must not cut -- it gets joined to others, and footage that
+  cuts inside itself cannot be used at all.
+- A direct tape is BUILT on cuts. Seedance does multi-shot inside ONE
+  generation, so nothing is stitched by the pipeline and
+  `DIRECT_NEEDS_ONE_CALL` is untouched. **In-camera cuts are also period-honest:
+  a 2003 tape is full of them because you pressed record and stopped again.**
+- Everything that was never about stillness -- slow motion, speed ramps, time
+  lapse, morphing, location and wardrobe changes -- stays refused on both.
+
+**A TEST WAS DELETED AND ANOTHER CHANGED SHAPE, both deliberately.** "the
+reference prompt is one continuous take" asserted the design Paul replaced. "the
+reference prompt keeps the anti-slop work" asserted a standalone `Framing:` line
+before `Light:` -- correct for a single-take prompt, meaningless for a shot list
+where every shot states its own size; it now asserts what it was ever really
+guarding, that the frame is uncomposed and something is happening.
+
+**TWO FALSE POSITIVES IN THE NEW TESTS, both mine, both worth knowing:** a bare
+`/ARRI/` matches **carriageway** and **barrier**, which the autobahn place says
+twice -- word-boundary it. And asserting a prop appears verbatim broke the
+moment the shot list capitalised it to open a sentence.
+
+**NOT CHANGED, AND THE OBVIOUS NEXT LEVER: `the camera zooming` is still a
+negative.** A punch-in zoom is the most characteristic home-recording move there
+is and it would add real energy. It was left alone so this run measures one
+change, not two.
+
+**THE PRODUCT IDENTITY MOVED, AND IT WAS SAID OUT LOUD BEFORE BUILDING.**
+PRODUCT.md opens on "Warm, grainy, quiet" and the entire look was designed
+around stillness. **A vlog is the opposite of quiet.** Paul chose it knowingly;
+if the docs are not updated to match, the next person will read a product
+description that no longer describes the product.
+
+### 20. PLACE AMBIENCE (2026-08-24) -- the bed now knows where it is
+
+**The bed was the sound of the MACHINE and nothing of the PLACE**, so a Baltic
+beach and a concrete stairwell came out sounding identical: hiss plus capstan,
+every time. Paul asked for sound "according to the video".
+
+**`audio.ambience` is a fourth layer, SILENT BY DEFAULT.** `amplitude: 0` emits
+no chain at all, so a job with no place override is bit-identical to the bed
+before this existed -- which is what keeps the still path and every existing
+calibration untouched. All eight places set their own in
+`lookOverride.audio.ambience`.
+
+**One vocabulary covers the whole catalog: filtered noise, optionally swelling,
+optionally in a room.** Surf and wind are a slow swell over brown noise; traffic
+is the same without the swell; a swimming hall or a stairwell is the same again
+with `aecho` on it. **Synthesised, for the reasons the module header already
+gives for the hiss** -- no sample means no licence and no normalisation pass,
+because a generator's loudness is known before it renders.
+
+**MEASURED, NOT ASSUMED. Every place, ebur128, integrated:**
+
+| | LUFS | | LUFS |
+|---|---|---|---|
+| (no place, before) | -27.2 | Autobahn | **-26.4** |
+| Beach | -26.7 | Living room | -26.9 |
+| Balcony / pool / stairwell | -27.0 | Kitchen / allotment | -27.1 |
+
+Target -27, tolerance 2. **The loudest place moves the bed 0.8 dB.** The place
+is felt rather than heard, which is the level Paul chose.
+
+**THE SEED IS `audioSeed + 1`, AND THAT IS NOT COSMETIC.** Two `anoisesrc` on
+one seed emit IDENTICAL noise; summing that is not two layers, it is one layer
+6 dB louder and perfectly correlated. It would sound exactly like the hiss being
+turned up, and nothing in the graph would look wrong. There is a test.
+
+**A REAL BUG THIS EXPOSED, one level down from where anyone was looking.**
+`withoutDocs` in `expand/local.mjs` strips a borrowed preset's `_comment` so a
+manifest cannot quote an argument about a different scene -- **and it filtered
+the TOP LEVEL ONLY.** That was sufficient while every lookOverride was two deep
+(`grade.saturation`); ambience is three (`audio.ambience._comment`), so a typed
+place could have carried "motorway rumble from behind the kiosk" into a scene
+with no kiosk in it. Now recursive, with a test that walks every depth. **The
+same two-level assumption was in `test/pipeline.test.js`'s frozen-look check**,
+where it compared an object against an object by identity and failed for the
+wrong reason.
+
+**NOT DONE, and both want a TONE rather than noise:** the fluorescent buzz the
+stairwell preset names, and the kitchen clock tick. This layer only makes noise;
+the capstan already proves tones work, so it is a small extension rather than a
+new idea. **Also not done: audible cuts.** Now the vlog has six shots, a real
+recording's sound would JUMP at each one -- the strongest remaining authenticity
+detail, and it needs shot-boundary detection on the finished clip.
 
 ---
 ---

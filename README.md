@@ -1,10 +1,26 @@
 # Timestamp
 
-One photo, one place, one outfit — fifteen seconds that look like a camcorder tape from 2003. Warm, grainy, quiet.
+One photo, one place, one outfit — fifteen seconds that look like a camcorder tape from 2003.
+
+The texture is warm, grainy and quiet. The tape itself is not: since 2026-08-24 it cuts six times in fifteen seconds and the camera walks, because the owner asked for a vlog rather than a held breath. See PRODUCT.md.
 
 **Be precise about what this is.** The *application* is built and it runs end to end: upload a photo in a browser, describe a place and an outfit in your own words, and a finished 15-second tape comes back — through a real job queue, a real render worker and real ffmpeg, for zero dollars.
 
-What that does **not** establish is the thing the product actually rests on: whether a generative model can put *you* in a chosen place and outfit recognisably, from one photograph. Every render above is served by `--provider=fixture`, which produces genuine files but invents nothing. So the plumbing is proven and the premise is not. That validation is `docs/phase-0-validation.md`, it is deliberately the next thing, and it is not something to discover in week nine.
+**The premise is now proven too, as of 2026-08-24.** The question the whole
+product rested on -- can a generative model put *you* in a chosen place and
+outfit recognisably, from one photograph -- has an answer, and the answer is
+yes. `fal-ai/bytedance/seedream/v4.5/edit` held the owner's likeness where
+`fal-ai/uso` had dropped his beard and his hair outright, and
+`bytedance/seedance-2.0/reference-to-video` then held it through fifteen seconds
+of video taken from the photograph directly, with no intermediate image at all.
+
+**Two honest caveats.** The blind check has not happened -- the right test is to
+send a frame to two people who know the face with the words "Who is this?" and
+nothing else, and that has not been done. And every price in this repo is an
+ESTIMATE: no run has ever been metered against a real invoice.
+
+The plumbing is still proven the same way it was: `--provider=fixture` produces
+genuine files for zero dollars and invents nothing.
 
 ---
 
