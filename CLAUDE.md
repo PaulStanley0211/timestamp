@@ -12,9 +12,9 @@ Warm, grainy, quiet.
 **1111 tests / 1109 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 **The tree is clean. Nothing is pushed.** `origin/main == b6f64a3`; branch
-`ui-redesign-signed-in-page` is **fifteen** commits ahead as of this line.
-The push is blocked on the Higgsfield licence question, item 3 below -- not on
-the code.
+`ui-redesign-signed-in-page` is **sixteen** commits ahead as of this line.
+**The Higgsfield licence question is ANSWERED as of 2026-08-24 and the stated
+blocker is cleared** -- section 10. Nothing in the code is holding the push.
 
 ### The one thing to know
 
@@ -57,10 +57,13 @@ free step and stop before the money.** Both were used today and both work.
    who know Paul's face with "Who is this?" and NOTHING else. **Not the friend
    he primed** by saying it was not AI generated. This is the only test that
    distinguishes "holds a likeness" from "looks like him to him".
-3. **The Higgsfield licence question, because it blocks the push.**
-   `assets/places/` is committed to a PUBLIC repo and the ruling in this file
-   says Higgsfield is "personal experiments and nothing else". Section 10.
-   **The commit already happened; the push is the irreversible line.**
+3. ~~**The Higgsfield licence question, because it blocks the push.**~~
+   **ANSWERED 2026-08-24 by reading the terms — see section 10.** Higgsfield
+   does not claim ownership of Outputs, does not restrict their commercial use,
+   does not tie that to a plan tier, and lets you sublicense them onward. What
+   it forbids is reselling **the Service** and acting as a "pass-through or
+   service bureau" — which is per-user generation, and is exactly why the
+   provider is fal. **The eight photographs are Outputs and they are fine.**
 4. ~~**The aspect ratios on the direct path.**~~ **READ 2026-08-24 — THE
    ENDPOINT ACCEPTS ALL THREE.** `aspect_ratio` takes `auto, 21:9, 16:9, 4:3,
    1:1, 3:4, 9:16` on image-to-video AND reference-to-video, agreed by both of
@@ -604,13 +607,45 @@ fields. Period-accurate, **no people**, and deliberately **no VHS/grain
 /"nostalgic"** in the prompts - era comes from named props and the tape look is
 ffmpeg's job.
 
-**A LICENCE QUESTION WAS RAISED AND NOT ANSWERED.** This file's own ruling says
-Higgsfield is "personal experiments and nothing else", because reselling its
-output through a paid app is outside consumer terms. That ruling was written
-about **per-user generation**; static brand assets are a different question it
-does not cleanly cover. **But these ship inside a commercial product and are
-committed to a PUBLIC repo.** Paul was told and has not come back on it. **Do not
-treat this as settled.**
+**THE LICENCE QUESTION IS ANSWERED, 2026-08-24, and the old ruling was right
+about a different thing.** Section 10 asked whether eight static assets, shipped
+in a commercial product and committed to a public repo, are covered. Read on
+Higgsfield's own pages -- the Terms of Use Agreement and the help-centre article
+"Who Owns Your Higgsfield Generations", last updated 3 August 2026:
+
+- Higgsfield **"does not claim ownership of any of your Inputs or Outputs"**
+  and **"nor does it restrict your commercial use of Outputs"**.
+- **"The Terms of Use do not tie commercial use rights to a specific plan"**,
+  and there is **"no separate commercial license to purchase"**. That retires
+  the "consumer creator subscription" half of the old ruling outright.
+- **"You may transfer or sublicense your rights in Outputs to your clients or
+  other third parties"**, and those rights **"survive cancellation of your
+  subscription or deletion or termination of your Account"**.
+
+**WHAT IS FORBIDDEN IS THE SERVICE, NOT THE OUTPUT**, and that is the line the
+old ruling was reaching for without the words: you may not "license, resell,
+rent, transfer, assign, reproduce, distribute, host, or otherwise commercially
+exploit the Service", and you may not "act as a pass-through or service bureau".
+**That is per-user generation to a description -- a customer types a place and
+Higgsfield renders it -- and it stays forbidden.** It is why the provider is
+fal.ai and that decision does not move. Eight photographs Paul generated once
+and committed are Outputs, and Outputs are his.
+
+**CHECKED IN THE CODE RATHER THAN ASSUMED: the shipped place photographs never
+reach a model.** `assets/places/<id>.jpg` is served by `server.mjs` as the
+placecard thumbnail and the background layer and nothing else; the `placePhoto`
+that becomes @Image2 in a reference prompt is always the USER's upload
+(`input/upload-place`). That matters because the terms also forbid using
+outputs "to train, fine-tune, or improve any AI or machine-learning model" --
+inference is not training, but the question does not even arise here.
+
+**WHAT IS STILL PAUL'S CALL, and it is not a licence question.** A public repo
+means anyone can take the eight files. That is a business decision about giving
+away assets, not a permission problem. **And the ruling rests on a document
+that changes** -- Higgsfield updated these terms recently -- so the sensible
+hygiene is to keep a dated note of what they said when the decision was made,
+which is what the quotes above are. **None of this is legal advice; it is what
+the published terms say, read on 2026-08-24.**
 
 **THE CARDS ARE NOW 16:9 AND THAT IS LOAD-BEARING.** One file is BOTH the
 `.placecard` thumbnail AND the full-bleed `.bg--<id>` layer, both `cover`. The
@@ -1184,7 +1219,7 @@ npm test
 
 Each of these was measured, not assumed. Re-deriving one is pure waste.
 
-**Higgsfield cannot serve a public Timestamp.** The access is a *consumer creator subscription*; reselling its output through a paid app is outside consumer terms, and its concurrency caps are per-account, not per-user. This is RELIO §11.6 (`C:\Users\pauls\RELIO\Reelio_Master_Document_v2.md`). It is why the provider is fal.ai. Higgsfield stays available for personal experiments and for nothing else.
+**Higgsfield cannot serve a public Timestamp -- and the reason is narrower than this ruling first said.** The terms were read on 2026-08-24 (section 10). What they forbid is acting as a "pass-through or service bureau" and commercially exploiting **the Service**: one account rendering on behalf of many customers, with concurrency caps that are per-account rather than per-user. That is the generation BACKEND, and it is why the provider is fal.ai. What the same terms explicitly permit is **commercial use of Outputs, on any plan, sublicensable onward** -- so "personal experiments and nothing else" was too broad, and section 10 records the quotes. **The backend is closed; assets Paul generates himself are open.** Original reasoning: RELIO §11.6 (`C:\Users\pauls\RELIO\Reelio_Master_Document_v2.md`).
 
 **Set the video model's native audio OFF.** Modern video models emit their own audio by default and it will fight the designed bed. Enforced in three layers — a required `nativeAudio: false` field, a provider-shape assertion, and an `ffprobe` check that the returned file has zero audio streams. Three layers for one boolean looks paranoid until a model version bump quietly re-enables it and you ship a week of videos with two ambiences arguing.
 
