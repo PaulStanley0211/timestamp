@@ -224,7 +224,11 @@ test('a new account opens with its plan first grant, and the balance is that sum
     planId: 'shelf',
   });
   assert.deepEqual(ledgerFor(account), [
-    { at: iso(T0), delta: 48, jobId: null, reason: 'grant:signup', balance: 48 },
+    // `ref: null` since 2026-08-24: grants gained an idempotency key so a
+    // redelivered Stripe webhook cannot pay out twice. A signup grant has no
+    // event behind it and nothing to key on, so null is the honest value and
+    // the row is pinned WITH it rather than loosened to ignore the field.
+    { at: iso(T0), delta: 48, jobId: null, reason: 'grant:signup', ref: null, balance: 48 },
   ]);
   assert.equal(balanceForId({ root, accountId: account.accountId }).credits, 48);
 });
@@ -588,12 +592,12 @@ const PEAK = 2;
  */
 const THREAD_SOURCE = `
 const { workerData, parentPort } = require('node:worker_threads');
-const { accountsUrl, creditsUrl, root, accountId, jobId, credits, index, nowMs, shared } = workerData;
+const { accountsUrl, creditsUrl, root, accountId, jobId, credits, index, nowMs, shared, op, ref } = workerData;
 const flags = new Int32Array(shared);
 
 (async () => {
   const { loadAccount } = await import(accountsUrl);
-  const { debitCredits } = await import(creditsUrl);
+  const { debitCredits, grantCredits } = await import(creditsUrl);
   const nowImpl = () => new Date(nowMs);
   const account = loadAccount({ root, accountId, nowImpl });
 
@@ -610,8 +614,13 @@ const flags = new Int32Array(shared);
 
   let result;
   try {
-    debitCredits(account, { jobId, credits, nowImpl });
-    result = { index, jobId, ok: true, code: null };
+    // A GRANT RACES EXACTLY AS A DEBIT DOES, and it is the shape Stripe
+    // actually produces: a redelivered webhook can arrive while the first
+    // delivery is still inside the handler.
+    const out = op === 'grant'
+      ? grantCredits(account, { credits, reason: 'grant:pack:test', ref, nowImpl })
+      : debitCredits(account, { jobId, credits, nowImpl });
+    result = { index, jobId, ok: true, code: null, granted: out ? out.granted : null };
   } catch (err) {
     result = { index, jobId, ok: false, code: err.code || err.message };
   } finally {
@@ -624,7 +633,7 @@ const flags = new Int32Array(shared);
 /** Boots `count` threads, waits until every one is parked at the barrier, then
  *  releases them all with a single notify. One starting gun, and every
  *  contender is inside the operation within microseconds. */
-function stampede({ count, root, accountId, jobIdFor, credits, nowMs = T0 }) {
+function stampede({ count, root, accountId, jobIdFor, credits, nowMs = T0, op = 'debit', ref = null }) {
   const shared = new SharedArrayBuffer(3 * Int32Array.BYTES_PER_ELEMENT);
   const view = new Int32Array(shared);
   const results = [];
@@ -637,7 +646,7 @@ function stampede({ count, root, accountId, jobIdFor, credits, nowMs = T0 }) {
         eval: true,
         workerData: {
           accountsUrl: ACCOUNTS_URL, creditsUrl: CREDITS_URL,
-          root, accountId, index, jobId: jobIdFor(index), credits, nowMs, shared,
+          root, accountId, index, jobId: jobIdFor(index), credits, nowMs, shared, op, ref,
         },
       });
       workers.push(worker);
@@ -660,6 +669,102 @@ function stampede({ count, root, accountId, jobIdFor, credits, nowMs = T0 }) {
     }
   });
 }
+
+// ---------------------------------------------------------------------------
+// grants are idempotent by `ref` -- the webhook's whole safety net
+// ---------------------------------------------------------------------------
+
+test('a grant with a ref already in the ledger is a no-op, not a second grant', (t) => {
+  // STRIPE REDELIVERS EVENTS. That is documented behaviour, not an edge case,
+  // and until 2026-08-24 `grantCredits` had no key of any kind -- debits are
+  // idempotent by jobId, grants wrote `jobId: null` -- so a replayed
+  // checkout.session.completed granted the credits a second time, free.
+  const root = makeRoot(t);
+  const account = signUp(root);
+  const before = balanceOf(account).credits;
+
+  const first = grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: 'evt_1', nowImpl: clock() });
+  const second = grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: 'evt_1', nowImpl: clock() });
+
+  assert.equal(first.granted, true);
+  assert.equal(second.granted, false, 'the replay must report that it granted nothing');
+  assert.equal(balanceOf(account).credits, before + 40, 'the balance moved once');
+  const refs = ledgerFor(account).filter((e) => e.ref === 'evt_1');
+  assert.equal(refs.length, 1, 'exactly one row carries the ref');
+});
+
+test('two different refs both land, because they are two different payments', (t) => {
+  const root = makeRoot(t);
+  const account = signUp(root);
+  const before = balanceOf(account).credits;
+
+  grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: 'evt_1', nowImpl: clock() });
+  grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: 'evt_2', nowImpl: clock() });
+
+  assert.equal(balanceOf(account).credits, before + 80, 'somebody buying twice is not a replay');
+});
+
+test('a grant with no ref is not deduplicated, and that is deliberate', (t) => {
+  // The signup grant and `npm run accounts -- grant` have no event behind them
+  // and nothing to key on. Silently collapsing two identical hand grants would
+  // be a different bug: an operator granting twice on purpose gets one.
+  const root = makeRoot(t);
+  const account = signUp(root);
+  const before = balanceOf(account).credits;
+
+  grantCredits(account, { credits: 5, reason: 'grant:goodwill', nowImpl: clock() });
+  grantCredits(account, { credits: 5, reason: 'grant:goodwill', nowImpl: clock() });
+
+  assert.equal(balanceOf(account).credits, before + 10);
+});
+
+test('the ref survives the round trip through the ledger file', (t) => {
+  // THE TRAP THIS TEST EXISTS FOR. `entriesOf` projects a fixed shape and drops
+  // everything it does not name, so a ref written to disk and not read back
+  // would leave the dedupe check looking at undefined forever -- an
+  // implementation that passes an in-memory test and is not idempotent at all.
+  const root = makeRoot(t);
+  const account = signUp(root);
+  grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: 'evt_round_trip', nowImpl: clock() });
+
+  const reloaded = loadAccount({ root, accountId: account.accountId, nowImpl: clock() });
+  assert.ok(ledgerFor(reloaded).some((e) => e.ref === 'evt_round_trip'),
+    'the ref must come back off disk or the dedupe reads nothing');
+
+  // And a second grant against the RELOADED account is still refused.
+  const again = grantCredits(reloaded, { credits: 40, reason: 'grant:pack:40', ref: 'evt_round_trip', nowImpl: clock() });
+  assert.equal(again.granted, false);
+});
+
+test('a ref that is not a usable key is refused rather than ignored', (t) => {
+  const root = makeRoot(t);
+  const account = signUp(root);
+  for (const bad of ['', '   ', 42, {}]) {
+    const err = grab(() => grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: bad, nowImpl: clock() }));
+    assert.equal(err?.code, 'BAD_REF', `ref ${JSON.stringify(bad)} should be refused, not silently dropped`);
+  }
+});
+
+test('8 threads grant the SAME ref at once: it lands once', async (t) => {
+  // The sequential test above is not enough. Stripe retries can OVERLAP -- a
+  // redelivery arriving while the first delivery is still inside the handler --
+  // and a check that reads before the lock would let both through. This is the
+  // same barrier harness the debit race uses, for the same reason.
+  const root = makeRoot(t);
+  const account = signUp(root);
+  const before = balanceOf(account).credits;
+
+  const { results } = await stampede({
+    count: 8, root, accountId: account.accountId, jobIdFor: () => JOB(1),
+    credits: 40, op: 'grant', ref: 'evt_stampede',
+  });
+
+  assert.equal(results.filter((r) => r.ok).length, 8, 'every thread should succeed -- a replay is a no-op, not an error');
+  assert.equal(results.filter((r) => r.granted === true).length, 1, 'exactly one thread actually granted');
+
+  const reloaded = loadAccount({ root, accountId: account.accountId, nowImpl: clock() });
+  assert.equal(balanceOf(reloaded).credits, before + 40, 'the balance moved exactly once');
+});
 
 test('12 threads debit at once against a balance that covers 3: exactly 3 get through', async (t) => {
   const root = makeRoot(t);

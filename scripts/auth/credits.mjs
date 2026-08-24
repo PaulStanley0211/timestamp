@@ -227,6 +227,25 @@ function assertReason(reason) {
 }
 
 /**
+ * An idempotency key, or nothing at all.
+ *
+ * WHY A BAD REF IS REFUSED RATHER THAN TREATED AS ABSENT. A caller passing an
+ * empty string believes it is protected and is not: the entry would be written
+ * with no key, and the next redelivery would grant the credits again. Failing
+ * loudly at the call is the only version of this that cannot be quietly wrong,
+ * and the caller is a webhook handling somebody's money.
+ */
+function assertRef(ref) {
+  if (ref === undefined || ref === null) return null;
+  if (typeof ref !== 'string' || ref.trim().length === 0) {
+    throw new AuthError(`a ledger ref must be a non-empty string or absent, got ${JSON.stringify(ref)}`, {
+      code: 'BAD_REF',
+    });
+  }
+  return ref.trim();
+}
+
+/**
  * Reads the stored ledger, refusing anything malformed.
  *
  * A skip-the-bad-entry policy would be wrong here in a way it is not wrong for
@@ -250,7 +269,13 @@ function entriesOf(account) {
     const ok = Number.isInteger(delta)
       && Number.isFinite(at)
       && typeof entry?.reason === 'string' && entry.reason.length > 0
-      && (entry.jobId === null || (typeof entry.jobId === 'string' && entry.jobId.length > 0));
+      && (entry.jobId === null || (typeof entry.jobId === 'string' && entry.jobId.length > 0))
+      // `ref` is optional, and EVERY ENTRY WRITTEN BEFORE 2026-08-24 LACKS IT
+      // ENTIRELY, so absent is as valid as null. Present but unusable as a key
+      // is corruption, and reading it as absent would silently disarm the
+      // grant dedupe on exactly the account whose file was damaged.
+      && (entry.ref === undefined || entry.ref === null
+        || (typeof entry.ref === 'string' && entry.ref.length > 0));
     if (!ok) {
       throw new AuthError(
         `ledger entry ${i} of account ${account?.accountId ?? '?'} is malformed: ${JSON.stringify(entry)}`,
@@ -262,7 +287,13 @@ function entriesOf(account) {
         },
       );
     }
-    return { at: entry.at, delta, jobId: entry.jobId ?? null, reason: entry.reason };
+    // THE PROJECTION IS A FIXED SHAPE AND DROPS WHATEVER IT DOES NOT NAME.
+    // `ref` was written to disk correctly and left off this line during
+    // implementation, and the result was a grant dedupe comparing every stored
+    // entry against `undefined` -- idempotent in memory, not idempotent at all
+    // across a reload, which is the only case that matters for a webhook. The
+    // round-trip test in test/auth-credits.test.js exists because of it.
+    return { at: entry.at, delta, jobId: entry.jobId ?? null, reason: entry.reason, ref: entry.ref ?? null };
   });
 }
 
@@ -457,8 +488,9 @@ export function refundCredits(account, { jobId, reason = 'refund:failed-before-p
  * below zero: a negative balance is a debt this product has no way to collect
  * and no page that could explain it.
  */
-export function grantCredits(account, { credits, reason, nowImpl } = {}) {
+export function grantCredits(account, { credits, reason, ref: rawRef, nowImpl } = {}) {
   assertReason(reason);
+  const ref = assertRef(rawRef);
   if (!Number.isInteger(credits) || credits === 0) {
     throw new AuthError(`grant must be a non-zero integer, got ${JSON.stringify(credits)}`, {
       code: 'BAD_CREDITS',
@@ -467,8 +499,22 @@ export function grantCredits(account, { credits, reason, nowImpl } = {}) {
   const { root, accountId } = mutableAccount(account, 'grantCredits');
   const clock = nowImpl ?? account?.nowImpl ?? defaultNow;
 
-  const { account: fresh } = updateAccount({ root, accountId, nowImpl: clock }, (record) => {
-    const balance = sum(entriesOf(record));
+  const { account: fresh, outcome } = updateAccount({ root, accountId, nowImpl: clock }, (record) => {
+    const entries = entriesOf(record);
+
+    // IDEMPOTENT BY ref, AND THE CHECK IS INSIDE THE LOCK FOR THE SAME REASON
+    // THE DEBIT'S BALANCE CHECK IS. Stripe redelivers events -- documented
+    // behaviour, not an edge case -- and a redelivery can arrive while the
+    // first delivery is still inside this function. A check that read before
+    // `updateAccount` took the per-account lock would let both through and
+    // grant twice. There is an 8-thread barrier test for exactly that.
+    //
+    // A replay RETURNS rather than throws: the webhook must be able to answer
+    // Stripe 200, and a 500 on a duplicate would make Stripe retry the one
+    // thing that already succeeded.
+    if (ref !== null && entries.some((entry) => entry.ref === ref)) return { granted: false };
+
+    const balance = sum(entries);
     if (balance + credits < 0) {
       throw new AuthError(
         `a grant of ${credits} would take account ${accountId} from ${balance} to ${balance + credits}`,
@@ -481,11 +527,16 @@ export function grantCredits(account, { credits, reason, nowImpl } = {}) {
     }
     record.ledger = [
       ...record.ledger,
-      { at: toIso(clock), delta: credits, jobId: null, reason },
+      { at: toIso(clock), delta: credits, jobId: null, reason, ref },
     ];
+    return { granted: true };
   });
 
   refreshAccount(account, fresh);
+  // Returned rather than void, because the one caller that matters -- the
+  // Stripe webhook -- has to be able to tell a payment from a redelivery, and
+  // reading it back off the ledger would be a second source of truth.
+  return { granted: outcome.granted, credits: outcome.granted ? credits : 0, ref };
 }
 
 /** The plan's period grant, by name, so the CLI and a future webhook cannot

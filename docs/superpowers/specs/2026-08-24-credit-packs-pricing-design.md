@@ -170,7 +170,7 @@ none. `scripts/auth/credits.mjs` already provides `grantCredits`,
 is the whole surface a pack needs. **Revenue is not blocked behind the Supabase
 migration.**
 
-### The gap: grants are not idempotent
+### The gap: grants are not idempotent — **CLOSED 2026-08-24**
 
 `debitCredits` is idempotent by `jobId` — the ledger's own header explains why,
 because a job can be enqueued more than once. **`grantCredits` has no such key.**
@@ -194,6 +194,25 @@ no way to tell the second row from a legitimate second purchase.
 This is the file-ledger form of the old spec's "idempotency is a primary key,
 not a check", and it must be written and tested **before** the webhook exists,
 not alongside it.
+
+**DONE 2026-08-24.** `grantCredits` takes `ref`, dedupes inside the existing
+`updateAccount` lock, and returns `{ granted, credits, ref }` so the webhook can
+tell a payment from a redelivery without reading the ledger back. A bad `ref` --
+empty, blank, not a string -- is refused with `BAD_REF` rather than treated as
+absent, because a caller passing `''` believes it is protected and is not.
+
+**Two traps this hit, both worth knowing before touching that module again:**
+
+1. **`entriesOf` projects a fixed shape and drops what it does not name.** The
+   `ref` was written to disk correctly and left off the projection, so the
+   dedupe compared every stored entry against `undefined` -- **idempotent in
+   memory, and not idempotent at all across a reload**, which is the only case a
+   webhook has. There is now a round-trip test that reloads the account from
+   disk before asserting.
+2. **A sequential test is not enough.** Stripe retries can overlap, so the check
+   has to be inside the per-account lock. There is an **8-thread barrier test**
+   -- the same harness the debit race uses -- asserting all eight calls succeed,
+   exactly one reports `granted: true`, and the balance moves once.
 
 ---
 

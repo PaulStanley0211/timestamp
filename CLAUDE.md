@@ -9,11 +9,11 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-08-24, end of day) — THE PREMISE IS PROVEN
 
-**1132 tests / 1130 pass / 0 fail / 2 skipped.** The skips are the
+**1138 tests / 1136 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 **The tree is clean, and as of 2026-08-24 THE BRANCH IS PUSHED.**
 `origin/ui-redesign-signed-in-page` exists and tracks; `origin/main` is still
-`b6f64a3`, so the branch is **twenty-two** commits ahead of main as of this line
+`b6f64a3`, so the branch is **twenty-three** commits ahead of main as of this line
 and **nothing has been merged**. GitHub offers a PR at
 `/pull/new/ui-redesign-signed-in-page`; opening one is Paul's call, not a
 prerequisite. The Higgsfield licence question that used to block this is
@@ -294,9 +294,14 @@ deliberately NOT papered over with retries or `continue-on-error`.
   60% gross and is chosen to absorb the FREE RETRIES that direct mode made
   inevitable. **A pack ships on the existing file ledger and does NOT need
   Supabase.** One free tape ever, not monthly, with a global ceiling.
-  **AND THE PRECONDITION NOBODY WOULD GUESS: `grantCredits` has no idempotency
-  key** -- debits are keyed by jobId, grants write `jobId: null` -- so a
-  replayed Stripe event grants twice. That fix comes before any webhook code.
+  ~~**AND THE PRECONDITION NOBODY WOULD GUESS: `grantCredits` has no
+  idempotency key**~~ **CLOSED 2026-08-24.** Grants take a `ref`, deduped inside
+  the existing per-account lock, returning `{granted, credits, ref}` so a
+  webhook can tell a payment from a redelivery. **Two traps:** `entriesOf`
+  projects a fixed shape and silently dropped the `ref` on read, which is
+  idempotent in memory and not idempotent across a reload; and a sequential
+  test is not enough, because Stripe retries overlap -- there is an 8-thread
+  barrier test.
 - **NOT WRITTEN: the Supabase design.** Sub-project 1 needs a fresh spec for
   "Supabase Auth replaces login + PostgREST over fetch". That is the next
   writing task, and **no code should be written before it exists.**
