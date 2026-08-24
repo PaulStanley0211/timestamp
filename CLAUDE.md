@@ -9,11 +9,11 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-08-24, end of day) — THE PREMISE IS PROVEN
 
-**1129 tests / 1127 pass / 0 fail / 2 skipped.** The skips are the
+**1132 tests / 1130 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 **The tree is clean, and as of 2026-08-24 THE BRANCH IS PUSHED.**
 `origin/ui-redesign-signed-in-page` exists and tracks; `origin/main` is still
-`b6f64a3`, so the branch is **nineteen** commits ahead of main as of this line
+`b6f64a3`, so the branch is **twenty** commits ahead of main as of this line
 and **nothing has been merged**. GitHub offers a PR at
 `/pull/new/ui-redesign-signed-in-page`; opening one is Paul's call, not a
 prerequisite. The Higgsfield licence question that used to block this is
@@ -92,8 +92,16 @@ free step and stop before the money.** Both were used today and both work.
    model override — so the browser is stuck on the still path behind a gate
    that is deliberately shut. **Both need Paul**, and they are items 1 and 4
    of section 9's order: solve identity, then hide everything.
-6. **Login, signup, status, result and pricing still wear the superseded
-   frost-and-amber world** and clash with the two converted pages.
+6. ~~**Login, signup, status, result and pricing still wear the superseded
+   frost-and-amber world.**~~ **PART DONE 2026-08-24 — and the diagnosis was
+   half wrong, section 23.** What actually differed was mechanical and is now
+   fixed and tested: those five wore the page-wide GRAIN plate DESIGN.md bans
+   and lacked the GAUZE it requires, and pricing carried the only 15 visible
+   dividers left in the product. **What is left is one real violation**: the
+   "YOUR PLAN" pill is a bordered box, a third border in a world that permits
+   exactly two — and the three plans do not use the struck/ghost grammar at
+   all, so colour still cannot answer "what have I chosen?" on that page. That
+   is the failure DESIGN.md was written against.
 7. **The Supabase spec**, then a plan, then code. Not before. Section 5.
 
 ### Two cheap wins nobody has taken
@@ -1264,6 +1272,60 @@ all.** And `fal-ai/uso` bills per MEGAPIXEL with an apparent 1MP floor: the
 640x480 this repo orders is ~0.31MP and was billed as 1.00.
 
 **One receipt, $12.00 of credits bought on 2026-08-23, $4.34 spent, $7.66 left.**
+
+### 23. THE FIVE UNCONVERTED PAGES (2026-08-24) -- measured, and the plan was half wrong
+
+**"They clash" is not a defect anybody can fix.** The pages were rendered and
+probed in a real browser instead, and the difference turned out to be mechanical:
+
+| | landing / app (converted) | login, signup, pricing, status, result |
+|---|---|---|
+| `.grain` -- fractal noise, fixed, over the whole viewport | `display: none` | **live** |
+| `.gauze` -- the anode mesh | present | **absent** |
+| visible borders | 0 | 0, except **15 on pricing** |
+
+**The five wore the one texture DESIGN.md bans and lacked the one it requires**,
+and in both cases because the thing was a page-by-page opt-in. `.gauze` was
+emitted through `preBody` by exactly two callers; `.grain` was switched off by a
+rule naming exactly two pages. **Every page nobody remembered to add to those
+lists came out wrong** -- a structure problem wearing a taste problem's clothes.
+
+Both are structural now: **the grain plate is DELETED** rather than suppressed,
+and **the gauze lives in `layout()`** so a new page cannot forget it. The two
+literal-colour borders -- `.step` on the status page and `.plan li` on pricing,
+fifteen of them -- are gone, and the lists group on space.
+
+**THREE TESTS KEEP IT THAT WAY, and they read the RENDERED pages**: every page
+the app can produce carries the gauze and none carries grain; `.grain` appears
+nowhere in the sheet; and no border declaration anywhere uses a literal colour.
+That last shape is the useful one -- borders written against `var(--hairline)`
+are already transparent, which is how the two converted pages went borderless
+without rewriting 300 rules, but a literal colour is a line no token can turn
+off. `renderedPages()` is a hand-written LIST rather than a loop over exports,
+because a page missing from it is invisible to all three checks, and being
+invisible to the last check is exactly how five pages stayed wrong.
+
+**TWO ITEMS OF THE PLAN WERE WITHDRAWN AFTER MEASURING, recorded so nobody
+re-proposes them.** The plan said headings on those pages should take the
+display face and `.eyebrow` should retire. Both came from comparing against the
+LANDING page, whose `h1` is TapeOSD at 94px -- the wrong neighbour. The
+signed-in app page is the one these sit beside, its own `.app-h1` is system sans
+at clamp(29-40px), and it uses `.eyebrow` too. Forcing the display face onto
+interior headings would have matched the hero and clashed with the neighbour,
+and DESIGN.md's own rule is that **body is never uppercase**. The remaining
+heading difference is 28px against 29-40px, which is not a clash.
+
+**WHAT IS STILL WRONG, AND IT IS THE INTERESTING PART.** On `/pricing` the
+current plan is marked with a **bordered pill** -- `border: 1px solid
+var(--accent-deep)` on `.plan .mark`. DESIGN.md permits exactly two borders,
+names both, and says any new one "must argue itself into this list or it does
+not ship". This one never argued. Worse, the three plans are otherwise
+**identical**: no ghost, no strike, no halo. The world's whole mechanic is
+"every value present as an unlit ghost, one struck forward in glowing orange",
+and the page that answers "which plan am I on?" is the one page not using it.
+**That is precisely the failure the palette rule was written against** -- colour
+losing the ability to answer "what have I chosen?". The fix is to strike the
+current plan, ghost the others at `.5`, and delete the pill.
 
 ---
 ---

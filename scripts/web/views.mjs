@@ -318,8 +318,8 @@ export function layout({
 ${refreshSeconds ? `<noscript><meta http-equiv="refresh" content="${Number(refreshSeconds)}"></noscript>` : ''}
 </head>
 <body class="${h(bodyClass)}">
-<div class="grain" aria-hidden="true"></div>
 ${preBody || '<div class="bgs" aria-hidden="true"></div>\n<div class="scrim" aria-hidden="true"></div>'}
+<div class="gauze" aria-hidden="true"></div>
 <div class="wrap ${h(wrapClass)}">
 <header class="masthead">
   ${wordmark()}
@@ -450,9 +450,11 @@ export function landingPage({ places = [], account = null } = {}) {
     `<input class="lstate" type="radio" name="lplace" id="${h(placeSlug(p.id))}" value="${h(p.id)}"${p.id === first ? ' checked' : ''}>`
   )).join('\n');
 
+  // The gauze belongs to `layout` now -- every page gets it, which is what
+  // DESIGN.md means by "runs past every edge". The bloom stays: it is this
+  // page's own light, not the world's mesh.
   const preBody = `${hooks}
-<div class="bloom" aria-hidden="true"></div>
-<div class="gauze" aria-hidden="true"></div>`;
+<div class="bloom" aria-hidden="true"></div>`;
 
   const stack = places.map((p, i) => `
       <li><label class="lopt lopt--${h(placeSlug(p.id))}" for="${h(placeSlug(p.id))}"><span class="lidx">${String(i + 1).padStart(2, '0')}</span>${h(p.label)}</label></li>`).join('');
@@ -580,8 +582,7 @@ export function homePage({
 ${backgrounds}
 </div>
 <div class="scrim" aria-hidden="true"></div>
-<div class="bloom" aria-hidden="true"></div>
-<div class="gauze" aria-hidden="true"></div>`;
+<div class="bloom" aria-hidden="true"></div>`;
 
   const lookCards = outfits.map((o) => `
     <label class="lookcard lookcard--${h(outfitSlug(o.id))}" for="${h(outfitSlug(o.id))}">

@@ -37,7 +37,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { createStylesheet } from '../scripts/web/static.mjs';
-import { creditMeter, homePage } from '../scripts/web/views.mjs';
+import {
+  creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, errorPage,
+} from '../scripts/web/views.mjs';
+import { loginPage, signupPage, pricingPage, authUnavailablePage } from '../scripts/web/views-auth.mjs';
 
 /** The `.statehook` block, from its selector to its closing brace. */
 function statehookRule(css) {
@@ -217,6 +220,85 @@ function marksItsLabel(css, id, html) {
   return selectors.some(([, rest]) => [...rest.matchAll(/\.([\w-]+)/g)]
     .some(([, cls]) => cls !== 'wrap' && html.includes(cls)));
 }
+
+/**
+ * Every page this app can put in front of a person, rendered.
+ *
+ * Written as a list rather than as a loop over an export map on purpose: a page
+ * added to views.mjs and not added here is invisible to these checks, and the
+ * whole reason they exist is that five pages were invisible to the last one.
+ * The arguments are the thinnest thing each page will accept -- these tests are
+ * about the world the page is drawn in, not about its content.
+ */
+function renderedPages() {
+  const view = {
+    jobId: '20260824-120000-abcdef',
+    status: 'running',
+    step: 'animate',
+    pct: 50,
+    steps: [{ name: 'intake', status: 'done', attempts: 1, startedAt: null, endedAt: null, error: null }],
+    cost: { estimated: 2.08, actual: null, currency: 'USD' },
+    result: { videoPath: null, posterPath: null, videoUrl: null, posterUrl: null, durationSeconds: null, frames: null, lufs: null },
+    error: null,
+    input: { place: 'schrebergarten-august', placeKind: 'preset', outfit: 'trainingsjacke', outfitKind: 'preset', stillCount: 0 },
+  };
+  const plans = [{ id: 'free', label: 'Free', monthlyUSD: 0, annualUSD: 0, creditsPerPeriod: 20 }];
+  const resolutions = [{ id: '480p', credits: 21, available: true }];
+
+  return [
+    ['landing', landingPage({ places: [], account: null })],
+    ['home', homePage({ ...FOCUS_MENU, consentText: 'I agree' })],
+    ['login', loginPage({})],
+    ['signup', signupPage({ consentText: 'I am in this photo.' })],
+    ['pricing', pricingPage({ plans, resolutions, currentPlan: null })],
+    ['status', statusPage({ view })],
+    ['select', selectPage({ view, stills: [] })],
+    ['result', resultPage({ view })],
+    ['error', errorPage({ status: 404, title: 'Not found' })],
+    ['auth-unavailable', authUnavailablePage()],
+  ];
+}
+
+test('every page the app can render carries the gauze and none carries grain', () => {
+  // DESIGN.md, "Texture belongs to the tape, and to nothing else": the interface
+  // carries NO grain, scanlines, noise or vignette, and the anode gauze runs
+  // past every edge. Both were page-by-page opt-ins -- `.gauze` was emitted by
+  // two callers through `preBody`, and `.grain` was suppressed by a rule naming
+  // the two converted pages -- so every page nobody remembered to list came out
+  // wearing the one texture this world bans and missing the one it requires.
+  // Structural now, and this is the test that keeps it structural.
+  for (const [name, html] of renderedPages()) {
+    assert.ok(html.includes('class="gauze"'), `${name} renders no gauze`);
+    assert.ok(!/class="[^"]*\bgrain\b/.test(html),
+      `${name} still renders the grain plate, which DESIGN.md forbids on the interface`);
+  }
+});
+
+test('the grain plate is gone from the stylesheet, not merely switched off', () => {
+  // Suppressing it per page is exactly what let five pages keep it. A
+  // `display: none` rule is one tidy-up away from being switched back on, and
+  // the plate itself is half a kilobyte of fractal noise nothing may use.
+  const { css } = createStylesheet(FOCUS_MENU);
+  assert.ok(!/\.grain\b/.test(css), 'a .grain rule is still in the sheet');
+  assert.ok(!/feTurbulence/.test(css), 'the noise plate data-URI is still in the sheet');
+});
+
+test('no border in the sheet draws a line of its own colour', () => {
+  // The one rule. Borders written against `var(--hairline)` are already
+  // transparent -- that is how the two converted pages went borderless without
+  // rewriting three hundred rules -- but a LITERAL colour in a border
+  // declaration cannot be neutralised by a token and is always a visible line.
+  // DESIGN.md's two exceptions are safe here: `outline` is not a border, and
+  // `.shape` draws with a var.
+  const { css } = createStylesheet(FOCUS_MENU);
+  const offenders = css.split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /border(-(top|right|bottom|left))?(-color)?:[^;]*(#[0-9a-fA-F]{3,8}|rgba?\()/.test(l));
+
+  assert.deepEqual(offenders, [],
+    'DESIGN.md forbids rules and dividers anywhere, and a border with a literal '
+    + 'colour is a line no token can turn off:\n' + offenders.join('\n'));
+});
 
 test('every hoisted radio marks its visible label when it takes focus', () => {
   const { css } = createStylesheet(FOCUS_MENU);

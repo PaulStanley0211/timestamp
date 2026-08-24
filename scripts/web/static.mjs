@@ -443,15 +443,6 @@ body {
     radial-gradient(120% 70% at 50% 0%, rgba(11,10,9,0.20) 0%, rgba(11,10,9,0.80) 100%);
 }
 
-/* One static grain plate over everything, very low. The product is about
-   texture; a flat page under it would be a different product's page. */
-.grain {
-  position: fixed; inset: 0; pointer-events: none; z-index: 9;
-  opacity: 0.05;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
 /* The radios live at the top of <body> so that ":checked ~ .bgs" and
    ":checked ~ .wrap" can reach the background and the cards. They are still
    part of the form, via the "form" attribute on each input. Hidden without
@@ -1194,8 +1185,10 @@ input[type="file"]::file-selector-button {
   grid-template-columns: 1rem 1fr;
   grid-template-areas: 'mark name' '. note';
   gap: 0 0.75rem;
-  padding: 0.5rem 0;
-  border-top: 1px solid rgba(242,237,228,0.06);
+  /* Was a 1px top border. DESIGN.md forbids rules and dividers anywhere, and a
+     literal colour is a line no token can turn transparent -- so the steps are
+     separated by space instead. Tight within the group, generous between. */
+  padding: 0.6rem 0;
   color: var(--faint);
 }
 .step-mark { grid-area: mark; width: 6px; height: 6px; margin-top: 0.6rem; border-radius: 50%; background: rgba(242,237,228,0.12); }
@@ -1297,7 +1290,9 @@ input[type="file"]::file-selector-button {
 .plan .price { font-family: var(--osd); font-size: 30px; letter-spacing: 0.06em; color: var(--ink); margin: 0.3rem 0 0.1rem; }
 .plan .per { color: var(--faint); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; }
 .plan ul { list-style: none; padding: 0; margin: 1rem 0 0; color: var(--muted); font-size: 14px; }
-.plan li { padding: 0.3rem 0; border-top: 1px solid rgba(242,237,228,0.06); }
+/* Fifteen of these were the only visible lines left in the product. Space does
+   the grouping now, per DESIGN.md's one rule. */
+.plan li { padding: 0.42rem 0; }
 .plan .mark {
   position: absolute; top: -0.65rem; left: 1.4rem;
   font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent);
@@ -1316,11 +1311,13 @@ input[type="file"]::file-selector-button {
 .is-landing,
 .page-home { background: var(--l-ground); }
 
-/* TEXTURE BELONGS TO THE TAPE AND TO NOTHING ELSE. The page-wide grain plate is
-   precisely the "AI tool with a filter over it" impression this product exists
-   to avoid, so the landing page switches it off. */
-.is-landing .grain,
-.page-home .grain { display: none; }
+/* TEXTURE BELONGS TO THE TAPE AND TO NOTHING ELSE, and as of 2026-08-24 that is
+   structural rather than remembered. This used to be a "display: none" naming
+   the two converted pages, so login, signup, pricing, status and result all
+   kept wearing the page-wide grain plate -- precisely the "AI tool with a
+   filter over it" impression the product exists to avoid. The plate is deleted,
+   not switched off: a suppression rule is one tidy-up away from being undone,
+   and a list of exceptions is a list somebody forgets to add to. */
 
 .is-landing .wrap { max-width: 76rem; position: relative; z-index: 6; }
 
