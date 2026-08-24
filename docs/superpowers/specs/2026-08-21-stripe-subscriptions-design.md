@@ -1,5 +1,20 @@
 # Stripe subscriptions and the webhook — design
 
+> **SUPERSEDED 2026-08-24 by `2026-08-24-credit-packs-pricing-design.md`.**
+> Two things were measured that this document could not have known: a tape costs
+> **$2.08, not $1.51** (fal bills tokens, and bills the raster it returns), so
+> every plan here was sized against a cost 27% too low; and the usage pattern is
+> bursty, which a monthly subscription bills badly and cannot measure.
+>
+> **Most of this file survives and should be read before writing any Stripe
+> code**: hosted Checkout with no card in the codebase, zero npm dependencies,
+> server-side prices, the raw-body signature trap, idempotency as a key rather
+> than a check, the event table, and the testing rules. What is superseded is the
+> *object being sold* -- four subscription Prices become one one-off pack.
+> Subscriptions return when repurchase rate says people want them, and this file
+> is the starting point when they do.
+
+
 **Date:** 2026-08-21 · **Status:** approved in chat, not started
 **Depends on:** the Supabase migration (sub-project 1), whose spec needs
 rewriting — `2026-08-21-sqlite-identity-money-design.md` was superseded when the

@@ -13,7 +13,7 @@ Warm, grainy, quiet.
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 **The tree is clean, and as of 2026-08-24 THE BRANCH IS PUSHED.**
 `origin/ui-redesign-signed-in-page` exists and tracks; `origin/main` is still
-`b6f64a3`, so the branch is **twenty-one** commits ahead of main as of this line
+`b6f64a3`, so the branch is **twenty-two** commits ahead of main as of this line
 and **nothing has been merged**. GitHub offers a PR at
 `/pull/new/ui-redesign-signed-in-page`; opening one is Paul's call, not a
 prerequisite. The Higgsfield licence question that used to block this is
@@ -281,10 +281,22 @@ deliberately NOT papered over with retries or `continue-on-error`.
   partial unique index, balance derived by `SUM(delta)` and never stored, expiry
   as an explicit negative row, the never-delete-anything migration with a
   per-account parity check, and jobs/queue staying on files.
-- **`2026-08-21-stripe-subscriptions-design.md` - current, approved, not
-  started.** Two guards against double payout, the raw-body signature trap
-  (`server.mjs` already parses bodies - a reserialise breaks every signature),
-  replay window vs idempotency as separate concerns.
+- **`2026-08-21-stripe-subscriptions-design.md` - SUPERSEDED 2026-08-24** by
+  `2026-08-24-credit-packs-pricing-design.md`. Most of it survives and must be
+  read before any Stripe code: two guards against double payout, the raw-body
+  signature trap (`server.mjs` already parses bodies - a reserialise breaks
+  every signature), replay window vs idempotency as separate concerns. What is
+  superseded is the OBJECT BEING SOLD.
+- **`2026-08-24-credit-packs-pricing-design.md` - current, approved, not
+  started.** **$10 for 40 credits, ONE-OFF, one Price.** A credit is $0.10 of
+  provider COST, so a 480p tape is **21 CR and not 16** -- the old number was
+  set by feel against a cost 27% too low. Credits sell at **$0.25**, which is
+  60% gross and is chosen to absorb the FREE RETRIES that direct mode made
+  inevitable. **A pack ships on the existing file ledger and does NOT need
+  Supabase.** One free tape ever, not monthly, with a global ceiling.
+  **AND THE PRECONDITION NOBODY WOULD GUESS: `grantCredits` has no idempotency
+  key** -- debits are keyed by jobId, grants write `jobId: null` -- so a
+  replayed Stripe event grants twice. That fix comes before any webhook code.
 - **NOT WRITTEN: the Supabase design.** Sub-project 1 needs a fresh spec for
   "Supabase Auth replaces login + PostgREST over fetch". That is the next
   writing task, and **no code should be written before it exists.**
