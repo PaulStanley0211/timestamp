@@ -11,120 +11,111 @@ Warm, grainy, quiet.
 
 **1138 tests / 1136 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
-**The tree is clean, and as of 2026-08-24 THE BRANCH IS PUSHED.**
-`origin/ui-redesign-signed-in-page` exists and tracks; `origin/main` is still
-`b6f64a3`, so the branch is **twenty-three** commits ahead of main as of this line
-and **nothing has been merged**. GitHub offers a PR at
-`/pull/new/ui-redesign-signed-in-page`; opening one is Paul's call, not a
-prerequisite. The Higgsfield licence question that used to block this is
-ANSWERED -- section 10.
+**Tree clean. Branch PUSHED**: `origin/ui-redesign-signed-in-page` tracks;
+`origin/main` is still `b6f64a3`, so it is **twenty-four commits ahead and
+nothing is merged.** Opening a PR is Paul's call, not a prerequisite.
+
+**This block is a HANDOFF, not a diary.** Everything struck through has moved
+into a numbered section. Sections 22, 23 and 24 are today's and are the ones
+worth reading before touching money, the web pages, or resolutions.
 
 ### The one thing to know
 
 **A model can put Paul in a place recognisably, from one photograph, and hold it
 through fifteen seconds of video with no intermediate image at all.** That was
-the only question that decided whether this is a product. It is answered.
+the only question that decided whether this is a product. It is answered — by
+`seedream/v4.5/edit` on the still and `seedance-2.0/reference-to-video` on the
+tape. **What is NOT answered is whether it holds for anyone who is not Paul.**
 
-- `fal-ai/bytedance/seedream/v4.5/edit` held the likeness where `fal-ai/uso`
-  dropped the beard and the hair. Paul's words: *"it looks like me. Each and
-  every bit looks like me. It is perfect."*
-- `bytedance/seedance-2.0/reference-to-video` then held it through a whole tape.
-
-### What the product IS now — read PRODUCT.md, it was rewritten today
+### What the product IS
 
 **Four choices and a tape: photo, outfit, place, frame shape.** No still, no
-gate, nothing to approve. `--direct`. Section 18.
-
-**Fifteen seconds is a SHOT LIST**, six beats, not one continuous take.
-Section 19. **The bed knows where it is** — per-place ambience. Section 20.
+gate, nothing to approve — section 18. **Fifteen seconds is a SHOT LIST**, six
+beats — section 19. **The bed knows where it is** — section 20.
 
 ```bash
 node --env-file-if-exists=.env scripts/render/render.mjs --photo=assets/test-photos/face.jpg --place=ostsee-strand --outfit=hemd-jeans --consent --provider=fal --direct --video-model=bytedance/seedance-2.0/reference-to-video
 ```
 
-**Add `--dry-run` to price it for free. Add `--stop-after=compose` to run every
-free step and stop before the money.** Both were used today and both work.
+`--dry-run` prices it for free. `--stop-after=compose` runs every free step and
+stops before the money. `--resolution=480p|720p` orders a tier — new today,
+section 24.
 
-### PICK UP HERE — in this order
+---
 
-1. ~~**METER A RUN.**~~ **DONE 2026-08-24 — AND IT MOVED MORE THAN A NUMBER.**
-   Read off fal's usage page, recorded with `npm run ledger -- record`, and the
-   ledger now totals **$4.3369 against fal's $4.34**. Section 22 has all of it.
-   The headline: **fal bills TOKENS, not seconds, and it bills the raster it
-   RETURNS.** `config/credits.json`'s token formula was right all along and
-   reproduces the invoice to seven figures; `config/pricing.json`'s per-second
-   flattening of it was **2.18x too high**. A video is **$2.08**, not $4.54.
-   And ordering 640x480 while the model returns 752x560 is a **37.5%
-   surcharge** — which turns the unhonoured raster from a cosmetic complaint
-   into a billing one, so item 4 below is now worth money.
-   **Still unmetered: `image-to-video` (never called) and 720p (never run).**
+### PICK UP HERE
 
-2. **The blind check, which STILL has not happened.** Send a frame to two people
-   who know Paul's face with "Who is this?" and NOTHING else. **Not the friend
-   he primed** by saying it was not AI generated. This is the only test that
-   distinguishes "holds a likeness" from "looks like him to him".
-3. ~~**The Higgsfield licence question, because it blocks the push.**~~
-   **ANSWERED 2026-08-24 by reading the terms — see section 10.** Higgsfield
-   does not claim ownership of Outputs, does not restrict their commercial use,
-   does not tie that to a plan tier, and lets you sublicense them onward. What
-   it forbids is reselling **the Service** and acting as a "pass-through or
-   service bureau" — which is per-user generation, and is exactly why the
-   provider is fal. **The eight photographs are Outputs and they are fine.**
-4. ~~**The aspect ratios on the direct path.**~~ **READ 2026-08-24 — THE
-   ENDPOINT ACCEPTS ALL THREE.** `aspect_ratio` takes `auto, 21:9, 16:9, 4:3,
-   1:1, 3:4, 9:16` on image-to-video AND reference-to-video, agreed by both of
-   fal's pages. **So the refusal is ours, not fal's**, and lifting it is four
-   things at once: `FAL_RESOLUTIONS` gains the aspect dimension,
-   `animate/plan.mjs` moves with it (same rule, and a test that they agree),
-   `resolveRaster`'s `ASPECT_UNSUPPORTED` comes out, and **pricing reopens** —
-   16:9 at 1024x576 is fewer pixels than 4:3 at 720p and every price here is an
-   unmetered guess. ~~Do item 1 first.~~ **Item 1 is done, and it raised the
-   stakes:** the endpoint hands back 752x560 when 640x480 is ordered and
-   **fal bills the frame it sends**, so that is a 37.5% surcharge on every
-   direct render (section 22). An accepted enum value is still not a delivered
-   frame — but now the gap costs money, not just tidiness.
-5. ~~**The web app cannot spend.**~~ **THE TRANSPORT HALF IS DONE
-   2026-08-24** — `worker-cli.mjs` now injects `paidTransport(provider)` and
-   the worker can reach the network. Section 8, bug 1. **The browser still
-   cannot finish a paid render, and what stops it now is a DECISION, not a
-   wire:** the fal still default is `fal/UNVERIFIED-identity-still`, which
-   refuses at compose on purpose, and the web form has no `direct` and no
-   model override — so the browser is stuck on the still path behind a gate
-   that is deliberately shut. **Both need Paul**, and they are items 1 and 4
-   of section 9's order: solve identity, then hide everything.
-6. ~~**Login, signup, status, result and pricing still wear the superseded
-   frost-and-amber world.**~~ **PART DONE 2026-08-24 — and the diagnosis was
-   half wrong, section 23.** What actually differed was mechanical and is now
-   fixed and tested: those five wore the page-wide GRAIN plate DESIGN.md bans
-   and lacked the GAUZE it requires, and pricing carried the only 15 visible
-   dividers left in the product. **What is left is one real violation**: the
-   "YOUR PLAN" pill is a bordered box, a third border in a world that permits
-   exactly two — and the three plans do not use the struck/ghost grammar at
-   all, so colour still cannot answer "what have I chosen?" on that page. That
-   is the failure DESIGN.md was written against.
-7. **The Supabase spec**, then a plan, then code. Not before. Section 5.
+**The next piece of work is the Stripe checkout and webhook.** The spec is
+`docs/superpowers/specs/2026-08-24-credit-packs-pricing-design.md`, approved,
+and its one precondition — grants being idempotent — is **closed**. Nothing
+technical blocks it. What is not yet decided is the NUMBER on the Price, and
+§7 of that spec lists the three gates for it.
+
+**PAUL'S, and nobody else can do them:**
+
+1. **METER THE PARKED 720p JOB.** `20260824-225641-f34b4f` is on disk with every
+   free step run and `720p -> 960x720` frozen. One paid call:
+   `npm run render -- --resume=20260824-225641-f34b4f`, then
+   `npm run ledger -- record 20260824-225641-f34b4f --actual=<usd>`.
+   **If it comes back 752x560 — the same raster both 480p jobs returned — then
+   480p and 720p are the same product** and a customer paying 46 CR gets what
+   one paying 16 CR gets. That decides the whole price list. Section 24.
+2. **THE BLIND CHECK, still not done.** The packet is built and unsent at
+   `out/blind-check/` — five images in `send/`, plus `BRIEF.md` with the exact
+   wording, the protocol and the decode key. Two people, separate chats,
+   "Who is this?" and nothing else. **Not the friend he primed.** Claude will
+   not send these: it is a deception of third parties about Paul's own face.
+3. **THE UI IS GOING TO CHANGE AND DESIGN.md DOES NOT KNOW YET.** Paul said on
+   2026-08-24 that he **does not want it dark** — he wants something engaging.
+   That supersedes the STRUCK world (ink-blue ground, cathode orange, gauze)
+   which was chosen the same day and which every converted page now implements.
+   **DESIGN.md gets rewritten FIRST and the pages follow**; do not let pages
+   drift light one at a time. What "engaging" means is still Paul's to say.
+4. **Seedance 2.5 exists and is DELIBERATELY NOT PURSUED.** Paul is building a
+   skill for it and will bring it himself. Do not wire it, do not price it, do
+   not raise it.
+
+**CLAUDE'S, ready to go:**
+
+5. **Build the checkout redirect and the webhook** against a placeholder Price
+   id, per the spec. The Price id is the only thing that has to wait.
+6. **The estimator cannot tell 480p from 720p.** `--dry-run` quotes the
+   identical `$2.079` at both. Fix by pricing video on fal's token formula
+   rather than per second — `config/credits.json` already carries the formula
+   and it reproduces the real invoice to seven figures. Section 24.
+7. **The pricing page**: the "YOUR PLAN" pill is a bordered box (a third border
+   in a world that permits two), and the three plans do not use the
+   struck/ghost grammar at all. Section 23. **Possibly moot** if the UI world
+   changes — check item 3 first.
+8. **The Supabase spec**, then a plan, then code. Not before. Section 5.
+   **NOTE: a credit PACK does not need it** — see §4 of the pricing spec.
+   Revenue is not blocked behind that migration.
 
 ### Two cheap wins nobody has taken
 
 - **A fluorescent buzz and a kitchen clock tick.** The ambience layer makes
-  noise only; both want a TONE. The capstan already proves tones work, so it is
-  an extension rather than a new idea. Section 20.
+  noise only; both want a TONE. The capstan already proves tones work. Section 20.
 - **The camera zooming is still a negative.** A punch-in zoom is the most
-  characteristic home-recording move there is and would add real energy. It was
-  left alone so the vlog run measured one change. Section 19.
+  characteristic home-recording move there is. Left alone so the vlog run
+  measured one change. Section 19.
 
 ### Things that will bite you
 
-- **Read the prompt before blaming the model.** Twice today the model was doing
+- **Read the prompt before blaming the model.** Twice the model was doing
   exactly what it was told: `Nothing dramatic happens` produced a tape with
-  nothing happening, and `deep focus from the table all the way to the shed`
-  produced the edge-to-edge sharpness that reads as AI.
+  nothing happening, and `deep focus ... all the way to the shed` produced the
+  edge-to-edge sharpness that reads as AI.
 - **Backticks in a comment inside a template literal** break `static.mjs` and
-  `views.mjs`. Most repeated mistake in this codebase. `node --check` after
-  every edit.
+  `views.mjs`. **The most repeated mistake in this codebase — it happened again
+  on 2026-08-24.** `node --check` after every edit to those files.
+- **A fixed shape that projects fields will drop yours.** `entriesOf` in
+  `credits.mjs` returns a literal object, so a field written to disk and not
+  named there reads back `undefined` forever. Cost an hour today. Section 5.
 - **`job-model` and `queue-race` fail under full parallel load on Windows** and
-  pass in isolation. Known, documented in section 12, not a regression.
+  pass in isolation. Section 12, not a regression. Re-run the file alone.
 - **CLAUDE CANNOT RUN PAID COMMANDS.** Paste them and paste the output back.
+- **Every price in this repo was a guess until 2026-08-24, and three still are.**
+  `image-to-video` has never been called; 720p has never been run.
 
 ```bash
 npm run web                              # terminal 1
