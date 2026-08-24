@@ -9,10 +9,10 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-08-24, end of day) — THE PREMISE IS PROVEN
 
-**1111 tests / 1109 pass / 0 fail / 2 skipped.** The skips are the
+**1129 tests / 1127 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 **The tree is clean. Nothing is pushed.** `origin/main == b6f64a3`; branch
-`ui-redesign-signed-in-page` is **sixteen** commits ahead as of this line.
+`ui-redesign-signed-in-page` is **seventeen** commits ahead as of this line.
 **The Higgsfield licence question is ANSWERED as of 2026-08-24 and the stated
 blocker is cleared** -- section 10. Nothing in the code is holding the push.
 
@@ -53,6 +53,14 @@ free step and stop before the money.** Both were used today and both work.
    Four paid calls exist to check against: `20260824-093906-d39675` and
    `20260824-114051-4209a6` (stills, ~$0.04 each), `20260824-122201-af8b0d` and
    `20260824-130457-a2e9ac` (videos, ~$4.54 each).
+   **`npm run ledger` NOW EXISTS and the number has somewhere to land.** Run it
+   bare to see the five jobs that cost something — $9.2110 estimated, nothing
+   metered — then, per job:
+   `npm run ledger -- record <jobId> --actual=<usd>`. It writes the actual onto
+   the step in the manifest, rolls it up, and the next bare run prints the
+   implied per-unit rate against the configured one, naming the
+   `config/pricing.json` line to change. **It does not edit that file** —
+   section 21.
 2. **The blind check, which STILL has not happened.** Send a frame to two people
    who know Paul's face with "Who is this?" and NOTHING else. **Not the friend
    he primed** by saying it was not AI generated. This is the only test that
@@ -1137,6 +1145,67 @@ new idea. **Also not done: audible cuts.** Now the vlog has six shots, a real
 recording's sound would JUMP at each one -- the strongest remaining authenticity
 detail, and it needs shot-boundary detection on the finished clip.
 
+### 21. `npm run ledger` EXISTS (2026-08-24) -- and what was missing was not the report
+
+`package.json` has pointed a `ledger` script at `scripts/render/ledger-cli.mjs`
+since before there was a file there, so the command failed with
+MODULE_NOT_FOUND. `pricing.mjs` already carried `divergence`, `diverges` and the
+15% limit, and the doc comment on `diverges` said in as many words *"true when
+`npm run ledger` should name this one"*. All of it was written against a command
+nobody had built.
+
+**THE READ-ONLY HALF WOULD HAVE BEEN USELESS ON ITS OWN.** `cost.actual` is
+`null` on every job ever run, because nothing writes it -- fal's queue response
+carries no price, and `fal.mjs` says so: *"actual: null means NOT METERED YET"*.
+A report over that prints "not metered" once per job forever. So the command has
+two halves and `record` is the one that matters:
+
+```bash
+npm run ledger                                                  # the report
+npm run ledger -- record 20260824-122201-af8b0d --actual=1.51   # the invoice
+```
+
+**Today it prints five jobs, $9.2110 estimated, nothing metered.** Record one
+number and the next run says, for that model, the implied per-unit rate against
+the configured one -- e.g. `$0.1007/second against $0.3027/second` -- and names
+the `config/pricing.json` line to change.
+
+**IT DOES NOT EDIT `config/pricing.json`, DELIBERATELY.** Every entry there
+carries a `_comment` saying where the number came from and the literal word
+ESTIMATE, which `provider-contract.test.js` enforces. A script rewriting those
+would erase the provenance that makes the file worth reading, and could turn an
+ESTIMATE into an unmarked fact. It prints the edit; a human makes it.
+
+**THREE REFUSALS, EACH FOR A REASON THIS REPO ALREADY HELD:**
+- **`--actual=0` is refused** unless `--actually-zero` is passed. `null` means
+  not metered and `0` means free; `contract.mjs` already refuses a zero-by-
+  accident for the same reason. A mistyped empty argument must not prove that
+  fal gives videos away.
+- **A job billed for more than one step demands `--step=`.** Guessing would put
+  a video's price on a still, and the per-model rollup -- the entire point --
+  would be wrong in a way no total could reveal.
+- **An already-recorded number needs `--force`**, and both numbers are printed.
+  A metered figure is evidence somebody paid to obtain it.
+
+**`meterStep(job, name, actual)` IS NEW IN `job.mjs` AND IT DOES NOT MOVE THE
+STEP.** `finishStep` is the only other way to price a step and it is a
+`running -> done` transition; metering happens days later on a step that is
+already `done`. Routing it through `finishStep` would have meant relaxing the
+transition table for a bookkeeping entry, and that table is what stops a resume
+becoming a second bill. It refuses `pending` and `skipped` -- a skipped step
+produced nothing and cost nothing -- and allows `failed`, because a request that
+went out and never came back is billable, which is why `recordIntent` exists.
+
+**A BUG THE TESTS MISSED AND RUNNING IT FOUND IN ONE LOOK.** The first version
+selected rows by "has an actual recorded". The fixture provider returns
+`actual: 0` honestly -- a local ffmpeg call IS free -- so the first real run
+printed **twelve fixture jobs above the five that cost money and announced "12
+metered"** when nobody had metered anything. The rule is now "a non-zero
+estimate, or a non-zero charge", which still keeps the most interesting line the
+report could print: $4.54 expected, $0 actually billed. **There is a test for
+each half.** Run the thing you built against real data before believing the
+green.
+
 ---
 ---
 
@@ -1315,7 +1384,7 @@ Paul's stated vision: **anyone uploads any photo, gives a location and an outfit
 - **Editing a preset and expecting old renders to still reproduce.** They will not, unless the manifest's frozen `resolved` block is intact. That block is why "reproducible" is a property rather than a word. Never strip it to tidy up a manifest.
 - **Adding a still scorer.** Ranking without a face-similarity metric optimises for the wrong thing — a sharp, well-lit stranger beats a soft likeness on every heuristic computable locally. The `scorer` seam exists; `firstScorer` is the only shipped implementation until there is a real embedding model behind it.
 - **Retrying a generation without an idempotency key.** The `intent` record is written *before* the HTTP request for exactly this reason. It is four lines and it is the whole difference between "we might have double-charged, who knows" and a named step with a timestamp.
-- **Treating `config/pricing.json` as fact.** Every entry is an ESTIMATE until a `--meter` run proves it. If actual diverges from estimated by more than 15%, `npm run ledger` would say so by name — except **`scripts/render/ledger-cli.mjs` does not exist**, so that command fails. Building it matters the moment real spending starts.
+- **Treating `config/pricing.json` as fact.** Every entry is an ESTIMATE until a real invoice proves it. If actual diverges from estimated by more than 15%, `npm run ledger` says so by name — and as of 2026-08-24 **that command exists and works** (section 21). What it cannot do is invent the number: `cost.actual` is still `null` on every job ever run, because fal's queue response carries no price. Somebody has to read the billing page and type it in.
 - **Reaching for `sharp` or a face detector.** ffmpeg is already a hard dependency and autorotates from EXIF by default. This repo ships with essentially zero native dependencies and that is worth protecting.
 - **Reading ffmpeg's failure from the last line of stderr.** The last line is usually a generic trailer (`Error : Invalid argument`); the line that says what actually happened sits several lines above it. `lastMeaningfulLine()` prefers the specific one. Related: Windows reports negative exit codes as their unsigned wrap, so `-22` arrives as `4294967274` — `normalizeExitCode()` undoes that.
 - **Substring-matching filter names.** `"avgblur"` contains `"gblur"`. A test asserting `!/gblur=/` on the head-switch chain fails against the very `avgblur` that fixes the determinism bug. Anchor filter-name checks to a boundary: `/(^|,)gblur=/`.

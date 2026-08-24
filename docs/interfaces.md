@@ -125,6 +125,7 @@ export function beginStep(job, name): void   // running, attempts++, startedAt
 export function finishStep(job, name, { output, cost }): void
 export function failStep(job, name, error): void       // sets job.status='failed'
 export function skipStep(job, name, reason): void
+export function meterStep(job, name, actual): Step   // price a step that ALREADY ran
 export function stepStatus(job, name): string
 export function nextStep(job): string|null   // first step not done/skipped
 export function isResumable(job): boolean
@@ -134,6 +135,13 @@ export function recordIntent(job, step, payload): { key, existing: boolean }
 export function readIntent(job, step): object|null
 export function completeIntent(job, step, result): void
 ```
+
+`meterStep` is the only way to write `cost.actual` after the fact and it does
+NOT move the step: `finishStep` is a `running -> done` transition and metering
+happens days later against an invoice. It refuses a `pending` or `skipped` step
+-- a skipped step produced nothing and cost nothing -- and allows a `failed` one,
+because a request that went out and never came back is still billable.
+`npm run ledger -- record <jobId> --actual=<usd>` is the caller.
 
 `recordIntent` returns `existing: true` when an intent file is already present
 with no recorded result — that is the "we may have submitted and crashed"

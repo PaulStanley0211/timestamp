@@ -967,6 +967,42 @@ function recomputeCost(job) {
   return job.cost;
 }
 
+/**
+ * Records what a step ACTUALLY cost, long after it finished.
+ *
+ * WHY THIS IS NOT `finishStep`. `finishStep` is the only public way to price a
+ * step and it also MOVES the step, and `running -> done` is the only finish
+ * this state machine allows. Metering happens days later against an invoice, on
+ * a step that is already `done` -- so routing it through `finishStep` would
+ * either be refused or, worse, would have to relax the transition table for a
+ * bookkeeping entry. The state machine is the thing that stops a resume turning
+ * into a second bill; it does not get loosened so a number can be written down.
+ *
+ * WHY IT GOES THROUGH `priceStep` AND `recomputeCost` ANYWAY. Those two are
+ * where "a step's price is valid" and "the job total is the sum of its steps"
+ * are decided, and a second implementation of either -- in a CLI, reaching into
+ * a manifest -- is how a job comes to disagree with its own arithmetic.
+ *
+ * A `skipped` step is refused by name. Its own comment in STEP_STATUSES says a
+ * skipped step "produced nothing and cost nothing", which is exactly the claim
+ * a recorded charge against it would contradict. A `failed` step is allowed:
+ * a request that went out and never came back is billable, and the intent
+ * record exists precisely because that case is real.
+ */
+export function meterStep(job, name, actual) {
+  const step = stepOf(job, name);
+  if (step.status !== 'done' && step.status !== 'failed') {
+    throw new JobError(
+      `cannot meter ${name}: it is ${step.status}, and only a step that actually ran can have been billed`,
+      { code: 'STEP_NOT_BILLABLE', jobId: job.jobId, detail: { step: name, status: step.status } },
+    );
+  }
+  // Validated before it is stored, same as every other price in this file.
+  step.cost = priceStep(job, step, { actual });
+  recomputeCost(job);
+  return step;
+}
+
 /** Records the failure on the step AND on the job. The two always move together,
  *  so there is no state in which a job looks runnable while the step it died on
  *  is failed. */
