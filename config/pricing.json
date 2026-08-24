@@ -1,11 +1,9 @@
 {
   "_comment": "EVERY NON-ZERO NUMBER IN THIS FILE IS AN ESTIMATE. Not one of them has been proved by a --meter run, and treating one as fact is listed under 'Common mistakes' in CLAUDE.md. A vendor's price page is a marketing document; the invoice depends on the resolution actually delivered, the seconds actually billed, and whether a retried submit charged twice. scripts/providers/pricing.mjs REFUSES to load an entry that does not carry a _comment and an explicit `estimate` flag, and refuses `estimate: false` on any non-zero price -- zero is the only price that cannot drift. When actual diverges from estimated by more than divergenceLimit, `npm run ledger` names the job. Believe the ledger, not this file.",
-
   "schemaVersion": 1,
   "currency": "USD",
   "divergenceLimit": 0.15,
   "asOf": "2026-08-20",
-
   "models": {
     "fixture/still-v1": {
       "_comment": "Not an estimate, and the only kind of entry allowed to say so: the fixture provider spawns local ffmpeg and there is no counterparty to bill anyone. Zero is a fact here. It is listed rather than special-cased so the cost path -- estimate, record, compare -- is exercised end to end at $0 before a paid provider is ever wired in.",
@@ -14,7 +12,6 @@
       "usd": 0,
       "source": "measured: it is local ffmpeg"
     },
-
     "fixture/video-v1": {
       "_comment": "Not an estimate. Same reasoning as fixture/still-v1 -- local ffmpeg, no counterparty, zero is a fact.",
       "estimate": false,
@@ -22,23 +19,22 @@
       "usd": 0,
       "source": "measured: it is local ffmpeg"
     },
-
     "bytedance/seedance-2.0/image-to-video": {
-      "_comment": "ESTIMATE, and deliberately the CONSERVATIVE one. config/credits.json is the resolution-aware money path -- $1.51 per 15s at 480p, $4.54 at 720p -- and this table has no resolution dimension at all: estimateVideo takes seconds and nothing else. So the number here is the 720p rate, $4.54 / 15s = $0.3027 per second, which OVERSTATES a 480p job by about 3x. That is the safe direction to be wrong in for the same reason credits.json gives: overstating cost understates margin. It is not the number a customer sees -- they see credits, computed by creditCost from credits.json -- it is the number the manifest and npm run ledger carry. One --meter run replaces both.",
+      "_comment": "ESTIMATE, and now a SUSPECT one. Still the 720p-derived $0.3027/s, and NOBODY HAS EVER CALLED THIS ENDPOINT. What changed on 2026-08-24 is that its sibling reference-to-video was metered and came out at $0.1386/s equivalent -- 2.18x lower -- because fal bills tokens, not seconds, and the token formula in config/credits.json turns out to be exactly right. This number is very likely wrong in the same direction and by a similar factor. It is NOT copied across from the sibling: they are different endpoints, and guessing one price from another invoice is how the wrong number got here in the first place. Meter it before trusting it. The conservative-direction argument still holds meanwhile -- overstating cost understates margin, which is the safe way round.",
       "estimate": true,
       "unit": "second",
       "usd": 0.3027,
       "source": "derived from config/credits.json 720p estimate, itself derived from fal's published token formula, UNVERIFIED"
     },
-
     "bytedance/seedance-2.0/reference-to-video": {
-      "_comment": "ESTIMATE. Same rate and same reasoning as image-to-video above -- fal prices the two Seedance 2.0 routes off the same token formula as far as anyone has read, and nobody has read an invoice. Listed so that switching the animate step to the two-reference route is a config change rather than an unknown_model at compose.",
-      "estimate": true,
+      "_comment": "MEASURED 2026-08-24 against fal's usage page, and the per-second unit here is a CONVERSION that has to be understood before this number is reused. fal bills this endpoint per 1000 TOKENS at $0.014, exactly the formula config/credits.json already recorded -- tokens = w * h * seconds * 24 / 1024 -- and that formula reproduces the invoice to seven figures: two clips at 752x560 x 15.04s = 296.92k tokens = $4.156915 against fal's $4.156908. THE FORMULA WAS NEVER THE PROBLEM. This table's flattening of it was: it had no token dimension, so somebody wrote the 720p per-second rate here and it was 2.18x too high. The $0.1386 below is $2.078454 per clip divided by the 15 seconds each ordered. It is exact for a 15s clip at the raster these two RETURNED and it does not generalise -- tokens scale with pixels AND frames, so a longer or larger clip is not 0.1386 x seconds. AND THE RASTER IS THE STING: 640x480 was ORDERED (108000 tokens, $1.5120) and 752x560 was DELIVERED and BILLED (148461 tokens, $2.0785). fal charges for what it sends, not for what you asked for, so the unhonoured raster recorded in config/models.json is a 37.5% surcharge and not a cosmetic complaint.",
+      "estimate": false,
+      "meteredOn": "2026-08-24",
+      "meteredFrom": "fal.ai/dashboard/usage-billing -- 296.92 x 1000 Tokens at $0.014 = $4.156908 across jobs 20260824-122201-af8b0d and 20260824-130457-a2e9ac",
       "unit": "second",
-      "usd": 0.3027,
-      "source": "derived from config/credits.json 720p estimate, UNVERIFIED"
+      "usd": 0.1386,
+      "source": "fal usage page, 2026-08-24: 296.92 x 1000 Tokens at $0.014. Per-second figure derived from the DELIVERED raster, not the ordered one."
     },
-
     "fal/still-UNVERIFIED": {
       "_comment": "ESTIMATE, and a placeholder: the still model has NOT been chosen. Paul picks it at Phase 0 (docs/phase-0-validation.md), and criterion 6 measures the real number as balance-before minus balance-after. The figure below is an order-of-magnitude stand-in for an identity-preserving image model at ~1MP so the estimator has something to divide by -- it is not a quote and it is not attributed to any vendor. Replace the id and the number together, in one edit, when the model is chosen.",
       "estimate": true,
@@ -46,23 +42,24 @@
       "usd": 0.05,
       "source": "order-of-magnitude placeholder, no vendor quote, UNVERIFIED"
     },
-
     "fal-ai/uso": {
-      "_comment": "ESTIMATE, and a PHASE 0 BAKE-OFF CANDIDATE. NO VENDOR QUOTE HAS BEEN READ FOR THIS ENDPOINT -- the number below is the same order-of-magnitude stand-in as fal/still-UNVERIFIED and is here only so the estimator has something to divide by. The real figure comes out of the bake-off as balance-before minus balance-after (phase-0 criterion 6), and it replaces this in the same edit that records the result.",
-      "estimate": true,
+      "_comment": "MEASURED 2026-08-24 against fal's own usage page: 1.00 Megapixels at $0.10 = $0.10 for the single call this endpoint ever received (job 20260823-190639-21c4cd). The old placeholder said $0.05, so it was HALF the real price -- the wrong direction to be wrong in, and a reminder that an order-of-magnitude stand-in is not a conservative one. Note fal bills this per MEGAPIXEL, not per image; at the 640x480 this repo orders, one call is ~0.31MP and was billed as 1.00, which suggests a floor. The candidate FAILED on identity anyway (CLAUDE.md section 8) so nothing here is load-bearing.",
+      "estimate": false,
+      "meteredOn": "2026-08-24",
+      "meteredFrom": "fal.ai/dashboard/usage-billing -- 1.00 Megapixels at $0.10, job 20260823-190639-21c4cd",
       "unit": "image",
-      "usd": 0.05,
-      "source": "placeholder, no vendor quote read, UNVERIFIED"
+      "usd": 0.1,
+      "source": "fal usage page, 2026-08-24. Billed per megapixel with an apparent 1MP floor."
     },
-
     "fal-ai/bytedance/seedream/v4.5/edit": {
-      "_comment": "ESTIMATE, and a PHASE 0 BAKE-OFF CANDIDATE. fal's model page quotes roughly $0.04 per edit and that is where this number comes from -- a MARKETING PAGE, not an invoice, which is the exact distinction this file's header exists to make. It is the only one of the three candidates with any published figure at all. Treat it as unproven until a metered run says otherwise.",
-      "estimate": true,
+      "_comment": "MEASURED 2026-08-24 and the marketing page was RIGHT, which is worth recording precisely because this file's header assumes it would not be: fal's usage page shows 2.00 Images at $0.04 = $0.08 across the two calls (jobs 20260824-093906-d39675 and 20260824-114051-4209a6), exactly the ~$0.04/edit the model page quoted on 2026-08-20. One of three prices in this file that a real invoice has now confirmed rather than corrected.",
+      "estimate": false,
+      "meteredOn": "2026-08-24",
+      "meteredFrom": "fal.ai/dashboard/usage-billing -- 2.00 Images at $0.04 = $0.08, jobs 20260824-093906-d39675 and 20260824-114051-4209a6",
       "unit": "image",
       "usd": 0.04,
-      "source": "fal model page, ~$0.04/edit, read 2026-08-20 -- marketing page, never invoiced"
+      "source": "fal usage page, 2026-08-24. Confirms the model page figure read 2026-08-20."
     },
-
     "fal-ai/nano-banana-pro/edit": {
       "_comment": "ESTIMATE, and a PHASE 0 BAKE-OFF CANDIDATE. NO PRICE HAS BEEN READ for this endpoint at all. The number is the same stand-in as the others and is not attributed to Google or to fal. If this model wins, its price is measured before it becomes the default.",
       "estimate": true,
@@ -70,7 +67,6 @@
       "usd": 0.05,
       "source": "placeholder, no vendor quote read, UNVERIFIED"
     },
-
     "fal/video-UNVERIFIED": {
       "_comment": "ESTIMATE, and a placeholder: the video model has NOT been chosen. Per-second because that is the common shape for image-to-video billing, not because any specific vendor was checked. 15 seconds at this rate is $3.00 per finished video, which is the number that decides whether this product has a price -- so it is exactly the number that must be replaced by a measurement rather than argued about.",
       "estimate": true,

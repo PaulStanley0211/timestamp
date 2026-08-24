@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "currency": "USD",
   "asOf": "2026-08-20",
-  "creditUSD": 0.10,
+  "creditUSD": 0.1,
   "_creditUSD_comment": "ESTIMATE. What one credit is worth in ESTIMATED PROVIDER COST, and therefore the only thing that converts dollars into the unit on the button. Ten cents is a round, explainable number rather than a derived one, and it is a scale factor and nothing else: it is NOT the price a credit is sold at, and no code in scripts/auth/ multiplies it by anything a customer pays. Change it and every credit figure below moves together, which is the point. RAISED FROM $0.03 ON 2026-08-21, at Paul's direction, and the reason was legibility rather than economics: at three cents a tape cost 51 or 152 credits, which are ugly numbers that read as arbitrary and made the free tier look stingier than it is. At ten cents the same tapes cost 16 and 46. MARGINS ARE UNCHANGED -- every plan's creditsPerPeriod was rescaled in the same edit, so each plan buys exactly the number of tapes it bought before. This is the honest way to make the numbers friendlier: scale the unit, do not discount the tape. Selling 720p at '100 credits' while it costs 152 credits' worth of provider time would have been a 52-credit loss on every render, invisible until an invoice arrived.",
   "referenceSeconds": 15,
   "_referenceSeconds_comment": "The duration every estimatedUSDPer15s below is quoted at, and not a default so much as the contract: 375 frames at 25fps, asserted by ~200 tests. `creditCost` scales linearly from here for any other duration.",
@@ -19,23 +19,29 @@
   },
   "resolutions": {
     "480p": {
-      "_comment": "ESTIMATE, and the cheap tier. 640x480 through the token formula is 108000 tokens, $1.51 for 15 seconds. CORRECTED 2026-08-20: this entry previously recorded 854x480 while carrying the $1.51 price, and those two disagree -- 854x480 is $2.02. The dimensions were the 16:9 shape of \"480p\", but THIS PRODUCT ALWAYS REQUESTS 4:3, so 640x480 is the raster and $1.51 is the matching number. Recording a price derived one way beside dimensions derived another is how an estimate quietly becomes unfalsifiable. THE NON-OBVIOUS RISK, and it is a real one: 480 is BELOW the tape raster vertically (the tape works at 736x588 per config/render.json), so this is the only option that is upscaled before the grain goes on, and the only one that actually loses detail. That loss is invisible on a test pattern. It is UNTESTED ON A FACE, and likeness is the entire product. A legitimate cheap tier, not a free lunch.",
+      "_comment": "ESTIMATE, and the cheap tier. 640x480 through the token formula is 108000 tokens, $1.51 for 15 seconds. CORRECTED 2026-08-20: this entry previously recorded 854x480 while carrying the $1.51 price, and those two disagree -- 854x480 is $2.02. The dimensions were the 16:9 shape of \"480p\", but THIS PRODUCT ALWAYS REQUESTS 4:3, so 640x480 is the raster and $1.51 is the matching number. Recording a price derived one way beside dimensions derived another is how an estimate quietly becomes unfalsifiable. THE NON-OBVIOUS RISK, and it is a real one: 480 is BELOW the tape raster vertically (the tape works at 736x588 per config/render.json), so this is the only option that is upscaled before the grain goes on, and the only one that actually loses detail. That loss is invisible on a test pattern. It is UNTESTED ON A FACE, and likeness is the entire product. A legitimate cheap tier, not a free lunch.\n\nANSWERED 2026-08-24 BY A REAL INVOICE, and the answer is the expensive one: FAL BILLS THE RASTER IT RETURNS, NOT THE ONE YOU ORDER. Two direct jobs ordered 640x480 and were delivered 752x560; fal's usage page charged 296.92k tokens at $0.014/1k = $4.156908, which is exactly w*h*seconds*24/1024 computed on the DELIVERED size. The formula in `provider` above is therefore CORRECT and was never the problem. What is wrong is the assumption that ordering a raster gets you that raster. For this tier specifically: 640x480 x 15s is 108000 tokens and $1.5120, but the two jobs that actually ran cost $2.0785 each -- a 37.5% surcharge caused entirely by the model returning a bigger frame than it was asked for. `estimatedUSDPer15s` BELOW IS DELIBERATELY UNCHANGED: it feeds `creditCost`, so editing it changes what a customer is charged, and that is Paul's decision and not a bookkeeping one. But it is now KNOWN to understate real cost by about a third, which is the unsafe direction -- this file's own header says overstating cost is the safe way to be wrong. Either the raster gets honoured (config/models.json, aspect ratios) or this number goes up.",
       "estimate": true,
       "available": true,
       "width": 640,
       "height": 480,
-      "raster": { "width": 640, "height": 480 },
+      "raster": {
+        "width": 640,
+        "height": 480
+      },
       "_raster_comment": "WHAT THE RENDERER ACTUALLY ASKS FOR. Identical to width/height here, because the price above was already derived at the 4:3 raster. See the 720p row, where they differ, for why the field exists at all.",
       "estimatedUSDPer15s": 1.51,
       "source": "provider formula at the 4:3 raster we actually request, UNVERIFIED"
     },
     "720p": {
-      "_comment": "ESTIMATE, and the anchor: 1280x720 through the token formula above is 324000 tokens, $4.54 for 15 seconds. It is also the resolution the product is designed around. The tape works at 736x588 (720x576 plus jitter headroom), and 720p is the first size that fully covers that raster -- which makes it the last size that buys anything. Measured SSIM between a 720p-sourced and a 1080p-sourced delivery was 0.958 and the two are indistinguishable at 4x zoom. OPEN QUESTION, and it is worth a metered call rather than an argument: this anchor uses 1280x720, the 16:9 shape. We request 4:3, and 960x720 through the same formula is $3.40, not $4.54. Whether the provider bills the raster it renders or the nominal frame size is not documented anywhere we could find. The higher figure is kept deliberately -- overstating cost understates margin, which is the safe direction to be wrong in. Do NOT lower it to $3.40 on reasoning alone; one --meter run settles it.",
+      "_comment": "ESTIMATE, and the anchor: 1280x720 through the token formula above is 324000 tokens, $4.54 for 15 seconds. It is also the resolution the product is designed around. The tape works at 736x588 (720x576 plus jitter headroom), and 720p is the first size that fully covers that raster -- which makes it the last size that buys anything. Measured SSIM between a 720p-sourced and a 1080p-sourced delivery was 0.958 and the two are indistinguishable at 4x zoom. OPEN QUESTION, and it is worth a metered call rather than an argument: this anchor uses 1280x720, the 16:9 shape. We request 4:3, and 960x720 through the same formula is $3.40, not $4.54. Whether the provider bills the raster it renders or the nominal frame size is not documented anywhere we could find. The higher figure is kept deliberately -- overstating cost understates margin, which is the safe direction to be wrong in. Do NOT lower it to $3.40 on reasoning alone; one --meter run settles it.\n\nANSWERED 2026-08-24 BY A REAL INVOICE, and the answer is the expensive one: FAL BILLS THE RASTER IT RETURNS, NOT THE ONE YOU ORDER. Two direct jobs ordered 640x480 and were delivered 752x560; fal's usage page charged 296.92k tokens at $0.014/1k = $4.156908, which is exactly w*h*seconds*24/1024 computed on the DELIVERED size. The formula in `provider` above is therefore CORRECT and was never the problem. What is wrong is the assumption that ordering a raster gets you that raster. That settles the open question this entry raised: it does NOT bill the 4:3 raster we request, and it does not reliably send it either. The $3.40-versus-$4.54 argument recorded above cannot be resolved from the request side at all -- only from what comes back. UNMETERED at this tier: no 720p job has ever run.",
       "estimate": true,
       "available": true,
       "width": 1280,
       "height": 720,
-      "raster": { "width": 960, "height": 720 },
+      "raster": {
+        "width": 960,
+        "height": 720
+      },
       "_raster_comment": "WHAT THE RENDERER ACTUALLY ASKS FOR, and it is NOT width/height above. THIS PRODUCT ALWAYS REQUESTS 4:3 -- the tape raster is 720x576 at SAR 16/15, i.e. DAR 4:3 -- so `720p` means 960x720 on the wire and nothing ever renders 1280x720. The two fields disagree on purpose and each is honest about a different thing: `raster` is the picture, `width`/`height` are the shape the PRICE above was derived at, and the open question in the _comment is exactly whether fal bills the raster it renders or the nominal frame. The higher figure is kept until a --meter run settles it. scripts/animate/plan.mjs derives the raster from the label (the number is the height, 4:3 gives the width) and scripts/providers/fal.mjs derives the same two rasters for its own resolution enum; a test asserts all three agree, so this row cannot drift away from what is requested without something going red.",
       "estimatedUSDPer15s": 4.54,
       "source": "derived from provider formula, UNVERIFIED"
@@ -46,7 +52,10 @@
       "available": false,
       "width": 1920,
       "height": 1080,
-      "raster": { "width": 1440, "height": 1080 },
+      "raster": {
+        "width": 1440,
+        "height": 1080
+      },
       "_raster_comment": "Recorded for the same reason the rest of this row is: turning 1080p on later should be a field, not an archaeology exercise. Nothing may request it while `available` is false -- creditCost throws, and so does resolutionRaster in scripts/animate/plan.mjs.",
       "estimatedUSDPer15s": 10.22,
       "source": "ratio to the 720p anchor, UNVERIFIED"

@@ -12,7 +12,7 @@ Warm, grainy, quiet.
 **1129 tests / 1127 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 **The tree is clean. Nothing is pushed.** `origin/main == b6f64a3`; branch
-`ui-redesign-signed-in-page` is **seventeen** commits ahead as of this line.
+`ui-redesign-signed-in-page` is **eighteen** commits ahead as of this line.
 **The Higgsfield licence question is ANSWERED as of 2026-08-24 and the stated
 blocker is cleared** -- section 10. Nothing in the code is holding the push.
 
@@ -44,23 +44,18 @@ free step and stop before the money.** Both were used today and both work.
 
 ### PICK UP HERE — in this order
 
-1. **METER A RUN. This is the highest-value thing left and it is nearly free.**
-   Every price in this repo is a guess: `config/pricing.json` quotes a flat
-   per-second rate that produces **$4.54** for a render that actually orders
-   **480p**, which `config/credits.json` prices at **$1.51**. Nobody has ever
-   read a real invoice. **Paul's fal.ai billing page settles it in one look**,
-   and one number corrects every estimate, the credit table and the dry run.
-   Four paid calls exist to check against: `20260824-093906-d39675` and
-   `20260824-114051-4209a6` (stills, ~$0.04 each), `20260824-122201-af8b0d` and
-   `20260824-130457-a2e9ac` (videos, ~$4.54 each).
-   **`npm run ledger` NOW EXISTS and the number has somewhere to land.** Run it
-   bare to see the five jobs that cost something — $9.2110 estimated, nothing
-   metered — then, per job:
-   `npm run ledger -- record <jobId> --actual=<usd>`. It writes the actual onto
-   the step in the manifest, rolls it up, and the next bare run prints the
-   implied per-unit rate against the configured one, naming the
-   `config/pricing.json` line to change. **It does not edit that file** —
-   section 21.
+1. ~~**METER A RUN.**~~ **DONE 2026-08-24 — AND IT MOVED MORE THAN A NUMBER.**
+   Read off fal's usage page, recorded with `npm run ledger -- record`, and the
+   ledger now totals **$4.3369 against fal's $4.34**. Section 22 has all of it.
+   The headline: **fal bills TOKENS, not seconds, and it bills the raster it
+   RETURNS.** `config/credits.json`'s token formula was right all along and
+   reproduces the invoice to seven figures; `config/pricing.json`'s per-second
+   flattening of it was **2.18x too high**. A video is **$2.08**, not $4.54.
+   And ordering 640x480 while the model returns 752x560 is a **37.5%
+   surcharge** — which turns the unhonoured raster from a cosmetic complaint
+   into a billing one, so item 4 below is now worth money.
+   **Still unmetered: `image-to-video` (never called) and 720p (never run).**
+
 2. **The blind check, which STILL has not happened.** Send a frame to two people
    who know Paul's face with "Who is this?" and NOTHING else. **Not the friend
    he primed** by saying it was not AI generated. This is the only test that
@@ -80,9 +75,11 @@ free step and stop before the money.** Both were used today and both work.
    `animate/plan.mjs` moves with it (same rule, and a test that they agree),
    `resolveRaster`'s `ASPECT_UNSUPPORTED` comes out, and **pricing reopens** —
    16:9 at 1024x576 is fewer pixels than 4:3 at 720p and every price here is an
-   unmetered guess. **Do item 1 first.** And read the raster question in
-   `config/models.json`: this endpoint has already handed back 752x560 when
-   640x480 was ordered, so an accepted enum value is not a delivered frame.
+   unmetered guess. ~~Do item 1 first.~~ **Item 1 is done, and it raised the
+   stakes:** the endpoint hands back 752x560 when 640x480 is ordered and
+   **fal bills the frame it sends**, so that is a 37.5% surcharge on every
+   direct render (section 22). An accepted enum value is still not a delivered
+   frame — but now the gap costs money, not just tidiness.
 5. ~~**The web app cannot spend.**~~ **THE TRANSPORT HALF IS DONE
    2026-08-24** — `worker-cli.mjs` now injects `paidTransport(provider)` and
    the worker can reach the network. Section 8, bug 1. **The browser still
@@ -1030,8 +1027,10 @@ same rule and there is a test that the two agree, `fal.mjs` sends the
 1024x576 is fewer pixels than 4:3 at 720p, and every price in this repo is still
 an unmetered estimate, which is why METER A RUN is item 1 and this is item 4.
 
-**The harder half is not the enum.** This endpoint ordered at 640x480 and
-returned **752x560** — a size nobody asked for. `resolveRaster` refuses a
+**The harder half is not the enum, and as of 2026-08-24 it has a price.** This
+endpoint ordered at 640x480 and returned **752x560** — a size nobody asked for,
+**and fal bills the size it sends**: 37.5% more than the 480p tier implies, on
+every direct render. Section 22. `resolveRaster` refuses a
 non-default shape on a paid provider precisely because a render that delivers
 something other than what was ordered is invisible to the customer AND the
 ledger; a model that picks its own raster is that failure already, and whoever
@@ -1205,6 +1204,63 @@ estimate, or a non-zero charge", which still keeps the most interesting line the
 report could print: $4.54 expected, $0 actually billed. **There is a test for
 each half.** Run the thing you built against real data before believing the
 green.
+
+### 22. THE FIRST METERED RUN (2026-08-24) -- fal bills tokens, and it bills what it SENDS
+
+**Read off fal's own usage page, recorded with `npm run ledger -- record`, and
+the ledger totals $4.3369 against fal's $4.34.** Five jobs, three endpoints.
+
+| Endpoint | fal charged | Estimate said | Verdict |
+|---|---|---|---|
+| `bytedance/seedance-2.0/reference-to-video` | **$4.156908** / 296.92k tokens (2 jobs) | $9.081 | **2.18x too high** |
+| `fal-ai/uso` | **$0.10** / 1.00 Megapixel | $0.05 | **half the real price** |
+| `fal-ai/bytedance/seedream/v4.5/edit` | **$0.08** / 2.00 Images | $0.08 | **exactly right** |
+
+**THE FORMULA WAS NEVER WRONG. THE FLATTENING OF IT WAS.** `config/credits.json`
+already recorded fal's token formula -- `tokens = w * h * seconds * 24 / 1024`
+at `$0.014` per 1000 -- and it reproduces the invoice to **seven figures**:
+two clips at 752x560 x 15.04s come to 296.92k tokens and **$4.156915** against
+fal's **$4.156908**. What was wrong is that `config/pricing.json` has no token
+dimension, so somebody wrote the 720p per-second rate into it. **A 15-second
+video costs $2.08, not $4.54.**
+
+**AND THE RASTER IS NOT COSMETIC ANY MORE.** Section 18 recorded that the model
+returns 752x560 when 640x480 is ordered and called it harmless because the tape
+stage rescales. **It is not harmless: fal bills the raster it RETURNS.**
+
+- ordered 640x480 x 15s = 108000 tokens = **$1.5120**
+- delivered 752x560 x 15.04s = 148461 tokens = **$2.0785**
+- **a 37.5% surcharge, on every direct render, for pixels nobody asked for**
+
+That answers the open question `config/credits.json`'s 720p entry has carried
+since it was written -- *"whether the provider bills the raster it returns"* --
+and it makes the aspect-ratio work in item 4 worth money rather than just
+worth tidiness.
+
+**`config/credits.json` WAS NOT REPRICED, DELIBERATELY.** `estimatedUSDPer15s`
+feeds `creditCost`, so changing it changes what a customer pays, and that is
+Paul's decision. It is annotated instead: the 480p figure of $1.51 is now KNOWN
+to understate real cost by about a third, which is the direction that file's own
+header calls unsafe. **Either the raster gets honoured or that number goes up.**
+
+**A GUARD LEARNED A THIRD STATE, and it had been asking for it in its own error
+message.** `assertPricingTable` refused every non-zero `estimate: false` with the
+words *"until a --meter run proves it"*. A run has now proved two, and an entry
+forced to keep calling an invoiced number an ESTIMATE is a lie in the other
+direction. The rule was never "everything is a guess", it was **"a number may
+not claim to be a fact without saying why"** -- so a measured price may now set
+`estimate: false` **if and only if** it carries `meteredOn` (an ISO date) and
+`meteredFrom` (where it was read). Half the evidence is refused, and a date that
+is not a date is refused.
+
+**STILL UNMETERED, and do not assume these follow:** `image-to-video` has
+**never been called** and keeps the suspect $0.3027/s -- probably wrong the same
+way, deliberately NOT copied across, because guessing one endpoint's price from
+another's invoice is how the bad number arrived. **720p has never been run at
+all.** And `fal-ai/uso` bills per MEGAPIXEL with an apparent 1MP floor: the
+640x480 this repo orders is ~0.31MP and was billed as 1.00.
+
+**One receipt, $12.00 of credits bought on 2026-08-23, $4.34 spent, $7.66 left.**
 
 ---
 ---

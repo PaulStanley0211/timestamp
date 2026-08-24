@@ -615,29 +615,61 @@ test('FAL_KEY is not in the process during a test run', () => {
   assert.equal(process.env.FAL_KEY, undefined);
 });
 
-test('every price in config/pricing.json is marked as an estimate', () => {
+test('every price in config/pricing.json says which of the two things it is', () => {
+  // Until 2026-08-24 this asserted that EVERY non-zero price was an estimate,
+  // because none had ever been checked against an invoice. Two now have been.
+  // The rule that survives is the one that was always the point: a number here
+  // either admits it is a guess, or names the invoice that proved it. What is
+  // still forbidden is a number doing neither.
   const pricing = loadPricing();
   for (const [model, entry] of Object.entries(pricing.models)) {
     assert.ok(entry._comment?.length > 0, `${model} has no _comment saying where the number came from`);
     assert.equal(typeof entry.estimate, 'boolean', `${model}.estimate`);
-    if (entry.usd !== 0) {
-      assert.equal(entry.estimate, true, `${model} is non-zero and must be marked as an ESTIMATE`);
+    if (entry.usd === 0) continue;
+    if (entry.estimate === true) {
       assert.match(entry._comment, /ESTIMATE/, `${model}'s _comment must say ESTIMATE in as many words`);
+    } else {
+      assert.match(entry.meteredOn ?? '', /^\d{4}-\d{2}-\d{2}$/, `${model} claims to be measured and must say when`);
+      assert.ok((entry.meteredFrom ?? '').length > 0, `${model} claims to be measured and must say where from`);
+      assert.match(entry._comment, /MEASURED/, `${model}'s _comment must say MEASURED in as many words`);
     }
   }
 });
 
-test('a non-zero price may not claim to be a fact', () => {
-  // Zero is the only price that cannot drift. Everything else is an estimate
-  // until a --meter run proves it -- see CLAUDE.md, "Common mistakes".
-  assert.throws(() => assertPricingTable({
+test('a non-zero price may claim to be a fact only by naming the invoice', () => {
+  // Zero is the only price that cannot drift, and it needs no evidence. Every
+  // other number either says ESTIMATE or says where it was measured; the word
+  // "measured" in a comment is not evidence, it is a claim about one.
+  const table = (over) => ({
     currency: 'USD',
-    models: { 'fal/x': { _comment: 'measured, honest', estimate: false, unit: 'image', usd: 0.04 } },
-  }), (err) => {
+    models: { 'fal/x': { _comment: 'measured, honest', estimate: false, unit: 'image', usd: 0.04, ...over } },
+  });
+
+  assert.throws(() => assertPricingTable(table({})), (err) => {
     assert.equal(err.code, 'unmarked_price');
+    assert.match(err.message, /meteredOn/);
+    assert.match(err.message, /meteredFrom/);
     return true;
   });
 
+  // Half the evidence is not evidence.
+  assert.throws(() => assertPricingTable(table({ meteredOn: '2026-08-24' })), (err) => {
+    assert.equal(err.code, 'unmarked_price');
+    assert.match(err.message, /meteredFrom/);
+    return true;
+  });
+  // Nor is a date that is not one.
+  assert.throws(() => assertPricingTable(table({ meteredOn: 'yesterday', meteredFrom: "fal's usage page" })),
+    (err) => {
+      assert.equal(err.code, 'unmarked_price');
+      assert.match(err.message, /meteredOn/);
+      return true;
+    });
+
+  // Both, and it is allowed to stop calling itself a guess.
+  assert.ok(assertPricingTable(table({ meteredOn: '2026-08-24', meteredFrom: "fal's usage page" })));
+
+  // And an entry with no provenance at all is still refused, measured or not.
   assert.throws(() => assertPricingTable({
     currency: 'USD',
     models: { 'fal/x': { estimate: true, unit: 'image', usd: 0.04 } },

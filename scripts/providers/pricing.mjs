@@ -78,9 +78,27 @@ export function assertPricingTable(pricing) {
     if (!Number.isFinite(entry.usd) || entry.usd < 0) {
       throw bad('invalid_pricing', `pricing.models[${model}].usd must be a non-negative number, got ${JSON.stringify(entry.usd)}`, { model });
     }
-    // The exemption, and its only safe form.
+    // The exemption, and its only safe forms. There are two.
+    //
+    // ZERO is a fact because it cannot drift: a local ffmpeg call costs nothing
+    // and no invoice will ever say otherwise.
+    //
+    // A MEASURED PRICE is a fact too -- but only if it says WHERE it was
+    // measured. This clause used to refuse every non-zero `estimate: false`
+    // outright, and its own message said why: "until a --meter run proves it".
+    // On 2026-08-24 a run finally proved two of them, and an entry forced to
+    // keep calling itself an ESTIMATE while carrying an invoiced number is a
+    // lie in the other direction. The principle was never "everything is a
+    // guess" -- it was "a number may not claim to be a fact without saying
+    // why". So the evidence is the price of the claim: an ISO date and a
+    // provenance string, both non-empty, or the refusal stands.
     if (entry.estimate === false && entry.usd !== 0) {
-      throw bad('unmarked_price', `pricing.models[${model}] claims estimate:false with usd=${entry.usd}. Only a zero price may claim to be a fact -- every non-zero number here is an ESTIMATE until a --meter run proves it.`, { model, usd: entry.usd });
+      const missing = [];
+      if (typeof entry.meteredOn !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(entry.meteredOn)) missing.push('meteredOn (YYYY-MM-DD)');
+      if (typeof entry.meteredFrom !== 'string' || entry.meteredFrom.length === 0) missing.push('meteredFrom (where the number was read)');
+      if (missing.length > 0) {
+        throw bad('unmarked_price', `pricing.models[${model}] claims estimate:false with usd=${entry.usd} and is missing ${missing.join(' and ')}. A non-zero price may only stop being an ESTIMATE by naming the invoice that proved it.`, { model, usd: entry.usd, missing });
+      }
     }
     if (!PRICING_UNITS.includes(entry.unit)) {
       throw bad('invalid_pricing', `pricing.models[${model}].unit must be one of ${PRICING_UNITS.join('|')}, got ${JSON.stringify(entry.unit)}`, { model });
