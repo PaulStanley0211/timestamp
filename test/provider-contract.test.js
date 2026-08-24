@@ -65,7 +65,7 @@ import {
   TerminalError,
   CapabilityError,
 } from '../scripts/providers/errors.mjs';
-import { createProvider, loadModels, modelEntry, PROVIDER_IDS } from '../scripts/providers/index.mjs';
+import { createProvider, loadModels, modelEntry, paidTransport, PROVIDER_IDS } from '../scripts/providers/index.mjs';
 // The fal case, transport fake and all, lives with the rest of fal's tests.
 // Importing it here is the ONLY change this file needed to cover a second
 // provider -- one import and one array entry, and the shared body below
@@ -552,6 +552,60 @@ test('requireFetchImpl is a TypeError, not a ProviderError', () => {
   assert.ok(thrown instanceof TypeError);
   assert.ok(!(thrown instanceof ProviderError));
   assert.match(thrown.message, /NO DEFAULT/);
+});
+
+test('paidTransport carries a bound fetch for a paid provider and nothing for a free one', () => {
+  // The other half of the money guard. `requireFetchImpl` refusing to default
+  // is only useful if something injects on the real path, and for a day
+  // nothing did.
+  const free = paidTransport({ id: 'fixture', paid: false });
+  assert.deepEqual(free, {}, 'the fixture must be handed no transport at all');
+  assert.ok(!('fetchImpl' in free), 'not even an undefined key -- requireFetchImpl reads typeof');
+
+  // Bound to globalThis: a detached `fetch` throws "Illegal invocation" in some
+  // runtimes, and the symptom would surface deep inside a retry loop.
+  const fake = function () { return this === globalThis; };
+  const paid = paidTransport({ id: 'fal', paid: true }, { globalFetch: fake });
+  assert.equal(typeof paid.fetchImpl, 'function');
+  assert.equal(paid.fetchImpl(), true, 'the transport must be bound to globalThis');
+
+  // And the real one, unbound, is not handed through by reference.
+  const real = paidTransport({ id: 'fal', paid: true });
+  assert.equal(typeof real.fetchImpl, 'function');
+  assert.notEqual(real.fetchImpl, globalThis.fetch, 'bind returns a new function');
+});
+
+test('paidTransport refuses rather than handing a paid provider no transport', () => {
+  // Unreachable on Node 22 and written anyway: the one thing that must never
+  // happen here is returning `{}` for a paid provider, because that lands as
+  // the money guard's TypeError eleven steps later and reads like a test bug.
+  // `null` rather than `undefined`: an explicit `undefined` takes the
+  // destructuring default, which is the real `globalThis.fetch`. Either value
+  // reaches the same typeof check in production.
+  let thrown;
+  try { paidTransport({ id: 'fal', paid: true }, { globalFetch: null }); } catch (e) { thrown = e; }
+  assert.ok(thrown instanceof TerminalError, 'a paid provider with nowhere to send a request must not get {}');
+  assert.equal(thrown.code, 'no_fetch');
+});
+
+test('every command that can spend injects the transport', () => {
+  // THE BUG THIS TEST EXISTS FOR was a missing wire, not a wrong function, and
+  // no unit test of `paidTransport` would have caught it: `render.mjs` was
+  // fixed on 2026-08-23 and `worker-cli.mjs` -- the only path the web app has
+  // to the network -- kept the identical hole because the fix lived inside the
+  // file that no longer had it. Reading the source is the only check that
+  // covers a call site nobody has written yet.
+  for (const file of ['scripts/render/render.mjs', 'scripts/worker/worker-cli.mjs']) {
+    const source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8');
+    const sites = source.match(/providerCtx:/g) ?? [];
+    // A renamed option would make the greps below pass vacuously, which is the
+    // one way a read-the-source test quietly stops testing anything.
+    assert.ok(sites.length > 0, `${file} hands no providerCtx to anything -- did the option get renamed?`);
+    const wired = source.match(/providerCtx: paidTransport\(provider\)/g) ?? [];
+    assert.equal(wired.length, sites.length,
+      `${file} has ${sites.length} providerCtx call site(s) and ${wired.length} of them inject the transport. `
+      + 'A paid provider with no fetchImpl dies at the still step with the TypeError from requireFetchImpl.');
+  }
 });
 
 test('FAL_KEY is not in the process during a test run', () => {

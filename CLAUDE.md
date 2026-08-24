@@ -9,10 +9,11 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-08-24, end of day) — THE PREMISE IS PROVEN
 
-**1108 tests / 1106 pass / 0 fail / 2 skipped.** The skips are the
+**1111 tests / 1109 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
-**The tree is clean. Nothing is pushed.** `origin/main == b6f64a3`; branch
-`ui-redesign-signed-in-page` is now **twelve** commits ahead.
+**Nothing is pushed.** `origin/main == b6f64a3`; branch
+`ui-redesign-signed-in-page` is **thirteen** commits ahead, plus the worker
+transport fix below, which is uncommitted.
 
 ### The one thing to know
 
@@ -59,13 +60,26 @@ free step and stop before the money.** Both were used today and both work.
    `assets/places/` is committed to a PUBLIC repo and the ruling in this file
    says Higgsfield is "personal experiments and nothing else". Section 10.
    **The commit already happened; the push is the irreversible line.**
-4. **The aspect ratios on the direct path.** `config/models.json` records
-   `aspectRatios: ["4:3"]` for reference-to-video and Paul's product list has
-   the user picking the shape. Nobody has read fal's schema page for the other
-   two. Free to check.
-5. **The web app cannot spend.** `worker-cli.mjs` passes no transport, so the
-   browser path still cannot reach the network — CLI only. Section 8, bug 1.
-   **This blocks the product being usable by anyone but Paul.**
+4. ~~**The aspect ratios on the direct path.**~~ **READ 2026-08-24 — THE
+   ENDPOINT ACCEPTS ALL THREE.** `aspect_ratio` takes `auto, 21:9, 16:9, 4:3,
+   1:1, 3:4, 9:16` on image-to-video AND reference-to-video, agreed by both of
+   fal's pages. **So the refusal is ours, not fal's**, and lifting it is four
+   things at once: `FAL_RESOLUTIONS` gains the aspect dimension,
+   `animate/plan.mjs` moves with it (same rule, and a test that they agree),
+   `resolveRaster`'s `ASPECT_UNSUPPORTED` comes out, and **pricing reopens** —
+   16:9 at 1024x576 is fewer pixels than 4:3 at 720p and every price here is an
+   unmetered guess. **Do item 1 first.** And read the raster question in
+   `config/models.json`: this endpoint has already handed back 752x560 when
+   640x480 was ordered, so an accepted enum value is not a delivered frame.
+5. ~~**The web app cannot spend.**~~ **THE TRANSPORT HALF IS DONE
+   2026-08-24** — `worker-cli.mjs` now injects `paidTransport(provider)` and
+   the worker can reach the network. Section 8, bug 1. **The browser still
+   cannot finish a paid render, and what stops it now is a DECISION, not a
+   wire:** the fal still default is `fal/UNVERIFIED-identity-still`, which
+   refuses at compose on purpose, and the web form has no `direct` and no
+   model override — so the browser is stuck on the still path behind a gate
+   that is deliberately shut. **Both need Paul**, and they are items 1 and 4
+   of section 9's order: solve identity, then hide everything.
 6. **Login, signup, status, result and pricing still wear the superseded
    frost-and-amber world** and clash with the two converted pages.
 7. **The Supabase spec**, then a plan, then code. Not before. Section 5.
@@ -447,9 +461,30 @@ Fixed by `paidTransport(provider)` in `render.mjs`, injecting
 `globalThis.fetch.bind(globalThis)` **only when `provider.paid`**. All four
 guards survive: fal.mjs still has no default, `npm test` never runs `main()`, the
 bare `node --test` still keeps FAL_KEY out of the process.
-**THE WORKER HAS THE SAME HOLE AND IT IS NOT FIXED** - `worker.mjs` accepts
-`providerCtx` but `worker-cli.mjs` passes no transport, so the web app's renderer
-cannot spend either. Fix it the same way before the app goes live.
+~~**THE WORKER HAS THE SAME HOLE AND IT IS NOT FIXED**~~ **FIXED 2026-08-24,
+and the shape of the fix is the lesson.** `worker.mjs` always accepted
+`providerCtx`; `worker-cli.mjs` passed none, so the web app's renderer could not
+spend either. It stayed broken for a day **because the fix lived inside the file
+that no longer had the bug** - a private function in `render.mjs`. It is now
+`scripts/providers/transport.mjs`, imported by both commands that can spend, and
+`worker-cli.mjs` takes it through the SAME lazy import as `createProvider` so
+this file's own rule about not loading a provider to test `renderEvent` still
+holds. All four money guards are untouched: fal.mjs still has no default,
+`npm test` still never runs either `main()`, the bare `node --test` still keeps
+FAL_KEY out of the process, and `guards.yml` still greps fal.mjs.
+
+**A UNIT TEST OF `paidTransport` WOULD NOT HAVE CAUGHT THIS AND DID NOT NEED TO.**
+The bug was a missing wire, so `provider-contract.test.js` now reads both CLIs'
+source and fails if any `providerCtx:` call site is handed anything other than
+`paidTransport(provider)` - including one nobody has written yet. Verified by
+deleting the line and watching it go red, then putting it back.
+
+**THE BROWSER STILL CANNOT FINISH A PAID RENDER, and the reason is now a
+decision rather than a defect.** `npm run worker -- --provider=fal` loads `.env`
+and reaches the network, but a web job takes the fal STILL default, which is
+`fal/UNVERIFIED-identity-still` and refuses at compose exactly as designed. The
+web form sets no `direct` and carries no model override, so it cannot take the
+direct path either. **Those are section 9's questions, not this one's.**
 
 **BUG 2 - the model is resolved in TWO places.** Threading `--still-model` into
 the pipeline made compose use the right model while step 5 still used the
@@ -650,7 +685,9 @@ they all read the same resolved config. `resolveRaster` now throws
 `ASPECT_UNSUPPORTED` for a paid provider on any non-default aspect. **Fixture
 does all three; paid does 4:3 and refuses the rest.** Lift it when
 `FAL_RESOLUTIONS` gains the aspect dimension -- which reopens pricing, because
-16:9 at 1024x576 is FEWER pixels than 4:3 720p.
+16:9 at 1024x576 is FEWER pixels than 4:3 720p. **2026-08-24: fal's enum was
+read and it accepts 16:9 and 9:16 on both video endpoints**, so the only thing
+in the way is this repo. Section 18's closing paragraph carries the full cost.
 
 ### 14. THE MOTION PROMPT WAS REWRITTEN (2026-08-24)
 
@@ -931,11 +968,29 @@ and `config/models.json` still carries the open question in its own words:
 **That question is unanswered and only a paid call answers it.** The old path is
 untouched and still the default precisely because of that.
 
-**ASPECT RATIOS: UNVERIFIED ON THIS ENDPOINT.** `config/models.json` records
-`aspectRatios: ["4:3"]` for reference-to-video. Paul's product list includes the
-user picking the shape, and the picker already exists in the app. Whether the
-endpoint accepts 16:9 and 9:16 has NOT been checked against fal's schema page.
-Section 13's refusal still applies on the paid path.
+**ASPECT RATIOS: THE ENDPOINT SAYS YES, WE STILL SAY NO (checked 2026-08-24).**
+Both of fal's pages give the same enum for `aspect_ratio` — `auto, 21:9, 16:9,
+4:3, 1:1, 3:4, 9:16` — on reference-to-video and on image-to-video. **So 16:9
+and 9:16 would be ORDERED natively, not cropped**, and section 13's refusal is
+this repo's, not the vendor's. `config/models.json` still records
+`aspectRatios: ["4:3"]` because that field says what the PRODUCT offers, the
+way `resolutions` already does; the enum is recorded in that entry's comment.
+
+**What lifting it actually costs**, so nobody starts it thinking it is a config
+edit: `FAL_RESOLUTIONS` is a 4:3 table by construction — the label is the height
+and 4:3 supplies the width — `animate/plan.mjs` derives the same rasters from the
+same rule and there is a test that the two agree, `fal.mjs` sends the
+`FAL_ASPECT_RATIO` constant on every call, and `resolveRaster` throws
+`ASPECT_UNSUPPORTED`. Four places, one rule. **And it reopens pricing**: 16:9 at
+1024x576 is fewer pixels than 4:3 at 720p, and every price in this repo is still
+an unmetered estimate, which is why METER A RUN is item 1 and this is item 4.
+
+**The harder half is not the enum.** This endpoint ordered at 640x480 and
+returned **752x560** — a size nobody asked for. `resolveRaster` refuses a
+non-default shape on a paid provider precisely because a render that delivers
+something other than what was ordered is invisible to the customer AND the
+ledger; a model that picks its own raster is that failure already, and whoever
+lifts the guard has to say what the tape stage does with it.
 
 ### 19. THE VLOG REWRITE (2026-08-24) -- the direct tape has beats now
 

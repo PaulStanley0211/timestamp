@@ -189,3 +189,8 @@ export {
   falRequestId,
   falResolutionFor,
 } from './fal.mjs';
+
+/** The other half of the fetchImpl money guard: the wire that a command which
+ *  is allowed to spend has to carry. Kept in its own module so both CLIs
+ *  import the same one -- see transport.mjs's header for why that matters. */
+export { paidTransport } from './transport.mjs';

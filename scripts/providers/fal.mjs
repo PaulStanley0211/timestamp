@@ -65,6 +65,21 @@
  * 16:9 shapes those labels usually name. config/credits.json carries the same
  * reasoning next to the money.
  *
+ * AND THE ENDPOINT IS NOT WHAT STOPS US, WHICH IS WORTH KNOWING BEFORE THE NEXT
+ * PERSON RE-DERIVES IT. Read on both of fal's pages on 2026-08-24: `aspect_ratio`
+ * accepts `auto`, `21:9`, `16:9`, `4:3`, `1:1`, `3:4` and `9:16` on image-to-video
+ * AND on reference-to-video, so the other two shapes this product sells would be
+ * ORDERED natively rather than cropped, and the paragraph above is an argument
+ * against cropping rather than an argument against 16:9. What stops it is here
+ * and one level up: `FAL_RESOLUTIONS` is a 4:3 table by construction -- the label
+ * is the height and 4:3 supplies the width -- `animate/plan.mjs` derives the same
+ * rasters from the same rule with a test that they agree, and `resolveRaster`
+ * refuses a paid job at any non-default shape. Three things move together, and
+ * the fourth is pricing: 16:9 at 1024x576 is FEWER pixels than 4:3 at 720p and
+ * every price in this repo is still an unmetered estimate. See the raster
+ * question in config/models.json first -- this endpoint has already returned a
+ * size nobody ordered.
+ *
  * WHAT IS NOT VERIFIED, AND IS MARKED SO. The video endpoints and their
  * parameters come from fal's own documentation. THE STILL MODEL HAS NOT BEEN
  * CHOSEN -- config/models.json lists candidates, all `verified: false`, and

@@ -442,6 +442,12 @@ export async function runPipeline(job, { provider, root, cfg, signal,
                                           providerCtx = {} }): Promise<Job>
 ```
 
+`providerCtx` is merged into the ctx each provider call receives, and on a paid
+provider it is the ONLY source of `fetchImpl` -- there is no default, by design.
+Both callers that may spend (`render.mjs` and `worker-cli.mjs`) fill it from
+`paidTransport(provider)` in `scripts/providers/transport.mjs`; a new caller
+that forgets gets a `TypeError` rather than a bill.
+
 Executes `STEPS` in order, skipping any already `done` — that is the whole of
 resume. Every step is wrapped: `beginStep`, do the work, `finishStep` or
 `failStep`, `saveJob` after **every** transition. A crash between two steps must

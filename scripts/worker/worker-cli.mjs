@@ -207,7 +207,10 @@ async function main() {
     leaseMs: cfg.provider.pollTimeoutMs,
   });
 
-  const { createProvider } = await import('../providers/index.mjs');
+  // `paidTransport` arrives through the SAME lazy import, for the reason named
+  // in this file's header: the provider layer's index pulls ffmpeg in behind it
+  // and a test that imports `renderEvent` must not load either.
+  const { createProvider, paidTransport } = await import('../providers/index.mjs');
   const provider = createProvider(providerId, { cfg, root });
 
   const t0 = Date.now();
@@ -220,6 +223,13 @@ async function main() {
     pollMs: values['poll-ms'] ? Number(values['poll-ms']) : undefined,
     stopAfter: values['stop-after'] ?? null,
     workerId: `${hostname()}-${process.pid}`,
+    // THE WIRE THAT LETS THIS PROCESS SPEND. `worker.mjs` has always accepted
+    // `providerCtx` and this file passed none, so `--provider=fal` died at the
+    // still step with the money guard's own TypeError and the web app's
+    // renderer could not reach the network at all -- CLI only, nobody but Paul.
+    // `paidTransport` returns nothing at all for the fixture, so the free path
+    // is byte-identical to what it was.
+    providerCtx: paidTransport(provider),
     signals: true,
     onEvent(event) {
       if (json) { console.log(JSON.stringify(event)); return; }
