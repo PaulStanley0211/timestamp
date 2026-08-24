@@ -11,10 +11,13 @@ Warm, grainy, quiet.
 
 **1129 tests / 1127 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
-**The tree is clean. Nothing is pushed.** `origin/main == b6f64a3`; branch
-`ui-redesign-signed-in-page` is **eighteen** commits ahead as of this line.
-**The Higgsfield licence question is ANSWERED as of 2026-08-24 and the stated
-blocker is cleared** -- section 10. Nothing in the code is holding the push.
+**The tree is clean, and as of 2026-08-24 THE BRANCH IS PUSHED.**
+`origin/ui-redesign-signed-in-page` exists and tracks; `origin/main` is still
+`b6f64a3`, so the branch is **nineteen** commits ahead of main as of this line
+and **nothing has been merged**. GitHub offers a PR at
+`/pull/new/ui-redesign-signed-in-page`; opening one is Paul's call, not a
+prerequisite. The Higgsfield licence question that used to block this is
+ANSWERED -- section 10.
 
 ### The one thing to know
 
