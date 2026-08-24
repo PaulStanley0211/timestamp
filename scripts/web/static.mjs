@@ -203,6 +203,34 @@ export const aspectSlug = (id) => `a-${String(id).replace(':', 'x')}`;
 const CSS_IDENT_RE = /^[a-z0-9][a-z0-9-]{0,62}$/i;
 
 /**
+ * The focus indicator for one hoisted radio, drawn on the label that stands in
+ * for it.
+ *
+ * WHY THE INDICATOR IS NOT ON THE CONTROL. Every `.statehook` radio is 1x1px
+ * with `clip-path: inset(50%)` -- deliberately, because that is what keeps it
+ * in the tab order -- so the global `:focus-visible` outline matches, paints,
+ * and is invisible. WCAG 2.4.7 is Level A, and 19 of the signed-in page's
+ * keyboard stops had no visible focus at all until this existed.
+ *
+ * WHY IT ALSO LIFTS THE OPACITY. Every unchosen option is a ghost at 0.5, and
+ * an outline inherits its element's opacity -- so the ring alone would be drawn
+ * at half strength on exactly the controls that most need it. Full opacity
+ * plus the ring measures 8.4:1 against the ground, where 1.4.11 asks 3:1.
+ *
+ * WHY ONE HELPER RATHER THAN FOUR LITERALS. A focus indicator that differs
+ * between control families is worse than one that is merely plain, and four
+ * copies of the same declaration is how that difference gets introduced.
+ * `outline` is the first of the two borders DESIGN.md permits, and that entry
+ * says it is never to be removed.
+ *
+ * @param {string} slug the radio's id
+ * @param {string} kind the card class it labels, e.g. 'placecard'
+ */
+function focusRing(slug, kind) {
+  return `#${slug}:focus-visible~.wrap .${kind}--${slug}{opacity:1;outline:2px solid var(--accent);outline-offset:3px;}`;
+}
+
+/**
  * The per-preset rules: the card image, the full-bleed background layer, and
  * everything `:checked` changes.
  *
@@ -229,6 +257,7 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       `#${slug}:checked~.wrap .lopt--${slug}{opacity:1;color:var(--l-cathode);text-shadow:0 0 26px rgba(255,138,30,0.5);}`,
       `#${slug}:checked~.wrap .lopt--${slug} .lidx{color:var(--l-hot);}`,
       `#${slug}:focus-visible~.wrap .lopt--${slug}{opacity:1;text-decoration:underline;text-underline-offset:6px;text-decoration-color:var(--l-cathode);}`,
+      focusRing(slug, 'placecard'),
       `#${slug}:checked~.wrap .placecard--${slug}{opacity:1;transform:scale(1.03);}`,
       `#${slug}:checked~.wrap .placecard--${slug} .badge{opacity:1;}`,
       `#${slug}:checked~.wrap .dot--${slug}{background:var(--accent);}`,
@@ -241,6 +270,7 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       `#${slug}:checked~.wrap .lookcard--${slug}{opacity:1;}`,
       `#${slug}:checked~.wrap .lookcard--${slug} .name{color:var(--accent);text-shadow:0 0 22px rgba(255,138,30,0.45);}`,
       `#${slug}:checked~.wrap .lookcard--${slug} .tick{opacity:1;}`,
+      focusRing(slug, 'lookcard'),
     );
   }
   // The quality row. A REAL choice, unlike the frame row above it -- so it gets
@@ -258,6 +288,7 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       `#${slug}:checked~.wrap .qualitycard--${slug} .tick{opacity:1;}`,
       `#${slug}:checked~.wrap .cost--${slug}{display:inline;}`,
       `#${slug}:checked~.wrap .why--${slug}{display:block;}`,
+      focusRing(slug, 'qualitycard'),
     );
   }
 
@@ -273,6 +304,7 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       `#${slug}:checked~.wrap .framecard--${slug} .ratio{color:var(--accent);text-shadow:0 0 22px rgba(255,138,30,0.45);}`,
       `#${slug}:checked~.wrap .framecard--${slug} .shape{border-color:var(--accent);}`,
       `#${slug}:checked~.wrap .framecard--${slug} .tick{opacity:1;}`,
+      focusRing(slug, 'framecard'),
     );
   }
 
@@ -447,8 +479,6 @@ body {
   overflow: hidden;
   white-space: nowrap;
 }
-.statehook:focus-visible + .wrap .placecard,
-.statehook:focus-visible ~ .wrap .placecard { outline: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .bg { animation: none; transition: none; transform: scale(1.08); }
@@ -564,10 +594,6 @@ body {
 .sub { color: var(--muted); margin: 0 0 0.75rem; }
 .hint { color: var(--faint); font-size: 13px; margin: 0 0 0.7rem; }
 .lede { color: var(--muted); margin: 0 0 2rem; }
-
-/* The 24px amber rule under a subtitle. Short on purpose -- it is punctuation,
-   not a divider. */
-.rule { display: none; }
 
 .stamp {
   font-family: var(--osd);
@@ -995,7 +1021,6 @@ input[type="file"]::file-selector-button {
 }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.statehook:focus-visible ~ .wrap .placecard { outline: none; }
 
 .field { margin: 0 0 var(--s-5); }
 .field label { display: block; font-size: 13px; letter-spacing: 0; color: var(--ink); margin-bottom: var(--s-2); }
