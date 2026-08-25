@@ -202,8 +202,10 @@ export const FAL_ENDPOINTS = Object.freeze({
  * The queue hands back `status_url`, `response_url` and a CDN url for the
  * finished file, and following a URL out of a response body without looking at
  * it is how a compromised or simply wrong upstream turns into a credential
- * posted somewhere else. The credential goes to `queue.fal.run` ONLY; the CDN
- * download is unauthenticated on purpose.
+ * posted somewhere else. The credential goes to the queue host ONLY; the CDN
+ * download is unauthenticated on purpose. That rule is enforced where the
+ * header is attached, in `call` -- an authorized request to any other host on
+ * this list is refused before a socket opens, not merely frowned at here.
  */
 const ALLOWED_HOSTS = Object.freeze([
   'queue.fal.run',
@@ -599,6 +601,9 @@ export function createFalProvider(opts = {}) {
   // `--dry-run` require a credential to answer "what would this cost".
   const envImpl = opts.envImpl ?? (() => process.env);
   const base = opts.base ?? FAL_QUEUE_BASE;
+  // The one host the credential may ever be sent to -- see ALLOWED_HOSTS,
+  // whose comment states this rule and whose enforcement lives in `call`.
+  const queueHost = new URL(base).hostname.toLowerCase();
   const nowImpl = opts.nowImpl ?? (() => performance.now());
   const existsImpl = opts.existsImpl ?? fs.existsSync;
   const writeImpl = opts.writeImpl ?? fs.writeFileSync;
@@ -697,12 +702,20 @@ export function createFalProvider(opts = {}) {
   function makeCall(ctx, { fetchImpl, key, sleepImpl, onRetry }) {
     return async function call(url, { method = 'GET', body = null, idempotencyKey = null, authorize = true, expect = 'json' } = {}) {
       const checked = assertAllowedHost(url, { what: `${method} target` });
+      // The credential goes to the queue host and nowhere else -- ENFORCED,
+      // not merely stated. The allow-list above admits hosts we download from,
+      // and one of them is multi-tenant storage anyone can own a bucket under;
+      // an authorized call steered at any of them by a url out of a response
+      // body is refused outright, before a socket opens. Terminal, because the
+      // same poisoned url would fail the same way on every retry.
+      if (authorize && new URL(checked).hostname.toLowerCase() !== queueHost) {
+        throw fail('credential_scope',
+          `${FAL_ID}: refusing to authorize a ${method} to ${new URL(checked).hostname} -- the credential goes to ${queueHost} and nowhere else`,
+          { url: checked, queueHost });
+      }
       return withRetry(async () => {
         throwIfAborted(ctx?.signal);
         const headers = { Accept: expect === 'json' ? 'application/json' : '*/*' };
-        // The credential goes to the queue host and nowhere else. A CDN
-        // download is unauthenticated, and sending a key to a host named in a
-        // response body is how a key ends up somewhere nobody chose.
         if (authorize) headers.Authorization = `Key ${key}`;
         if (body !== null) headers['Content-Type'] = 'application/json';
         // fal does not document an idempotency header. Sending one costs

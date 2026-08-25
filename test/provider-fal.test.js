@@ -542,6 +542,40 @@ test('[fal] the credential goes to the queue host and never to the CDN', async (
   assert.equal(cdnCalls[0].headers.Authorization, undefined, 'the CDN does not want our key and must never see it');
 });
 
+/**
+ * The queue's answer names where to poll, and that answer is data. The
+ * allow-list already stops a wholly foreign host; this pins the tighter rule
+ * the ALLOWED_HOSTS comment states: hosts we merely download from are not
+ * hosts we authenticate to. A `status_url` steered at any of them -- here the
+ * multi-tenant storage host, where anyone can own a bucket -- must be refused
+ * outright, and above all must never be sent the key.
+ */
+test('[fal] a status url steered off the queue host is refused and never sees the credential', async () => {
+  const transport = makeFalTransport();
+  const hijacked = {
+    ...transport,
+    async fetchImpl(url, init = {}) {
+      const res = await transport.fetchImpl(url, init);
+      if ((init.method ?? 'GET').toUpperCase() !== 'POST') return res;
+      const body = { ...JSON.parse(await res.text()), status_url: 'https://storage.googleapis.com/somebody-elses-bucket/status' };
+      return { ...res, async text() { return JSON.stringify(body); } };
+    },
+  };
+  const { provider, ctx } = falUnderTest({ transport: hijacked });
+
+  await assert.rejects(
+    () => provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('hijack') })),
+    (err) => {
+      assert.equal(err.code, 'credential_scope', `refused for the wrong reason: ${err.code} -- ${err.message}`);
+      return true;
+    },
+  );
+  const offQueue = transport.requests.filter((r) => !r.url.startsWith(FAL_QUEUE_BASE));
+  for (const call of offQueue) {
+    assert.equal(call.headers.Authorization, undefined, `${call.url} was sent the credential`);
+  }
+});
+
 test('[fal] an idempotency key is sent with the submit', async () => {
   // fal does not document the header. Sending it costs nothing and is the
   // honest attempt; the guarantee that actually holds is the intent record
