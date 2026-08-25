@@ -66,6 +66,33 @@ function pricedBilling({ fetchImpl, envImpl }) {
   };
 }
 
+/**
+ * A billing seam with NO price on the pack.
+ *
+ * This used to be the real config and is now the constructed case. Until
+ * 2026-08-25 `stripePriceId` was `null` -- a Price is immutable, so it was
+ * deliberately the last thing to exist -- and two tests below leaned on that
+ * to exercise "a pack that cannot be bought yet". A test-mode Price now exists,
+ * so the unpriced state has to be built rather than borrowed.
+ *
+ * It is still worth testing: a pack can lose its Price again the moment one is
+ * rotated, replaced for going live, or added for a second pack nobody has
+ * priced yet, and the answer then must still be 503-and-no-request rather than
+ * a call to Stripe with `price: null` in it.
+ */
+function unpricedBilling({ fetchImpl, envImpl }) {
+  const real = createBilling({ fetchImpl, envImpl });
+  const unpriced = { ...PACK, stripePriceId: null };
+  return {
+    ...real,
+    async packs() { return [unpriced]; },
+    async packFor(id) {
+      if (id !== unpriced.id) return real.packFor(id);
+      return unpriced;
+    },
+  };
+}
+
 async function withApp(run, { billing, nowImpl } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-billing-'));
   const app = createServer({
@@ -474,9 +501,10 @@ test('checkout refuses a pack the config does not name', async () => {
 });
 
 /**
- * Today's state, and it is the designed one: the pack is real and its Stripe
- * Price does not exist yet, because a Price is immutable and section 7 of the
- * spec gates creating it. The route must say so and must not attempt a call.
+ * A pack whose Price does not exist is a 503 AND NOT A 400, because the gap is
+ * ours: the customer asked for something real and the immutable object it needs
+ * has not been created. It must also not reach Stripe -- a checkout request
+ * carrying `price: null` is a round trip to be told what we already knew.
  */
 test('a pack with no Stripe Price cannot be bought, and no request is attempted', async () => {
   const calls = [];
@@ -489,7 +517,7 @@ test('a pack with no Stripe Price cannot be bought, and no request is attempted'
     assert.equal((await res.json()).error.code, 'CHECKOUT_NOT_OPEN');
     assert.deepEqual(calls, [], 'a Stripe request was attempted for a pack with no price');
   }, {
-    billing: createBilling({
+    billing: unpricedBilling({
       fetchImpl,
       envImpl: () => ({ STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET }),
     }),
@@ -600,16 +628,51 @@ test('checkout grants nothing on its own -- only the webhook does', async () => 
 // the page
 // ---------------------------------------------------------------------------
 
-test('the pricing page offers the pack, disabled, and says why', async () => {
+test('the pricing page offers the pack, and never a payment field', async () => {
   await withApp(async ({ base }) => {
     const html = await (await fetch(`${base}/pricing`, { headers: { accept: 'text/html' } })).text();
     assert.ok(html.includes(PACK.label), 'the pack is not on the pricing page');
-    assert.ok(html.includes(`$${PACK.priceUSD}`), 'the price is not on the pricing page');
-    assert.match(html, /disabled/, 'the buy button is live while there is no Stripe Price');
-    // And still no payment field anywhere, which is the rule the whole design
-    // is built around.
+    assert.ok(html.includes(`${PACK.priceUSD}`), 'the price is not on the pricing page');
+    // THE RULE THE WHOLE DESIGN IS BUILT AROUND, and it holds whether or not
+    // the pack can currently be bought. The card is entered on Stripe's domain
+    // and there is nowhere on this page to type one.
     assert.ok(!/name="(card|cvv|cvc|number|pan)"/i.test(html), 'a payment field reached the pricing page');
+    assert.match(html, /action="\/api\/billing\/checkout"/, 'the buy form is missing');
   }, { billing: configuredBilling() });
+});
+
+/** A pack with a Price is buyable, and the button says so. */
+test('a priced pack renders a live buy button', async () => {
+  await withApp(async ({ base }) => {
+    const html = await (await fetch(`${base}/pricing`, { headers: { accept: 'text/html' } })).text();
+    assert.match(html, /Buy credits/, 'the button does not offer to sell anything');
+    assert.ok(!/<button[^>]*\sdisabled/.test(html), 'the buy button is disabled while a Price exists');
+  }, {
+    billing: pricedBilling({
+      fetchImpl: async () => { throw new Error('the page must not call Stripe'); },
+      envImpl: () => ({ STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET }),
+    }),
+  });
+});
+
+/**
+ * And a pack WITHOUT one renders disabled, with a sentence rather than a dead
+ * button. This is the state the repo shipped in from 2026-08-25 morning until a
+ * test Price existed, and it is the state it returns to whenever a Price is
+ * rotated or a new pack is added before anybody prices it.
+ */
+test('an unpriced pack renders disabled and says why', async () => {
+  await withApp(async ({ base }) => {
+    const html = await (await fetch(`${base}/pricing`, { headers: { accept: 'text/html' } })).text();
+    assert.match(html, /<button[^>]*\sdisabled/, 'the buy button is live while there is no Stripe Price');
+    assert.match(html, /Not open yet/, 'the disabled button does not say what is wrong');
+    assert.match(html, /Nothing is charged here/i, 'the page does not reassure that nothing is charged');
+  }, {
+    billing: unpricedBilling({
+      fetchImpl: async () => { throw new Error('the page must not call Stripe'); },
+      envImpl: () => ({ STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET }),
+    }),
+  });
 });
 
 test('the success page thanks without claiming the credits have landed', async () => {
