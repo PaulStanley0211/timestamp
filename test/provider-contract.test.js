@@ -601,7 +601,14 @@ test('every command that can spend injects the transport', () => {
     // A renamed option would make the greps below pass vacuously, which is the
     // one way a read-the-source test quietly stops testing anything.
     assert.ok(sites.length > 0, `${file} hands no providerCtx to anything -- did the option get renamed?`);
-    const wired = source.match(/providerCtx: paidTransport\(provider\)/g) ?? [];
+    // ANY IDENTIFIER, not the literal word "provider". On 2026-08-25 the resume
+    // branch grew its own provider -- built from what the MANIFEST froze rather
+    // than from CLI defaults -- and this test went red for a call site that
+    // injects the transport perfectly, because the variable is called
+    // `resumedProvider`. What is guarded is that every site injects
+    // `paidTransport`, not that a variable is spelled a particular way; pinning
+    // the name makes the next correct call site look like a bug.
+    const wired = source.match(/providerCtx: paidTransport\([A-Za-z_$][\w$]*\)/g) ?? [];
     assert.equal(wired.length, sites.length,
       `${file} has ${sites.length} providerCtx call site(s) and ${wired.length} of them inject the transport. `
       + 'A paid provider with no fetchImpl dies at the still step with the TypeError from requireFetchImpl.');
@@ -958,4 +965,32 @@ test('a dry run prices 720p above 480p', async () => {
   const cheap = await quote('480p');
   const dear = await quote('720p');
   assert.ok(dear > cheap, `720p quoted $${dear} against 480p at $${cheap}`);
+});
+
+/**
+ * `--dry-run` PROMISES TO CHARGE NOTHING, AND ON A RESUME IT USED TO RUN THE
+ * JOB FOR REAL.
+ *
+ * The `--resume` branch returns before the dry-run branch further down is ever
+ * reached, so the flag was silently ignored on exactly the path where somebody
+ * is most likely to reach for it: a parked job they do not want to pay for by
+ * accident. On 2026-08-25 that ran a job against the wrong provider and marked
+ * a job parked for a metered run as `failed`. With `--provider=fal` it would
+ * have been a paid call made by somebody who believed they were pricing it.
+ *
+ * Asserted by POSITION rather than presence: a dry-run check that sits after
+ * the pipeline call is not a check. The comparison is against the FIRST
+ * `runPipeline` in the file, which is the resume one.
+ */
+test('a resumed render checks the dry-run flag before it runs anything', () => {
+  const source = fs.readFileSync(path.join(REPO_ROOT, 'scripts/render/render.mjs'), 'utf8');
+  const resumeAt = source.indexOf('if (args.resume)');
+  const firstRun = source.indexOf('runPipeline(', resumeAt);
+  const dryCheck = source.indexOf("flags.has('dry-run')", resumeAt);
+
+  assert.ok(resumeAt > -1, 'render.mjs has no resume branch -- did it move?');
+  assert.ok(firstRun > -1, 'the resume branch runs no pipeline -- did runPipeline get renamed?');
+  assert.ok(dryCheck > -1, 'the resume branch never looks at --dry-run, so the flag is ignored on a resume');
+  assert.ok(dryCheck < firstRun,
+    'the resume branch checks --dry-run AFTER calling runPipeline, which means it has already spent the money');
 });
