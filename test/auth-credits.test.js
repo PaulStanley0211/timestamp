@@ -76,6 +76,21 @@ const JOB = (n) => `20260820-1445${String(n).padStart(2, '0')}-a3f19c`;
 /** One 15-second tape at the default resolution: the unit the whole plan ladder
  *  is built out of. */
 const TAPE = creditCost();
+/** What a new account opens with. DERIVED, never spelled: this number moved
+ *  from 16 to 42 on 2026-08-25 when a metered delivery put a 480p tape at 21
+ *  credits, and every test below that had written it as a literal broke. */
+const FREE = PLANS.free.creditsPerPeriod;
+
+/** Put an account on an exact balance, with a ledger line saying why. The race
+ *  tests below need a balance that covers exactly N renders, and BORROWING one
+ *  from a plan couples a concurrency guard to the price list -- which is how
+ *  they all failed when the price list was corrected. */
+function setBalance(account, target, nowImpl) {
+  const delta = target - balanceOf(account).credits;
+  if (delta !== 0) grantCredits(account, { credits: delta, reason: 'test:set-balance', nowImpl });
+  assert.equal(balanceOf(account).credits, target);
+  return account;
+}
 
 function makeRoot(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'timestamp-credits-'));
@@ -105,30 +120,37 @@ const grab = (fn) => {
 // what a render costs
 // --------------------------------------------------------------------------
 
-test('the 720p anchor still matches the formula it was derived from', () => {
+/**
+ * THE ANCHOR SURVIVES; ITS DERIVATION DID NOT.
+ *
+ * This test used to pin 720p's price to the formula applied to 1280x720 -- a
+ * 16:9 frame this product never orders and fal has never sent. It passed for
+ * five days because two errors cancelled: the nominal frame was too big and the
+ * ignored upscale was too small, and the answer landed within three cents of
+ * the truth. On 2026-08-25 the delivered raster was measured at 1112x834 and
+ * the real figure is $4.5646, so the coincidence broke by 2.9 cents.
+ *
+ * What replaces the formula assertion is the one in 'every offered tier is
+ * priced from the raster fal actually delivered', which pins the same link to
+ * a measurement rather than to a nominal frame. What is kept here is the part
+ * that was never about the arithmetic: every number in the money path has to
+ * say what KIND of number it is, and the vocabulary now includes MEASURED.
+ */
+test('every number in the money path says what kind of number it is', () => {
   const cfg = creditConfig();
   assert.equal(cfg.provider.anchorResolution, '720p');
-  const res = cfg.resolutions['720p'];
-  // The published fal formula, spelled out here so that an edit which breaks the
-  // link between the anchor and its derivation is caught rather than absorbed:
-  // tokens = h * w * seconds * 24 / 1024, at $0.014 per 1000 tokens.
-  const tokens = (res.width * res.height * cfg.referenceSeconds * cfg.provider.tokensPerPixelSecond)
-    / cfg.provider.tokenDivisor;
-  const usd = (tokens / 1000) * cfg.provider.usdPerThousandTokens;
-  assert.ok(Math.abs(usd - res.estimatedUSDPer15s) < 0.01,
-    `720p: formula says $${usd.toFixed(2)}, config says $${res.estimatedUSDPer15s}`);
-
-  // The other two are RATIOS to that anchor and not the formula, because pixel
-  // count is not the whole rate -- the fast Seedance tier tops out at 720p and
-  // the tiers are priced differently. By pixels alone 480p would be 0.44 of
-  // 720p; it is estimated at a third.
   for (const id of ALL_RESOLUTIONS) {
-    assert.match(cfg.resolutions[id]._comment, /ESTIMATE|DEFERRED/,
-      'every number in the money path says what kind of number it is');
+    assert.match(cfg.resolutions[id]._comment, /MEASURED|ESTIMATE|DEFERRED/,
+      `${id} does not say whether its price was measured or guessed`);
+  }
+  // And a tier that is actually on sale may not still call itself a guess.
+  for (const id of RESOLUTIONS) {
+    assert.match(cfg.resolutions[id]._comment, /MEASURED/,
+      `${id} is on offer and its price is still a guess`);
   }
 });
 
-test('the numbers: 16 credits at 480p, 46 at 720p, and the ratios Paul specified', () => {
+test('the numbers: 21 credits at 480p, 46 at 720p, measured', () => {
   // RESCALED 2026-08-21, when creditUSD moved from $0.03 to $0.10 at Paul's
   // direction. The reason was legibility, not economics: 51 and 152 are ugly
   // numbers that read as arbitrary. Every plan's creditsPerPeriod moved in the
@@ -137,16 +159,30 @@ test('the numbers: 16 credits at 480p, 46 at 720p, and the ratios Paul specified
   // ones that matter: they encode the cost relationships, and a rescale must
   // not touch them. If a future edit changes a ratio, that is a pricing
   // decision and not a rescale, and it should be argued rather than absorbed.
-  assert.equal(creditCost({ resolution: '480p' }), 16);
+  assert.equal(creditCost({ resolution: '480p' }), 21);
   assert.equal(creditCost({ resolution: '720p' }), 46);
-  assert.equal(TAPE, 16, 'the default is 480p, the cheap tier');
+  assert.equal(TAPE, 21, 'the default is 480p, the cheap tier');
   assert.deepEqual(CREDIT_DEFAULTS, { resolution: '480p', seconds: 15, tier: 'standard' });
 
   const cr = (id) => CREDIT_COSTS[id].creditsPerReference;
-  // 480p is roughly a third of 720p; 1080p roughly 2.25x of it. Both are
-  // ESTIMATES and the tolerance says so -- published third-party figures
-  // disagree with each other and only a --meter run settles it.
-  assert.ok(Math.abs(cr('480p') / cr('720p') - 1 / 3) < 0.02, `480p:720p is ${(cr('480p') / cr('720p')).toFixed(3)}`);
+
+  // THE RATIO CHANGED, AND THAT IS A FINDING RATHER THAN A RESCALE. This
+  // assertion used to require 480p to be about a THIRD of 720p, on the stated
+  // theory that pixel count is not the whole rate because fal's fast Seedance
+  // tier tops out at 720p and the tiers are priced differently. Three metered
+  // deliveries say otherwise: 752x560 costs $2.0727 and 1112x834 costs $4.5646,
+  // a ratio of 0.454, which is the PIXEL ratio to three decimal places. fal
+  // bills tokens, tokens are pixels x seconds, and there is no separate tier
+  // rate hiding in it. The old comment reasoned its way to a third and the
+  // invoice says otherwise.
+  const px = (id) => {
+    const d = creditConfig().resolutions[id].delivered;
+    return d.width * d.height;
+  };
+  assert.ok(
+    Math.abs((cr('480p') / cr('720p')) - (px('480p') / px('720p'))) < 0.01,
+    `credits are billed by pixels: 480p:720p is ${(cr('480p') / cr('720p')).toFixed(3)} in credits and ${(px('480p') / px('720p')).toFixed(3)} in pixels`,
+  );
   assert.ok(Math.abs(cr('1080p') / cr('720p') - 2.25) < 0.05, `1080p:720p is ${(cr('1080p') / cr('720p')).toFixed(3)}`);
 
   // The consequence, asserted so that nobody quotes a price without meeting it:
@@ -154,6 +190,13 @@ test('the numbers: 16 credits at 480p, 46 at 720p, and the ratios Paul specified
   // reach of every plan there is.
   assert.ok(cr('720p') <= PLANS.shelf.creditsPerPeriod);
   assert.ok(cr('1080p') > PLANS.archive.creditsPerPeriod);
+
+  // AND THE ONE A CUSTOMER MEETS FIRST: the free grant buys 480p tapes and no
+  // 720p one. That is the shape of the free tier rather than an oversight --
+  // the free tape proves the likeness, and the paid tier is what somebody buys
+  // once they believe it.
+  assert.ok(FREE >= cr('480p'), 'the free grant does not cover a single tape');
+  assert.ok(FREE < cr('720p'), 'the free grant reaches the paid tier');
 });
 
 test('480p and 720p ship; 1080p is present, deferred, and refused rather than substituted', () => {
@@ -182,15 +225,32 @@ test('480p and 720p ship; 1080p is present, deferred, and refused rather than su
 });
 
 test('cost is linear in seconds and rounds up', () => {
-  // 16 is a rounded-up 15.1, so two 15-second tapes cost one credit more than
-  // one 30-second one. Rounding up is deliberate: rounding down gives away a
-  // fraction of a credit on every render, in the same direction every time, and
-  // no line item ever explains it. The property this asserts survived the
-  // 2026-08-21 rescale unchanged, which is the point of testing the behaviour
-  // rather than the arithmetic: 31 < 32 for the same reason 101 < 102 did.
-  assert.equal(creditCost({ resolution: '480p', seconds: 30 }), 31);
-  assert.equal(creditCost({ resolution: '480p', seconds: 15 }) * 2, 32);
-  assert.equal(creditCost({ resolution: '720p', seconds: 7.5 }), 23);
+  // THE PROPERTY, NOT AN EXAMPLE. This test used to assert 31 < 32 at 480p --
+  // a genuine consequence of rounding when a tape cost 15.1 credits. At the
+  // measured price a tape is exactly 20.727, the two figures come out equal,
+  // and the old assertion failed while the behaviour it was defending was
+  // completely intact. An example that only holds for one price is a test of
+  // that price. So: assert that every quote is the exact cost rounded UP, at
+  // every duration, and that splitting a render never costs less than not
+  // splitting it.
+  //
+  // Rounding up is deliberate. Rounding down gives away a fraction of a credit
+  // on every render, in the same direction every time, and no line item ever
+  // explains it.
+  const cfg = creditConfig();
+  for (const id of RESOLUTIONS) {
+    const per15 = cfg.resolutions[id].estimatedUSDPer15s;
+    for (const seconds of [4, 7.5, 15, 30, 61]) {
+      const exact = (per15 * (seconds / cfg.referenceSeconds)) / cfg.creditUSD;
+      const quoted = creditCost({ resolution: id, seconds });
+      assert.equal(quoted, Math.ceil(exact),
+        `${id} at ${seconds}s: quoted ${quoted}, exact ${exact.toFixed(4)}`);
+      assert.ok(quoted >= exact, `${id} at ${seconds}s rounds DOWN, which gives credits away silently`);
+    }
+    // Two halves are never cheaper than the whole, whatever the price is.
+    assert.ok(creditCost({ resolution: id, seconds: 15 }) * 2
+      >= creditCost({ resolution: id, seconds: 30 }));
+  }
   assert.equal(CREDIT_COSTS['720p'].creditsPerReference, 46);
   assert.equal(estimatedUSD(16).toFixed(2), '1.60');
 });
@@ -283,7 +343,7 @@ test('a debit spends credits durably and refreshes the caller copy', (t) => {
 
   assert.equal(balanceOf(account).credits, PLANS.shelf.creditsPerPeriod - TAPE);
   assert.deepEqual(account.ledger.at(-1), {
-    at: iso(T0 + 1000), delta: -16, jobId: JOB(1), reason: 'render:480p',
+    at: iso(T0 + 1000), delta: -TAPE, jobId: JOB(1), reason: 'render:480p',
   });
   // And another process reading the record sees the same thing. Derived from
   // the plan and the tape rather than written as a literal, so that a rescale
@@ -295,22 +355,24 @@ test('a debit spends credits durably and refreshes the caller copy', (t) => {
 
 test('a debit larger than the balance is refused, with a shortfall the page can act on', (t) => {
   const root = makeRoot(t);
-  const account = signUp(root); // free: 16 credits, exactly one 480p tape
+  const account = signUp(root); // free: two 480p tapes, and no 720p one
 
   const err = grab(() => debitCredits(account, {
     jobId: JOB(1), credits: creditCost({ resolution: '720p' }), nowImpl: clock(),
   }));
   assert.equal(err.code, 'INSUFFICIENT_CREDITS');
-  assert.deepEqual(err.detail, { required: 46, balance: 16, shortfall: 30, planId: 'free' });
+  assert.deepEqual(err.detail, {
+    required: 46, balance: FREE, shortfall: 46 - FREE, planId: 'free',
+  });
   assert.match(err.userMessage, /Not enough credits/);
   assert.ok(!err.userMessage.includes(root), 'a user message must never leak a path');
 
   // A refused debit must not have half-spent anything.
   assert.equal(loadAccount({ root, accountId: account.accountId }).ledger.length, 1);
-  assert.equal(balanceOf(account).credits, 16);
+  assert.equal(balanceOf(account).credits, FREE);
   // And the affordable version still goes through.
   debitCredits(account, { jobId: JOB(1), credits: TAPE, nowImpl: clock() });
-  assert.equal(balanceOf(account).credits, 0);
+  assert.equal(balanceOf(account).credits, FREE - TAPE);
 });
 
 test('debiting the same jobId twice charges once, at the price it was quoted', (t) => {
@@ -357,21 +419,21 @@ test('a grant is one more line, and a negative grant is a correction', (t) => {
   const account = signUp(root);
 
   grantCredits(account, { credits: 200, reason: 'grant:manual', nowImpl: clock(T0 + 1000) });
-  assert.equal(balanceOf(account).credits, 216);
+  assert.equal(balanceOf(account).credits, FREE + 200);
   assert.equal(balanceOf(account).grantedAt, iso(T0 + 1000));
 
   // The honest way to fix a ledger is another line, never an edit to an
   // existing one.
   grantCredits(account, { credits: -200, reason: 'correction:granted twice', nowImpl: clock(T0 + 2000) });
-  assert.equal(balanceOf(account).credits, 16);
+  assert.equal(balanceOf(account).credits, FREE);
   assert.equal(ledgerFor(account).length, 3);
-  assert.deepEqual(ledgerFor(account).map((e) => e.balance), [16, 216, 16]);
+  assert.deepEqual(ledgerFor(account).map((e) => e.balance), [FREE, FREE + 200, FREE]);
 
   // A negative balance is a debt this product has no way to collect and no page
   // that could explain it.
-  const err = grab(() => grantCredits(account, { credits: -100, reason: 'oops', nowImpl: clock() }));
+  const err = grab(() => grantCredits(account, { credits: -(FREE + 1), reason: 'oops', nowImpl: clock() }));
   assert.equal(err.code, 'GRANT_BELOW_ZERO');
-  assert.equal(balanceOf(account).credits, 16);
+  assert.equal(balanceOf(account).credits, FREE);
 
   for (const credits of [0, 1.5, '10', undefined]) {
     assert.equal(grab(() => grantCredits(account, { credits, reason: 'x' })).code, 'BAD_CREDITS');
@@ -387,7 +449,7 @@ test('grantPlanPeriod grants exactly what the plan says, by name', (t) => {
   setPlan(account, 'archive');
 
   assert.equal(grantPlanPeriod(account, { planId: 'archive', nowImpl: clock(T0 + 1000) }), 64);
-  assert.equal(balanceOf(account).credits, 16 + 64);
+  assert.equal(balanceOf(account).credits, FREE + 64);
   assert.equal(account.ledger.at(-1).reason, 'grant:period:archive');
   assert.equal(grab(() => grantPlanPeriod(account, { planId: 'gold' })).code, 'BAD_PLAN');
 });
@@ -406,13 +468,14 @@ test('a job that died before the provider was called gets exactly what it paid',
   // ours.
   refundCredits(account, { jobId: JOB(1), reason: 'refund:intake-failed', spent: false, nowImpl: clock(T0 + 5000) });
 
-  assert.equal(balanceOf(account).credits, 48);
+  assert.equal(balanceOf(account).credits, PLANS.shelf.creditsPerPeriod);
   assert.deepEqual(account.ledger.at(-1), {
-    at: iso(T0 + 5000), delta: 16, jobId: JOB(1), reason: 'refund:intake-failed',
+    at: iso(T0 + 5000), delta: TAPE, jobId: JOB(1), reason: 'refund:intake-failed',
   });
   // Nothing was edited: the debit is still there, and the ledger explains itself.
   assert.equal(account.ledger.length, 3);
-  assert.deepEqual(ledgerFor(account).map((e) => e.delta), [48, -16, 16]);
+  assert.deepEqual(ledgerFor(account).map((e) => e.delta),
+    [PLANS.shelf.creditsPerPeriod, -TAPE, TAPE]);
 });
 
 test('a job that failed AFTER the provider was called is refused a refund, loudly', (t) => {
@@ -768,9 +831,12 @@ test('8 threads grant the SAME ref at once: it lands once', async (t) => {
 
 test('12 threads debit at once against a balance that covers 3: exactly 3 get through', async (t) => {
   const root = makeRoot(t);
-  // Shelf grants 48 credits, which is exactly three 480p tapes at 16 each.
-  const account = signUp(root, { plan: 'shelf' });
-  assert.equal(PLANS.shelf.creditsPerPeriod, TAPE * 3);
+  // THE BALANCE IS CONSTRUCTED, NOT BORROWED. This used to lean on Shelf
+  // granting exactly three tapes' worth, which stopped being true the moment
+  // the tape price was corrected -- and a concurrency guard that fails because
+  // a PRICE moved is a guard nobody trusts. Three renders' worth, set here, and
+  // it stays three whatever a tape costs.
+  const account = setBalance(signUp(root, { plan: 'shelf' }), TAPE * 3, clock());
 
   const { results, peak } = await stampede({
     count: 12, root, accountId: account.accountId, credits: TAPE, jobIdFor: (i) => JOB(20 + i),
@@ -825,8 +891,7 @@ test('16 threads against a balance that covers exactly one render', async (t) =>
   // The narrowest balance is the one a bad lock is most likely to leak through,
   // and the free plan -- one 480p tape -- is the plan with the most accounts on
   // it.
-  const account = signUp(root);
-  assert.equal(PLANS.free.creditsPerPeriod, TAPE);
+  const account = setBalance(signUp(root), TAPE, clock());
 
   const { results, peak } = await stampede({
     count: 16, root, accountId: account.accountId, credits: TAPE, jobIdFor: (i) => JOB(40 + i),
@@ -835,7 +900,84 @@ test('16 threads against a balance that covers exactly one render', async (t) =>
   assert.equal(results.filter((r) => r.ok).length, 1, 'one tape of credits means one render');
   const after = loadAccount({ root, accountId: account.accountId, nowImpl: clock() });
   assert.equal(balanceOf(after).credits, 0);
-  assert.equal(after.ledger.filter((e) => e.delta < 0).length, 1);
+  // DEBITS FOR A RENDER, not every negative line: `setBalance` above writes a
+  // negative correction to put this account on an exact one-tape balance, and
+  // counting that as a charge would make the guard fail on its own setup.
+  assert.equal(after.ledger.filter((e) => e.delta < 0 && e.jobId !== null).length, 1);
   assert.ok(peak >= 2, `peak concurrent debitCredits() calls was ${peak}`);
   t.diagnostic(`peak concurrent debitCredits() calls: ${peak} of 16`);
+});
+
+// ---------------------------------------------------------------------------
+// what the tiers actually cost -- MEASURED 2026-08-25
+// ---------------------------------------------------------------------------
+
+/**
+ * THE PRICE IS DERIVED FROM THE RASTER FAL RETURNS, NOT THE ONE WE ORDER.
+ *
+ * Three metered jobs settled this. Two ordered 640x480 and were delivered --
+ * and billed for -- 752x560; one ordered 960x720 and was delivered 1112x834.
+ * fal upscales by about 1.16 on each axis and bills what it sends, so a price
+ * computed from the raster we ASK for understates the invoice by roughly a
+ * third, in the unsafe direction.
+ *
+ * This test pins each offered tier to the formula applied to its DELIVERED
+ * raster. It replaces the old "720p anchor" assertion, which pinned the figure
+ * to 1280x720 -- a 16:9 frame this product never orders and fal never sent.
+ * That the old number happened to land within three cents of the truth was a
+ * coincidence of two errors cancelling, and a coincidence is not a derivation.
+ */
+test('every offered tier is priced from the raster fal actually delivered', () => {
+  const cfg = creditConfig();
+  const rate = cfg.provider.usdPerThousandTokens / 1000;
+  const tokens = (w, h) => (w * h * cfg.referenceSeconds * cfg.provider.tokensPerPixelSecond)
+    / cfg.provider.tokenDivisor;
+
+  for (const id of RESOLUTIONS) {
+    const res = cfg.resolutions[id];
+    assert.ok(res.delivered, `${id} is on offer and nothing records what fal delivered for it`);
+    assert.ok(Number.isInteger(res.delivered.width) && Number.isInteger(res.delivered.height),
+      `${id} delivered raster is not a pair of whole pixels`);
+
+    const usd = tokens(res.delivered.width, res.delivered.height) * rate;
+    assert.ok(
+      Math.abs(usd - res.estimatedUSDPer15s) < 0.01,
+      `${id}: the delivered raster ${res.delivered.width}x${res.delivered.height} costs $${usd.toFixed(4)}, config says $${res.estimatedUSDPer15s}`,
+    );
+
+    // A tier that is sold cannot still call itself a guess.
+    assert.equal(res.estimate, false, `${id} is on offer and still marked an estimate`);
+    assert.match(res._comment, /MEASURED/, `${id} is on offer and its comment does not say it was measured`);
+  }
+});
+
+/** The customer-facing number, pinned to the measurement rather than to a
+ *  figure somebody chose. If a tape's cost moves, this is what has to move with
+ *  it -- and a credit price that no longer covers the invoice fails here rather
+ *  than on an invoice. */
+test('a tape is priced at or above what it costs to serve', () => {
+  const cfg = creditConfig();
+  for (const id of RESOLUTIONS) {
+    const charged = creditCost({ resolution: id, seconds: 15 }) * cfg.creditUSD;
+    const costs = cfg.resolutions[id].estimatedUSDPer15s;
+    assert.ok(charged >= costs,
+      `${id} charges ${(charged / cfg.creditUSD)} CR ($${charged.toFixed(2)}) against a measured cost of $${costs.toFixed(4)}`);
+  }
+});
+
+/**
+ * 720p IS A DIFFERENT PRODUCT FROM 480p, and that is a claim on a public page
+ * so it is asserted rather than assumed. It was genuinely open until
+ * 2026-08-25: both 480p jobs came back at 752x560, and if a 720p order had
+ * come back at 752x560 too there would have been one tier and not two --
+ * pricing them separately would have been charging for a difference that does
+ * not exist.
+ */
+test('the two offered tiers deliver visibly different rasters', () => {
+  const cfg = creditConfig();
+  const a = cfg.resolutions['480p'].delivered;
+  const b = cfg.resolutions['720p'].delivered;
+  const ratio = (b.width * b.height) / (a.width * a.height);
+  assert.ok(ratio > 1.5,
+    `720p delivers ${(ratio).toFixed(2)}x the pixels of 480p -- too close to sell as separate tiers`);
 });

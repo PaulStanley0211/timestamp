@@ -19,8 +19,8 @@
   },
   "resolutions": {
     "480p": {
-      "_comment": "ESTIMATE, and the cheap tier. 640x480 through the token formula is 108000 tokens, $1.51 for 15 seconds. CORRECTED 2026-08-20: this entry previously recorded 854x480 while carrying the $1.51 price, and those two disagree -- 854x480 is $2.02. The dimensions were the 16:9 shape of \"480p\", but THIS PRODUCT ALWAYS REQUESTS 4:3, so 640x480 is the raster and $1.51 is the matching number. Recording a price derived one way beside dimensions derived another is how an estimate quietly becomes unfalsifiable. THE NON-OBVIOUS RISK, and it is a real one: 480 is BELOW the tape raster vertically (the tape works at 736x588 per config/render.json), so this is the only option that is upscaled before the grain goes on, and the only one that actually loses detail. That loss is invisible on a test pattern. It is UNTESTED ON A FACE, and likeness is the entire product. A legitimate cheap tier, not a free lunch.\n\nANSWERED 2026-08-24 BY A REAL INVOICE, and the answer is the expensive one: FAL BILLS THE RASTER IT RETURNS, NOT THE ONE YOU ORDER. Two direct jobs ordered 640x480 and were delivered 752x560; fal's usage page charged 296.92k tokens at $0.014/1k = $4.156908, which is exactly w*h*seconds*24/1024 computed on the DELIVERED size. The formula in `provider` above is therefore CORRECT and was never the problem. What is wrong is the assumption that ordering a raster gets you that raster. For this tier specifically: 640x480 x 15s is 108000 tokens and $1.5120, but the two jobs that actually ran cost $2.0785 each -- a 37.5% surcharge caused entirely by the model returning a bigger frame than it was asked for. `estimatedUSDPer15s` BELOW IS DELIBERATELY UNCHANGED: it feeds `creditCost`, so editing it changes what a customer is charged, and that is Paul's decision and not a bookkeeping one. But it is now KNOWN to understate real cost by about a third, which is the unsafe direction -- this file's own header says overstating cost is the safe way to be wrong. Either the raster gets honoured (config/models.json, aspect ratios) or this number goes up.",
-      "estimate": true,
+      "_comment": "MEASURED 2026-08-25, and the number moved UP. Two metered jobs (20260824-122201-af8b0d, 20260824-130457-a2e9ac) ordered 640x480 and were DELIVERED 752x560 at 24fps. fal bills the raster it returns, so the invoice is computed on 752x560: 148050 tokens at $0.014/1000 = $2.0727. The old figure of $1.51 was the formula applied to the raster we ASK for, which is not a raster that has ever arrived -- it understated every 480p tape by 37%, in the unsafe direction, and at 16 CR this tier was sold BELOW COST from the day it was priced.\n\nTHE NON-OBVIOUS RISK, and it is unchanged: 480 is BELOW the tape raster vertically (the tape works at 736x588 per config/render.json), so this is the only option upscaled before the grain goes on, and the only one that actually loses detail. The delivered 752x560 softens that -- it is closer to the tape raster than 640x480 was -- but it is still short of it.\n\nTHE DELIVERED ASPECT IS NOT 4:3. 752x560 is 47:35 (1.3429), where 720p delivered an exact 1.3333. Nothing downstream depends on it -- the tape stage crops to 4:3 -- but it is recorded because a tier whose delivered aspect drifts is a tier whose crop is throwing away a different amount of picture than the other one.",
+      "estimate": false,
       "available": true,
       "width": 640,
       "height": 480,
@@ -29,12 +29,23 @@
         "height": 480
       },
       "_raster_comment": "WHAT THE RENDERER ACTUALLY ASKS FOR. Identical to width/height here, because the price above was already derived at the 4:3 raster. See the 720p row, where they differ, for why the field exists at all.",
-      "estimatedUSDPer15s": 1.51,
-      "source": "provider formula at the 4:3 raster we actually request, UNVERIFIED"
+      "estimatedUSDPer15s": 2.0727,
+      "source": "MEASURED: fal usage page, two jobs, 752x560 delivered against a 640x480 order",
+      "delivered": {
+        "_comment": "WHAT FAL ACTUALLY SENT AND BILLED FOR. This, not `raster`, is what estimatedUSDPer15s is computed from. Two independent jobs, same answer.",
+        "width": 752,
+        "height": 560,
+        "fps": 24,
+        "measuredOn": "2026-08-25",
+        "jobIds": [
+          "20260824-122201-af8b0d",
+          "20260824-130457-a2e9ac"
+        ]
+      }
     },
     "720p": {
-      "_comment": "ESTIMATE, and the anchor: 1280x720 through the token formula above is 324000 tokens, $4.54 for 15 seconds. It is also the resolution the product is designed around. The tape works at 736x588 (720x576 plus jitter headroom), and 720p is the first size that fully covers that raster -- which makes it the last size that buys anything. Measured SSIM between a 720p-sourced and a 1080p-sourced delivery was 0.958 and the two are indistinguishable at 4x zoom. OPEN QUESTION, and it is worth a metered call rather than an argument: this anchor uses 1280x720, the 16:9 shape. We request 4:3, and 960x720 through the same formula is $3.40, not $4.54. Whether the provider bills the raster it renders or the nominal frame size is not documented anywhere we could find. The higher figure is kept deliberately -- overstating cost understates margin, which is the safe direction to be wrong in. Do NOT lower it to $3.40 on reasoning alone; one --meter run settles it.\n\nANSWERED 2026-08-24 BY A REAL INVOICE, and the answer is the expensive one: FAL BILLS THE RASTER IT RETURNS, NOT THE ONE YOU ORDER. Two direct jobs ordered 640x480 and were delivered 752x560; fal's usage page charged 296.92k tokens at $0.014/1k = $4.156908, which is exactly w*h*seconds*24/1024 computed on the DELIVERED size. The formula in `provider` above is therefore CORRECT and was never the problem. What is wrong is the assumption that ordering a raster gets you that raster. That settles the open question this entry raised: it does NOT bill the 4:3 raster we request, and it does not reliably send it either. The $3.40-versus-$4.54 argument recorded above cannot be resolved from the request side at all -- only from what comes back. UNMETERED at this tier: no 720p job has ever run.",
-      "estimate": true,
+      "_comment": "MEASURED 2026-08-25 by job 20260824-225641-f34b4f, the first render that ever ORDERED a resolution. It asked for 960x720 and was delivered 1112x834 at 24fps: 326042 tokens, $4.5646.\n\nTHIS RUN SETTLED THE QUESTION THAT DECIDED THE PRICE LIST. Both 480p jobs came back 752x560, and if a 720p order had come back 752x560 as well then 480p and 720p would have been THE SAME PRODUCT -- and charging separately for them would have been a claim on a public page that is not true. It did not: 1112x834 is 2.20x the pixels of 752x560. The tier is real and can be sold honestly.\n\nTHE OLD FIGURE WAS RIGHT BY ACCIDENT. $4.54 was the formula applied to 1280x720 -- the 16:9 frame this product never orders and fal has never sent -- and it landed within three cents of the truth because two errors cancelled. A coincidence is not a derivation, so the anchor is now the delivered raster and the test asserts that link.\n\nDELIVERED ASPECT IS EXACTLY 4:3 (1112/834 = 1.3333), which 480p is not. The upscale is 1.1583 on both axes, where 480p was 1.1750 x 1.1667 -- so fal upscales consistently but not identically, and neither factor is documented anywhere. It is measured, twice, and that is all.",
+      "estimate": false,
       "available": true,
       "width": 1280,
       "height": 720,
@@ -43,11 +54,21 @@
         "height": 720
       },
       "_raster_comment": "WHAT THE RENDERER ACTUALLY ASKS FOR, and it is NOT width/height above. THIS PRODUCT ALWAYS REQUESTS 4:3 -- the tape raster is 720x576 at SAR 16/15, i.e. DAR 4:3 -- so `720p` means 960x720 on the wire and nothing ever renders 1280x720. The two fields disagree on purpose and each is honest about a different thing: `raster` is the picture, `width`/`height` are the shape the PRICE above was derived at, and the open question in the _comment is exactly whether fal bills the raster it renders or the nominal frame. The higher figure is kept until a --meter run settles it. scripts/animate/plan.mjs derives the raster from the label (the number is the height, 4:3 gives the width) and scripts/providers/fal.mjs derives the same two rasters for its own resolution enum; a test asserts all three agree, so this row cannot drift away from what is requested without something going red.",
-      "estimatedUSDPer15s": 4.54,
-      "source": "derived from provider formula, UNVERIFIED"
+      "estimatedUSDPer15s": 4.5646,
+      "source": "MEASURED: job 20260824-225641-f34b4f, 1112x834 delivered against a 960x720 order",
+      "delivered": {
+        "_comment": "WHAT FAL ACTUALLY SENT. 24fps against a 25fps contract, which is where the once-a-second judder in every tape comes from -- 361 source frames stretched to 375 duplicates 15 of them, one every 25 frames.",
+        "width": 1112,
+        "height": 834,
+        "fps": 24,
+        "measuredOn": "2026-08-25",
+        "jobIds": [
+          "20260824-225641-f34b4f"
+        ]
+      }
     },
     "1080p": {
-      "_comment": "DEFERRED, NOT CANCELLED, and the row is kept with its reasoning attached so that turning it on later is a one-field change rather than an archaeology exercise -- and so nobody re-derives the same measurement in six months. Why it is off: roughly 2.25x the cost of 720p for pixels that are thrown away before the grain is applied, because the tape raster is 736x588 and 720p already covers it (SSIM 0.958 against a 1080p source, indistinguishable at 4x zoom). It also forces the expensive standard tier, since fal's fast Seedance tops out at 720p -- so it is more than 2.25x the cost in practice. Set `available: true` when there is a reason; `creditCost` refuses it until then rather than quietly rendering something else.",
+      "_comment": "DEFERRED, NOT CANCELLED, and its number is now an ESTIMATE BUILT ON A MEASUREMENT rather than on a ratio. Applying the 1.1583 upscale measured at 720p to a 1440x1080 order gives 1668x1251 and $10.27 -- 2.25x the cost of 720p. NOBODY HAS EVER ORDERED 1080p, so both the delivered raster and the price are forecasts.\n\nWHY IT WAS DEFERRED, kept with the entry so that turning it on later is a one-field change rather than an archaeology exercise: roughly 2.25x the cost of 720p for pixels that are thrown away before the grain is applied, because THE TAPE RASTER IS 736x588 and 720p already covers it. Measured SSIM between a 720p-sourced and a 1080p-sourced delivery was 0.958 and the two were indistinguishable at 4x zoom.\n\nTHAT REASONING IS NOW SUSPECT AND SHOULD BE RE-TESTED BEFORE 1080p IS SOLD OR DISMISSED. The SSIM comparison was made against a 720p SOURCE back when nothing in this repo could actually order 720p -- every render silently took the provider default, which is why section 24 of CLAUDE.md exists. On 2026-08-25 an ORDERED 720p turned out to deliver 1112x834, a genuine step up from 480p rather than the same file, which is exactly the shape of finding the old comparison could not have made. One metered 1080p run settles it.\n\nfal's own schema for this endpoint offers 480p, 720p, 1080p and 4k. Nothing here has read the 1080p page, and 4k is not in this file at all. Set `available: true` when there is a reason; `creditCost` refuses it until then rather than quietly rendering something else.",
       "estimate": true,
       "available": false,
       "width": 1920,
@@ -57,8 +78,16 @@
         "height": 1080
       },
       "_raster_comment": "Recorded for the same reason the rest of this row is: turning 1080p on later should be a field, not an archaeology exercise. Nothing may request it while `available` is false -- creditCost throws, and so does resolutionRaster in scripts/animate/plan.mjs.",
-      "estimatedUSDPer15s": 10.22,
-      "source": "ratio to the 720p anchor, UNVERIFIED"
+      "estimatedUSDPer15s": 10.2703,
+      "source": "ESTIMATE: the 1.1583 upscale measured at 720p applied to a 1440x1080 order, UNVERIFIED",
+      "delivered": {
+        "_comment": "A FORECAST, NOT A MEASUREMENT -- the 1.1583 upscale measured at 720p, applied to a 1440x1080 order. No 1080p job has ever run. `measuredOn` is null on purpose: a date here would make a guess look like an observation.",
+        "width": 1668,
+        "height": 1251,
+        "fps": null,
+        "measuredOn": null,
+        "jobIds": []
+      }
     }
   },
   "tiers": {
@@ -95,16 +124,16 @@
   },
   "plans": {
     "free": {
-      "_comment": "ESTIMATE. 16 credits is exactly one 480p tape (rescaled from 51 when creditUSD moved to $0.10; same one tape), which keeps the previously specified 'free: 1 tape per month' true under the credit mechanism. It is not enough for a 720p tape, and that is the shape of the free tier rather than an oversight. Zero is the only price in this file that cannot drift.",
-      "estimate": true,
+      "_comment": "MEASURED-DERIVED 2026-08-25, and it had to move or the free tier would have silently stopped working. It was 16 credits, chosen when a 480p tape cost 16; the metered delivery put a 480p tape at 21 CR, so 16 bought NOTHING -- an account could sign up, see a balance, and be refused at the button. Set to 42 = exactly TWO 480p tapes, at Paul's direction on 2026-08-25 (\"one or two videos, both 480p\"). Halving it to one tape is one edit and doubles nothing else.\n\nWHAT IT COSTS US: two tapes at $2.0727 is $4.15 of provider spend per signup, against no revenue and no card on file. That is the number section 3 of the credit-packs spec is about, and the GLOBAL CEILING it asks for -- a hard maximum on free tapes across all accounts -- DOES NOT EXIST YET. Until it does, this figure multiplied by however many people sign up in a day is the exposure, and nobody has set a bound on it.\n\nIT IS NOT ENOUGH FOR A 720p TAPE, and that is the shape of the free tier rather than an oversight: the free tape proves the likeness, and the paid tiers are what a person buys once they believe it. Zero is the only price in this file that cannot drift.",
+      "estimate": false,
       "id": "free",
       "label": "Free",
       "monthlyUSD": 0,
       "annualUSD": 0,
-      "creditsPerPeriod": 16
+      "creditsPerPeriod": 42
     },
     "shelf": {
-      "_comment": "ESTIMATE. 48 credits is exactly three 480p tapes (rescaled from 153; same three tapes), preserving the allowance the flat spec named -- or one 720p tape with a 480p one left over, which is the trade the credit model exists to let a person make. $10/month against $4.53 of estimated provider spend at full 480p usage is a 55% gross margin BEFORE any infrastructure; at full 720p usage it is 55% of one tape and then nothing, which is the correct behaviour and not a bug. annualUSD is ten months for twelve -- an interpretation of Paul's 'price it very small annually', not his words. NEEDS PAUL.",
+      "_comment": "STALE AND NOT SOLD. ESTIMATE. 48 credits is exactly three 480p tapes (rescaled from 153; same three tapes), preserving the allowance the flat spec named -- or one 720p tape with a 480p one left over, which is the trade the credit model exists to let a person make. $10/month against $4.53 of estimated provider spend at full 480p usage is a 55% gross margin BEFORE any infrastructure; at full 720p usage it is 55% of one tape and then nothing, which is the correct behaviour and not a bug. annualUSD is ten months for twelve -- an interpretation of Paul's 'price it very small annually', not his words. NEEDS PAUL.\n\nSTALE AS OF 2026-08-25: the tape counts above were computed when a 480p tape cost 16 credits. It costs 21, so this plan buys 2 480p tapes rather than the number named above. NOT RE-TUNED ON PURPOSE -- subscriptions are out of scope (Paul, 2026-08-25: the one-off pack stands), and re-pricing a plan nobody can buy would put an invented number in the money path. Re-derive it from the measured cost in the same edit that turns subscriptions back on.",
       "estimate": true,
       "id": "shelf",
       "label": "Shelf",
@@ -113,7 +142,7 @@
       "creditsPerPeriod": 48
     },
     "archive": {
-      "_comment": "ESTIMATE. 64 credits is exactly four 480p tapes (rescaled from 204; same four tapes), or one 720p tape plus one 480p. $12/month against $6.04 of estimated provider spend is a 50% gross margin; the annual rate at $10/month effective is 40%. The ladder is still weak on its own terms: two dollars and 51 credits apart is one extra 480p tape a month, which has to read as obviously worth two dollars or it looks like indecision. Flagged in docs/interfaces-app.md, unchanged by the move to credits, and worth revisiting the moment a --meter run gives these numbers a floor.",
+      "_comment": "STALE AND NOT SOLD. ESTIMATE. 64 credits is exactly four 480p tapes (rescaled from 204; same four tapes), or one 720p tape plus one 480p. $12/month against $6.04 of estimated provider spend is a 50% gross margin; the annual rate at $10/month effective is 40%. The ladder is still weak on its own terms: two dollars and 51 credits apart is one extra 480p tape a month, which has to read as obviously worth two dollars or it looks like indecision. Flagged in docs/interfaces-app.md, unchanged by the move to credits, and worth revisiting the moment a --meter run gives these numbers a floor.\n\nSTALE AS OF 2026-08-25: the tape counts above were computed when a 480p tape cost 16 credits. It costs 21, so this plan buys 3 480p tapes rather than the number named above. NOT RE-TUNED ON PURPOSE -- subscriptions are out of scope (Paul, 2026-08-25: the one-off pack stands), and re-pricing a plan nobody can buy would put an invented number in the money path. Re-derive it from the measured cost in the same edit that turns subscriptions back on.",
       "estimate": true,
       "id": "archive",
       "label": "Archive",
