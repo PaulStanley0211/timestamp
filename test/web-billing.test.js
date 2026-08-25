@@ -181,10 +181,15 @@ function completedSession({
   credits = PACK.credits,
   paymentStatus = 'paid',
   type = 'checkout.session.completed',
+  // Real Stripe events always say which mode they are in. The fixture defaults
+  // to live because that is the only kind of event a deployed server should
+  // ever pay out on; the tests that need the other kind say so explicitly.
+  livemode = true,
 } = {}) {
   return JSON.stringify({
     id,
     type,
+    livemode,
     data: {
       object: {
         id: 'cs_test_1',
@@ -374,6 +379,43 @@ test('an unpaid session grants nothing and is not retried', async () => {
     const res = await deliver(base, body, { signature: stripeSignature(body) });
     assert.equal(res.status, 200, 'a non-2xx would make Stripe retry an event we do not want');
     assert.equal((await res.json()).granted, false);
+    assert.deepEqual(await paymentRows(root, account.accountId), []);
+  }, { billing: configuredBilling() });
+});
+
+/**
+ * A test-mode event is signed exactly as honestly as a live one -- the
+ * signature proves who sent it, not that money moved. A test card costs its
+ * holder nothing, and credits buy real renders at real provider cost, so a
+ * paid-out test event would be free credits for anyone once the app is
+ * deployed. Acknowledged with a 200 because Stripe did nothing wrong and must
+ * not retry it; granted nothing because nothing was paid.
+ */
+test('a test-mode session grants nothing and is not retried', async () => {
+  await withApp(async ({ base, root }) => {
+    const account = await makeAccount(root);
+    const body = completedSession({ accountId: account.accountId, livemode: false });
+
+    const res = await deliver(base, body, { signature: stripeSignature(body) });
+    assert.equal(res.status, 200, 'a non-2xx would make Stripe retry an event we will never honour');
+    assert.deepEqual(await res.json(), { ok: true, granted: false, ignored: 'testmode' });
+    assert.deepEqual(await paymentRows(root, account.accountId), []);
+  }, { billing: configuredBilling() });
+});
+
+/** Absence is not a yes. An event that does not say which mode it is in is
+ *  treated exactly like a test one, because the safe reading of a missing
+ *  field is the one that grants nothing. */
+test('a session that does not say which mode it is in grants nothing', async () => {
+  await withApp(async ({ base, root }) => {
+    const account = await makeAccount(root);
+    const raw = JSON.parse(completedSession({ accountId: account.accountId }));
+    delete raw.livemode;
+    const body = JSON.stringify(raw);
+
+    const res = await deliver(base, body, { signature: stripeSignature(body) });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true, granted: false, ignored: 'testmode' });
     assert.deepEqual(await paymentRows(root, account.accountId), []);
   }, { billing: configuredBilling() });
 });

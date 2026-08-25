@@ -1132,6 +1132,18 @@ export function createServer({
         });
       }
 
+      // THE MODE IS CHECKED BEFORE ANY FIELD IS ACTED ON. The signature above
+      // proves Stripe sent these bytes; it does not prove money moved, because
+      // a test-mode event is signed exactly as honestly as a live one and a
+      // test card costs its holder nothing. Credits buy real renders at real
+      // provider cost, so nothing is paid out unless the event says, itself,
+      // that it is live -- and absence is not a yes: an event that does not
+      // carry the field is treated like a test one. 200, because Stripe did
+      // nothing wrong and must not retry.
+      if (event.livemode !== true) {
+        return sendJson(req, res, 200, { ok: true, granted: false, ignored: 'testmode' });
+      }
+
       // ONE EVENT, BECAUSE THERE IS ONE PACK. Everything else is acknowledged
       // so Stripe stops retrying events this product does not act on.
       if (event.type !== 'checkout.session.completed') {
