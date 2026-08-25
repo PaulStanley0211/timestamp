@@ -7,17 +7,18 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-25) — THE PREMISE IS PROVEN, AND THERE IS A CHECKOUT
+## START HERE (2026-08-25, afternoon) — THE PRICE LIST IS MEASURED
 
-**1197 tests / 1195 pass / 0 fail / 2 skipped.** The skips are the
+**1217 tests / 1214 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 Branch `ui-redesign-signed-in-page`; `origin/main` is still `b6f64a3`, so
 nothing is merged. Opening a PR is Paul's call, not a prerequisite.
 
 **This block is a HANDOFF, not a diary.** Everything struck through has moved
-into a numbered section. Section 25 is the newest and is the one to read before
-touching money; 22, 23 and 24 are the day before's, on cost, the web pages and
-resolutions.
+into a numbered section. **Section 26 is the newest and it is the one to read
+before touching money or resuming anything** — the 720p tier was metered, the
+price list moved, and three pass-through defects were found in one morning.
+Section 25 is the checkout; 22, 23 and 24 are the day before's.
 
 ### The one thing to know
 
@@ -26,6 +27,12 @@ through fifteen seconds of video with no intermediate image at all.** That was
 the only question that decided whether this is a product. It is answered — by
 `seedream/v4.5/edit` on the still and `seedance-2.0/reference-to-video` on the
 tape. **What is NOT answered is whether it holds for anyone who is not Paul.**
+
+**AND IT HOLDS AT 720p, ON PAUL'S OWN VERDICT (2026-08-25).** His words on the
+first 720p tape: *"it looks great ... especially the face ... it looks like it
+was real ... it doesn't look like AI."* That is the half of the blind check only
+he can give, on the tier the product will actually sell. The stranger half is
+still owed — item 2 below.
 
 ### What the product IS
 
@@ -60,13 +67,14 @@ and that is the designed state, not a gap.**
 
 **PAUL'S, and nobody else can do them:**
 
-1. **METER THE PARKED 720p JOB.** `20260824-225641-f34b4f` is on disk with every
-   free step run and `720p -> 960x720` frozen. One paid call:
-   `npm run render -- --resume=20260824-225641-f34b4f`, then
-   `npm run ledger -- record 20260824-225641-f34b4f --actual=<usd>`.
-   **If it comes back 752x560 — the same raster both 480p jobs returned — then
-   480p and 720p are the same product** and a customer paying 46 CR gets what
-   one paying 16 CR gets. That decides the whole price list. Section 24.
+1. ~~**METER THE PARKED 720p JOB.**~~ **DONE 2026-08-25 — section 26. THE TIER
+   IS REAL.** 960x720 ordered came back **1112x834**, which is 2.20x the pixels
+   of the 752x560 both 480p jobs returned. They are not the same product and
+   they can be priced separately and honestly. **What is still owed is one
+   number:** read fal's usage page for what that run actually cost and record it
+   — `npm run ledger -- record 20260824-225641-f34b4f --actual=<usd>`. The
+   formula predicts **$4.5646**; confirming it at a second tier is what makes
+   the whole price list measured rather than half-measured.
 2. **THE BLIND CHECK, still not done.** The packet is built and unsent at
    `out/blind-check/` — five images in `send/`, plus `BRIEF.md` with the exact
    wording, the protocol and the decode key. Two people, separate chats,
@@ -91,10 +99,11 @@ and that is the designed state, not a gap.**
    `.env.example`). **Verify with `stripe listen` before anything is live** —
    the Stripe CLI is already on this machine and delivers genuinely-signed
    events to localhost, so the whole path can be proven with no public url.
-6. **The estimator cannot tell 480p from 720p.** `--dry-run` quotes the
-   identical `$2.079` at both. Fix by pricing video on fal's token formula
-   rather than per second — `config/credits.json` already carries the formula
-   and it reproduces the real invoice to seven figures. Section 24.
+6. ~~**The estimator cannot tell 480p from 720p.**~~ **DONE 2026-08-25 —
+   section 26.** `--dry-run` now quotes **$2.0727 at 480p and $4.5646 at 720p**,
+   both the measured invoice to four decimals. It was TWO defects, not one: the
+   pricing table had no raster dimension, and `render.mjs` never handed the
+   `--resolution` flag to `dryRun()` at all. **§7's second gate is closed.**
 7. **The pricing page**: the "YOUR PLAN" pill is a bordered box (a third border
    in a world that permits two), and the three plans do not use the
    struck/ghost grammar at all. Section 23. **Possibly moot** if the UI world
@@ -1495,6 +1504,136 @@ exists.** Only going live needs the deployed endpoint. Note that a `stripe
 trigger` event carries no `client_reference_id`, so it will land as a 500
 `NO_ACCOUNT_ON_SESSION` — which is the correct behaviour and is what that test
 asserts; a real purchase carries one.
+
+---
+
+### 26. THE 720p TIER IS REAL, AND THREE THINGS WERE NOT HANDED ON (2026-08-25)
+
+**The parked job ran. 960x720 ordered, 1112x834 delivered.** That was the
+question that decided the price list and the answer is the good one.
+
+| tier | ordered | delivered | tokens | cost | CR @ $0.10 |
+|---|---|---|---|---|---|
+| 480p (x2 jobs) | 640x480 | **752x560** | 148,050 | **$2.0727** | 21 |
+| 720p | 960x720 | **1112x834** | 326,042 | **$4.5646** | 46 |
+| 1080p | — | never run | — | ~$10.27? | ~103? |
+
+**720p IS 2.20x THE PIXELS OF 480p.** Had it come back 752x560 there would have
+been one product and not two, and selling a tier would have been a claim on a
+public page that is not true. It can be sold. **Paul watched it and the likeness
+held** — see The one thing to know.
+
+#### Four findings from one measurement
+
+1. **480p WAS BEING SOLD BELOW COST.** $1.51 was the formula applied to the
+   raster we ASK for, and fal has never once delivered the raster it was asked
+   for. Real cost $2.0727, so **16 CR -> 21 CR**. Every 480p tape sold before
+   this lost 5 CR of cost basis.
+2. **720p WAS RIGHT BY ACCIDENT.** $4.54 came from 1280x720 — a 16:9 frame this
+   product never orders and fal has never sent — and landed within three cents
+   of the truth because two errors cancelled. **The spec's §2.1 wanted to LOWER
+   it to 35 CR** against a $3.40 forecast that assumed the raster was honoured.
+   Following the spec would have sold every 720p tape below cost. The gate held.
+3. **THE RATIO WAS WRONG, NOT JUST THE PRICE.** 480p was assumed to be about a
+   THIRD of 720p, on the stated theory that fal's fast tier is priced
+   differently. Measured, it is **0.454 — the pixel ratio to three decimals.**
+   fal bills tokens, tokens are pixels x seconds, and there is no separate tier
+   rate. The theory was reasoned and the invoice disagrees.
+4. **THE FREE PLAN HAD TO MOVE OR IT WOULD HAVE SILENTLY BROKEN.** 16 CR was
+   exactly one 480p tape and now buys nothing — an account could sign up, see a
+   balance and be refused at the button. It is **42: two 480p tapes**, at Paul's
+   direction, and still short of a 720p one. That is **$4.15 of provider spend
+   per signup** against no revenue, and **the global ceiling §3 asks for still
+   does not exist.**
+
+**AND THE $10 PACK CANNOT BUY A 720p TAPE.** 40 CR against 46. A customer buying
+one pack gets 480p only. That may be the ladder Paul wants; it is a product
+decision that only became visible once the tiers were measured.
+
+#### THREE PASS-THROUGH DEFECTS IN ONE MORNING, and they are one bug wearing three hats
+
+Every one is **a value that exists, is correct, and is simply not handed on** —
+and no unit test of the function that RECEIVES it can see the call site that
+forgot to pass it.
+
+| What was dropped | Where | What it did |
+|---|---|---|
+| `provider` | `--resume` | Resumed a `fal` job against `fixture`; the capability error was recorded as a real step failure, so **a job parked for a metered run was marked `failed` by a command meant to cost nothing** |
+| `--video-model` | `--resume` | Built a reference-to-video BODY (`image_urls`) and posted it to the image-to-video ENDPOINT (`image_url`). **fal answered 422** |
+| `--resolution` | `--dry-run` | Priced **every tier as 480p**. `dryRun()` had read `input.resolution` correctly the whole time |
+
+**NOTHING WAS CHARGED, BY LUCK.** The 422 happened because the two shapes were
+incompatible. **Had they agreed, the resume would have rendered with a model the
+manifest does not name, billed for it, and left the frozen block lying** — which
+is exactly the reproducibility that block exists to guarantee.
+
+**AND A FOURTH, WHICH IS THE ONE THAT NEARLY COST MONEY: `--dry-run` WAS
+IGNORED ENTIRELY ON A RESUME.** The `--resume` branch returns before the dry-run
+branch is ever reached, so the flag whose whole promise is *charges nothing* ran
+the job for real. It was caught only because the provider had ALSO defaulted
+wrong and died on a capability check first. **With `--provider=fal` typed on
+that same line — which is the correct command for the job — it would have been a
+paid call made by somebody who believed they were pricing it.**
+
+**THE FIX: the manifest wins, and a command line that CONTRADICTS it is refused
+by name.** `scripts/render/resume.mjs`, nine tests. Agreeing stays legal — naming
+the model a job already froze is how the metered run was finally made. A job that
+froze nothing falls back to the CLI and then to `fixture`, **never to a paid
+provider.**
+
+```
+20260824-225641-f34b4f froze video model "…/reference-to-video" and the command
+line asks for "…/image-to-video". A resumed render must be the render the
+manifest describes, or the frozen block stops meaning anything. Run it again
+without the flag to use what the job froze, or start a new job if you meant a
+different video model.
+```
+
+#### The estimator now prices by tokens
+
+`unit: "token"` on reference-to-video, and `delivered` is a measured **LOOKUP
+keyed by the ordered raster, not a coefficient** — the two upscales are not the
+same number (1.175 x 1.167 at 480p, 1.1583 on both axes at 720p) and a single
+factor cannot reproduce both. An unmetered raster is priced through
+`deliveredUpscaleFallback`, the LARGEST upscale seen, because **overstating cost
+understates margin and that is the safe direction.** A token-billed model
+**refuses to quote without a raster** rather than falling back to a per-second
+guess — that fallback is precisely the flattening being removed.
+
+**config/pricing.json and config/credits.json now have a cross-file test.** One
+prices what a render costs us, the other what a customer is charged; they are two
+files answering two questions from ONE measurement, so a future metering that
+corrects one and not the other goes red rather than leaving the estimator and the
+invoice quietly disagreeing.
+
+#### A defect in the tape that Paul found by watching it
+
+**A frozen frame once per second, every second, in every tape ever made.** fal
+delivers **24fps** and the contract is **25** — 361 source frames stretched to
+375 duplicates 15 of them, and `ffmpeg`'s `fps` filter places them at frames 12,
+37, 62, 87 … **exactly one every 25.** Periodic judder is the most visible kind,
+because the eye locks onto the rhythm.
+
+**Measured, not inferred:** `ffmpeg -vf fps=25 -f framehash` on the raw segment,
+counting consecutive identical hashes. It is separate from the DELIBERATE tape
+stutter at `droppedFrames: [201, 202]` — 8.04 seconds in — which is working
+exactly as designed.
+
+**fal's `duration` caps at 15**, so we cannot buy 15.625s of 24fps footage to
+fill 375 frames. The three ways out are: interpolate to 25fps and let the
+tapedeck add stutter where it WANTS it (the content/texture split this repo is
+built on); scatter the duplicates pseudo-randomly from the job seed so the
+metronome becomes tape unsteadiness; or leave it. **PAUL'S CALL, NOT TAKEN YET.**
+
+#### Two things fal's schema told us that this repo did not know
+
+- **The endpoint's `resolution` enum is `480p, 720p, 1080p, 4k`.** Config has
+  1080p off and no 4k at all.
+- **1080p's deferral is now SUSPECT.** "It buys nothing over 720p" rested on SSIM
+  0.958 against a **720p source measured back when nothing could actually ORDER
+  720p** — every render silently took the provider default. An ordered 720p just
+  turned out to be a genuine step up. One metered 1080p run settles it, and Paul
+  has said he wants to sell the tier.
 
 ---
 
