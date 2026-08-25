@@ -33,6 +33,7 @@
  * in: the alternative default hands one stranger's face to another.
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -57,6 +58,18 @@ export const SESSION_MAX_AGE_S = 30 * 24 * 60 * 60;
  *  become a path component, and "it came from us" is how directory traversal
  *  gets written every time. */
 export const ACCOUNT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * The anti-forgery cookie for the two routes that ESTABLISH a session.
+ *
+ * `SameSite=Lax` on the session cookie stops a foreign page acting AS a
+ * session; it does nothing to stop a foreign page CREATING one, because the
+ * login post needs no cookie at all. So `/login` and `/signup` demand a signed
+ * value that arrives twice -- once in this cookie, which a foreign origin
+ * cannot set, and once in a hidden field, which a foreign origin cannot read.
+ * A page that auto-submits somebody's credentials can supply neither half.
+ */
+export const CSRF_COOKIE = 'timestamp_csrf';
 
 export class AuthUnavailableError extends Error {
   constructor(cause) {
@@ -308,6 +321,48 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
   }
 
   // -------------------------------------------------------------------------
+  // proving a credential post came from this site's own form
+  // -------------------------------------------------------------------------
+
+  /**
+   * The pair for a form about to be rendered: the value for the hidden field,
+   * and the `Set-Cookie` that plants its twin -- or `setCookie: null` when the
+   * request already carries a valid one, which is what keeps a form opened in
+   * a second tab submittable after the first tab rendered a newer page.
+   */
+  async function csrfIssue(req) {
+    const mod = await api();
+    const sec = await secret();
+    const raw = parseCookies(req?.headers?.cookie)[CSRF_COOKIE];
+    if (typeof raw === 'string' && raw.length > 0 && mod.verifyCookie(raw, sec)) {
+      return { token: raw, setCookie: null };
+    }
+    const token = mod.signCookie(crypto.randomBytes(16).toString('hex'), sec);
+    return {
+      token,
+      setCookie: serializeCookie(CSRF_COOKIE, token, { secure: isSecureRequest(req) }),
+    };
+  }
+
+  /**
+   * Both halves present, the cookie half provably ours, and the two equal in
+   * constant time. The signature check comes first: an attacker who can plant
+   * arbitrary cookies from a sibling context still has to plant one WE minted,
+   * and the comparison after it leaks nothing about how close a guess came.
+   */
+  async function csrfCheck(req, token) {
+    if (typeof token !== 'string' || token.length === 0) return false;
+    const mod = await api();
+    const raw = parseCookies(req?.headers?.cookie)[CSRF_COOKIE];
+    if (typeof raw !== 'string' || raw.length === 0) return false;
+    if (!mod.verifyCookie(raw, await secret())) return false;
+    const ours = Buffer.from(raw, 'utf8');
+    const theirs = Buffer.from(token, 'utf8');
+    if (ours.length !== theirs.length) return false;
+    return crypto.timingSafeEqual(ours, theirs);
+  }
+
+  // -------------------------------------------------------------------------
   // credits
   // -------------------------------------------------------------------------
 
@@ -508,6 +563,8 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
     currentAccount,
     startSession,
     endSession,
+    csrfIssue,
+    csrfCheck,
     balance,
     cost,
     resolutions,

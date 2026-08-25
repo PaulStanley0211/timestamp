@@ -279,7 +279,12 @@ function nav({ account = null, balance = null } = {}) {
 </nav>`;
   }
   const left = balance ? creditMeter(balance) : '';
+  // The email is chrome, not decoration: every page says WHOSE account it is,
+  // so being signed into an account that is not yours -- however that happened
+  // -- is visible on sight instead of discoverable only from what later lands
+  // on the wrong shelf.
   return `<nav class="nav">
+  <span class="who">${h(account.email ?? '')}</span>
   ${left}
   <a href="/pricing">Plans</a>
   <form method="post" action="/logout" class="nav-form"><button type="submit">Sign out</button></form>

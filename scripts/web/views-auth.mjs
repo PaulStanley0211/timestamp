@@ -23,11 +23,15 @@
  * "shortly" rather than claiming a balance it has no way to know about. The
  * credits arrive on a signature-verified webhook or they do not arrive at all.
  *
- * WHY THESE FORMS CARRY NO CSRF TOKEN. The session cookie is `SameSite=Lax`, so
- * a cross-site form post arrives without it and lands as "not signed in" rather
- * than as an action taken on somebody's behalf. That covers every state-changing
- * POST here. A token would be the right answer if the cookie were `SameSite=None`
- * -- it is not, and `session-middleware.mjs` says why.
+ * WHY THE SIGN-IN AND SIGN-UP FORMS CARRY A HIDDEN `csrf` FIELD. `SameSite=Lax`
+ * on the session cookie stops a foreign page acting AS somebody's session,
+ * which covers every state-changing POST made while signed in. What it cannot
+ * stop is a foreign page CREATING a session: a login post needs no cookie, so
+ * a page that auto-submits the attacker's own credentials signs the visitor in
+ * as the attacker, and the next photograph they upload lands on the attacker's
+ * shelf. The field is one half of a signed pair -- the other half is a cookie
+ * only this origin can set -- and the server refuses these two posts without
+ * both. `session-middleware.mjs` owns the pair; these templates only carry it.
  *
  * WHY THE PASSWORD FIELD HAS `autocomplete` SET EXPLICITLY. `current-password`
  * on sign-in and `new-password` on sign-up is what tells a password manager to
@@ -54,7 +58,13 @@ function nextField(next) {
   return next ? `<input type="hidden" name="next" value="${h(next)}">` : '';
 }
 
-export function loginPage({ error = null, email = '', next = '', notice = null } = {}) {
+/** The hidden half of the anti-forgery pair. Rendered empty-safe so a page
+ *  built without a token still parses; the server never renders it that way. */
+function csrfField(csrf) {
+  return csrf ? `<input type="hidden" name="csrf" value="${h(csrf)}">` : '';
+}
+
+export function loginPage({ error = null, email = '', next = '', notice = null, csrf = '' } = {}) {
   const body = `
 <main>
   <section class="panel">
@@ -67,6 +77,7 @@ export function loginPage({ error = null, email = '', next = '', notice = null }
 
     <form method="post" action="/login">
       ${nextField(next)}
+      ${csrfField(csrf)}
       ${field({ id: 'email', name: 'email', label: 'Email', type: 'email', value: email, autocomplete: 'username' })}
       ${field({ id: 'password', name: 'password', label: 'Password', type: 'password', autocomplete: 'current-password' })}
       <button type="submit" class="record">Sign in</button>
@@ -79,7 +90,7 @@ export function loginPage({ error = null, email = '', next = '', notice = null }
   return layout({ title: 'Timestamp - sign in', body, bodyClass: 'page-login', wrapClass: 'wrap--narrow', chrome: false });
 }
 
-export function signupPage({ error = null, email = '', next = '', consentText = '' } = {}) {
+export function signupPage({ error = null, email = '', next = '', consentText = '', csrf = '' } = {}) {
   const body = `
 <main>
   <section class="panel">
@@ -92,6 +103,7 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
 
     <form method="post" action="/signup">
       ${nextField(next)}
+      ${csrfField(csrf)}
       ${field({ id: 'email', name: 'email', label: 'Email', type: 'email', value: email, autocomplete: 'username' })}
       ${field({
     id: 'password',

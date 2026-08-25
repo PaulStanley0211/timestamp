@@ -403,6 +403,43 @@ export function createServer({
     signup: createRateLimiter({ ...AUTH_RATE_LIMITS.signup, nowImpl }),
   };
 
+  /**
+   * A post that says where it came from must say here. Browsers put the
+   * posting page's origin on every form submission; a value naming another
+   * site is a cross-site post whatever else it carries. ABSENCE PASSES --
+   * non-browser clients name nothing, and the anti-forgery token below still
+   * gates them -- so this is the cheap early layer, not the proof.
+   */
+  function sameOriginPost(req) {
+    const origin = req.headers.origin;
+    if (origin === undefined) return true;
+    try {
+      return new URL(origin).host === String(req.headers.host ?? '');
+    } catch {
+      // 'null' and anything else unparseable: an opaque origin is not this one.
+      return false;
+    }
+  }
+
+  /**
+   * The 403 for a credential post that did not prove it came from this site's
+   * own form. The HTML answer is the form again, carrying a fresh pair, so the
+   * person a stale tab belongs to is one submit away from signed in -- the
+   * forger gets the same page and can do nothing with it.
+   */
+  async function refuseForgery(req, res, which, extras = {}) {
+    const message = 'We could not confirm that came from this site. Please try again below.';
+    const { token, setCookie } = await auths.csrfIssue(req);
+    const headers = setCookie ? { 'Set-Cookie': setCookie } : {};
+    if (wantsHtml(req)) {
+      const page = which === 'login'
+        ? loginPage({ error: message, csrf: token, ...extras })
+        : signupPage({ error: message, csrf: token, consentText, ...extras });
+      return sendHtml(req, res, 403, page, headers);
+    }
+    return sendJson(req, res, 403, { error: { status: 403, message, code: 'NOT_FROM_THIS_SITE' } }, headers);
+  }
+
   /** True when the 429 has been sent and the handler must stop. Decided before
    *  the body is read: the refusal must not depend on -- or reveal -- anything
    *  about what was being attempted. */
@@ -941,12 +978,16 @@ export function createServer({
 
     async loginPage(req, res, { query, account }) {
       if (account) return redirect(res, safeNext(query?.get('next')) || '/');
-      return sendHtml(req, res, 200, loginPage({ next: safeNext(query?.get('next')) }));
+      const { token, setCookie } = await auths.csrfIssue(req);
+      return sendHtml(req, res, 200, loginPage({ next: safeNext(query?.get('next')), csrf: token }),
+        setCookie ? { 'Set-Cookie': setCookie } : {});
     },
 
     async signupPage(req, res, { query, account }) {
       if (account) return redirect(res, safeNext(query?.get('next')) || '/');
-      return sendHtml(req, res, 200, signupPage({ next: safeNext(query?.get('next')), consentText }));
+      const { token, setCookie } = await auths.csrfIssue(req);
+      return sendHtml(req, res, 200, signupPage({ next: safeNext(query?.get('next')), consentText, csrf: token }),
+        setCookie ? { 'Set-Cookie': setCookie } : {});
     },
 
     /**
@@ -959,10 +1000,17 @@ export function createServer({
      */
     async login(req, res) {
       if (refuseOverLimit(req, res, 'login', loginPage)) return undefined;
+      if (!sameOriginPost(req)) return refuseForgery(req, res, 'login');
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const password = String(body.password ?? '');
       const next = safeNext(body.next);
+      const csrf = String(body.csrf ?? '');
+
+      // BEFORE the credentials are looked at. A post that cannot prove it came
+      // from this site's own form gets no opinion on whether a password was
+      // right, and no work spent finding out.
+      if (!(await auths.csrfCheck(req, csrf))) return refuseForgery(req, res, 'login', { email, next });
 
       const mod = await auths.api();
       let account = null;
@@ -980,7 +1028,9 @@ export function createServer({
       }
       if (!account) {
         const message = refusal ?? 'That email and password do not match an account.';
-        if (wantsHtml(req)) return sendHtml(req, res, 401, loginPage({ error: message, email, next }));
+        // The token that just verified is rendered back, so the retry the
+        // person is about to make still carries a valid pair.
+        if (wantsHtml(req)) return sendHtml(req, res, 401, loginPage({ error: message, email, next, csrf }));
         return sendJson(req, res, 401, { error: { status: 401, message } });
       }
 
@@ -991,13 +1041,21 @@ export function createServer({
 
     async signup(req, res) {
       if (refuseOverLimit(req, res, 'signup', (opts) => signupPage({ ...opts, consentText }))) return undefined;
+      if (!sameOriginPost(req)) return refuseForgery(req, res, 'signup');
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const password = String(body.password ?? '');
       const next = safeNext(body.next);
+      const csrf = String(body.csrf ?? '');
+
+      // Same gate, same order as login: the post proves where it came from
+      // before anything it says is acted on.
+      if (!(await auths.csrfCheck(req, csrf))) return refuseForgery(req, res, 'signup', { email, next });
 
       const reject = (message) => {
-        const html = signupPage({ error: message, email, next, consentText });
+        // The verified token rides along on every refusal, so the corrected
+        // form still submits.
+        const html = signupPage({ error: message, email, next, consentText, csrf });
         if (wantsHtml(req)) return sendHtml(req, res, 400, html);
         return sendJson(req, res, 400, { error: { status: 400, message } });
       };

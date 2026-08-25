@@ -250,11 +250,22 @@ const uploadParts = (salt = 'x', resolution = '480p') => ([
   { name: 'consent', body: 'yes' },
 ]);
 
+/** GET the form first, the way a browser does: the anti-forgery pair -- the
+ *  cookie off the response and the hidden field out of the HTML -- is required
+ *  to post credentials at all. */
+async function csrfPair(base, path = '/login') {
+  const res = await fetch(`${base}${path}`, { headers: { accept: 'text/html' } });
+  const cookie = res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  const csrf = (await res.text()).match(/name="csrf" value="([^"]+)"/)?.[1] ?? '';
+  return { cookie, csrf };
+}
+
 async function signIn(base, email, password) {
+  const pair = await csrfPair(base);
   const res = await fetch(`${base}/login`, {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ email, password }),
+    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: pair.cookie },
+    body: new URLSearchParams({ email, password, csrf: pair.csrf }),
     redirect: 'manual',
   });
   if (res.status !== 200) return null;
@@ -395,10 +406,11 @@ test('a browser is sent back where it was going after signing in', async () => {
     const res = await fetch(`${base}/j/${SHAPED_ID}`, { headers: { accept: 'text/html' }, redirect: 'manual' });
     assert.equal(res.headers.get('location'), `/login?next=${encodeURIComponent(`/j/${SHAPED_ID}`)}`);
 
+    const pair = await csrfPair(base);
     const login = await fetch(`${base}/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', next: `/j/${SHAPED_ID}` }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', next: `/j/${SHAPED_ID}`, csrf: pair.csrf }),
       redirect: 'manual',
     });
     assert.equal(login.status, 303);
@@ -418,10 +430,11 @@ test('next is only ever a same-origin absolute path', async () => {
 
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const pair = await csrfPair(base);
     const login = await fetch(`${base}/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', next: 'https://evil.example' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', next: 'https://evil.example', csrf: pair.csrf }),
       redirect: 'manual',
     });
     assert.equal(login.headers.get('location'), '/', 'an off-site next must be dropped, not followed');
@@ -443,10 +456,11 @@ test('the public pages answer without a session', async () => {
 
 test('signing up creates the account, starts a session and lands on the shelf', async () => {
   await withApp(async ({ base, auth }) => {
+    const pair = await csrfPair(base, '/signup');
     const res = await fetch(`${base}/signup`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'new@example.com', password: 'ten or more chars', consent: 'yes' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'new@example.com', password: 'ten or more chars', consent: 'yes', csrf: pair.csrf }),
       redirect: 'manual',
     });
     assert.equal(res.status, 303);
@@ -466,11 +480,12 @@ test('sign-up refuses a bad address, a short password and a missing consent', as
       { email: 'ok@example.com', password: 'short', consent: 'yes' },
       { email: 'ok@example.com', password: 'ten or more chars' },
     ];
+    const pair = await csrfPair(base, '/signup');
     for (const body of cases) {
       const res = await fetch(`${base}/signup`, {
         method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(body),
+        headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: pair.cookie },
+        body: new URLSearchParams({ ...body, csrf: pair.csrf }),
       });
       assert.equal(res.status, 400, `${JSON.stringify(body)} was accepted`);
     }
@@ -481,10 +496,11 @@ test('sign-up refuses a bad address, a short password and a missing consent', as
 test('a duplicate email is refused in the words of the auth module', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'taken@example.com', password: 'a long enough password' });
+    const pair = await csrfPair(base, '/signup');
     const res = await fetch(`${base}/signup`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'taken@example.com', password: 'another long one', consent: 'yes' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'taken@example.com', password: 'another long one', consent: 'yes', csrf: pair.csrf }),
     });
     assert.equal(res.status, 400);
     assert.ok((await res.text()).includes('That email already has an account.'));
@@ -500,15 +516,16 @@ test('a wrong password and an unknown email are the same 401 and the same senten
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
 
+    const pair = await csrfPair(base);
     const wrong = await fetch(`${base}/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'a@example.com', password: 'nope' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'nope', csrf: pair.csrf }),
     });
     const unknown = await fetch(`${base}/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'nobody@example.com', password: 'nope' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'nobody@example.com', password: 'nope', csrf: pair.csrf }),
     });
 
     assert.equal(wrong.status, 401);
@@ -525,19 +542,19 @@ test('a wrong password and an unknown email are the same 401 and the same senten
 // the limiter
 // ---------------------------------------------------------------------------
 
-const login = (base, { email = 'a@example.com', password = 'nope', accept = 'application/json' } = {}) =>
+const login = (base, { email = 'a@example.com', password = 'nope', accept = 'application/json', pair = { cookie: '', csrf: '' } } = {}) =>
   fetch(`${base}/login`, {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', accept },
-    body: new URLSearchParams({ email, password }),
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept, cookie: pair.cookie },
+    body: new URLSearchParams({ email, password, csrf: pair.csrf }),
     redirect: 'manual',
   });
 
-const signup = (base, email, { accept = 'application/json' } = {}) =>
+const signup = (base, email, { accept = 'application/json', pair = { cookie: '', csrf: '' } } = {}) =>
   fetch(`${base}/signup`, {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', accept },
-    body: new URLSearchParams({ email, password: 'a long enough password', consent: 'yes' }),
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept, cookie: pair.cookie },
+    body: new URLSearchParams({ email, password: 'a long enough password', consent: 'yes', csrf: pair.csrf }),
     redirect: 'manual',
   });
 
@@ -552,23 +569,24 @@ const signup = (base, email, { accept = 'application/json' } = {}) =>
 test('repeated login attempts from one address are refused, right password included', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const pair = await csrfPair(base);
 
     for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) {
-      assert.equal((await login(base)).status, 401, `attempt ${i + 1} is an ordinary refusal`);
+      assert.equal((await login(base, { pair })).status, 401, `attempt ${i + 1} is an ordinary refusal`);
     }
-    const over = await login(base);
+    const over = await login(base, { pair });
     assert.equal(over.status, 429);
     assert.match(over.headers.get('retry-after') ?? '', /^[0-9]+$/, 'a 429 without Retry-After is a puzzle, not an answer');
     const body = await over.json();
     assert.equal(body.error.status, 429);
     assert.ok(!body.error.message.includes('a@example.com'));
 
-    const right = await login(base, { password: 'a long enough password' });
+    const right = await login(base, { password: 'a long enough password', pair });
     assert.equal(right.status, 429, 'the limit must hold before credentials are examined, or it can be probed around');
 
     // The browser form gets a page with the sentence on it, same as every other
     // refusal on these routes.
-    const html = await login(base, { accept: 'text/html' });
+    const html = await login(base, { accept: 'text/html', pair });
     assert.equal(html.status, 429);
     assert.ok((await html.text()).includes('Too many'));
   });
@@ -578,12 +596,13 @@ test('the login window closes, and a genuine sign-in works again', async () => {
   let nowMs = Date.UTC(2026, 7, 25, 12, 0, 0);
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const pair = await csrfPair(base);
 
-    for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) await login(base);
-    assert.equal((await login(base)).status, 429);
+    for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) await login(base, { pair });
+    assert.equal((await login(base, { pair })).status, 429);
 
     nowMs += AUTH_RATE_LIMITS.login.windowMs + 1000;
-    const after = await login(base, { password: 'a long enough password' });
+    const after = await login(base, { password: 'a long enough password', pair });
     assert.equal(after.status, 200, 'a closed window must not keep refusing a genuine sign-in');
   }, { nowImpl: () => new Date(nowMs) });
 });
@@ -593,23 +612,147 @@ test('the login window closes, and a genuine sign-in works again', async () => {
  *  written, and the account count proves it. */
 test('signup attempts from one address are bounded, and no account is created past the bound', async () => {
   await withApp(async ({ base, auth }) => {
+    const pair = await csrfPair(base, '/signup');
     for (let i = 0; i < AUTH_RATE_LIMITS.signup.max; i += 1) {
-      assert.equal((await signup(base, `fresh-${i}@example.com`)).status, 201, `signup ${i + 1} is ordinary`);
+      assert.equal((await signup(base, `fresh-${i}@example.com`, { pair })).status, 201, `signup ${i + 1} is ordinary`);
     }
-    const over = await signup(base, 'one-too-many@example.com');
+    const over = await signup(base, 'one-too-many@example.com', { pair });
     assert.equal(over.status, 429);
     assert.match(over.headers.get('retry-after') ?? '', /^[0-9]+$/);
     assert.equal(auth.accounts.size, AUTH_RATE_LIMITS.signup.max, 'an account was created past the refusal');
   });
 });
 
-test('the session cookie is HttpOnly, SameSite=Lax and not Secure over plain HTTP', async () => {
+// ---------------------------------------------------------------------------
+// signing in is something only this site's own form can do
+// ---------------------------------------------------------------------------
+
+/** The sign-in form as a browser would receive it: the anti-forgery cookie from
+ *  the response and the matching hidden field out of the HTML. */
+async function loginForm(base, path = '/login') {
+  const res = await fetch(`${base}${path}`, { headers: { accept: 'text/html' } });
+  assert.equal(res.status, 200);
+  const cookie = res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  const match = (await res.text()).match(/name="csrf" value="([^"]+)"/);
+  assert.ok(match, `the ${path} form carries no csrf field`);
+  return { cookie, csrf: match[1] };
+}
+
+/**
+ * `SameSite=Lax` stops a foreign page acting AS somebody's session; it does
+ * nothing to stop a foreign page CREATING one. A page that auto-submits a
+ * login form with the attacker's own credentials signs the victim in as the
+ * attacker, and the next photograph they upload lands on the attacker's
+ * shelf. So establishing a session takes proof the post came from this
+ * site's own form: a signed value that arrives twice, once as a cookie only
+ * this origin can set and once as a field only this origin's page carries.
+ */
+test('a login posted without the form is refused, and no session comes back', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const res = await fetch(`${base}/login`, {
+
+    // Right credentials, no form: exactly what a cross-site auto-submitting
+    // form delivers, since a foreign page can neither read our form nor set
+    // our cookie.
+    const bare = await fetch(`${base}/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password' }),
+      redirect: 'manual',
+    });
+    assert.equal(bare.status, 403);
+    assert.deepEqual(bare.headers.getSetCookie().filter((c) => c.startsWith(SESSION_COOKIE)), [],
+      'a session cookie was minted for a post that proved nothing');
+
+    // A harvested field without its cookie: an attacker can fetch our form
+    // themselves and copy the value out, but they cannot plant the matching
+    // cookie in the victim's browser.
+    const { csrf } = await loginForm(base);
+    const fieldOnly = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', csrf }),
+      redirect: 'manual',
+    });
+    assert.equal(fieldOnly.status, 403);
+  });
+});
+
+test('the form flow signs in: cookie plus matching field plus credentials', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const { cookie, csrf } = await loginForm(base);
+    const res = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', csrf }),
+      redirect: 'manual',
+    });
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.getSetCookie().some((c) => c.startsWith(SESSION_COOKIE)), 'no session came back from the genuine flow');
+  });
+});
+
+/** The cheap second layer: a browser names where a post came from, and a post
+ *  that names somewhere else is refused before anything else is looked at. */
+test('a login or signup posted from another origin is refused whatever it carries', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const { cookie, csrf } = await loginForm(base);
+    for (const path of ['/login', '/signup']) {
+      const res = await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', cookie, origin: 'https://third-party.example' },
+        body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', consent: 'yes', csrf }),
+        redirect: 'manual',
+      });
+      assert.equal(res.status, 403, `${path} accepted a post that said it came from another site`);
+      assert.deepEqual(res.headers.getSetCookie().filter((c) => c.startsWith(SESSION_COOKIE)), []);
+    }
+  });
+});
+
+test('a signup posted without the form is refused and creates nothing', async () => {
+  await withApp(async ({ base, auth }) => {
+    const res = await fetch(`${base}/signup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ email: 'new@example.com', password: 'a long enough password', consent: 'yes' }),
+      redirect: 'manual',
+    });
+    assert.equal(res.status, 403);
+    assert.equal(auth.accounts.size, 0, 'an account was created for a post that proved nothing');
+  });
+});
+
+/**
+ * The other half of the same defence, and it is one line of HTML: the nav says
+ * WHOSE account this is. A takeover that signs the victim into somebody else's
+ * account is silent precisely when no page ever names the account -- with the
+ * email in the chrome, it is visible on every page instead.
+ */
+test('every signed-in page names the account it belongs to', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    for (const path of ['/', '/pricing']) {
+      const html = await (await fetch(`${base}${path}`, { headers: { cookie, accept: 'text/html' } })).text();
+      assert.ok(html.includes('a@example.com'), `${path} does not say whose account is signed in`);
+    }
+    // And never to a stranger.
+    const anon = await (await fetch(`${base}/`, { headers: { accept: 'text/html' } })).text();
+    assert.ok(!anon.includes('a@example.com'));
+  });
+});
+
+test('the session cookie is HttpOnly, SameSite=Lax and not Secure over plain HTTP', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const pair = await csrfPair(base);
+    const res = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', csrf: pair.csrf }),
     });
     const [cookie] = res.headers.getSetCookie();
     assert.ok(cookie.startsWith(`${SESSION_COOKIE}=`));

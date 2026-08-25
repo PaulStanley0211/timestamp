@@ -220,12 +220,16 @@ function fakeAuth() {
 }
 
 /** The `Cookie:` header for a signed-in session, obtained the way a browser
- *  obtains it: by posting the sign-in form and keeping what came back. */
+ *  obtains it: by fetching the form for its anti-forgery pair, then posting
+ *  the sign-in form and keeping what came back. */
 async function signIn(base, { email, password }) {
+  const form = await fetch(`${base}/login`, { headers: { accept: 'text/html' } });
+  const formCookie = form.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  const csrf = (await form.text()).match(/name="csrf" value="([^"]+)"/)?.[1] ?? '';
   const res = await fetch(`${base}/login`, {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ email, password }),
+    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: formCookie },
+    body: new URLSearchParams({ email, password, csrf }),
     redirect: 'manual',
   });
   assert.equal(res.status, 200, `sign-in for ${email} failed`);

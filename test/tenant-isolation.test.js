@@ -207,10 +207,16 @@ async function withTwoTenants(run) {
 }
 
 async function signIn(base, email, password) {
+  // The form first, the way a browser does: posting credentials requires the
+  // anti-forgery pair -- the cookie off the GET and the hidden field out of
+  // the HTML.
+  const form = await fetch(`${base}/login`, { headers: { accept: 'text/html' } });
+  const formCookie = form.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  const csrf = (await form.text()).match(/name="csrf" value="([^"]+)"/)?.[1] ?? '';
   const res = await fetch(`${base}/login`, {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ email, password }),
+    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: formCookie },
+    body: new URLSearchParams({ email, password, csrf }),
     redirect: 'manual',
   });
   if (res.status !== 200) return null;
