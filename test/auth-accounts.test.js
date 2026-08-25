@@ -534,6 +534,50 @@ test('an unknown email costs the same work as a wrong password, so the timing is
 });
 
 /**
+ * FOUR CELLS, NOT TWO. The test above pins known-vs-unknown for a normal
+ * password. But "the same amount of work" has to hold for every password a
+ * stranger can type, and an oversized one -- over PASSWORD.maxBytes, which any
+ * client can send -- takes a DIFFERENT code path on each branch: the unknown
+ * side burns equal work with a substitute, and the known side must not answer
+ * early, or the wall clock says which addresses hold an account here. For
+ * this product that disclosure is that a named person uploaded their face.
+ *
+ * Same discipline as above: a proportion with interleaved samples, never a
+ * wall-clock budget. The defect this guards against is an early return that
+ * skips the derivation entirely -- two orders of magnitude against a 4x
+ * margin.
+ */
+test('an oversized password takes the same work as a normal one, on both branches', async (t) => {
+  const root = makeRoot(t);
+  await signUp(root);
+  const oversized = 'a'.repeat(PASSWORD.maxBytes + 76);
+
+  const cells = {
+    'known-normal': { email: 'paul@example.com', password: 'not-the-password' },
+    'unknown-normal': { email: 'nobody@example.com', password: 'not-the-password' },
+    'known-oversized': { email: 'paul@example.com', password: oversized },
+    'unknown-oversized': { email: 'nobody@example.com', password: oversized },
+  };
+  const samples = Object.fromEntries(Object.keys(cells).map((k) => [k, []]));
+  for (let i = 0; i < 5; i += 1) {
+    for (const [name, { email, password }] of Object.entries(cells)) {
+      const at = process.hrtime.bigint();
+      try { await authenticate({ root, email, password }); } catch { /* expected */ }
+      samples[name].push(Number(process.hrtime.bigint() - at));
+    }
+  }
+  const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+  const medians = Object.fromEntries(Object.entries(samples).map(([k, xs]) => [k, median(xs) / 1e6]));
+  t.diagnostic(Object.entries(medians).map(([k, ms]) => `${k}: ${ms.toFixed(1)}ms`).join(' · '));
+
+  const values = Object.values(medians);
+  const fastest = Math.min(...values);
+  const slowest = Math.max(...values);
+  assert.ok(fastest > slowest / 4,
+    `the fastest cell answered in ${fastest.toFixed(1)}ms against ${slowest.toFixed(1)}ms -- that gap is an enumeration oracle`);
+});
+
+/**
  * Whether anything else got to run while `work` was deriving. `setImmediate`
  * fires on the next turn of the event loop, so if the derivation holds the
  * loop for its whole ~30ms, the flag is still false at the moment the work

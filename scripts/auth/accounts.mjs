@@ -558,7 +558,15 @@ export async function verifyPassword(account, password) {
   const parsed = parsePassword(encoded);
   if (parsed === null) return false;
   if (typeof password !== 'string') return false;
-  if (Buffer.byteLength(password, 'utf8') > PASSWORD.maxBytes) return false;
+  if (Buffer.byteLength(password, 'utf8') > PASSWORD.maxBytes) {
+    // The refusal is free but the answer must not be. An oversized password is
+    // one any stranger can send, and the unknown-email branch burns a full
+    // derivation for it -- so an early return HERE would make "this address
+    // holds an account" readable off the wall clock, which is the exact
+    // divergence this module's header forbids. Same work, then the same no.
+    await burnEqualWork(password);
+    return false;
+  }
 
   let candidate;
   try {
