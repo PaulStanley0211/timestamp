@@ -937,6 +937,38 @@ test('credits are spent when the job is enqueued, and the next one is refused', 
   });
 });
 
+/**
+ * The debit lands at enqueue, so a cancel BEFORE any worker claimed the job is
+ * a purchase of nothing: the queue says no lease was ever held, the manifest's
+ * steps say no provider was ever asked, and the person is entitled to their
+ * credits back. Wrong photo, immediate cancel, full price was the shape of the
+ * loss.
+ */
+test('cancelling a job the queue never claimed gives the credits back', async () => {
+  await withApp(async ({ base, auth }) => {
+    const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    assert.equal(auth.balanceOf(a).credits, 51);
+
+    const made = await fetch(`${base}/api/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
+      body: multipart(uploadParts()),
+    });
+    assert.equal(made.status, 201);
+    const { jobId } = await made.json();
+    assert.equal(auth.balanceOf(a).credits, 0, 'the tape was paid for at enqueue');
+
+    const cancelled = await fetch(`${base}/api/jobs/${jobId}`, { method: 'DELETE', headers: { cookie } });
+    assert.equal(cancelled.status, 200);
+    assert.equal(auth.balanceOf(a).credits, 51, 'a cancel before any render kept the money');
+    // As a new positive line, never an erased debit -- the ledger records both
+    // the charge and the return.
+    const rows = a.ledger.filter((e) => e.jobId === jobId);
+    assert.equal(rows.length, 2, 'the refund is a ledger line of its own');
+  });
+});
+
 test('a balance that covers 480p but not 720p refuses only the 720p tape', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 100 });

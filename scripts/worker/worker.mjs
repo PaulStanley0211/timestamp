@@ -208,6 +208,11 @@ const isAbortError = (err) => err?.name === 'AbortError' || err?.code === 'ABORT
  * @param {Function} [opts.nowImpl]           () => epoch ms (a Date is accepted)
  * @param {Function} [opts.sleepImpl]         (ms, signal) => Promise
  * @param {Function} [opts.runPipelineImpl]   injected in tests; never spends
+ * @param {Function} [opts.refundImpl]        async (job, {reason}) => {refunded, credits?, accountId?};
+ *                                            consulted when a job ends with no tape -- terminal failure
+ *                                            or cancellation. Null means this worker cannot refund
+ *                                            (no accounts wired), which is every test rig and the
+ *                                            direct-CLI render.
  * @param {Function} [opts.loadJobImpl]
  * @param {Function} [opts.saveJobImpl]
  * @param {Function} [opts.setIntervalImpl]
@@ -233,6 +238,7 @@ export function createWorker({
   nowImpl = () => Date.now(),
   sleepImpl = defaultSleep,
   runPipelineImpl = defaultRunPipeline,
+  refundImpl = null,
   loadJobImpl = loadJob,
   saveJobImpl = saveJob,
   setIntervalImpl = setInterval,
@@ -471,7 +477,35 @@ export function createWorker({
       }
     };
 
-    const failOnQueue = (err, retriable, step) => {
+    /**
+     * The customer's money, decided at the moment a job ends without a tape.
+     *
+     * The debit landed at enqueue, in the web process; the worker is where a
+     * job can die AFTER that, so the worker is where the case for giving the
+     * credits back gets raised. The seam reads the manifest's steps and
+     * declines on its own when a paid step was ever attempted -- this side
+     * only decides WHEN to ask: a terminal failure or a cancellation, never a
+     * retry the queue still owes an attempt. A refund that cannot be recorded
+     * is emitted rather than thrown, because the queue transition it rides on
+     * has already happened and must stand -- but it is emitted LOUDLY, since
+     * a missed refund is a person's money and somebody has to credit it by
+     * hand.
+     */
+    const tryRefund = async (jobArg, reason) => {
+      if (!refundImpl || !jobArg) return;
+      try {
+        const result = await refundImpl(jobArg, { reason });
+        if (result?.refunded) {
+          emit('refunded', {
+            jobId, reason, credits: result.credits ?? null, accountId: result.accountId ?? null,
+          });
+        }
+      } catch (err) {
+        emit('refund-failed', { jobId, reason, error: brief(err) });
+      }
+    };
+
+    const failOnQueue = async (err, retriable, step) => {
       try {
         const result = queue.fail(jobId, token, { error: err, retriable });
         emit('failed', {
@@ -484,6 +518,10 @@ export function createWorker({
           ms: now() - jobStartedAt,
           error: brief(err),
         });
+        // Only once the queue has said this was the LAST attempt. A refund
+        // while a retry is still owed pays the customer back for a tape they
+        // may yet receive.
+        if (result?.state === 'failed') await tryRefund(job, 'refund:failed-before-provider');
       } catch (queueErr) {
         if (queueErr?.code === 'LEASE_LOST') { loseLease(queueErr); return; }
         throw queueErr;
@@ -515,7 +553,7 @@ export function createWorker({
         // A queue pointer to a job with no readable manifest is the one state
         // this system cannot recover from -- there is nothing to resume and
         // retrying cannot make the file appear. Terminal, by name, in failed/.
-        failOnQueue(err, false, null);
+        await failOnQueue(err, false, null);
         return;
       }
 
@@ -532,6 +570,7 @@ export function createWorker({
         // A cancellation is not a failure. It must not burn a retry and it must
         // not land in failed/, or every cancelled job looks like a bug.
         completeOnQueue('cancelled', { reason: job.error?.message ?? null });
+        if (!leaseLost) await tryRefund(job, 'refund:cancelled-before-provider');
         return;
       }
       if (job.status === 'done') {
@@ -574,7 +613,7 @@ export function createWorker({
           releaseOnQueue('no-pipeline');
           throw err;
         }
-        failOnQueue(err, isRetriable(err), job.error?.step ?? openStep);
+        await failOnQueue(err, isRetriable(err), job.error?.step ?? openStep);
         return;
       }
 
@@ -588,6 +627,7 @@ export function createWorker({
           return;
         case 'cancelled':
           completeOnQueue('cancelled', { reason: final.error?.message ?? null });
+          if (!leaseLost) await tryRefund(final, 'refund:cancelled-before-provider');
           return;
         case 'awaiting-selection':
           // Parked in front of a human, and deliberately taken off the queue:
@@ -597,7 +637,7 @@ export function createWorker({
           completeOnQueue('awaiting-selection', { stillCount: final.input?.stillCount ?? null });
           return;
         case 'failed':
-          failOnQueue(final.error ?? new Error('pipeline reported a failed job'),
+          await failOnQueue(final.error ?? new Error('pipeline reported a failed job'),
             final.error?.retriable === true, final.error?.step ?? null);
           return;
         default:
@@ -608,7 +648,7 @@ export function createWorker({
           // straight back on the board and spin; failing retriably makes the
           // bug visible in `queue-cli peek --state=failed` after maxAttempts
           // instead of burning a CPU all night.
-          failOnQueue(
+          await failOnQueue(
             new WorkerError(
               `pipeline returned ${jobId} as ${final.status} with no stopAfter and no shutdown`,
               { code: 'PIPELINE_INCOMPLETE', jobId, detail: { status: final.status } },

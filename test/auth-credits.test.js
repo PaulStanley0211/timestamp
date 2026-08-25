@@ -64,6 +64,7 @@ import {
   refundCredits,
   refundIfUnspent,
 } from '../scripts/auth/credits.mjs';
+import { createOwnerRefunds } from '../scripts/web/session-middleware.mjs';
 
 const ACCOUNTS_URL = new URL('../scripts/auth/accounts.mjs', import.meta.url).href;
 const CREDITS_URL = new URL('../scripts/auth/credits.mjs', import.meta.url).href;
@@ -980,4 +981,59 @@ test('the two offered tiers deliver visibly different rasters', async () => {
   const ratio = (b.width * b.height) / (a.width * a.height);
   assert.ok(ratio > 1.5,
     `720p delivers ${(ratio).toFixed(2)}x the pixels of 480p -- too close to sell as separate tiers`);
+});
+
+// --------------------------------------------------------------------------
+// the owner-refund glue: what the worker hands a job that ended with no tape
+// --------------------------------------------------------------------------
+
+/** The web layer's ownership receipt, written the way `claimJob` writes it:
+ *  the file's existence at out/owners/<accountId>/<jobId>.json IS the fact. */
+function claimOnDisk(root, accountId, jobId) {
+  const dir = path.join(root, 'out', 'owners', accountId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${jobId}.json`), JSON.stringify({ jobId, accountId }));
+}
+
+test('the worker refund glue finds the owner and gives back what the steps never spent', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(1);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  assert.equal(balanceOf(account).credits, FREE - TAPE);
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({ root });
+  const result = await refunds.refund(jobWith([['intake', 1]], jobId), { reason: 'refund:failed-before-provider' });
+
+  assert.equal(result.refunded, true);
+  assert.equal(result.accountId, account.accountId);
+  const fresh = loadAccount({ root, accountId: account.accountId });
+  assert.equal(balanceOf(fresh).credits, FREE, 'the debit came back');
+  const rows = ledgerFor(fresh).filter((e) => e.jobId === jobId);
+  assert.equal(rows.length, 2, 'the refund is its own ledger line, never an erased debit');
+});
+
+test('the glue declines a job whose steps show a paid attempt, and money stays gone', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(2);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({ root });
+  const result = await refunds.refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+
+  assert.equal(result.refunded, false);
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE - TAPE,
+    'a provider was asked for something, so the money is gone and stays gone');
+});
+
+/** A job nobody owns is every direct-CLI render. Declining quietly is the
+ *  correct answer -- there is no ledger to give anything back to. */
+test('the glue answers a job with no owner by refunding nothing, not by throwing', async (t) => {
+  const root = makeRoot(t);
+  const refunds = createOwnerRefunds({ root });
+  const result = await refunds.refund(jobWith([['intake', 1]], JOB(3)), { reason: 'refund:failed-before-provider' });
+  assert.equal(result.refunded, false);
 });

@@ -34,6 +34,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { hostname } from 'node:os';
 import { createQueue, REPO_ROOT } from '../queue/queue.mjs';
+import { createOwnerRefunds } from '../web/session-middleware.mjs';
 import { createWorker, WorkerError } from './worker.mjs';
 
 export function parseArgs(argv) {
@@ -119,6 +120,14 @@ export function renderEvent(event, { verbose = false, t0 = null } = {}) {
 
     case 'cancelled':
       return line(`cancelled  ${job}  ${formatMs(e.ms)}  no attempt burned, nothing in failed/`);
+
+    case 'refunded':
+      return line(`refunded   ${job}  ${e.credits == null ? 'unspent credits returned' : `${e.credits} CR returned`}  (${e.reason})`);
+
+    case 'refund-failed':
+      // A person's money missed its way back. This line is the only witness,
+      // so it says what to do, not just what happened.
+      return line(`REFUND MISSED ${job}  [${e.error?.code ?? 'ERROR'}] ${e.error?.message}  -- credit it by hand`);
 
     case 'failed':
       return line(`FAILED     ${job}  ${formatMs(e.ms)}  [${e.error?.code ?? 'ERROR'}] ${e.error?.message}` +
@@ -230,6 +239,14 @@ async function main() {
     // `paidTransport` returns nothing at all for the fixture, so the free path
     // is byte-identical to what it was.
     providerCtx: paidTransport(provider),
+    // THE OTHER WIRE THAT MUST NOT DANGLE. The worker consults this seam when
+    // a job ends without a tape; the glue walks the ownership index back to
+    // the account that paid at enqueue and asks `refundIfUnspent`, which
+    // reads the manifest's steps and declines on its own if a paid step ever
+    // ran. Without this line, worker-side refunds exist only in the tests --
+    // the exact dangling-seam shape BUG 1 in CLAUDE.md section 8 had -- and
+    // a source-reading test in test/worker.test.js fails if it goes missing.
+    refundImpl: createOwnerRefunds({ root }).refund,
     signals: true,
     onEvent(event) {
       if (json) { console.log(JSON.stringify(event)); return; }

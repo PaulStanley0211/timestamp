@@ -200,6 +200,66 @@ export function missingAuthFunctions(auth) {
 }
 
 // ---------------------------------------------------------------------------
+// refunds for a job that ended with no tape, raised by the worker
+// ---------------------------------------------------------------------------
+
+/**
+ * The glue between the worker and the ledger.
+ *
+ * The debit lands at enqueue, in the web process, which has the account in its
+ * hand. The worker is where a job can die AFTER that, and the worker knows
+ * only a job id -- so this module, which owns the ownership index's layout,
+ * is the one that can walk from a job back to the account that paid for it.
+ * The index is `out/owners/<accountId>/<jobId>.json` and the file's existence
+ * is the fact, so the walk is one readdir and one stat per account.
+ *
+ * WHY IT DECLINES QUIETLY WHEN NO OWNER EXISTS. A job with no ownership entry
+ * is every direct-CLI render -- there is no ledger to give anything back to,
+ * and a worker that crashed over it would stop rendering for the customers
+ * who do have one.
+ *
+ * The refund decision itself is NOT made here: `refundIfUnspent` reads the
+ * manifest's steps and declines on its own when a paid step was ever
+ * attempted. This function only finds whose money it was.
+ */
+export function createOwnerRefunds({ root, loadAuthImpl = loadAuth, fsImpl = fs } = {}) {
+  if (typeof root !== 'string' || root.length === 0) {
+    throw new TypeError('createOwnerRefunds needs a root');
+  }
+  const ownersRoot = path.resolve(root, 'out', 'owners').split(path.sep).join('/');
+
+  function ownerOf(jobId) {
+    let names;
+    try {
+      names = fsImpl.readdirSync(ownersRoot);
+    } catch {
+      return null; // nobody has ever claimed anything
+    }
+    for (const accountId of names) {
+      if (!ACCOUNT_ID_RE.test(accountId)) continue;
+      try {
+        if (fsImpl.statSync(`${ownersRoot}/${accountId}/${jobId}.json`).isFile()) return accountId;
+      } catch { /* not this account's job */ }
+    }
+    return null;
+  }
+
+  return {
+    /** @returns {Promise<{refunded: boolean, accountId: string|null, credits?: number}>} */
+    async refund(job, { reason } = {}) {
+      const accountId = ownerOf(job?.jobId);
+      if (accountId === null) return { refunded: false, accountId: null };
+      const mod = await loadAuthImpl();
+      const account = mod.loadAccount({ root, accountId });
+      const before = mod.balanceOf(account).credits;
+      const refunded = mod.refundIfUnspent(account, job, { reason }) === true;
+      const credits = refunded ? mod.balanceOf(account).credits - before : 0;
+      return { refunded, accountId, ...(refunded ? { credits } : {}) };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // the middleware
 // ---------------------------------------------------------------------------
 

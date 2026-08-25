@@ -545,3 +545,109 @@ test('formatMs and parseArgs', () => {
   assert.equal(values.provider, 'fixture');
   assert.equal(values['poll-ms'], '250');
 });
+
+// --- refunds ----------------------------------------------------------------
+
+/**
+ * The debit happened at enqueue, in the web process. The worker is where a job
+ * can die AFTER that, so the worker is where the customer's case for their
+ * money back is decided -- and it hands the decision to the refund seam, which
+ * reads the manifest's steps and declines by itself when a paid step was ever
+ * attempted. What these tests pin is WHEN the seam is consulted: exactly once,
+ * and only on an outcome that ends the job without a tape.
+ */
+test('a job that fails for good is handed to the refund seam, once', async (t) => {
+  const clock = { now: T0 };
+  const refunds = [];
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async () => {
+      throw new TerminalError('the compose gate refused the still', { provider: 'fake', code: 'refused' });
+    },
+    refundImpl: async (job, { reason }) => {
+      refunds.push({ jobId: job.jobId, reason });
+      return { refunded: true, credits: 21 };
+    },
+  });
+  rig.seed();
+
+  assert.equal(await rig.worker.once(), true);
+
+  assert.equal(rig.queue.stats().failed, 1);
+  assert.deepEqual(refunds, [{ jobId: JOB_A, reason: 'refund:failed-before-provider' }]);
+  assert.equal(rig.of('refunded').length, 1, 'the operator can see money moved back');
+});
+
+test('a failure the queue will retry refunds nothing until the attempt that makes it final', async (t) => {
+  const clock = { now: T0 };
+  const refunds = [];
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async () => { throw new RetriableError('the provider hiccupped', { provider: 'fake' }); },
+    refundImpl: async (job, { reason }) => { refunds.push(reason); return { refunded: true }; },
+  });
+  rig.seed();
+
+  for (let attempt = 0; attempt < CFG.provider.maxAttempts; attempt += 1) {
+    await rig.worker.once();
+    clock.now += 60_000;
+    // A refund while the queue still intends to run the job again would pay
+    // the customer back for a tape they may yet receive.
+    if (attempt < CFG.provider.maxAttempts - 1) {
+      assert.deepEqual(refunds, [], `a refund fired while attempt ${attempt + 2} was still owed`);
+    }
+  }
+  assert.equal(rig.queue.stats().failed, 1);
+  assert.deepEqual(refunds, ['refund:failed-before-provider'], 'exactly one refund, on the attempt that made it final');
+});
+
+test('a job cancelled at a step boundary is handed to the refund seam', async (t) => {
+  const clock = { now: T0 };
+  const refunds = [];
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async (job) => {
+      cancelJob(job, 'cancelled by the person who uploaded it');
+      saveJob(job);
+      return job;
+    },
+    refundImpl: async (job, { reason }) => {
+      refunds.push({ jobId: job.jobId, reason });
+      return { refunded: true, credits: 21 };
+    },
+  });
+  rig.seed();
+
+  assert.equal(await rig.worker.once(), true);
+  assert.deepEqual(refunds, [{ jobId: JOB_A, reason: 'refund:cancelled-before-provider' }]);
+});
+
+test('a refund seam that throws does not take the worker down with it', async (t) => {
+  const clock = { now: T0 };
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async () => {
+      throw new TerminalError('the compose gate refused the still', { provider: 'fake', code: 'refused' });
+    },
+    refundImpl: async () => { throw new Error('the accounts module is not reachable'); },
+  });
+  rig.seed();
+
+  assert.equal(await rig.worker.once(), true, 'the job still failed cleanly on the queue');
+  assert.equal(rig.queue.stats().failed, 1);
+  assert.equal(rig.of('refund-failed').length, 1, 'the miss is visible, not swallowed');
+});
+
+/**
+ * The wire, not the function. The refund path existed once before with every
+ * piece tested and NO caller -- the exact shape BUG 1 in CLAUDE.md section 8
+ * had, where the fix lived in a file that no longer had the bug. Same defence
+ * as provider-contract.test.js: read the command's source and fail if the
+ * seam is not handed the real implementation.
+ */
+test('the worker CLI hands createWorker the owner-refund glue', () => {
+  const source = fs.readFileSync(new URL('../scripts/worker/worker-cli.mjs', import.meta.url), 'utf8');
+  assert.match(source, /refundImpl:\s*createOwnerRefunds\(\{\s*root\s*\}\)\.refund/,
+    'worker-cli must wire refundImpl to createOwnerRefunds, or worker-side refunds exist only in tests');
+  assert.match(source, /session-middleware\.mjs/, 'the glue comes from the module that owns the ownership index');
+});

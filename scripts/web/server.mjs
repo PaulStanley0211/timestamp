@@ -1722,7 +1722,7 @@ export function createServer({
      * job, it still appears on the shelf, and removing the entry would make the
      * cost record unreachable by the only person entitled to see it.
      */
-    cancelJob(req, res, { params, account }) {
+    async cancelJob(req, res, { params, account }) {
       const job = ownedJob(account, params.id);
       const paths = jobPaths(root, job.jobId);
 
@@ -1745,6 +1745,15 @@ export function createServer({
       if (!terminal) {
         markCancelled(job, 'cancelled by the person who uploaded it');
         saveJob(job);
+        // This branch is reached precisely when the queue says nobody ever
+        // held a lease, so no provider was asked for anything and the debit
+        // from enqueue bought nothing. Same call the create handler's catch
+        // makes: `refundIfUnspent` reads the manifest's steps and declines on
+        // its own if a paid step somehow ran, so this site needs no judgement
+        // -- only the decency to ask.
+        await auths.refund(account, {
+          jobId: job.jobId, job, reason: 'refund:cancelled-before-provider',
+        });
       }
       // REPORTED, NOT ASSUMED. `purgeJobMedia` returns what it could not delete
       // -- an unlink refused while `getVideo` streams the same file is EBUSY on
