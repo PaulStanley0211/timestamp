@@ -174,6 +174,19 @@ export async function main(argv = process.argv.slice(2), { log = console.log } =
   // of every one of these being absent and none of them is visible from a page.
   log(`  checkout   ${process.env.STRIPE_SECRET_KEY ? 'stripe key set' : 'NO STRIPE_SECRET_KEY -- /pricing will 503 on buy'}`);
   log(`  webhook    ${process.env.STRIPE_WEBHOOK_SECRET ? 'signing secret set' : 'NO STRIPE_WEBHOOK_SECRET -- deliveries will 503'}`);
+  if (process.env.STRIPE_WEBHOOK_SECRET) {
+    // THE HOST IS SPELLED OUT, AND THAT IS THE WHOLE POINT OF THIS LINE.
+    // This server binds IPv4 only. The Stripe CLI resolves `localhost` to IPv6
+    // `::1` on Windows and does NOT fall back, so `--forward-to localhost:3000`
+    // fails every delivery with "connectex: No connection could be made" while
+    // a browser on the same machine reaches the identical URL perfectly -- and
+    // the payment succeeds at Stripe with nothing to show for it locally. That
+    // cost a completed test checkout on 2026-08-25. Printing the address this
+    // process actually bound to is one line and it removes the guess.
+    log('');
+    log(`  forward webhooks here (IPv4, NOT localhost -- the CLI resolves that to ::1):`);
+    log(`    stripe listen --forward-to ${opts.host}:${bound}/api/stripe/webhook`);
+  }
 
   let inProcess = { stop: async () => {} };
   if (opts.withWorker) {

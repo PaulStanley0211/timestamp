@@ -7,18 +7,17 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-25, afternoon) — THE PRICE LIST IS MEASURED
+## START HERE (2026-08-25, evening) — A REAL PAYMENT WENT THROUGH
 
-**1217 tests / 1214 pass / 0 fail / 2 skipped.** The skips are the
+**1219 tests / 1217 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 Branch `ui-redesign-signed-in-page`; `origin/main` is still `b6f64a3`, so
 nothing is merged. Opening a PR is Paul's call, not a prerequisite.
 
 **This block is a HANDOFF, not a diary.** Everything struck through has moved
-into a numbered section. **Section 26 is the newest and it is the one to read
-before touching money or resuming anything** — the 720p tier was metered, the
-price list moved, and three pass-through defects were found in one morning.
-Section 25 is the checkout; 22, 23 and 24 are the day before's.
+into a numbered section. **START AT SECTION 27** — a test-mode card payment
+succeeded and the credits have NOT landed yet, and the one command that finishes
+it is in there. Section 26 is the measured price list; 25 is the checkout.
 
 ### The one thing to know
 
@@ -51,6 +50,12 @@ section 24.
 ---
 
 ### PICK UP HERE
+
+**PICK UP AT SECTION 27: ONE COMMAND FINISHES THE PAYMENT DEMO.** A real
+test-mode checkout was paid on 2026-08-25 and Stripe holds a completed session;
+the webhook could not be delivered because the CLI was forwarding to an IPv6
+address this server does not bind. **Do not pay again** — the event is
+redeliverable and the command is in section 27.
 
 **The Stripe checkout and webhook are BUILT — section 25.** `POST
 /api/billing/checkout` creates a hosted Checkout Session and 303s to Stripe;
@@ -1634,6 +1639,114 @@ metronome becomes tape unsteadiness; or leave it. **PAUL'S CALL, NOT TAKEN YET.*
   720p** — every render silently took the provider default. An ordered 720p just
   turned out to be a genuine step up. One metered 1080p run settles it, and Paul
   has said he wants to sell the tier.
+
+---
+
+### 27. A CARD WAS CHARGED AND THE CREDITS HAVE NOT LANDED (2026-08-25)
+
+**A real test-mode payment succeeded end to end on Stripe's side.** `4242` card,
+`$10.00`, on the test Price created the same day. **The webhook never reached
+this machine**, so nothing was granted. That is a two-word configuration fault,
+not a defect in any code this repo owns.
+
+#### FINISH IT WITH THIS — DO NOT PAY AGAIN
+
+The event is still on Stripe and is redeliverable. Three terminals:
+
+```bash
+stripe listen --forward-to 127.0.0.1:3000/api/stripe/webhook
+npm run web
+stripe events resend evt_1U8IWT0WJAHtsKz6p8dOUVen
+```
+
+**`127.0.0.1`, NOT `localhost`.** That is the whole bug — see below.
+
+**Expected:** `ps6475961@gmail.com` (`e9eb3f5999235f3a7074b01766bdb9db`) goes
+from **42 to 82 credits**, with a ledger row whose `ref` is that event id.
+
+**Then resend the SAME event a second time.** The balance must stay at 82 and the
+ledger must gain no row. That is the idempotency guard being proved against real
+Stripe redelivery rather than against a synthetic fixture, which is the one thing
+the test suite cannot do for itself.
+
+```bash
+npm run accounts -- ledger e9eb3f5999235f3a7074b01766bdb9db
+```
+
+#### THE BUG: this server binds IPv4 and the Stripe CLI dials IPv6
+
+```
+--> checkout.session.completed [evt_1U8IWT0WJAHtsKz6p8dOUVen]
+    [ERROR] Failed to POST: dial tcp [::1]:3000: connectex:
+            No connection could be made because the target machine actively refused it.
+```
+
+`server-cli.mjs` defaults to `host: '127.0.0.1'`, so `server.listen` binds **IPv4
+only**. On Windows the Stripe CLI resolves `localhost` to **`::1`** and does not
+fall back to IPv4. **A browser on the same machine reaches the identical URL
+perfectly**, which is what makes this so confusing: the checkout page worked, the
+payment worked, and only the callback silently could not connect.
+
+**Fixed by making it impossible to guess:** when a webhook secret is configured,
+the startup banner now prints the exact command using the address the process
+actually bound to.
+
+```
+  forward webhooks here (IPv4, NOT localhost -- the CLI resolves that to ::1):
+    stripe listen --forward-to 127.0.0.1:3000/api/stripe/webhook
+```
+
+**`TIMESTAMP_PUBLIC_URL` stays `http://localhost:3000`** and that is not a
+contradiction. It is where STRIPE SENDS THE BROWSER BACK TO, and the browser must
+return to the same host it signed in on or the session cookie does not travel --
+`localhost` and `127.0.0.1` are different hosts to a cookie jar. So: the browser
+uses `localhost`, the CLI forwards to `127.0.0.1`, and both are right.
+
+#### WHAT THE PAYMENT PROVED, and it is most of the path
+
+Everything this repo puts on a Checkout Session arrived at Stripe correctly.
+Read back off the live event with `stripe events retrieve`:
+
+| field | value |
+|---|---|
+| `payment_status` | **paid** |
+| `amount_total` | `1000` USD |
+| `mode` | `payment` — one-off, not a subscription |
+| `client_reference_id` | `e9eb3f5999235f3a7074b01766bdb9db` |
+| `metadata` | `{accountId, credits: "40", pack: "starter"}` |
+| `livemode` | **false** |
+
+So the outbound half is proven against the real API: the key authenticates, the
+Price resolves, the account id rides on `client_reference_id`, and the credit
+count the customer was promised is on the session where the webhook expects it.
+**What is unproven is the inbound half** -- signature verification against a
+genuinely Stripe-signed delivery, and the grant landing. That is what the resend
+above finishes.
+
+#### Two things noticed in passing
+
+- **`adaptive_pricing: { enabled: true }`** is on the session. That is Stripe
+  showing international customers a local currency, which means `amount_total`
+  is not always USD and the ledger's credit count must never be derived from it.
+  It is not: the count comes from `metadata.credits`. Worth knowing before
+  anybody "improves" that.
+- **The free grant of 42 credits is landing.** Both accounts created today --
+  `plstnly06@gmail.com` and `ps6475961@gmail.com` -- opened on exactly 42, which
+  is two 480p tapes at the measured price. Signup works.
+
+#### The setup, for whoever does this next
+
+`.env` needs three values and **none of them has to be typed by hand.** The
+Stripe CLI already holds a `sk_test_` key from `stripe login`, and
+`stripe listen --print-secret` yields the signing secret, so a script can move
+both into `.env` without either ever appearing on a screen. One was written to
+the scratchpad on 2026-08-25; **the resolver detail worth keeping is that on
+Windows the CLI is an npm shim** -- `stripe.cmd`, no `.exe` -- so
+`execFileSync('stripe')` fails with `ENOENT` on a machine where typing `stripe`
+works. Resolve the real file and pass `shell: true` for a `.cmd`.
+
+**The test Price is `price_1U8I1t0WJAHtsKz673YZyToR` on
+`prod_V8ZAgOINl0TIkL`, `livemode: false`. It must not go live** -- section 25.
 
 ---
 
