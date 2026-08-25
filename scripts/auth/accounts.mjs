@@ -123,6 +123,39 @@ export const OWNERS_DIR = 'out/owners';
  *  lowercase hex characters and nothing else. */
 export const INDEX_DIR = '_index';
 
+/**
+ * How many free tapes this installation has given away, ever.
+ *
+ * THE ONLY PIECE OF GLOBAL STATE IN THE ACCOUNT STORE, and it is here rather
+ * than in a database because there is no database -- the pricing spec's section
+ * 4 is explicit that a pack ships on the file ledger and revenue is not blocked
+ * behind Supabase. It sits beside `_index` under the same root, underscore
+ * prefixed for the same collision-proof reason, so that one `--root` still
+ * moves a whole installation including its spend bound.
+ *
+ * WHY A STORED COUNT, IN A CODEBASE WHOSE FIRST RULE IS THAT THE BALANCE IS
+ * NEVER STORED. The balance is derived because there is exactly one place to
+ * derive it from -- one account's own append-only ledger -- and a stored copy
+ * could disagree with it. This number has no such source. Deriving it means
+ * scanning every account directory on the filesystem at every signup, which is
+ * unbounded work on the hot path of the one operation that must stay cheap; and
+ * far worse, A SCAN CANNOT BE ATOMIC WITH THE GRANT. Two signups landing
+ * together both scan, both count N-1, and both grant. Making that safe needs a
+ * global lock, and once the lock is held the counter file costs nothing extra.
+ * So the lock is the real mechanism and the file is just where it writes.
+ *
+ * IT IS A RESERVATION REGISTER, NOT A SECOND OPINION ABOUT MONEY. The ledger
+ * rows are still the audit trail for what was granted. This answers only "may
+ * another one be given away", and it is incremented BEFORE the account record
+ * is written, deliberately. A crash in the gap leaves the count one ahead of
+ * reality, so the ceiling arrives one tape early -- headroom lost, which is
+ * survivable. The other ordering loses the reservation and grants a tape the
+ * ceiling had already spent, which is the failure this whole file exists to
+ * prevent. Same reasoning, same direction, as debitCredits happening before the
+ * queue entry is written.
+ */
+export const FREE_TAPES_FILE = '_free-tapes.json';
+
 export const ACCOUNT_ID_RE = /^[0-9a-f]{32}$/;
 
 /**
@@ -198,8 +231,41 @@ export function creditConfig({ root = REPO_ROOT, reload = false } = {}) {
       });
     }
   }
+  // THE FREE-TAPE CEILING IS CHECKED HERE FOR A STRONGER REASON THAN THE PACKS
+  // ARE. A missing pack field is caught when somebody tries to buy something. A
+  // missing ceiling is caught by NOBODY: the free grant would simply carry on
+  // being handed out, exactly as it does today, and the file would look like it
+  // had a bound on it. A guard that silently becomes absent is worse than one
+  // that was never written, so the process refuses to start instead.
+  assertCeiling(parsed?.freeTape?.globalCeiling, `${file} (freeTape.globalCeiling)`);
+  if (typeof parsed?.freeTape?._comment !== 'string' || parsed.freeTape._comment.length === 0) {
+    throw new AuthError(`freeTape in ${file} carries no _comment saying where its number came from`, {
+      code: 'BAD_CREDIT_CONFIG',
+    });
+  }
+
   creditConfigCache = deepFreeze(parsed);
   return creditConfigCache;
+}
+
+/**
+ * A ceiling is a whole number of tapes, zero or more, and anything else throws.
+ *
+ * NO FALLBACK, ON PURPOSE. The tempting default for an unreadable ceiling is
+ * "no limit", and that is the single worst value it could take: the config file
+ * would claim a bound, the code would enforce nothing, and the discrepancy
+ * would surface as an invoice. `Infinity` and a float are both rejected by name
+ * because both survive a `typeof x === 'number'` check that somebody will
+ * eventually write instead of this one.
+ */
+function assertCeiling(ceiling, where) {
+  if (!Number.isInteger(ceiling) || ceiling < 0) {
+    throw new AuthError(
+      `the free-tape ceiling must be a whole number of tapes, zero or more; ${where} is ${JSON.stringify(ceiling)}`,
+      { code: 'BAD_FREE_TAPE_CEILING', detail: { ceiling: ceiling ?? null } },
+    );
+  }
+  return ceiling;
 }
 
 function deepFreeze(value) {
@@ -682,29 +748,196 @@ function stealIfStale(file, nowMs) {
  */
 export function withAccountLock({ root = REPO_ROOT, accountId }, fn) {
   const paths = accountPaths(root, accountId);
-  fs.mkdirSync(paths.dir, { recursive: true });
+  return withFileLock({
+    lock: paths.lock,
+    onTimeout: () => new AuthError(`timed out waiting for the lock on account ${accountId}`, {
+      code: 'ACCOUNT_LOCKED',
+      accountId,
+      userMessage: 'We are still finishing your last request. Please try again in a moment.',
+    }),
+  }, fn);
+}
+
+/**
+ * The lock itself, with nothing about accounts in it.
+ *
+ * EXTRACTED RATHER THAN COPIED, and that is the whole point of it existing. The
+ * free-tape register needs exactly this mutual exclusion and is NOT keyed by an
+ * account id -- it is one file for the whole installation, so it cannot go
+ * through `withAccountLock`, whose path builder rejects anything that is not 32
+ * hex characters. The alternative was a second lock loop, and a second
+ * hand-written lock is how a codebase ends up with one that is correct and one
+ * that looks correct: this repo already MEASURED that `unlink` and `rename` are
+ * not exclusive on Windows while `openSync(path,'wx')` is, and that measurement
+ * is embodied here once. See the WINNER SELECTION comment in
+ * scripts/queue/queue.mjs.
+ *
+ * `onTimeout` builds the error rather than receiving one, so the caller can say
+ * which resource was contended without this function knowing what a resource
+ * is, and so the message is not constructed on the path where nothing is wrong.
+ */
+function withFileLock({ lock, onTimeout }, fn) {
+  fs.mkdirSync(path.dirname(lock), { recursive: true });
   const started = Date.now();
   let delay = 0;
 
   for (;;) {
-    if (tryExclusiveCreate(paths.lock, { pid: process.pid, at: Date.now() })) {
+    if (tryExclusiveCreate(lock, { pid: process.pid, at: Date.now() })) {
       try {
         return fn();
       } finally {
-        try { fs.rmSync(paths.lock, { force: true }); } catch { /* stealIfStale will clear it */ }
+        try { fs.rmSync(lock, { force: true }); } catch { /* stealIfStale will clear it */ }
       }
     }
-    stealIfStale(paths.lock, Date.now());
-    if (Date.now() - started > LOCK_TIMEOUT_MS) {
-      throw new AuthError(`timed out waiting for the lock on account ${accountId}`, {
-        code: 'ACCOUNT_LOCKED',
-        accountId,
-        userMessage: 'We are still finishing your last request. Please try again in a moment.',
-      });
-    }
+    stealIfStale(lock, Date.now());
+    if (Date.now() - started > LOCK_TIMEOUT_MS) throw onTimeout();
     sleepSync(delay);
     delay = Math.min(delay === 0 ? 1 : delay * 2, 16);
   }
+}
+
+// ---------------------------------------------------------------------------
+// the free-tape ceiling
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a plan is a giveaway, and therefore whether the ceiling applies.
+ *
+ * THE TEST IS THE PRICE, NOT THE NAME. `planId === 'free'` would be the obvious
+ * spelling and it is the wrong one: it bounds a string rather than the property
+ * that actually costs money, so a promotional plan added at $0 under any other
+ * name would hand out provider spend with nothing counting it. Zero is also the
+ * one number in config/credits.json that its own comment says cannot drift.
+ *
+ * It lives here, exported, because `createAccount` and `grantPlanPeriod` both
+ * need it and two spellings of "is this free" is how one of them ends up
+ * bounded and the other does not.
+ */
+export function isFreePlan(planId) {
+  return PLANS[assertPlanId(planId)].monthlyUSD === 0;
+}
+
+/** The register and its lock. A sibling of the record, never a field inside it,
+ *  for the same reason the account lock is: a lock written into the file it
+ *  protects has to be read through the very write it protects against. */
+export function freeTapePaths(root = REPO_ROOT) {
+  const { dir } = accountsRoot(root);
+  return { record: `${dir}/${FREE_TAPES_FILE}`, lock: `${dir}/${FREE_TAPES_FILE}.lock` };
+}
+
+/** The configured ceiling. Read through `creditConfig` on every call rather
+ *  than captured at module scope, so that `reload: true` in a test reaches it
+ *  like every other number in that file. */
+export function freeTapeCeiling({ root = REPO_ROOT } = {}) {
+  return creditConfig({ root }).freeTape.globalCeiling;
+}
+
+/**
+ * How many free tapes have been given away, and whether there is room for one
+ * more. Read-only: it takes no lock and writes nothing.
+ *
+ * A MISSING FILE IS ZERO, NOT AN ERROR, and that is the one place a default is
+ * right in this module. An installation that has never granted a free tape has
+ * genuinely granted zero of them, and there is no other value it could mean.
+ * Creating the file on a read would mean `accounts -- list` left state behind
+ * it, and the number it wrote would be indistinguishable from a real one.
+ */
+export function freeTapeState({ root = REPO_ROOT, ceiling = freeTapeCeiling({ root }) } = {}) {
+  assertCeiling(ceiling, 'the ceiling passed to freeTapeState');
+  const granted = readGrantedCount(freeTapePaths(root).record);
+  return {
+    granted,
+    ceiling,
+    // Clamped at zero: if the count is ever above the ceiling -- which happens
+    // the moment somebody LOWERS the ceiling, a completely legitimate act -- the
+    // honest answer to "how many are left" is none, not a negative number that
+    // arithmetic elsewhere would treat as room.
+    remaining: Math.max(0, ceiling - granted),
+    exhausted: granted >= ceiling,
+  };
+}
+
+function readGrantedCount(file) {
+  const record = readJson(file, { missingOk: true });
+  if (record === null) return 0;
+  const granted = Number(record?.granted);
+  if (!Number.isInteger(granted) || granted < 0) {
+    // A corrupt register is NOT read as zero. Zero means "give everything away
+    // again", which is the most expensive possible interpretation of a damaged
+    // file, and it would be reached by the one account store that had already
+    // shown it could not be trusted.
+    throw new AuthError(`the free-tape register at ${file} is unreadable: granted is ${JSON.stringify(record?.granted)}`, {
+      code: 'FREE_TAPE_REGISTER_CORRUPT',
+      detail: { file },
+    });
+  }
+  return granted;
+}
+
+/**
+ * Claims one free tape against the global ceiling, or reports that there are
+ * none left. The read and the write are one critical section, which is the
+ * entire reason this function exists rather than a comparison at the call site.
+ *
+ * RETURNS RATHER THAN THROWS WHEN THE CEILING IS REACHED. Being full is not an
+ * error -- it is the product having given away what it chose to give away, and
+ * the caller is a signup that must still succeed. An exception here would turn
+ * "no free credits" into "you cannot create an account", which converts a
+ * spending decision into an outage.
+ */
+export function reserveFreeTape({ root = REPO_ROOT, ceiling = freeTapeCeiling({ root }), nowImpl = defaultNow } = {}) {
+  assertCeiling(ceiling, 'the ceiling passed to reserveFreeTape');
+  const paths = freeTapePaths(root);
+
+  return withFileLock({
+    lock: paths.lock,
+    onTimeout: () => new AuthError('timed out waiting for the lock on the free-tape register', {
+      code: 'FREE_TAPES_LOCKED',
+      userMessage: 'We are still finishing another signup. Please try again in a moment.',
+    }),
+  }, () => {
+    const granted = readGrantedCount(paths.record);
+    // `>=` and not `>`. At a ceiling of zero these differ, and zero is the kill
+    // switch somebody reaches for while a balance is draining.
+    if (granted >= ceiling) return { reserved: false, granted, ceiling };
+
+    const next = granted + 1;
+    atomicWriteJson(paths.record, {
+      schemaVersion: SCHEMA_VERSION,
+      granted: next,
+      updatedAt: toDate(nowImpl()).toISOString(),
+    }, null);
+    return { reserved: true, granted: next, ceiling };
+  });
+}
+
+/**
+ * Hands a reservation back, for the one caller that took one and then could not
+ * use it: a signup that lost the race for its own email address.
+ *
+ * NOT CALLED ON ANY ERROR PATH, and deliberately not wrapped in one. Losing a
+ * reservation to a crash costs a tape of headroom and the ceiling arrives early;
+ * releasing one that was actually used costs a tape of real money. Only the
+ * caller that KNOWS the account was destroyed may call this.
+ */
+export function releaseFreeTape({ root = REPO_ROOT, nowImpl = defaultNow } = {}) {
+  const paths = freeTapePaths(root);
+  return withFileLock({
+    lock: paths.lock,
+    onTimeout: () => new AuthError('timed out waiting for the lock on the free-tape register', {
+      code: 'FREE_TAPES_LOCKED',
+    }),
+  }, () => {
+    const granted = readGrantedCount(paths.record);
+    if (granted === 0) return { granted: 0 };
+    const next = granted - 1;
+    atomicWriteJson(paths.record, {
+      schemaVersion: SCHEMA_VERSION,
+      granted: next,
+      updatedAt: toDate(nowImpl()).toISOString(),
+    }, null);
+    return { granted: next };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -758,6 +991,11 @@ export function createAccount({
   password,
   plan = DEFAULT_PLAN_ID,
   consent = null,
+  // Injected exactly as `nowImpl` and `rand` are, and for the same reason: a
+  // test that wants to prove the ceiling holds should be able to state the
+  // number it is testing instead of creating a hundred accounts to reach the
+  // real one. Production never passes it.
+  ceiling = undefined,
   nowImpl = defaultNow,
   rand = crypto,
 }) {
@@ -774,6 +1012,29 @@ export function createAccount({
   const consentBlock = normaliseConsent(consent, nowImpl);
   const at = toDate(nowImpl()).toISOString();
   const accountId = newAccountId({ rand });
+
+  // THE GLOBAL CEILING, AND IT IS CLAIMED HERE -- after the cheap duplicate
+  // check, so an ordinary "you already have an account" never burns one, and
+  // before the record is written, so a crash costs headroom rather than money.
+  //
+  // ONLY THE FREE PLAN IS BOUNDED. A paid plan's credits were bought; counting
+  // them here would exhaust the giveaway on the people who are not being given
+  // anything. `reserved` is therefore trivially true for every other plan, and
+  // the register is not touched at all.
+  const isFree = isFreePlan(planId);
+  const reservation = isFree
+    ? reserveFreeTape({ root, nowImpl, ...(ceiling === undefined ? {} : { ceiling }) })
+    : { reserved: true };
+
+  // A WITHHELD GRANT IS STILL AN EVENT, so it is a row with a delta of zero
+  // rather than an empty ledger. `createAccount`'s contract below is that an
+  // account with no ledger line is an account whose balance is zero for a
+  // reason nothing recorded, and "we had already given away everything we
+  // decided to give away" is exactly the reason somebody will be looking for
+  // when they read this account back and ask why it started empty.
+  const opening = reservation.reserved
+    ? { at, delta: PLANS[planId].creditsPerPeriod, jobId: null, reason: 'grant:signup' }
+    : { at, delta: 0, jobId: null, reason: 'grant:signup:withheld-global-ceiling' };
 
   const account = attach({
     schemaVersion: SCHEMA_VERSION,
@@ -796,12 +1057,7 @@ export function createAccount({
     // The opening entry is the plan's first grant, written here rather than
     // left to a later call, because an account that exists with no ledger line
     // is an account whose balance is zero for a reason nothing recorded.
-    ledger: [{
-      at,
-      delta: PLANS[planId].creditsPerPeriod,
-      jobId: null,
-      reason: 'grant:signup',
-    }],
+    ledger: [opening],
   }, { root, nowImpl });
 
   fs.mkdirSync(account.paths.dir, { recursive: true });
@@ -812,6 +1068,14 @@ export function createAccount({
     // the record just written: it is unreachable, and its directory name is 16
     // random bytes, so nothing else can possibly be pointing at it.
     try { fs.rmSync(account.paths.dir, { recursive: true, force: true }); } catch { /* orphan, not a leak */ }
+    // And give the free tape back. This is the one place that may: the account
+    // it was reserved for has just been destroyed, so the reservation is
+    // provably unused rather than merely probably unused. Failing to release it
+    // costs a tape of headroom and nothing else, which is why the release is
+    // allowed to fail quietly and the reservation is not.
+    if (reservation.reserved && isFree) {
+      try { releaseFreeTape({ root, nowImpl }); } catch { /* headroom, not money */ }
+    }
     throw emailTaken(address);
   }
   return account;

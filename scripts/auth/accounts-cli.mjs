@@ -47,6 +47,7 @@ import {
   REPO_ROOT,
   createAccount,
   findAccountByEmail,
+  freeTapeState,
   listAccounts,
   loadAccount,
   setPlan,
@@ -177,8 +178,19 @@ function main() {
       credits: PLANS[id].creditsPerPeriod,
       buys: buys(PLANS[id].creditsPerPeriod),
     }));
+    // THE GLOBAL CEILING BELONGS ON THIS SCREEN, because an operator asking
+    // "what do we give away" is asking two questions and the second one has
+    // never had an answer: what a free account gets, and how many more of them
+    // this installation is willing to hand out before it stops. A bound nobody
+    // can observe is a bound that is discovered by surprise, and the surprise
+    // is either an unexplained "no free credits" on a signup or a provider
+    // balance going down faster than anyone expected.
+    const freeTape = freeTapeState({ root });
+
     if (json) {
-      console.log(JSON.stringify({ plans: PLANS, costs: CREDIT_COSTS, defaults: CREDIT_DEFAULTS }, null, 2));
+      console.log(JSON.stringify({
+        plans: PLANS, costs: CREDIT_COSTS, defaults: CREDIT_DEFAULTS, freeTape,
+      }, null, 2));
       return;
     }
     console.log('\ntimestamp plans\n');
@@ -198,6 +210,14 @@ function main() {
       { key: 'cr', head: 'credits' }, { key: 'usd', head: 'est. cost' },
       { key: 'state', head: 'state' },
     ]));
+    console.log('\nfree tapes given away, against the global ceiling\n');
+    console.log(`  ${freeTape.granted} of ${freeTape.ceiling} used, ${freeTape.remaining} left`
+      + `${freeTape.exhausted ? '  <-- EXHAUSTED: new signups get no free credits' : ''}`);
+    const freeGrant = PLANS[DEFAULT_PLAN_ID].creditsPerPeriod;
+    console.log(`  Each one is ${freeGrant} credits = ~$${estimatedUSD(freeGrant).toFixed(2)} of provider spend,`
+      + ` so the ceiling is worth ~$${estimatedUSD(freeTape.ceiling * freeGrant).toFixed(2)} in total.`);
+    console.log('  It never resets. Raise it in config/credits.json (freeTape.globalCeiling); 0 stops it dead.');
+
     console.log('\n  Every number above is an ESTIMATE until a --meter run proves it; the reasoning');
     console.log('  for each one is in config/credits.json -- including why 1080p is deferred and');
     console.log('  why 480p, which sits below the tape raster, is not a free lunch.');

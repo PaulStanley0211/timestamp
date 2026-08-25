@@ -68,6 +68,7 @@ import {
   AuthError,
   PLANS,
   creditConfig,
+  isFreePlan,
   loadAccount,
   planFor,
   refreshAccount,
@@ -539,12 +540,41 @@ export function grantCredits(account, { credits, reason, ref: rawRef, nowImpl } 
   return { granted: outcome.granted, credits: outcome.granted ? credits : 0, ref };
 }
 
-/** The plan's period grant, by name, so the CLI and a future webhook cannot
- *  drift into two ideas of what a plan is worth. */
+/**
+ * The plan's period grant, by name, so the CLI and a future webhook cannot
+ * drift into two ideas of what a plan is worth.
+ *
+ * THE FREE PLAN HAS NO PERIOD, AND ASKING FOR ONE IS AN ERROR RATHER THAN A
+ * NO-OP. Section 3 of the credit-packs spec: "One real tape, ever, per verified
+ * account. Not monthly. A recurring free tape is a standing $2.08/user/month
+ * liability against no revenue and no card on file." The signup grant in
+ * `createAccount` is the whole of the free tape, it is claimed against the
+ * global ceiling there, and this is the only other automated path that could
+ * ever hand out the same credits a second time -- `npm run accounts -- grant
+ * --period` reaches it directly.
+ *
+ * IT REFUSES INSTEAD OF QUIETLY GRANTING ZERO because the caller is an operator
+ * at a terminal who has just typed a command meaning "top this person up", and
+ * silence would read as success. An operator who genuinely intends to give a
+ * free account more credits still can -- `grant <id> 42 --reason ...` goes
+ * through `grantCredits` and writes a row saying a human decided it -- and that
+ * is the difference worth preserving: a deliberate gift is auditable, a
+ * recurring one is a liability nobody chose.
+ */
 export function grantPlanPeriod(account, { planId = account?.plan, nowImpl } = {}) {
   const plan = PLANS[planId];
   if (!plan) {
     throw new AuthError(`unknown plan ${JSON.stringify(planId)}`, { code: 'BAD_PLAN' });
+  }
+  if (isFreePlan(plan.id)) {
+    throw new AuthError(
+      `the ${plan.id} plan grants one tape ever, at signup, and has no period to grant`,
+      {
+        code: 'FREE_TAPE_IS_ONCE_EVER',
+        detail: { planId: plan.id },
+        userMessage: 'The free tape is a one-time grant and cannot be renewed.',
+      },
+    );
   }
   grantCredits(account, { credits: plan.creditsPerPeriod, reason: `grant:period:${plan.id}`, nowImpl });
   return plan.creditsPerPeriod;
