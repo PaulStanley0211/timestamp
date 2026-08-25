@@ -15,9 +15,12 @@ Branch `ui-redesign-signed-in-page`; `origin/main` is still `b6f64a3`, so
 nothing is merged. Opening a PR is Paul's call, not a prerequisite.
 
 **This block is a HANDOFF, not a diary.** Everything struck through has moved
-into a numbered section. **START AT SECTION 27** — a test-mode card payment
-succeeded and the credits have NOT landed yet, and the one command that finishes
-it is in there. Section 26 is the measured price list; 25 is the checkout.
+into a numbered section. **SECTION 27 IS CLOSED** — the test-mode card payment
+was finished at midday with no second payment: the redeliverable event landed
+the grant, and resending that same event a second time proved the idempotency
+guard against genuine Stripe redelivery, not a synthetic fixture. **What is
+next is Paul's — items 1-3 below.** Section 26 is the measured price list; 25
+is the checkout; 27 is the closed payment demo.
 
 ### The one thing to know
 
@@ -51,11 +54,20 @@ section 24.
 
 ### PICK UP HERE
 
-**PICK UP AT SECTION 27: ONE COMMAND FINISHES THE PAYMENT DEMO.** A real
-test-mode checkout was paid on 2026-08-25 and Stripe holds a completed session;
-the webhook could not be delivered because the CLI was forwarding to an IPv6
-address this server does not bind. **Do not pay again** — the event is
-redeliverable and the command is in section 27.
+~~**PICK UP AT SECTION 27: ONE COMMAND FINISHES THE PAYMENT DEMO.**~~ **DONE
+2026-08-25, midday — section 27.** Three terminals, no second payment: `stripe
+listen --forward-to 127.0.0.1:3000/api/stripe/webhook`, `npm run web`, `stripe
+events resend evt_1U8IWT0WJAHtsKz6p8dOUVen`. The redeliverable event landed
+clean — `ps6475961@gmail.com` **42 → 82**, one new ledger row — and resending
+that SAME event a second time moved nothing, proving the idempotency guard
+against genuine Stripe redelivery rather than a synthetic fixture. **The
+payment path is proven end to end: checkout, webhook signature, grant, and
+idempotent replay.**
+
+**What is left is Paul's, and only Paul's — items 1-3 in START HERE above.**
+Record fal's actual cost for the 720p run (item 1's remaining number), send
+the blind check (item 2), and settle the UI direction so DESIGN.md can be
+rewritten (item 3). None of it is blocked on code.
 
 **The Stripe checkout and webhook are BUILT — section 25.** `POST
 /api/billing/checkout` creates a hosted Checkout Session and 303s to Stripe;
@@ -1642,32 +1654,45 @@ metronome becomes tape unsteadiness; or leave it. **PAUL'S CALL, NOT TAKEN YET.*
 
 ---
 
-### 27. A CARD WAS CHARGED AND THE CREDITS HAVE NOT LANDED (2026-08-25)
+### 27. A CARD WAS CHARGED — ~~AND THE CREDITS HAVE NOT LANDED~~ **THEY HAVE. CLOSED 2026-08-25, MIDDAY.**
 
 **A real test-mode payment succeeded end to end on Stripe's side.** `4242` card,
-`$10.00`, on the test Price created the same day. **The webhook never reached
-this machine**, so nothing was granted. That is a two-word configuration fault,
-not a defect in any code this repo owns.
+`$10.00`, on the test Price created the same day. **The webhook could not
+reach this machine at first**, so nothing was granted — a two-word
+configuration fault, not a defect in any code this repo owns. **It is fixed
+and the demo is finished; see below.**
 
-#### FINISH IT WITH THIS — DO NOT PAY AGAIN
+#### ~~FINISH IT WITH THIS — DO NOT PAY AGAIN~~ **FINISHED, NO SECOND PAYMENT**
 
-The event is still on Stripe and is redeliverable. Three terminals:
+Three terminals, exactly as prescribed:
 
 ```bash
-stripe listen --forward-to 127.0.0.1:3000/api/stripe/webhook
-npm run web
-stripe events resend evt_1U8IWT0WJAHtsKz6p8dOUVen
+stripe listen --forward-to 127.0.0.1:3000/api/stripe/webhook   # terminal 1
+npm run web                                                     # terminal 2
+stripe events resend evt_1U8IWT0WJAHtsKz6p8dOUVen                # terminal 3
 ```
 
-**`127.0.0.1`, NOT `localhost`.** That is the whole bug — see below.
+The startup banner printed the correct IPv4 forward command, exactly as the
+fix below intended, and `.env`'s `STRIPE_WEBHOOK_SECRET` was hash-compared
+against `stripe listen --print-secret` before starting anything: match.
 
-**Expected:** `ps6475961@gmail.com` (`e9eb3f5999235f3a7074b01766bdb9db`) goes
-from **42 to 82 credits**, with a ledger row whose `ref` is that event id.
+**First delivery: the listener logged `[200]`.** `ps6475961@gmail.com`
+(`e9eb3f5999235f3a7074b01766bdb9db`) went **42 → 82 credits**, with a new
+ledger row `grant:pack:starter`, `ref: evt_1U8IWT0WJAHtsKz6p8dOUVen`.
+Signature verification passed against a genuinely Stripe-signed delivery —
+**the inbound half this section once called unproven is now proven.**
 
-**Then resend the SAME event a second time.** The balance must stay at 82 and the
-ledger must gain no row. That is the idempotency guard being proved against real
-Stripe redelivery rather than against a synthetic fixture, which is the one thing
-the test suite cannot do for itself.
+**Second resend of the SAME event: `[200]` again, and nothing moved** — no
+new row, no credit change, balance held at 82, still 2 rows. **Idempotency is
+proven against real Stripe redelivery**, not a synthetic fixture, which is
+the one thing the test suite could not do for itself — the guard is at
+`scripts/auth/credits.mjs:515`, inside the per-account lock.
+
+**One thing worth a sentence so nobody misreads it later:** a replay still
+REWRITES the account record. `updateAccount` (`scripts/auth/accounts.mjs:936`)
+bumps `rev`/`updatedAt` unconditionally even when the ledger does not change,
+so the file's hash changes on a no-op resend. Harmless today — recorded so a
+changed hash is never mistaken for a double grant.
 
 ```bash
 npm run accounts -- ledger e9eb3f5999235f3a7074b01766bdb9db
@@ -1702,7 +1727,7 @@ return to the same host it signed in on or the session cookie does not travel --
 `localhost` and `127.0.0.1` are different hosts to a cookie jar. So: the browser
 uses `localhost`, the CLI forwards to `127.0.0.1`, and both are right.
 
-#### WHAT THE PAYMENT PROVED, and it is most of the path
+#### WHAT THE PAYMENT PROVED, and now it is the whole path
 
 Everything this repo puts on a Checkout Session arrived at Stripe correctly.
 Read back off the live event with `stripe events retrieve`:
@@ -1719,9 +1744,10 @@ Read back off the live event with `stripe events retrieve`:
 So the outbound half is proven against the real API: the key authenticates, the
 Price resolves, the account id rides on `client_reference_id`, and the credit
 count the customer was promised is on the session where the webhook expects it.
-**What is unproven is the inbound half** -- signature verification against a
-genuinely Stripe-signed delivery, and the grant landing. That is what the resend
-above finishes.
+**The inbound half is proven too, now** -- signature verification against a
+genuinely Stripe-signed delivery, and the grant landing, both confirmed by the
+resend above. Checkout, webhook signature, grant, and idempotent replay: the
+whole path is proven end to end.
 
 #### Two things noticed in passing
 
