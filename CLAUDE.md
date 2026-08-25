@@ -153,24 +153,26 @@ and that is the designed state, not a gap.**
 
 ### THE SECURITY REVIEW IS THE NEXT PIECE OF WORK
 
-**`docs/security-review-2026-08-25.md`, and the August one beside it.** Three
-independent auditors, every HIGH re-verified by hand. **Nothing about secrets is
-wrong** — `.env` has never been committed, no key reaches a log, a manifest or a
-page, and there are still zero npm dependencies. **No cross-tenant path to
-another user's face exists**, no XSS was found in a codebase that builds every
-page from template literals, and four webhook forgeries were all refused.
+**`docs/security-review-2026-08-25.md`, on this machine only.** A second review,
+three independent auditors, every HIGH re-verified by hand. **IT IS GITIGNORED
+AND MUST STAY THAT WAY** -- this repo is PUBLIC and an accurate list of a live
+system's open weaknesses is an attack roadmap. That is `.gitignore:16` and its
+reasoning is right. **Do not summarise its findings here, in a commit message,
+or in a PR description.** Read the file.
 
-**ONE CRITICAL: F16.** Nothing checks that the Stripe key mode and the Price
-mode agree, and the shipped Price is test-mode. Today that is worth $0 because
-every web render refuses at compose. **Filling in the still model arms it** —
-after that, card `4242` mints real credits that buy real fal renders, about
-$1,300 a day. F31 arms on the same edit. **Whoever fills that field in reads
-section 3 of the review first.**
+**What is safe to say in public, because it is all good news:** `.env` has never
+been committed, no secret reaches a log, a manifest, a page or disk, there are
+still zero npm dependencies, no cross-tenant path to another user's face exists,
+no XSS was found, and four webhook forgeries were all refused.
 
-**AND THE UNCOMFORTABLE ONE.** The August review's F3, F6, F7, F8, F9, F10 and
-F13 are all still open four days and thirty-nine commits later, and F13's
-pattern was reintroduced on 2026-08-25 as F26. A review only helps if the
-findings get closed.
+**There is one CRITICAL and it is a trap rather than a hole -- it is worth
+nothing today and arms on a specific one-field edit.** Section 3 of the review
+names the field and the two-line fix. **Whoever is about to make the next edit
+to `config/models.json` reads that section FIRST.**
+
+**AND THE UNCOMFORTABLE ONE.** Seven findings from the August review are still
+open four days and thirty-nine commits later, and one had its pattern
+reintroduced. A review only helps if the findings get closed.
 
 ### Two cheap wins nobody has taken
 
