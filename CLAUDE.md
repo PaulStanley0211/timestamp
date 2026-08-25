@@ -7,12 +7,19 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-25, evening) — A REAL PAYMENT WENT THROUGH
+## START HERE (2026-08-26) — THE SECURITY FIX ORDER IS WORKED, TOP TO BOTTOM
 
-**1256 tests / 1254 pass / 0 fail / 2 skipped.** The skips are the
+**1284 tests / 1282 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 Branch `ui-redesign-signed-in-page`; `origin/main` is still `b6f64a3`, so
 nothing is merged. Opening a PR is Paul's call, not a prerequisite.
+
+**ALL SEVEN ITEMS OF THE REVIEW'S FIX ORDER ARE CLOSED (2026-08-25/26),**
+one commit each, strict test-first, on this branch — see section 28. What
+remains open is in the review on this machine and nowhere else. **THE
+`config/models.json` WARNING STILL STANDS**: one finding that arms on that
+edit was NOT in the fix order and is still open — whoever fills in the still
+model reads the review's section 3 first.
 
 **This block is a HANDOFF, not a diary.** Everything struck through has moved
 into a numbered section. **SECTION 27 IS CLOSED** — the test-mode card payment
@@ -151,7 +158,7 @@ and that is the designed state, not a gap.**
    ceiling do not move together; editing one silently re-prices the other.**
    What the ceiling does NOT bound is availability — see F21.
 
-### THE SECURITY REVIEW IS THE NEXT PIECE OF WORK
+### THE SECURITY REVIEW'S FIX ORDER IS WORKED — section 28 for what shipped
 
 **`docs/security-review-2026-08-25.md`, on this machine only.** A second review,
 three independent auditors, every HIGH re-verified by hand. **IT IS GITIGNORED
@@ -165,14 +172,14 @@ been committed, no secret reaches a log, a manifest, a page or disk, there are
 still zero npm dependencies, no cross-tenant path to another user's face exists,
 no XSS was found, and four webhook forgeries were all refused.
 
-**There is one CRITICAL and it is a trap rather than a hole -- it is worth
-nothing today and arms on a specific one-field edit.** Section 3 of the review
-names the field and the two-line fix. **Whoever is about to make the next edit
-to `config/models.json` reads that section FIRST.**
-
-**AND THE UNCOMFORTABLE ONE.** Seven findings from the August review are still
-open four days and thirty-nine commits later, and one had its pattern
-reintroduced. A review only helps if the findings get closed.
+**All seven items of the review's own fix order were closed 2026-08-25/26** --
+the CRITICAL first, then every HIGH, the two customers'-money defects, and the
+deployment headers -- each as its own commit with the failing test written
+first. Section 28 records what each commit DOES; the review records what each
+closed. **What is still open lives only in the review**: a handful of MEDIUMs
+and LOWs outside the fix order, including one that **still arms on the next
+edit to `config/models.json`** -- whoever fills in the still model reads the
+review's section 3 FIRST, same rule as before.
 
 ### Two cheap wins nobody has taken
 
@@ -2001,6 +2008,67 @@ Paul's stated vision: **anyone uploads any photo, gives a location and an outfit
 - **`taskkill /F /IM node.exe` to stop the server.** Claude Code is a node process. Kill by PID: `netstat -ano | grep ":3000.*LISTENING"`. Related: stopping an `npm run web` background task kills the npm wrapper and **leaves the node child holding the port**, so the restart fails `EADDRINUSE` and the old code keeps serving.
 - **Backticks inside a comment that sits inside a JS template literal.** `static.mjs`'s `BASE_CSS` and the HTML blocks in `views.mjs` are template literals, so a comment mentioning `` `style-src 'self'` `` terminates the string and the file stops parsing — or worse, parses as a tagged template and throws `X is not a function` from a line nowhere near the edit. Cost two rounds on 2026-08-21 and **THREE MORE on 2026-08-23** — it is the single most repeated mistake in this codebase. Use plain quotes inside those comments, and **run `node --check scripts/web/static.mjs` after every edit to that file**. Never chain it as "check && kill-the-server": a failed check short-circuits the kill, the OLD server keeps the port and keeps serving stale CSS, and the next thing you measure will be the old bytes. That compounds with the cache trap two bullets down — a CSS change needs a server restart AND a browser hard refresh, and on 2026-08-23 the measured card size was still the old one for exactly that reason.
 - **A signed shift on a hash.** `hash32` returns `h >>> 0`, so any value above 2^31 makes `h >> 5` **negative**, and a negative left operand makes `%` return a negative remainder — which subtracts from a floor instead of adding to it. It had been quietly desaturating whichever place cards happened to hash high, invisibly, because "muddier than intended" looks exactly like a design decision. Always `>>>` on a hash.
+
+---
+
+### 28. THE FIX ORDER, WORKED 2026-08-25/26 — eight commits, what each DOES
+
+The review's own section 3 order, one commit each, strict test-first: every
+change began as a failing test that failed for the stated reason. This section
+says what the code now does; the WHY of each lives in the review, on this
+machine, and is not restated here. **The findings the fix order did not cover
+are still open — including one that arms on the next `config/models.json`
+edit.**
+
+1. **`2305e81` — only a live-mode Stripe event grants credits.** The webhook
+   checks the event's own mode immediately after signature verification;
+   absence counts as not-live. A test-mode event is answered 200,
+   `ignored: 'testmode'`, and grants nothing — which means **local `stripe
+   listen` demos no longer land credits**; the grant path is proven by the
+   test suite instead.
+2. **`7245279` — password work is async, and knocking is metered.** Every
+   scrypt derivation now runs on the threadpool: `hashPassword`,
+   `verifyPassword`, `authenticate`, `createAccount` are **async — await
+   them**. And `/login` and `/signup` are limited per client address (10
+   attempts/minute and 10 accounts/hour — `AUTH_RATE_LIMITS`, exported from
+   `server.mjs`; the limiter is `scripts/web/rate-limit.mjs`), keyed on the
+   socket address and never a header, answered 429 + `Retry-After`.
+3. **`5dae6d5` — every password costs the same time to refuse**, whatever its
+   length, on both the known- and unknown-address branches. The four-cell
+   matrix test in `auth-accounts.test.js` pins it as a proportion with
+   interleaved samples.
+4. **`51aafa5` — signing in takes this site's own form.** `POST /login` and
+   `/signup` demand a signed double-submit pair (cookie `timestamp_csrf` +
+   hidden `csrf` field, minted in `session-middleware.mjs`), refuse posts
+   naming a foreign `Origin`, and the nav names the signed-in email on every
+   page. **ANY TEST THAT POSTS CREDENTIALS MUST FETCH THE FORM FIRST** — every
+   web test file has a `csrfPair`/`signIn` helper that does the GET-then-POST
+   dance; copy it, do not post bare.
+5. **`4e80fe8` — the fal credential is scoped to the queue host, enforced.**
+   An authorized request whose target is any other allow-listed host is
+   refused before a socket opens, whatever a response body's `status_url`
+   said.
+6. **`a1fc67f` — a job that ends without a tape gives back what it never
+   spent.** The worker consults a refund seam on the attempt that makes a
+   failure final and on cancellation; the glue (`createOwnerRefunds`,
+   `session-middleware.mjs`) walks `out/owners` back to the payer and
+   `refundIfUnspent` decides from the manifest's steps. The web cancel
+   handler's direct path refunds the same way. A missed refund prints
+   `REFUND MISSED ... credit it by hand` in the worker terminal. The CLI
+   wiring is pinned by a source-reading test.
+7. **`9e52e14` — the deployment headers.** `script-src` names the two shipped
+   inline scripts BY HASH — they live as constants in `views.mjs` next to
+   `INLINE_SCRIPT_HASHES`, so **a third `<script>` added anywhere else is
+   killed by the CSP and by the test that hashes what pages actually ship**.
+   `sendFile` (the path serving user-influenced bytes) sends nosniff +
+   `default-src 'none'`. Everything sends `Referrer-Policy: no-referrer`
+   (a `/j/<id>` url must never ride out in a Referer), same-origin CORP, and
+   HSTS; pages add COOP and a Permissions-Policy that renounces the camera.
+8. **`becb112` — `x-forwarded-proto` is believed only when the operator says
+   so.** `TIMESTAMP_TRUST_PROXY=1` (documented in `.env.example`) is Paul's
+   chosen design (2026-08-26): default never, opt in the day a
+   TLS-terminating proxy actually exists. One test was changed deliberately
+   with his sign-off — it pinned the old header-trusting behaviour by name.
 
 ---
 
