@@ -794,7 +794,12 @@ test('a job with no still stage is estimated without a still line', () => {
   // call nobody will be billed for is worse than no estimate at all -- the
   // whole point of `--dry-run` is authorising a spend against real numbers.
   const pricing = loadPricing();
-  const segments = [{ index: 1, seconds: 15, startsFrom: 'references' }];
+  // THE SIZE IS PART OF A SEGMENT, and it was missing from this fixture only
+  // because nothing read it: video was priced per second, with no raster
+  // dimension at all. `planSegments` has always produced it. Since 2026-08-25
+  // the estimator refuses to quote a token-billed model without it, which is
+  // why this line grew a size rather than the estimator growing a default.
+  const segments = [{ index: 1, seconds: 15, startsFrom: 'references', size: { width: 640, height: 480 } }];
   const est = estimateJob({
     pricing,
     videoModel: 'bytedance/seedance-2.0/reference-to-video',
@@ -805,4 +810,152 @@ test('a job with no still stage is estimated without a still line', () => {
   assert.equal(est.lines.filter((l) => l.step === 'still').length, 0, 'no still line at all');
   assert.equal(est.lines.length, 1, 'one call, and it is the video');
   assert.equal(est.estimated, est.lines[0].usd, 'the total is the video and nothing else');
+});
+
+// ---------------------------------------------------------------------------
+// video is billed by tokens, and tokens are pixels x frames
+// ---------------------------------------------------------------------------
+
+/**
+ * THE DEFECT THIS CLOSES. `--dry-run` quoted the identical $2.079 at 480p and
+ * at 720p, because the video entry was flattened to a per-second rate with no
+ * raster dimension at all -- so the one command whose entire purpose is
+ * authorising a spend could not tell apart two orders that differ by 2.2x.
+ *
+ * fal bills tokens: w * h * seconds * 24 / 1024, at $0.014 per 1000. The rate
+ * was never wrong; the table's flattening of it was, and the entry's own
+ * comment said so before this was fixed.
+ */
+test('the estimator prices video by the raster, not by the second alone', () => {
+  const pricing = loadPricing();
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+
+  const cheap = estimateVideo({ pricing, model, seconds: 15, size: { width: 640, height: 480 } });
+  const dear = estimateVideo({ pricing, model, seconds: 15, size: { width: 960, height: 720 } });
+
+  assert.ok(dear > cheap, `720p (${dear}) must cost more than 480p (${cheap})`);
+  assert.ok(Math.abs((dear / cheap) - 2.2) < 0.1,
+    `720p is ${(dear / cheap).toFixed(2)}x 480p in price; the delivered pixel ratio is 2.20x`);
+});
+
+/** Tokens scale with pixels AND frames, so twice the seconds is twice the
+ *  price at the same raster -- the one part the per-second rate got right, and
+ *  it has to survive the change. */
+test('video price is linear in seconds at a fixed raster', () => {
+  const pricing = loadPricing();
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+  const size = { width: 960, height: 720 };
+  const short = estimateVideo({ pricing, model, seconds: 5, size });
+  const long = estimateVideo({ pricing, model, seconds: 15, size });
+  assert.ok(Math.abs(long - short * 3) < 0.01, `${long} is not 3x ${short}`);
+});
+
+/**
+ * THE CROSS-FILE ASSERTION, and it is the point of the whole change.
+ *
+ * `config/pricing.json` prices what a render will cost us; `config/credits.json`
+ * prices what a customer is charged for it. They are two files because they
+ * answer two questions, and they are derived from ONE measurement -- so a
+ * metered run that corrects one and not the other must go red here rather than
+ * quietly leaving the estimator and the invoice disagreeing. This is the same
+ * guard the models.json / plan.mjs / fal.mjs raster agreement already uses.
+ */
+test('the estimator and the credit price agree, because they come from one measurement', async () => {
+  const { creditConfig } = await import('../scripts/auth/accounts.mjs');
+  const pricing = loadPricing();
+  const cfg = creditConfig();
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+
+  for (const [id, res] of Object.entries(cfg.resolutions)) {
+    if (res.available !== true) continue;
+    const quoted = estimateVideo({
+      pricing, model, seconds: cfg.referenceSeconds, size: res.raster,
+    });
+    assert.ok(
+      Math.abs(quoted - res.estimatedUSDPer15s) < 0.01,
+      `${id}: --dry-run quotes $${quoted.toFixed(4)} and the customer is charged against $${res.estimatedUSDPer15s}`,
+    );
+  }
+});
+
+/** An estimate that does not know the raster cannot price a token-billed
+ *  model, and quietly falling back to a per-second guess is exactly the
+ *  flattening that produced the identical quote at both tiers. */
+test('a token-billed model refuses to quote without a raster', () => {
+  const pricing = loadPricing();
+  assert.throws(
+    () => estimateVideo({ pricing, model: 'bytedance/seedance-2.0/reference-to-video', seconds: 15 }),
+    (err) => /size|raster/i.test(err.message),
+  );
+});
+
+/** An ordered raster nobody has metered still gets a price, and it is
+ *  deliberately on the HIGH side: fal has upscaled every delivery so far, and
+ *  overstating cost understates margin, which is the safe direction. */
+test('an unmetered raster is quoted above the ordered size, not at it', () => {
+  const pricing = loadPricing();
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+  const size = { width: 1440, height: 1080 };
+  const quoted = estimateVideo({ pricing, model, seconds: 15, size });
+  const entry = pricing.models[model];
+  const atOrdered = (size.width * size.height * 15 * entry.tokensPerPixelSecond)
+    / entry.tokenDivisor * entry.usd;
+  assert.ok(quoted > atOrdered,
+    `an unmetered raster quoted $${quoted} against $${atOrdered.toFixed(4)} at the ordered size -- that understates it`);
+});
+
+/**
+ * THE THIRD PASS-THROUGH BUG IN ONE MORNING, and the reason this is a
+ * source-reading test rather than a unit test.
+ *
+ * On 2026-08-25, in the space of an hour: `--resume` rebuilt the provider from
+ * CLI defaults and ignored the `fal` its own manifest froze; it did the same to
+ * `--video-model`, so the request body was built for one endpoint and posted to
+ * another (fal answered 422); and `--dry-run` built its input WITHOUT
+ * `resolution`, so the one command whose purpose is authorising a spend priced
+ * every tier as 480p. `dryRun()` had read `input.resolution` correctly the
+ * whole time. Every one of these is a value that exists, is correct, and is
+ * simply not handed on -- and no unit test of the function that receives it can
+ * see the call site that forgot to pass it.
+ *
+ * CLAUDE.md section 24 diagnosed the identical-quote defect as the pricing
+ * table having no raster dimension. It was that AND this, and fixing only the
+ * table left --dry-run still quoting one number at both tiers.
+ */
+test('the dry run is given the resolution it was asked for', () => {
+  const source = fs.readFileSync(path.join(REPO_ROOT, 'scripts/render/render.mjs'), 'utf8');
+  const calls = source.match(/dryRun\(\{[\s\S]*?\n {4}\}\)/g) ?? [];
+  assert.ok(calls.length > 0, 'render.mjs calls dryRun nowhere -- did it get renamed?');
+  for (const call of calls) {
+    assert.match(call, /resolution/,
+      'a dryRun call that does not pass the resolution prices every tier the same, '
+      + 'which is exactly the defect --dry-run exists to prevent');
+  }
+});
+
+/** And the seam itself: two resolutions, two prices. This is what the source
+ *  test above is protecting -- it works, and it worked before, and nothing was
+ *  reaching it. */
+test('a dry run prices 720p above 480p', async () => {
+  const { dryRun } = await import('../scripts/render/pipeline.mjs');
+  const { createProvider } = await import('../scripts/providers/index.mjs');
+  const provider = createProvider('fal', {
+    videoModel: 'bytedance/seedance-2.0/reference-to-video',
+  });
+
+  const quote = async (resolution) => (await dryRun({
+    provider,
+    input: {
+      place: { kind: 'preset', value: 'schrebergarten-august' },
+      outfit: { kind: 'preset', value: 'trainingsjacke' },
+      stillCount: 0,
+      direct: true,
+      resolution,
+    },
+    videoModelOverride: 'bytedance/seedance-2.0/reference-to-video',
+  })).estimate.estimated;
+
+  const cheap = await quote('480p');
+  const dear = await quote('720p');
+  assert.ok(dear > cheap, `720p quoted $${dear} against 480p at $${cheap}`);
 });

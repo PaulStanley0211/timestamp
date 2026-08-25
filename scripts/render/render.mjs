@@ -289,7 +289,20 @@ async function main() {
   if (args.flags.has('dry-run')) {
     const plan = await dryRun({
       provider, cfg,
-      input: { place: { ...place, photoPath: placePhoto }, outfit, stillCount, direct },
+      // THE RESOLUTION TRAVELS, and its absence here was half of the defect
+      // CLAUDE.md section 24 recorded. `dryRun` has always read
+      // `input.resolution` and always resolved the raster from it; this object
+      // simply never carried it, so every tier was priced at the provider's
+      // first offer. The other half was the pricing table having no raster
+      // dimension at all. Fixing either one alone leaves --dry-run quoting one
+      // number for two orders that differ by 2.2x.
+      input: {
+        place: { ...place, photoPath: placePhoto },
+        outfit,
+        stillCount,
+        direct,
+        resolution: cleanResolution(args.resolution),
+      },
       stillModelOverride, videoModelOverride, allowUnverifiedModel,
     });
     console.log(`\ntimestamp render · DRY RUN · provider ${plan.provider}`);

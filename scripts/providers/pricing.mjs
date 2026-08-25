@@ -42,7 +42,7 @@ export const DIVERGENCE_LIMIT = 0.15;
 /** How a model bills. `call` is a flat per-request price; `second` is the
  *  common video shape; `image` the common still shape. A unit not on this list
  *  is a table someone hand-edited without reading the estimator. */
-export const PRICING_UNITS = Object.freeze(['image', 'second', 'call']);
+export const PRICING_UNITS = Object.freeze(['image', 'second', 'call', 'token']);
 
 export const PRICING_FILE = 'config/pricing.json';
 
@@ -103,6 +103,25 @@ export function assertPricingTable(pricing) {
     if (!PRICING_UNITS.includes(entry.unit)) {
       throw bad('invalid_pricing', `pricing.models[${model}].unit must be one of ${PRICING_UNITS.join('|')}, got ${JSON.stringify(entry.unit)}`, { model });
     }
+    // A TOKEN PRICE IS THREE NUMBERS, NOT ONE, and a partial one is worse than
+    // a per-second rate: it would quote something plausible from an incomplete
+    // formula. `usd` is per token; the other two turn a raster and a duration
+    // into a token count. Checked here so the failure is "this file is wrong"
+    // at load, rather than NaN in a quote.
+    if (entry.unit === 'token') {
+      for (const field of ['tokensPerPixelSecond', 'tokenDivisor']) {
+        if (!Number.isFinite(entry[field]) || entry[field] <= 0) {
+          throw bad('invalid_pricing', `pricing.models[${model}] is billed per token and needs a positive ${field}, got ${JSON.stringify(entry[field])}`, { model });
+        }
+      }
+      // The fallback is what prices a raster nobody has metered. Absent, an
+      // unmetered size would be quoted at the raster we ORDER -- and fal has
+      // never once delivered the raster it was asked for.
+      if (entry.deliveredUpscaleFallback !== undefined
+        && (!Number.isFinite(entry.deliveredUpscaleFallback) || entry.deliveredUpscaleFallback < 1)) {
+        throw bad('invalid_pricing', `pricing.models[${model}].deliveredUpscaleFallback must be >= 1, got ${JSON.stringify(entry.deliveredUpscaleFallback)}`, { model });
+      }
+    }
   }
   return pricing;
 }
@@ -141,11 +160,52 @@ export function priceEntry(pricing, model) {
  *  level turns a 15-second clip into $0.00. */
 const usd = (n) => Number(n.toFixed(4));
 
-function quantityFor(entry, { count, seconds }, model) {
+/**
+ * What fal actually renders for a given order, and therefore what it bills.
+ *
+ * A LOOKUP AND NOT A COEFFICIENT, because the two measured upscales are not
+ * the same number: 640x480 came back 752x560 (1.175 x 1.167) and 960x720 came
+ * back 1112x834 (1.1583 on both axes). A single factor cannot reproduce both,
+ * and a price that is nearly right in the money path is a price that is wrong.
+ *
+ * An ordered raster with no measurement gets `deliveredUpscaleFallback` -- the
+ * LARGEST upscale seen so far -- so an unmetered size is quoted high rather
+ * than low. Overstating cost understates margin, which is the safe direction;
+ * the other way round is an invoice nobody forecast.
+ *
+ * @returns {{width, height, measured: boolean}}
+ */
+export function deliveredRaster(entry, size) {
+  const key = `${size.width}x${size.height}`;
+  const hit = entry.delivered?.[key];
+  if (hit) return { width: hit.width, height: hit.height, measured: true };
+  const up = entry.deliveredUpscaleFallback ?? 1;
+  return {
+    width: Math.round(size.width * up),
+    height: Math.round(size.height * up),
+    measured: false,
+  };
+}
+
+function quantityFor(entry, { count, seconds, size }, model) {
   switch (entry.unit) {
     case 'image': return count;
     case 'second': return seconds;
     case 'call': return 1;
+    // TOKENS ARE PIXELS x FRAMES, which is how fal actually bills video. The
+    // raster is REQUIRED rather than defaulted: an estimate that does not know
+    // the size cannot price a token-billed model, and falling back to a
+    // per-second guess is exactly the flattening that had --dry-run quoting the
+    // identical figure at two tiers that differ by 2.2x.
+    case 'token': {
+      if (!size || !Number.isFinite(size.width) || !Number.isFinite(size.height)) {
+        throw bad('invalid_request',
+          `pricing.models[${model}] is billed per token, so it needs the raster size -- got ${JSON.stringify(size)}`,
+          { model });
+      }
+      const out = deliveredRaster(entry, size);
+      return (out.width * out.height * seconds * entry.tokensPerPixelSecond) / entry.tokenDivisor;
+    }
     default: throw bad('invalid_pricing', `pricing.models[${model}].unit ${JSON.stringify(entry.unit)} has no estimator`, { model });
   }
 }
@@ -160,12 +220,12 @@ export function estimateStill({ pricing, model, count = 1 }) {
 }
 
 /** Estimated USD for one video segment. */
-export function estimateVideo({ pricing, model, seconds }) {
+export function estimateVideo({ pricing, model, seconds, size = null }) {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     throw bad('invalid_request', `estimateVideo seconds must be a positive number, got ${JSON.stringify(seconds)}`);
   }
   const entry = priceEntry(pricing, model);
-  return usd(entry.usd * quantityFor(entry, { count: 1, seconds }, model));
+  return usd(entry.usd * quantityFor(entry, { count: 1, seconds, size }, model));
 }
 
 /**
@@ -193,13 +253,24 @@ export function estimateJob({ pricing, stillModel, videoModel, stillCount, segme
     ...(stillCount > 0
       ? [{ step: 'still', model: stillModel, quantity: stillCount, usd: estimateStill({ pricing, model: stillModel, count: stillCount }) }]
       : []),
-    ...segments.map((seg, i) => ({
-      step: 'animate',
-      model: videoModel,
-      index: i + 1,
-      quantity: seg.seconds,
-      usd: estimateVideo({ pricing, model: videoModel, seconds: seg.seconds }),
-    })),
+    ...segments.map((seg, i) => {
+      const entry = priceEntry(pricing, videoModel);
+      // THE RASTER TRAVELS WITH THE SEGMENT. `planSegments` already resolves it
+      // -- the same size the renderer will order -- so the estimate is priced
+      // against what will actually be requested rather than against a default.
+      const out = entry.unit === 'token' && seg.size ? deliveredRaster(entry, seg.size) : null;
+      return {
+        step: 'animate',
+        model: videoModel,
+        index: i + 1,
+        quantity: seg.seconds,
+        usd: estimateVideo({ pricing, model: videoModel, seconds: seg.seconds, size: seg.size ?? null }),
+        // What fal is expected to send back, and whether that is a measurement
+        // or a forecast. A line the operator can see is a forecast is a line
+        // they can decide about; one that looks measured and is not, is not.
+        ...(out ? { ordered: seg.size, delivered: out, measured: out.measured } : {}),
+      };
+    }),
   ];
   return {
     estimated: usd(lines.reduce((sum, l) => sum + l.usd, 0)),

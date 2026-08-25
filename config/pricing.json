@@ -27,13 +27,34 @@
       "source": "derived from config/credits.json 720p estimate, itself derived from fal's published token formula, UNVERIFIED"
     },
     "bytedance/seedance-2.0/reference-to-video": {
-      "_comment": "MEASURED 2026-08-24 against fal's usage page, and the per-second unit here is a CONVERSION that has to be understood before this number is reused. fal bills this endpoint per 1000 TOKENS at $0.014, exactly the formula config/credits.json already recorded -- tokens = w * h * seconds * 24 / 1024 -- and that formula reproduces the invoice to seven figures: two clips at 752x560 x 15.04s = 296.92k tokens = $4.156915 against fal's $4.156908. THE FORMULA WAS NEVER THE PROBLEM. This table's flattening of it was: it had no token dimension, so somebody wrote the 720p per-second rate here and it was 2.18x too high. The $0.1386 below is $2.078454 per clip divided by the 15 seconds each ordered. It is exact for a 15s clip at the raster these two RETURNED and it does not generalise -- tokens scale with pixels AND frames, so a longer or larger clip is not 0.1386 x seconds. AND THE RASTER IS THE STING: 640x480 was ORDERED (108000 tokens, $1.5120) and 752x560 was DELIVERED and BILLED (148461 tokens, $2.0785). fal charges for what it sends, not for what you asked for, so the unhonoured raster recorded in config/models.json is a 37.5% surcharge and not a cosmetic complaint.",
+      "_comment": "MEASURED, and priced by TOKENS rather than by seconds since 2026-08-25. fal bills this endpoint per 1000 tokens at $0.014, where tokens = w * h * seconds * 24 / 1024. That formula reproduces the invoice to seven figures and was never the problem; this table's FLATTENING of it was. A per-second rate has no raster dimension, so --dry-run quoted the identical $2.079 at 480p and at 720p -- the one command whose entire purpose is authorising a spend could not tell apart two orders that differ by 2.2x in price.\n\nAND THE RASTER IS THE STING: fal bills what it SENDS, not what you ordered. 640x480 ordered came back 752x560 (a 37.5% surcharge); 960x720 ordered came back 1112x834. Neither is the raster requested, and the two upscales are not even the same factor -- 1.175 x 1.167 at 480p, 1.1583 on both axes at 720p. So `delivered` below is a measured LOOKUP keyed by the ordered raster, not a coefficient.\n\nAN ORDERED RASTER NOBODY HAS METERED still gets a price, via `deliveredUpscaleFallback`. It is the LARGEST upscale measured so far, deliberately: every delivery has been bigger than the order, and overstating cost understates margin, which is the safe direction to be wrong in. A line priced that way is a forecast and `estimateVideo` marks it as one.\n\nconfig/credits.json carries the same measurement for the CUSTOMER price. Two files because they answer two questions -- what a render costs us, and what somebody is charged for it -- derived from one metered run. test/provider-contract.test.js asserts they agree, so a future metering that corrects one and not the other goes red rather than leaving the estimator and the invoice quietly disagreeing.",
       "estimate": false,
-      "meteredOn": "2026-08-24",
-      "meteredFrom": "fal.ai/dashboard/usage-billing -- 296.92 x 1000 Tokens at $0.014 = $4.156908 across jobs 20260824-122201-af8b0d and 20260824-130457-a2e9ac",
-      "unit": "second",
-      "usd": 0.1386,
-      "source": "fal usage page, 2026-08-24: 296.92 x 1000 Tokens at $0.014. Per-second figure derived from the DELIVERED raster, not the ordered one."
+      "meteredOn": "2026-08-25",
+      "meteredFrom": "fal.ai/dashboard/usage-billing across jobs 20260824-122201-af8b0d, 20260824-130457-a2e9ac (752x560) and 20260824-225641-f34b4f (1112x834)",
+      "unit": "token",
+      "usd": 0.000014,
+      "source": "fal usage page: $0.014 per 1000 tokens, tokens = w*h*seconds*24/1024, on the DELIVERED raster",
+      "tokensPerPixelSecond": 24,
+      "tokenDivisor": 1024,
+      "delivered": {
+        "_comment": "Keyed by the ORDERED raster, valued with the raster fal actually returned and billed for. Add a row only from a metered run.",
+        "640x480": {
+          "width": 752,
+          "height": 560,
+          "jobIds": [
+            "20260824-122201-af8b0d",
+            "20260824-130457-a2e9ac"
+          ]
+        },
+        "960x720": {
+          "width": 1112,
+          "height": 834,
+          "jobIds": [
+            "20260824-225641-f34b4f"
+          ]
+        }
+      },
+      "deliveredUpscaleFallback": 1.175
     },
     "fal/still-UNVERIFIED": {
       "_comment": "ESTIMATE, and a placeholder: the still model has NOT been chosen. Paul picks it at Phase 0 (docs/phase-0-validation.md), and criterion 6 measures the real number as balance-before minus balance-after. The figure below is an order-of-magnitude stand-in for an identity-preserving image model at ~1MP so the estimator has something to divide by -- it is not a quote and it is not attributed to any vendor. Replace the id and the number together, in one edit, when the model is chosen.",
