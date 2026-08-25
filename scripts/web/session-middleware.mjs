@@ -128,11 +128,23 @@ export function serializeCookie(name, value, { maxAge = null, secure = false, ex
   return parts.join('; ');
 }
 
-/** Did this request arrive over TLS? Behind a proxy the socket is plain, so the
- *  forwarded header is the only evidence -- and it is only believed for the
- *  literal value `https`, never for anything that merely contains it. */
-export function isSecureRequest(req) {
+/**
+ * Did this request arrive over TLS?
+ *
+ * `x-forwarded-proto` is a header, which means it is whatever the client
+ * typed unless something trusted rewrote it. Believing it by default let any
+ * request turn `Secure` on or off by asking, so `trustProxy` is OPT-IN and
+ * belongs to whoever configured the deployment (TIMESTAMP_TRUST_PROXY=1,
+ * threaded through `createServer`), never to the request. Opted in, the
+ * header is believed for the literal value `https` and nothing that merely
+ * contains it. Same rule, same words, as the twin in
+ * `scripts/auth/session.mjs` -- this copy exists because that module is
+ * imported lazily and a cookie decision cannot be async; the two must not
+ * drift.
+ */
+export function isSecureRequest(req, { trustProxy = false } = {}) {
   if (req?.socket?.encrypted) return true;
+  if (!trustProxy) return false;
   const proto = String(req?.headers?.['x-forwarded-proto'] ?? '').split(',')[0].trim().toLowerCase();
   return proto === 'https';
 }
@@ -268,8 +280,10 @@ export function createOwnerRefunds({ root, loadAuthImpl = loadAuth, fsImpl = fs 
  * @param {string} opts.root         data root; `out/sessions` and `out/owners` live under it
  * @param {object} [opts.auth]       an injected auth object; omit to import `scripts/auth/`
  * @param {Function} [opts.loadAuthImpl]  seam for tests that want to prove the lazy path
+ * @param {boolean} [opts.trustProxy]  believe `x-forwarded-proto` for the Secure
+ *                                     decision; the operator's call, never the request's
  */
-export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsImpl = fs } = {}) {
+export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsImpl = fs, trustProxy = false } = {}) {
   if (typeof root !== 'string' || root.length === 0) {
     throw new TypeError('createSessions needs a root');
   }
@@ -357,7 +371,7 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
     const { sessionId } = mod.createSession({ root, accountId });
     return serializeCookie(SESSION_COOKIE, mod.signCookie(sessionId, await secret()), {
       maxAge: SESSION_MAX_AGE_S,
-      secure: isSecureRequest(req),
+      secure: isSecureRequest(req, { trustProxy }),
     });
   }
 
@@ -377,7 +391,7 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
         if (sessionId) mod.destroySession({ root, sessionId });
       } catch { /* the cookie is being cleared regardless */ }
     }
-    return serializeCookie(SESSION_COOKIE, '', { maxAge: 0, secure: isSecureRequest(req) });
+    return serializeCookie(SESSION_COOKIE, '', { maxAge: 0, secure: isSecureRequest(req, { trustProxy }) });
   }
 
   // -------------------------------------------------------------------------
@@ -400,7 +414,7 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
     const token = mod.signCookie(crypto.randomBytes(16).toString('hex'), sec);
     return {
       token,
-      setCookie: serializeCookie(CSRF_COOKIE, token, { secure: isSecureRequest(req) }),
+      setCookie: serializeCookie(CSRF_COOKIE, token, { secure: isSecureRequest(req, { trustProxy }) }),
     };
   }
 

@@ -272,13 +272,14 @@ async function signIn(base, email, password) {
   return res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
 }
 
-async function withApp(run, { auth = fakeAuth(), queue = fakeQueue(), sessions = null, nowImpl = null } = {}) {
+async function withApp(run, { auth = fakeAuth(), queue = fakeQueue(), sessions = null, nowImpl = null, trustProxy = undefined } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-auth-'));
   const app = createServer({
     root, cfg: CFG, queue, port: 0, auth: sessions ? null : auth, sessions,
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
     logImpl: () => {},
     ...(nowImpl ? { nowImpl } : {}),
+    ...(trustProxy === undefined ? {} : { trustProxy }),
   });
   const port = await app.listen();
   try {
@@ -1229,13 +1230,62 @@ test('cookies parse tolerantly and serialize strictly', () => {
   assert.match(set, /Max-Age=60/);
 });
 
-test('Secure follows the actual protocol, and a forwarded header is believed exactly', () => {
+/**
+ * CHANGED DELIBERATELY, 2026-08-26, with Paul's sign-off. The old test pinned
+ * "a forwarded header is believed exactly" -- but a header is whatever the
+ * client typed unless something trusted rewrote it, so believing it by
+ * default let any request turn `Secure` on or off by asking. The decision now
+ * belongs to whoever configured the deployment: `trustProxy` is opt-in
+ * (TIMESTAMP_TRUST_PROXY=1 for a deployment behind a TLS-terminating proxy),
+ * and only then is the header believed, exactly as before. Same rule, same
+ * words, as the twin in scripts/auth/session.mjs.
+ */
+test('Secure follows the actual protocol; a forwarded header is believed only when the deployment says so', () => {
   assert.equal(isSecureRequest({ socket: { encrypted: true }, headers: {} }), true);
-  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https' } }), true);
-  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https, http' } }), true);
-  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'http' } }), false);
-  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'nothttps' } }), false);
-  assert.equal(isSecureRequest({ socket: {}, headers: {} }), false);
+  // Default: the header is client-typed bytes and is never believed.
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https' } }), false);
+  // Opted in, it is believed for the literal value https and nothing else.
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https' } }, { trustProxy: true }), true);
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https, http' } }, { trustProxy: true }), true);
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'http' } }, { trustProxy: true }), false);
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'nothttps' } }, { trustProxy: true }), false);
+  assert.equal(isSecureRequest({ socket: {}, headers: {} }, { trustProxy: true }), false);
+});
+
+/** The same rule at the HTTP boundary, where it actually decides a cookie. */
+test('a client-typed forwarded header cannot mark the session cookie Secure unless the deployment opted in', async () => {
+  const attempt = async (base) => {
+    const form = await fetch(`${base}/login`, { headers: { accept: 'text/html', 'x-forwarded-proto': 'https' } });
+    const formCookie = form.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+    const csrf = (await form.text()).match(/name="csrf" value="([^"]+)"/)?.[1] ?? '';
+    return fetch(`${base}/login`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        cookie: formCookie,
+        'x-forwarded-proto': 'https',
+      },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', csrf }),
+      redirect: 'manual',
+    });
+  };
+
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const res = await attempt(base);
+    assert.equal(res.status, 200);
+    const [cookie] = res.headers.getSetCookie();
+    assert.ok(!/Secure/.test(cookie),
+      'a header any client can type turned Secure on, which silently breaks login for a plain-HTTP deployment');
+  });
+
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const res = await attempt(base);
+    assert.equal(res.status, 200);
+    const [cookie] = res.headers.getSetCookie();
+    assert.match(cookie, /Secure/, 'behind a proxy the operator vouched for, the header is believed');
+  }, { trustProxy: true });
 });
 
 test('the ownership index refuses ids that are not path-safe', () => {

@@ -397,6 +397,15 @@ export function createServer({
   auth = null,
   sessions = null,
   /**
+   * Whether `x-forwarded-proto` decides the Secure attribute on cookies.
+   *
+   * OFF unless the operator says otherwise, because the header is whatever
+   * the client typed unless a proxy this deployment actually has rewrote it.
+   * Set TIMESTAMP_TRUST_PROXY=1 in the environment the day this runs behind
+   * a TLS-terminating proxy, and not before -- Paul's call, 2026-08-26.
+   */
+  trustProxy = process.env.TIMESTAMP_TRUST_PROXY === '1',
+  /**
    * The Stripe seam. Defaulted to a billing object WITH NO TRANSPORT AND NO
    * CREDENTIALS, which is guard 4: a server built by a test can read the pack
    * table out of config -- so the pricing page is the real page -- and cannot
@@ -428,7 +437,7 @@ export function createServer({
     throw new TypeError('createServer needs a queue (scripts/queue/queue.mjs)');
   }
 
-  const auths = sessions ?? createSessions({ root, auth });
+  const auths = sessions ?? createSessions({ root, auth, trustProxy });
 
   /**
    * One limiter per credential route, keyed by the SOCKET address and never by
