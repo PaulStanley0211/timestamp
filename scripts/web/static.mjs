@@ -1526,6 +1526,18 @@ export function sendFile(req, res, { file, contentType, maxAge = 0, download = n
     ETag: etag,
     'Last-Modified': stat.mtime.toUTCString(),
     'Cache-Control': maxAge > 0 ? `private, max-age=${maxAge}` : 'no-cache',
+    // This is the one path that serves bytes a user influenced -- their
+    // photograph re-encoded, their tape. The declared type is final: a browser
+    // invited to sniff is a browser that can be talked into treating a "video"
+    // as something that executes. The policy says a file opened as a document
+    // loads nothing at all, the resource stays on this origin, and no url of
+    // ours rides out in a Referer. Mirrors the page and JSON paths, which have
+    // always said most of this; the file path saying none of it was the gap.
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': "default-src 'none'",
+    'Cross-Origin-Resource-Policy': 'same-origin',
+    'Referrer-Policy': 'no-referrer',
+    'Strict-Transport-Security': 'max-age=31536000',
   };
   if (download) headers['Content-Disposition'] = `attachment; filename="${download.replace(/["\\]/g, '')}"`;
 

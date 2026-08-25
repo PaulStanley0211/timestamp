@@ -35,6 +35,8 @@
  * is a fact rather than an animation.
  */
 
+import crypto from 'node:crypto';
+
 import { STEPS } from '../render/job.mjs';
 import { placeSlug, outfitSlug, qualitySlug, aspectSlug } from './static.mjs';
 
@@ -114,6 +116,91 @@ const STATUS_COPY = Object.freeze({
   failed: 'Stopped',
   cancelled: 'Cancelled',
 });
+
+// ---------------------------------------------------------------------------
+// the inline scripts, as named constants, because the policy names them
+// ---------------------------------------------------------------------------
+
+/**
+ * These are the only two scripts in the product, and the Content-Security-
+ * Policy admits each BY ITS HASH rather than by 'unsafe-inline' -- a keyword
+ * that names no scripts and therefore admits all of them, including one an
+ * injection just wrote. Held as constants so the hash is computed from the
+ * exact bytes the page ships: edit a script and its hash follows
+ * automatically; add a third script without adding it here and the test that
+ * hashes what the page ACTUALLY shipped fails loudly, instead of the script
+ * dying silently in the browser.
+ */
+const HOME_SCRIPT = `
+// The only thing scripting adds to this page: telling you which file you chose,
+// and clearing the reason under a button that is already enabled. Selection,
+// the background cross-fade and the reveal of the place upload are all CSS.
+(function () {
+  var photo = document.getElementById('photo');
+  var name = document.getElementById('photo-name');
+  var reason = document.getElementById('reason');
+  var record = document.getElementById('record');
+  if (!photo || !record) return;
+  if (!record.disabled) { record.disabled = true; }
+  photo.addEventListener('change', function () {
+    var file = photo.files && photo.files[0];
+    name.textContent = file ? file.name : '';
+    if (file) { record.disabled = false; reason.textContent = ''; }
+    else { record.disabled = true; reason.textContent = 'Upload a photo first'; }
+  });
+}());
+`;
+
+/** The status poller. `STEP_COPY` and `STATUS_COPY` are frozen module
+ *  constants, so this text -- interpolations included -- is fixed at load and
+ *  its hash is as stable as the home script's. */
+const STATUS_SCRIPT = `
+(function () {
+  var root = document.getElementById('status');
+  var id = root.dataset.job;
+  var copy = ${jsonInScript(STEP_COPY)};
+  var words = ${jsonInScript(STATUS_COPY)};
+
+  function paint(v) {
+    var c = copy[v.step] || null;
+    document.getElementById('headline').textContent = c ? c.title : (words[v.status] || v.status);
+    document.getElementById('subline').textContent = c ? c.note : '';
+    document.getElementById('statusword').textContent = words[v.status] || v.status;
+
+    var done = v.steps.filter(function (s) { return s.status === 'done' || s.status === 'skipped'; }).length;
+    document.getElementById('counter').firstChild.nodeValue =
+      Math.min(done + 1, v.steps.length) + ' of ' + v.steps.length + ' \\u00b7 ';
+
+    var segs = document.querySelectorAll('#bar .seg');
+    var rows = document.querySelectorAll('#steps .step');
+    v.steps.forEach(function (s, i) {
+      if (segs[i]) segs[i].className = 'seg seg-' + s.status;
+      if (rows[i]) rows[i].className = 'step step-' + s.status + (s.name === v.step ? ' step-current' : '');
+    });
+
+    if (v.status === 'awaiting-selection') location.href = '/j/' + id + '/select';
+    if (v.status === 'done') location.href = '/j/' + id + '/result';
+  }
+
+  function poll() {
+    fetch('/api/jobs/' + id, { headers: { accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (v) { if (v) paint(v); })
+      .catch(function () { /* a dropped poll is not an error worth showing */ });
+  }
+  setInterval(poll, 2000);
+
+  document.getElementById('cancel').addEventListener('click', function () {
+    if (!confirm('Cancel this one? The photo you uploaded is deleted.')) return;
+    fetch('/api/jobs/' + id, { method: 'DELETE' }).then(function () { location.reload(); });
+  });
+}());
+`;
+
+/** base64 sha256 of each shipped script, for `script-src 'sha256-...'`. */
+export const INLINE_SCRIPT_HASHES = Object.freeze(
+  [HOME_SCRIPT, STATUS_SCRIPT].map((s) => crypto.createHash('sha256').update(s, 'utf8').digest('base64')),
+);
 
 /**
  * The FRAME row used to render `['4:3', 'PAL', '25 fps', '15.000s']` as four
@@ -827,25 +914,7 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
 </section>
 </main>
 
-<script>
-// The only thing scripting adds to this page: telling you which file you chose,
-// and clearing the reason under a button that is already enabled. Selection,
-// the background cross-fade and the reveal of the place upload are all CSS.
-(function () {
-  var photo = document.getElementById('photo');
-  var name = document.getElementById('photo-name');
-  var reason = document.getElementById('reason');
-  var record = document.getElementById('record');
-  if (!photo || !record) return;
-  if (!record.disabled) { record.disabled = true; }
-  photo.addEventListener('change', function () {
-    var file = photo.files && photo.files[0];
-    name.textContent = file ? file.name : '';
-    if (file) { record.disabled = false; reason.textContent = ''; }
-    else { record.disabled = true; reason.textContent = 'Upload a photo first'; }
-  });
-}());
-</script>
+<script>${HOME_SCRIPT}</script>
 `;
 
   return layout({
@@ -941,48 +1010,7 @@ export function statusPage({ view, account = null, labels = {} }) {
   </section>
 </main>
 
-<script>
-(function () {
-  var root = document.getElementById('status');
-  var id = root.dataset.job;
-  var copy = ${jsonInScript(STEP_COPY)};
-  var words = ${jsonInScript(STATUS_COPY)};
-
-  function paint(v) {
-    var c = copy[v.step] || null;
-    document.getElementById('headline').textContent = c ? c.title : (words[v.status] || v.status);
-    document.getElementById('subline').textContent = c ? c.note : '';
-    document.getElementById('statusword').textContent = words[v.status] || v.status;
-
-    var done = v.steps.filter(function (s) { return s.status === 'done' || s.status === 'skipped'; }).length;
-    document.getElementById('counter').firstChild.nodeValue =
-      Math.min(done + 1, v.steps.length) + ' of ' + v.steps.length + ' \\u00b7 ';
-
-    var segs = document.querySelectorAll('#bar .seg');
-    var rows = document.querySelectorAll('#steps .step');
-    v.steps.forEach(function (s, i) {
-      if (segs[i]) segs[i].className = 'seg seg-' + s.status;
-      if (rows[i]) rows[i].className = 'step step-' + s.status + (s.name === v.step ? ' step-current' : '');
-    });
-
-    if (v.status === 'awaiting-selection') location.href = '/j/' + id + '/select';
-    if (v.status === 'done') location.href = '/j/' + id + '/result';
-  }
-
-  function poll() {
-    fetch('/api/jobs/' + id, { headers: { accept: 'application/json' } })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (v) { if (v) paint(v); })
-      .catch(function () { /* a dropped poll is not an error worth showing */ });
-  }
-  setInterval(poll, 2000);
-
-  document.getElementById('cancel').addEventListener('click', function () {
-    if (!confirm('Cancel this one? The photo you uploaded is deleted.')) return;
-    fetch('/api/jobs/' + id, { method: 'DELETE' }).then(function () { location.reload(); });
-  });
-}());
-</script>
+<script>${STATUS_SCRIPT}</script>
 `;
   return layout({
     title: `Timestamp - ${view.status}`, body, refreshSeconds: 5, bodyClass: 'page-status', account,

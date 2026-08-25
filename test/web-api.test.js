@@ -1064,6 +1064,82 @@ test('pages declare a content security policy and refuse to be sniffed', async (
   });
 });
 
+/**
+ * `script-src 'unsafe-inline'` names no scripts at all: it admits every inline
+ * script, including one an injection just wrote, which is to say it admits the
+ * exact thing a script policy exists to refuse. The pages ship a known, fixed
+ * set of inline scripts, so the policy can name each one by its hash -- the
+ * shipped scripts run, and nothing else does. Asserted from the OUTSIDE: every
+ * script actually present in the page must be named by the header on the same
+ * response, so an edited script that forgets its hash fails here rather than
+ * silently going dead in the browser.
+ */
+test('the only scripts a page may run are the ones it ships, named by hash', async () => {
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { owner: accountA });
+    for (const target of ['/', `/j/${job.jobId}`]) {
+      const res = await get(base, target, cookieA);
+      const csp = res.headers.get('content-security-policy') ?? '';
+      assert.ok(!/script-src[^;]*'unsafe-inline'/.test(csp),
+        `${target} admits every inline script, including an injected one`);
+      const html = await res.text();
+      const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+      assert.ok(scripts.length > 0, `${target} lost its script; this test needs a page that ships one`);
+      for (const body of scripts) {
+        const digest = crypto.createHash('sha256').update(body, 'utf8').digest('base64');
+        assert.ok(csp.includes(`'sha256-${digest}'`),
+          `${target} ships a script its own policy does not name`);
+      }
+    }
+  });
+});
+
+/**
+ * The file path serves what a user uploaded, re-encoded. `sendJson` and
+ * `sendHtml` have always said "do not sniff me"; the one path serving
+ * user-influenced bytes did not, and a browser that second-guesses a
+ * Content-Type is a browser that can be talked into executing a "video".
+ */
+test('a served file refuses sniffing and carries a policy of its own', async () => {
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'awaiting-selection', owner: accountA });
+    writeStills(root, job.jobId, [1]);
+    const res = await get(base, `/api/jobs/${job.jobId}/stills/1`, cookieA);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(res.headers.get('content-security-policy') ?? '', /default-src 'none'/,
+      'a served file is data and must say so, in case it is ever opened as a document');
+    assert.equal(res.headers.get('cross-origin-resource-policy'), 'same-origin');
+    assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
+  });
+});
+
+/**
+ * The headers that only matter on the day this is deployed, sent from the
+ * first day so deployment does not depend on remembering them. Referrer-Policy
+ * is the load-bearing one today: a job url is `/j/<id>` and the id is the only
+ * secret protecting a face's status page from anyone who never signed in as
+ * its owner -- it must not ride out in `Referer` when a person follows a link
+ * off a page. HSTS is ignored over plain HTTP by specification, so sending it
+ * always costs nothing locally and is already right behind TLS.
+ */
+test('every response carries the deployment headers, pages and JSON alike', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const page = await get(base, '/', cookieA);
+    assert.equal(page.headers.get('referrer-policy'), 'no-referrer');
+    assert.equal(page.headers.get('cross-origin-opener-policy'), 'same-origin');
+    assert.equal(page.headers.get('cross-origin-resource-policy'), 'same-origin');
+    assert.match(page.headers.get('permissions-policy') ?? '', /camera=\(\)/,
+      'a product that handles faces should say out loud that its pages never want the camera');
+    assert.match(page.headers.get('strict-transport-security') ?? '', /max-age=\d+/);
+
+    const json = await get(base, '/api/health', cookieA);
+    assert.equal(json.headers.get('referrer-policy'), 'no-referrer');
+    assert.equal(json.headers.get('cross-origin-resource-policy'), 'same-origin');
+    assert.match(json.headers.get('strict-transport-security') ?? '', /max-age=\d+/);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // stills and selection -- 1-BASED
 // ---------------------------------------------------------------------------

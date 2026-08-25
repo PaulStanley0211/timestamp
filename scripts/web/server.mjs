@@ -86,7 +86,9 @@ import { matchRoute, isPublicRoute } from './router.mjs';
 import { boundaryFromContentType, parseMultipart, fileSink, MultipartError } from './multipart.mjs';
 import { createStylesheet, sendFile } from './static.mjs';
 import { aspectIds } from '../tapedeck/frame.mjs';
-import { homePage, landingPage, statusPage, selectPage, resultPage, errorPage } from './views.mjs';
+import {
+  homePage, landingPage, statusPage, selectPage, resultPage, errorPage, INLINE_SCRIPT_HASHES,
+} from './views.mjs';
 import { loginPage, signupPage, pricingPage, authUnavailablePage } from './views-auth.mjs';
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
@@ -181,13 +183,42 @@ const TAPE_SECONDS = 15;
 // small response helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * The headers every response carries, whatever its type.
+ *
+ * `Referrer-Policy: no-referrer` is the load-bearing one today: a job url is
+ * `/j/<id>` and the id is the only thing keeping a face's status page out of
+ * a stranger's hands, so it must never ride out in `Referer` when somebody
+ * follows a link off a page. The HSTS header is ignored over plain HTTP by
+ * specification, so sending it unconditionally costs local development
+ * nothing and is already right on the day there is TLS -- deployment must not
+ * depend on somebody remembering to add it.
+ */
+const BASE_SECURITY_HEADERS = Object.freeze({
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'Strict-Transport-Security': 'max-age=31536000',
+});
+
+/**
+ * The script policy names the two scripts this product ships, each by the
+ * hash of its exact bytes, and admits nothing else. 'unsafe-inline' named no
+ * scripts and therefore admitted all of them -- including one an injection
+ * just wrote -- which made the directive decorative. The hashes come from
+ * views.mjs, where the scripts live as constants, so an edited script
+ * re-hashes itself and a forgotten one fails the test that hashes what the
+ * page actually shipped.
+ */
+const SCRIPT_SRC = INLINE_SCRIPT_HASHES.map((hash) => `'sha256-${hash}'`).join(' ');
+
 function sendJson(req, res, status, body, headers = {}) {
   const text = JSON.stringify(body);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(text),
     'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
+    ...BASE_SECURITY_HEADERS,
     ...headers,
   });
   res.end(req.method === 'HEAD' ? undefined : text);
@@ -203,15 +234,24 @@ function sendHtml(req, res, status, html, headers = {}) {
     // stops a proxy that ignores the first header from serving one person's
     // shelf to another.
     Vary: 'Cookie',
-    'X-Content-Type-Options': 'nosniff',
+    ...BASE_SECURITY_HEADERS,
+    // A document that never wants the camera, the microphone or the location
+    // should say so; a page on a face-video service asking for the camera is
+    // exactly the shape a phishing overlay takes. And this app is one origin
+    // talking to itself, so nothing may open it into a shared browsing group
+    // -- COOP costs nothing here and closes the window-handle channel.
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Cross-Origin-Opener-Policy': 'same-origin',
     // The pages load nothing from anywhere else -- one same-origin stylesheet,
     // one same-origin font, images and video from this app. Saying so means a
     // successful injection into the place field still cannot exfiltrate.
     // `style-src 'self'` with no `'unsafe-inline'` is why the per-place card
-    // gradients are generated into /styles.css instead of onto style attributes.
+    // gradients are generated into /styles.css instead of onto style attributes,
+    // and `script-src` names the two shipped scripts by hash for the same
+    // reason -- see SCRIPT_SRC above.
     'Content-Security-Policy':
       "default-src 'self'; img-src 'self' data:; media-src 'self'; "
-      + "style-src 'self'; font-src 'self'; script-src 'unsafe-inline'; "
+      + `style-src 'self'; font-src 'self'; script-src ${SCRIPT_SRC}; `
       // `form-action` LISTS STRIPE BECAUSE OF A REDIRECT, NOT A FORM. The buy
       // button posts to this origin; the handler answers 303 to the hosted
       // checkout page, and Chrome checks the redirect target of a form
