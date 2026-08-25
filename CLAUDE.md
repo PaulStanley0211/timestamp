@@ -9,7 +9,7 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-08-25, evening) — A REAL PAYMENT WENT THROUGH
 
-**1219 tests / 1217 pass / 0 fail / 2 skipped.** The skips are the
+**1256 tests / 1254 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 Branch `ui-redesign-signed-in-page`; `origin/main` is still `b6f64a3`, so
 nothing is merged. Opening a PR is Paul's call, not a prerequisite.
@@ -125,16 +125,52 @@ and that is the designed state, not a gap.**
    in a world that permits two), and the three plans do not use the
    struck/ghost grammar at all. Section 23. **Possibly moot** if the UI world
    changes — check item 3 first.
-8. **The Supabase spec**, then a plan, then code. Not before. Section 5.
-   **NOTE: a credit PACK does not need it** — see §4 of the pricing spec, and
-   section 25 for the pack that shipped on the file ledger. Revenue is not
-   blocked behind that migration.
-9. **THE FREE TAPE IS STILL THE OLD ONE, and §3 of the pricing spec is not
-   built.** Signup still grants `creditsPerPeriod` from the `free` plan every
-   period rather than one real tape once, and **there is no global ceiling on
-   free tapes.** §3 calls that ceiling "the single most important line in this
-   section" and it does not exist: the difference between a good day and a
-   drained fal balance is still a number nobody set. Not started, not blocked.
+8. ~~**The Supabase spec**, then a plan, then code.~~ **THE SPEC EXISTS AS OF
+   2026-08-25** — three documents, written after Paul settled four decisions:
+   full migration (accounts, credits AND sessions), Google + email/password
+   first, and the shape where **Supabase proves identity but THIS SERVER MINTS
+   ITS OWN SESSION**, because a JWT cannot be revoked and this service holds
+   their face. `docs/superpowers/specs/2026-08-25-supabase-identity-money-design.md`
+   plus its schema and test-runtime companions. **11 open questions are Paul's
+   to close, and no plan and no code exist yet.** INSTAGRAM LOGIN IS IMPOSSIBLE
+   — not a Supabase provider, and Meta forbids using its Instagram APIs to
+   authenticate app users; Facebook is deferred behind App Review and Business
+   Verification. **NOTE: a credit PACK does not need any of it** — revenue is
+   not blocked behind that migration.
+9. ~~**THE FREE TAPE IS STILL THE OLD ONE**~~ **BUILT 2026-08-25.** The
+   GLOBAL CEILING §3 calls "the single most important line in this section"
+   now exists: `freeTape.globalCeiling` in `config/credits.json`, **default
+   100**, a lifetime count across every account ever, enforced inside a global
+   file lock in `createAccount`, with `0` supported as a kill switch and an
+   8-thread barrier test. Reaching it does NOT fail signup — the account opens
+   at zero with an auditable withheld row, because a visible balance the button
+   then refuses is what forced free off 16 credits in the first place. The
+   free plan is once-ever now, not per period. **THE SIGNUP GRANT IS 21, NOT
+   42** — §3's own number, Paul's call the same evening — so the exposure is
+   $2.07 a signup and about $207 against the ceiling. **The grant and the
+   ceiling do not move together; editing one silently re-prices the other.**
+   What the ceiling does NOT bound is availability — see F21.
+
+### THE SECURITY REVIEW IS THE NEXT PIECE OF WORK
+
+**`docs/security-review-2026-08-25.md`, and the August one beside it.** Three
+independent auditors, every HIGH re-verified by hand. **Nothing about secrets is
+wrong** — `.env` has never been committed, no key reaches a log, a manifest or a
+page, and there are still zero npm dependencies. **No cross-tenant path to
+another user's face exists**, no XSS was found in a codebase that builds every
+page from template literals, and four webhook forgeries were all refused.
+
+**ONE CRITICAL: F16.** Nothing checks that the Stripe key mode and the Price
+mode agree, and the shipped Price is test-mode. Today that is worth $0 because
+every web render refuses at compose. **Filling in the still model arms it** —
+after that, card `4242` mints real credits that buy real fal renders, about
+$1,300 a day. F31 arms on the same edit. **Whoever fills that field in reads
+section 3 of the review first.**
+
+**AND THE UNCOMFORTABLE ONE.** The August review's F3, F6, F7, F8, F9, F10 and
+F13 are all still open four days and thirty-nine commits later, and F13's
+pattern was reintroduced on 2026-08-25 as F26. A review only helps if the
+findings get closed.
 
 ### Two cheap wins nobody has taken
 
