@@ -394,3 +394,89 @@ test('parseArgs separates the sub-command from its options', () => {
   assert.equal(args.flags.has('force'), true);
   assert.equal(args.flags.has('json'), false);
 });
+
+// ---------------------------------------------------------------------------
+// a quantity that cannot reproduce its own estimate is not a denominator
+// ---------------------------------------------------------------------------
+
+/**
+ * THE DEFECT THIS CLOSES, and it printed real, catastrophic advice.
+ *
+ * `estimateJob` froze `quantity: seg.seconds` for a model billed per TOKEN.
+ * The estimate was right -- the USD beside it came from the token count -- so
+ * nothing upstream looked wrong. This command then divided a REAL INVOICE by
+ * that seconds figure and labelled the answer with the CONFIG's unit, so the
+ * two never had to agree: $8.73 over 45 seconds implied $0.1941/token against
+ * $0.000014 configured, flagged it OVER, and printed
+ *
+ *   models["bytedance/seedance-2.0/reference-to-video"].usd: 0.000014 -> 0.1941
+ *
+ * which is wrong by a factor of about 13,825 and would have priced a 480p tape
+ * at roughly $28,700. The upstream freeze is fixed, but EVERY MANIFEST ALREADY
+ * ON DISK still carries seconds, so the guard has to live here too.
+ *
+ * The check is unit-agnostic on purpose: rather than comparing unit strings --
+ * which legacy lines do not carry at all -- it asks whether the frozen
+ * quantity, at the configured rate, reproduces the frozen estimate. If it
+ * cannot, then dividing an invoice by it means nothing, whatever either side
+ * calls its unit. A rate this command cannot honestly imply is one it must
+ * refuse to print, because the whole purpose of the number is to be typed into
+ * config/pricing.json.
+ */
+test('a line whose quantity cannot reproduce its own estimate implies no rate', () => {
+  const root = tmpRoot();
+  // 15 "seconds" frozen against a $4.5646 estimate that was really priced from
+  // 326,042 tokens: 0.3027 x 15 = $4.54, nowhere near it.
+  seedJob(root, { lines: [{ step: 'animate', model: VIDEO, usd: 4.5646, quantity: 15, actual: 4.5773 }] });
+
+  const [video] = rollupByModel(buildLedger({ root }).rows, { pricing: PRICING });
+
+  assert.equal(video.meteredCalls, 1, 'the invoice is still real and still counted');
+  assert.equal(video.actual, 4.5773, 'and the dollars are still reported');
+  assert.equal(video.impliedUsd, null, 'but the rate is refused rather than guessed');
+  assert.equal(video.flagged, false, 'and nothing is flagged OVER on the strength of a number that does not exist');
+});
+
+/** The honest case still works: a quantity that reproduces its estimate is a
+ *  denominator you can divide an invoice by. */
+test('a line whose quantity does reproduce its estimate still implies a rate', () => {
+  const root = tmpRoot();
+  // 0.3027 x 15 = 4.5405 exactly, so seconds really are what this was priced on.
+  seedJob(root, { lines: [{ step: 'animate', model: VIDEO, usd: 4.5405, quantity: 15, actual: 1.50 }] });
+
+  const [video] = rollupByModel(buildLedger({ root }).rows, { pricing: PRICING });
+  assert.equal(video.impliedUsd, 0.1, '1.50 over 15 seconds');
+});
+
+/**
+ * "3/3 call(s) metered · nothing metered" is a sentence that argues with
+ * itself, and it is what the guard above printed the moment it started
+ * refusing. A refusal has to say WHICH refusal it is: there were no invoices,
+ * or there were invoices and the frozen quantity beside them cannot be divided
+ * by. The second is a repairable data problem and the operator can only repair
+ * what the report names.
+ */
+test('a refused rate says which refusal it is', () => {
+  const root = tmpRoot();
+  seedJob(root, { lines: [{ step: 'animate', model: VIDEO, usd: 4.5646, quantity: 15, actual: 4.5773 }] });
+  seedJob(root, { lines: [{ step: 'still', model: STILL, usd: 0.04, quantity: 1 }] });
+
+  const groups = rollupByModel(buildLedger({ root }).rows, { pricing: PRICING });
+  const video = groups.find((g) => g.model === VIDEO);
+  const still = groups.find((g) => g.model === STILL);
+
+  assert.equal(video.impliedUsd, null);
+  assert.equal(video.impliedReason, 'unreconcilable', 'invoices exist; the denominator is what failed');
+  assert.equal(still.impliedUsd, null);
+  assert.equal(still.impliedReason, 'nothing-metered', 'no invoice has arrived at all');
+});
+
+/** A rate that IS implied has nothing to explain. */
+test('an implied rate carries no refusal reason', () => {
+  const root = tmpRoot();
+  seedJob(root, { lines: [{ step: 'animate', model: VIDEO, usd: 4.5405, quantity: 15, actual: 1.50 }] });
+
+  const [video] = rollupByModel(buildLedger({ root }).rows, { pricing: PRICING });
+  assert.equal(video.impliedUsd, 0.1);
+  assert.equal(video.impliedReason, null);
+});

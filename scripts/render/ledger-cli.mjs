@@ -180,7 +180,7 @@ export function rollupByModel(rows, { pricing }) {
       if (!groups.has(line.model)) {
         groups.set(line.model, {
           model: line.model, unit: null, calls: 0, meteredCalls: 0,
-          quantity: 0, estimated: 0, actual: 0,
+          quantity: 0, estimated: 0, actual: 0, meteredLines: [],
         });
       }
       const g = groups.get(line.model);
@@ -194,6 +194,7 @@ export function rollupByModel(rows, { pricing }) {
       // would divide real dollars by imagined ones and report a rate lower than
       // anything anybody was charged.
       g.quantity += line.quantity ?? 0;
+      g.meteredLines.push(line);
     }
   }
 
@@ -203,10 +204,50 @@ export function rollupByModel(rows, { pricing }) {
       entry = pricing?.models?.[g.model] ?? null;
     } catch { entry = null; }
     const configuredUsd = entry?.usd ?? null;
-    const impliedUsd = g.meteredCalls > 0 && g.quantity > 0 ? usd(g.actual / g.quantity) : null;
+    // A QUANTITY THAT CANNOT REPRODUCE ITS OWN ESTIMATE IS NOT A DENOMINATOR.
+    // `estimateJob` froze `quantity: seg.seconds` for a model billed per TOKEN.
+    // The estimate was right -- its USD came from the token count -- so nothing
+    // upstream looked wrong, and this function divided a real invoice by the
+    // seconds and labelled the answer with the CONFIG's unit, which the
+    // quantity never had to agree with. $8.73 over 45 seconds implied
+    // $0.1941/token against $0.000014 configured and printed an instruction to
+    // edit config/pricing.json by a factor of about 13,825.
+    //
+    // The freeze is fixed, but every manifest already on disk still holds
+    // seconds, so the guard has to be here as well as there.
+    //
+    // TWO CHECKS, BECAUSE LEGACY LINES DO NOT NAME THEIR UNIT. A line that
+    // names one is checked against the config directly. A line that does not is
+    // asked whether the configured rate times its quantity reproduces the
+    // estimate it was frozen with; if it cannot, then whatever the two sides
+    // call their units, dividing an invoice by that quantity means nothing.
+    //
+    // The second check has a known false positive: a line frozen under a rate
+    // that has since been edited will not reproduce either, and its rate is
+    // refused although its unit was fine. That is the safe direction -- this
+    // number exists to be typed into config/pricing.json, so refusing to print
+    // one is a delay, and printing a wrong one is a four-order-of-magnitude
+    // mispricing. Lines carrying their unit are exact, and they age in.
+    const reconcilable = (line) => {
+      if (configuredUsd === null || !(line.quantity > 0)) return false;
+      if (line.unit) return line.unit === entry?.unit;
+      return Math.abs(configuredUsd * line.quantity - line.estimated) < 0.0001;
+    };
+    const denominatorIsHonest = g.meteredLines.length > 0 && g.meteredLines.every(reconcilable);
+    const impliedUsd = denominatorIsHonest && g.meteredCalls > 0 && g.quantity > 0
+      ? usd(g.actual / g.quantity)
+      : null;
+    // WHICH REFUSAL IT IS, because "3/3 call(s) metered - nothing metered" is a
+    // sentence that argues with itself. No invoice at all is a waiting game;
+    // an invoice whose frozen quantity cannot be divided by is a repairable
+    // data problem, and an operator can only repair what the report names.
+    const impliedReason = impliedUsd !== null
+      ? null
+      : (g.meteredCalls === 0 ? 'nothing-metered' : 'unreconcilable');
     return {
       ...g,
       unit: entry?.unit ?? null,
+      impliedReason,
       estimated: usd(g.estimated),
       actual: g.meteredCalls > 0 ? usd(g.actual) : null,
       configuredUsd,
@@ -315,7 +356,9 @@ function printReport({ rows, totals, groups }) {
   console.log('  by model -- this is what config/pricing.json is keyed on');
   for (const g of groups) {
     const rate = g.impliedUsd === null
-      ? 'nothing metered'
+      ? (g.impliedReason === 'unreconcilable'
+        ? `NO RATE -- the frozen quantity cannot reproduce its own estimate at $${g.configuredUsd}/${g.unit ?? 'unit'}, so an invoice divided by it would mean nothing`
+        : 'nothing metered')
       : `$${g.impliedUsd}/${g.unit ?? 'unit'} against $${g.configuredUsd}/${g.unit ?? 'unit'} configured`;
     console.log(`  ${g.model}`);
     console.log(`    ${g.meteredCalls}/${g.calls} call(s) metered · ${rate}${g.flagged ? `  <-- OVER ${DIVERGENCE_LIMIT * 100}%` : ''}`);

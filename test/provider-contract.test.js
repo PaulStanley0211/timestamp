@@ -71,7 +71,7 @@ import { createProvider, loadModels, modelEntry, paidTransport, PROVIDER_IDS } f
 // provider -- one import and one array entry, and the shared body below
 // untouched. If that ever stops being true, the edit is the bug report.
 import { falContractCase } from './provider-fal.test.js';
-import { loadPricing, assertPricingTable, estimateStill, estimateVideo, estimateJob, divergence, diverges } from '../scripts/providers/pricing.mjs';
+import { loadPricing, assertPricingTable, estimateStill, estimateVideo, estimateJob, priceEntry, divergence, diverges } from '../scripts/providers/pricing.mjs';
 
 const cfg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config', 'render.json'), 'utf8'));
 
@@ -993,4 +993,56 @@ test('a resumed render checks the dry-run flag before it runs anything', () => {
   assert.ok(dryCheck > -1, 'the resume branch never looks at --dry-run, so the flag is ignored on a resume');
   assert.ok(dryCheck < firstRun,
     'the resume branch checks --dry-run AFTER calling runPipeline, which means it has already spent the money');
+});
+
+// ---------------------------------------------------------------------------
+// the frozen quantity is the one the ledger divides by
+// ---------------------------------------------------------------------------
+
+/**
+ * THE DEFECT THIS CLOSES, and it is the section 26 shape exactly: a value that
+ * exists, is correct, and is simply not handed on.
+ *
+ * `quantityFor` computes tokens for a token-billed model and `estimateVideo`
+ * prices against them, but the frozen line wrote `quantity: seg.seconds` no
+ * matter what the model was billed in. Nothing in the estimate looked wrong --
+ * the USD was right -- and the damage landed one file away, in `npm run
+ * ledger`, which divides REAL INVOICE DOLLARS by that frozen quantity to imply
+ * a rate. Dividing by 45 seconds instead of 622,142 tokens implied
+ * $0.1941/token against $0.000014 configured, flagged it OVER, and printed an
+ * instruction to edit config/pricing.json BY A FACTOR OF ~13,825. Following the
+ * tool would have priced a 480p tape at about $28,700.
+ *
+ * The invariant that makes that impossible is the one the ledger already
+ * assumes and nothing asserted: THE FROZEN QUANTITY, AT THE CONFIGURED RATE,
+ * MUST REPRODUCE THE FROZEN PRICE. If those two disagree the line is not a
+ * reconcilable record of anything.
+ */
+test('the frozen quantity, at the configured rate, reproduces the frozen price', () => {
+  const pricing = loadPricing();
+  const videoModel = 'bytedance/seedance-2.0/reference-to-video';
+  const entry = priceEntry(pricing, videoModel);
+  assert.equal(entry.unit, 'token', 'this test is about the token-billed path');
+
+  // 960x720 is the 720p order -- the tier whose real invoice is now recorded.
+  const segments = [{ index: 1, seconds: 15, startsFrom: 'references', size: { width: 960, height: 720 } }];
+  const est = estimateJob({ pricing, videoModel, stillCount: 0, segments });
+  const line = est.lines.find((l) => l.step === 'animate');
+
+  assert.ok(line.quantity > 0, 'a billed line has a quantity');
+  const implied = entry.usd * line.quantity;
+  assert.ok(
+    Math.abs(implied - line.usd) < 0.0001,
+    `rate x frozen quantity must equal the frozen price: ${entry.usd} x ${line.quantity} = ${implied}, line says ${line.usd}`,
+  );
+});
+
+/** The unit travels with the number, so nothing downstream has to assume it. */
+test('a frozen line names the unit its quantity is counted in', () => {
+  const pricing = loadPricing();
+  const videoModel = 'bytedance/seedance-2.0/reference-to-video';
+  const segments = [{ index: 1, seconds: 15, startsFrom: 'references', size: { width: 960, height: 720 } }];
+  const est = estimateJob({ pricing, videoModel, stillCount: 0, segments });
+
+  assert.equal(est.lines.find((l) => l.step === 'animate').unit, 'token');
 });

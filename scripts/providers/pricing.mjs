@@ -263,7 +263,17 @@ export function estimateJob({ pricing, stillModel, videoModel, stillCount, segme
         step: 'animate',
         model: videoModel,
         index: i + 1,
-        quantity: seg.seconds,
+        // THE QUANTITY IS THE ONE THE PRICE WAS COMPUTED FROM, IN THE UNIT THE
+        // MODEL IS BILLED IN -- not the seconds it ran. This line was
+        // `seg.seconds` and the estimate still looked right, because the USD
+        // beside it was computed correctly from tokens. The damage landed one
+        // file away: `npm run ledger` divides a REAL INVOICE by this number to
+        // imply a rate, so dividing $8.73 by 45 seconds instead of 622,142
+        // tokens implied $0.1941/token against $0.000014 configured and printed
+        // an instruction to edit config/pricing.json by a factor of ~13,825.
+        // The unit travels with the number so nothing downstream has to guess.
+        unit: entry.unit,
+        quantity: quantityFor(entry, { count: 1, seconds: seg.seconds, size: seg.size ?? null }, videoModel),
         usd: estimateVideo({ pricing, model: videoModel, seconds: seg.seconds, size: seg.size ?? null }),
         // What fal is expected to send back, and whether that is a measurement
         // or a forecast. A line the operator can see is a forecast is a line
