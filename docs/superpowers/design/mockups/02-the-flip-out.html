@@ -1,0 +1,1138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- LIGHT WORLD ONLY. `color-scheme: light` is declared, and there is no dark
+     mode and no `prefers-color-scheme` block anywhere in this file. Paul ruled
+     on 2026-08-24 that the UI is not to be dark. The one dark rectangle on this
+     page is the LCD well, which is the whole idea of THE FLIP-OUT: the warmth
+     is QUARANTINED, not translated. It is a component, not a theme. -->
+<meta name="color-scheme" content="light">
+
+<title>THE FLIP-OUT — Timestamp, signed in</title>
+
+<!-- The only external request in this file, and it is the one the brief
+     permits. VT323 is the face the repo already bundles at
+     assets/fonts/tape-osd.ttf (Peter Hull, SIL OFL 1.1); loading the same face
+     from Google here keeps the mockup to one file. Real fallback stack:
+     ui-monospace, then Courier New, then monospace. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+
+<style>
+/* ==========================================================================
+   THE FLIP-OUT -- direction 02 of the light-UI set.
+   docs/superpowers/design/2026-08-25-light-ui-directions.md
+
+   THE ONE RULE OF THIS FILE, and it is what makes the direction legible:
+
+       ANY PICTURE, AND ANY NUMBER THE TAPE OWNS, LIVES INSIDE A WELL.
+       THE CHASSIS CARRIES LETTERING AND NOTHING ELSE.
+
+   So there is no orange pixel anywhere outside a #12161A rectangle, no
+   photograph anywhere outside one either, and no gradient, glow, halo, bevel
+   or plastic texture anywhere at all. The chassis is a COLOUR and a LABELLING
+   CONVENTION -- the rule the direction doc says has to be written down
+   explicitly or this tips into skeuomorphism.
+
+   EVERY COLOUR BELOW IS EITHER DECLARED IN THE DIRECTION DOC OR DERIVED FROM
+   ONE THAT IS, AND EVERY DERIVATION SAYS SO IN A COMMENT.
+
+   CONTRAST, computed against the actual hex values with the WCAG relative-
+   luminance formula rather than estimated. Every one of these reproduces the
+   figure the direction doc publishes:
+
+     ink       #211E1A on chassis #E7E4DE ....... 13.08:1
+     ink       #211E1A on lift    #F3F1EC ....... 14.70:1
+     ink-dim   #5F5A52 on chassis ............... 5.39:1
+     ink-dim   #5F5A52 on lift .................. 6.06:1
+     ghost     ink @ .65 on chassis (= #66635F) . 4.71:1   <- the corrected value
+     rec       #A82A22 on chassis ............... 5.48:1
+     lift      #F3F1EC on rec #A82A22 ........... 6.16:1
+     seam      #CFCBC2 on chassis ............... 1.28:1   <- a seam, not a divider
+     osd       #FF8A1E on well #12161A .......... 7.71:1   <- STRUCK, unchanged
+   ========================================================================== */
+
+:root {
+  /* ---- declared by the direction. Nothing here is invented. ------------- */
+  --chassis:      #E7E4DE;  /* the body. Matte plastic, warm-grey            */
+  --chassis-lift: #F3F1EC;  /* a raised panel                                */
+  --chassis-seam: #CFCBC2;  /* a moulding line -- 1.28:1. NEVER a fill.      */
+  --ink:          #211E1A;  /* silkscreen lettering                          */
+  --ink-dim:      #5F5A52;  /* secondary labels                              */
+  --ghost:        rgba(33, 30, 26, .65); /* ink @ .65 -- see the note below  */
+  --rec:          #A82A22;  /* the record lamp. Red, because a REC lamp was  */
+  --well:         #12161A;  /* the LCD. Cool blue-black                      */
+  --osd:          #FF8A1E;  /* unchanged from STRUCK. LEGAL ONLY IN THE WELL */
+
+  /* THE GHOST IS WRITTEN AS AN ALPHA, NOT AS THE FLATTENED HEX, ON PURPOSE.
+     rgba(33,30,26,.65) IS the declared token -- ink at .65 -- and flattening
+     it to #66635F by hand would put a second number in the file that has to
+     be kept in step with the first. It is applied as `color`, never as the
+     `opacity` PROPERTY, and that is not a stylistic preference: `opacity`
+     applies to an element's outline too, so a focus ring drawn on a ghosted
+     control would be painted at 65% strength on exactly the controls that most
+     need it. CLAUDE.md section 16 paid for that lesson once already.
+     Flattened over the chassis this is #66635F and measures 4.71:1 -- the
+     corrected ghost value, which costs more here than in either other
+     direction because a mid-light ground squeezes contrast from both ends. */
+
+  /* ---- DERIVED. Each one says what it is derived from. ------------------ */
+
+  /* Shadow. A raised panel needs one and the doc gives no shadow colour, so it
+     is INK at low alpha -- the only ink in this world -- rather than a new
+     grey. No hue is introduced and none can drift. */
+  --shade-near: rgba(33, 30, 26, .10);
+  --shade-far:  rgba(33, 30, 26, .055);
+
+  /* The well is RECESSED into the chassis, and a recess is a shadow cast by
+     the chassis onto the plane below it -- again INK at alpha, inset. This is
+     a box-shadow, NOT a border: nothing is being separated from anything, the
+     dark plane simply sits lower than the light one. */
+  --well-recess: rgba(33, 30, 26, .28);
+
+  /* The 4px spacing scale, unchanged from the repo. Structural rhythm uses
+     these eight steps and nothing else. */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
+
+  /* TWO TYPE REGISTERS, AND THE SPLIT IS PHYSICAL.
+     The chassis is lettered the way a 2003 camcorder body was: small, hard,
+     wide-tracked uppercase system sans. VT323 appears ONLY on the screen --
+     the date, the counter, REC, the credit balance. That narrows the display
+     face rather than dropping it. */
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --osd-face: 'VT323', ui-monospace, 'Courier New', monospace;
+}
+
+* { box-sizing: border-box; }
+
+/* THE BORDER BUDGET FOR THIS DIRECTION IS THREE, AND THE THIRD IS ARGUED.
+   Everything starts at zero and exactly three things are allowed it back:
+
+     1. `outline` on :focus-visible. Never removed. (Named in DESIGN.md.)
+     2. `.shape` -- the glyph depicting an aspect ratio. (Named in DESIGN.md.)
+     3. `.seam` -- a 1px #CFCBC2 moulding line at 1.28:1 against the chassis.
+        THE ONE THIS DIRECTION DELIBERATELY SPENDS. A chassis has seams, and a
+        moulding line at 1.28:1 is a manufacturing mark rather than a device
+        for separating two things -- the same argument the aspect glyph won on.
+        If Paul rejects it, delete the `.seam` class and the page still works
+        on shadow and space alone, slightly weaker. Nothing else depends on it.
+
+   Grep this file for a `border:` or `border-bottom/top:` declaration and there
+   are exactly four: this reset, `.shape`, and the seam's two edges. Everything
+   else that greps is `box-sizing: border-box` or a `border-radius` on a lamp,
+   neither of which draws a line. Grouping is depth and space everywhere else. */
+body, header, section, div, p, h1, h2, label, input, button, select, ul, li, a, dl, dt, dd, summary, details {
+  border: 0;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;             /* dvh, not vh -- the repo already fixed this */
+  background: var(--chassis);     /* THE PAGE IS THE CAMCORDER'S OWN BODY      */
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;                /* an EXTENSION -- see the note at the foot  */
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ---- the two lettering registers ---------------------------------------- */
+
+/* Silkscreen. The NIGHTSHOT / 700x DIGITAL ZOOM idiom: small, hard, wide,
+   uppercase. This is how the chassis says anything that is not prose. */
+.silk {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--ink-dim);          /* 5.39:1 on chassis, 6.06:1 on lift */
+  margin: 0;
+}
+
+/* The read-out. VT323, and it may not appear outside a well. */
+.osd {
+  font-family: var(--osd-face);
+  color: var(--osd);              /* 7.71:1 on the well ground */
+  letter-spacing: .04em;
+  line-height: 1.1;
+}
+
+/* ==========================================================================
+   the mockup's own header strip -- names the direction, states the thesis
+   ========================================================================== */
+
+.strip { background: var(--chassis-lift); padding: var(--s-4) var(--s-4) var(--s-5); }
+.strip-in { max-width: 72rem; margin: 0 auto; }
+.strip-k { margin: 0 0 var(--s-2); }
+.strip-name {
+  margin: 0 0 var(--s-2);
+  font-size: clamp(22px, 4.4vw, 30px);
+  font-weight: 700; letter-spacing: .06em; line-height: 1.05;
+}
+.strip-say { margin: 0; max-width: 68ch; color: var(--ink-dim); font-size: 15px; }
+.strip-say b { color: var(--ink); font-weight: 600; }
+
+/* THE ONE SPENT BORDER. Every instance in this file is this class. */
+.seam { border-bottom: 1px solid var(--chassis-seam); }
+.seam-top { border-top: 1px solid var(--chassis-seam); }
+
+/* ==========================================================================
+   the chassis
+   ========================================================================== */
+
+.chassis { max-width: 72rem; margin: 0 auto; padding: 0 var(--s-4) var(--s-8); }
+
+.masthead {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--s-3) var(--s-5);
+  padding: var(--s-4) 0; margin-bottom: var(--s-6);
+}
+
+.wordmark {
+  display: inline-flex; align-items: center; gap: var(--s-2);
+  font-size: 15px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--ink); text-decoration: none;
+}
+
+/* THE RECORD LAMP. Red, on the chassis, because a REC lamp was -- and because
+   red is the machine speaking ABOUT ITSELF. The word REC also appears inside
+   the well below, in orange, where it is the TAPE speaking. Same word, two
+   colours, two planes: that is the whole geographic rule, and it is drawn
+   twice on this page so it can be seen rather than read about. */
+.lamp { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); flex: none; }
+.lamp--big { width: 11px; height: 11px; }
+
+.nav { margin-left: auto; display: flex; align-items: center; gap: var(--s-4); }
+.nav a, .nav button {
+  font: inherit; font-size: 13px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-dim); background: none; padding: 0; cursor: pointer; text-decoration: none;
+}
+.nav a:hover, .nav button:hover { color: var(--ink); }
+
+/* THE BALANCE IS A READ-OUT, SO IT IS IN A WELL.
+   The repo draws the balance as an SVG ring in accent orange. Orange may not
+   appear on the chassis in this world, and the direction names "the credit
+   balance" as one of the four things VT323 is still for -- so the ring becomes
+   a readout and the readout is on a screen. It is the smallest instance of the
+   same component as the big well, which is what makes the rule read as a rule
+   rather than as one special rectangle. */
+.readout {
+  display: inline-flex; align-items: baseline; gap: var(--s-2);
+  background: var(--well); padding: var(--s-1) var(--s-3) 3px;
+  box-shadow: inset 0 1px 3px var(--well-recess);
+}
+.readout .osd { font-size: 21px; }
+.readout .osd-k { font-size: 15px; }
+
+/* ==========================================================================
+   THE DECK -- the well, and the strip of chassis beside it
+   ========================================================================== */
+
+.deck { margin-bottom: var(--s-6); }
+
+/* THE WELL. One dark, warm-lit rectangle, recessed with an inset shadow and
+   carrying NO BORDER: a plane that sits lower than the plane around it does
+   not need a line to say so. */
+.well { background: var(--well); padding: var(--s-3); box-shadow: inset 0 2px 6px var(--well-recess); }
+
+/* The two OSD bands sit on the well's own ground, ABOVE and BELOW the picture,
+   never over it. That is not a layout convenience: 7.71:1 is a measured fact
+   about orange on #12161A, and orange over an arbitrary photograph is an
+   unmeasurable one. It is also what the product itself already does -- the
+   delivered tape is a picture centred on a dark surround, per the output
+   contract in CLAUDE.md. */
+.osd-row { display: flex; align-items: baseline; gap: var(--s-3); flex-wrap: wrap; padding: 0 var(--s-1) var(--s-2); }
+.osd-row--foot { padding: var(--s-2) var(--s-1) 0; }
+.osd-row .osd { font-size: 19px; text-transform: uppercase; }
+.osd-row .osd--sm { font-size: 16px; }
+.osd-push { margin-left: auto; }
+
+/* The blinking on-screen REC legend. Cancelled under prefers-reduced-motion. */
+.osd-rec { animation: blink 1.6s steps(1, end) infinite; }
+@keyframes blink { 0%, 62% { opacity: 1; } 63%, 100% { opacity: .28; } }
+
+/* THE PICTURE AREA, AND THE ARITHMETIC THAT MAKES THREE SHAPES FIT ONE WELL.
+   The height is clamped so the WIDEST offered shape -- 16:9, always -- fits the
+   well's inner width at every one of the six widths CLAUDE.md 6c says this
+   product is tested at. The well's inner width is the viewport less 56px (two
+   16px chassis paddings and two 12px well paddings), and a 16:9 picture is
+   height x 16/9:
+
+     320px:  height 136 (the clamp floor) -> 242px wide against 264px available
+     375px:  height 165 (44vw)            -> 293px against 319px
+     414px:  height 182                   -> 324px against 358px
+     768px:  height 208 (the clamp cap)    -> 370px against 712px
+     1024px and up: the deck column is a fixed 26rem, so 370px against 392px
+
+   THE FLOOR IS 8.5rem AND NOT 9.5rem FOR EXACTLY ONE REASON: at 9.5rem the
+   320px column overflows by 6px. That was measured, not foreseen -- the first
+   version of this rule was fine on a laptop and wrong on the narrowest device
+   on the repo's own list. `overflow: hidden` is a second belt: if a user's
+   font size or zoom moves these numbers, the picture crops instead of climbing
+   over the read-out.
+
+   A shape narrower than the well is PILLARBOXED on the well's own ground --
+   exactly what the product does with a 4:3 tape, and the reason the frame
+   choice is legible here at all.
+
+*/
+.screen { display: grid; place-items: center; height: clamp(8.5rem, 44vw, 13rem); overflow: hidden; }
+.picture { position: relative; height: 100%; aspect-ratio: 4 / 3; overflow: hidden; }
+.frame { position: absolute; inset: 0; display: none; }
+
+/* IMPORTED PHOTOGRAPHS STAY UNTINTED -- structural, and it survives here.
+   These eight gradients stand in for the eight photographs in assets/places/,
+   and they are not invented: they are the VERBATIM output of placeGradient()
+   in scripts/web/static.mjs for each place id, whose hues are the repo's own
+   observations (sodium vapour 24, chlorinated teal 176, the television 290).
+   The world does not colour them: no scrim, no veil, no wash is laid over
+   them. In the real page these declarations become the photograph and nothing
+   else moves. */
+.f-autobahn-raststaette     { background: linear-gradient(163deg, hsl(26 54% 34%), hsl(14 46% 11%)); }
+.f-balkon-waesche           { background: linear-gradient(163deg, hsl(199 53% 34%), hsl(187 45% 11%)); }
+.f-hallenbad-nachmittag     { background: linear-gradient(163deg, hsl(174 55% 33%), hsl(162 47% 13%)); }
+.f-kuechentisch-fruehstueck { background: linear-gradient(163deg, hsl(47 48% 29%), hsl(35 40% 15%)); }
+.f-ostsee-strand            { background: linear-gradient(163deg, hsl(217 51% 30%), hsl(205 43% 14%)); }
+.f-plattenbau-treppenhaus   { background: linear-gradient(163deg, hsl(149 61% 33%), hsl(137 53% 11%)); }
+.f-schrebergarten-august    { background: linear-gradient(163deg, hsl(82 48% 34%), hsl(70 40% 13%)); }
+.f-wohnzimmer-abend         { background: linear-gradient(163deg, hsl(294 46% 20%), hsl(282 38% 9%)); }
+/* NOT `display: grid` here: `.frame` is display:none and this rule is later
+   in the sheet, so it would win and the placeholder would always be visible.
+   The grid is set by the :checked rule instead, where it belongs. */
+.f-own { place-items: center; }
+.f-own .osd { font-size: 15px; text-transform: uppercase; text-align: center; padding: 0 var(--s-3); }
+
+/* the chassis strip under the screen -- the silkscreened legend and the lamp */
+.bezel { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); padding: var(--s-3) 0 0; }
+.bezel-lamp { display: inline-flex; align-items: center; gap: var(--s-2); }
+.bezel-lamp .silk { color: var(--rec); }   /* 5.48:1 -- the lamp's own legend */
+.legend { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); margin: 0; padding: 0; list-style: none; }
+.legend li { font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); }
+
+/* ==========================================================================
+   headline, panels, step heads
+   ========================================================================== */
+
+/* Headlines become large system sans at tight tracking. The repo's 44px VT323
+   step numeral CANNOT survive this direction -- VT323 is screen-only here --
+   so the numerals below are system sans, tabular, and carry their weight by
+   size and tracking instead of by face. That is a real cost of the direction
+   and it is stated rather than hidden. */
+.app-head { margin: 0 0 var(--s-6); }
+.app-h1 {
+  margin: 0 0 var(--s-3);
+  font-size: clamp(28px, 4.6vw, 42px); line-height: 1.08;
+  letter-spacing: -.02em; font-weight: 700;
+  max-width: 18ch; text-wrap: balance;
+}
+.lede { margin: 0; max-width: 62ch; color: var(--ink-dim); }
+
+.panel { margin: 0 0 var(--s-7); }
+.step-head { display: flex; gap: var(--s-4); align-items: baseline; margin: 0 0 var(--s-4); padding-bottom: var(--s-3); }
+.stepno { margin: 0; flex: none; width: 3.5rem; }
+.stepno-k { display: block; font-size: 11px; font-weight: 700; letter-spacing: .2em; color: var(--ink-dim); }
+.stepno-n {
+  display: block; font-size: 30px; font-weight: 700; line-height: 1;
+  letter-spacing: -.03em; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; }
+.sub { margin: var(--s-1) 0 0; color: var(--ink-dim); font-size: 15px; max-width: 58ch; }
+.hint { margin: var(--s-3) 0 0; color: var(--ink-dim); font-size: 14px; max-width: 66ch; }
+.hint strong { color: var(--ink); font-weight: 700; }
+.eyebrow { margin: var(--s-5) 0 var(--s-3); font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); }
+
+/* ==========================================================================
+   CSS-ONLY SELECTION -- the world's central mechanic, untouched
+   ========================================================================== */
+
+/* Hoisted radios, `position: fixed`, exactly as scripts/web/static.mjs does it.
+   Fixed rather than absolute because an input at document offset -1 makes every
+   click scroll the page to the top -- measured at 1641px in the real app.
+   pointer-events:none keeps the 1px boxes from swallowing a click at the very
+   top-left corner. It does not affect keyboard focus, so the tab order this
+   block exists to preserve is untouched. */
+.statehook {
+  position: fixed; top: 0; left: 0;
+  pointer-events: none;
+  width: 1px; height: 1px; margin: -1px; padding: 0;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
+
+/* A CHASSIS CONTROL IS ENGAGED OR IT IS NOT, and the difference is carried by
+   DEPTH AND INK WEIGHT -- never by either accent. Red is reserved for the
+   machine speaking about itself and orange may not leave the well, so neither
+   is available to say "chosen". That is a stricter reading of "orange means
+   exactly one thing" than STRUCK manages today, and it is the direction's
+   central discipline rather than a limitation worked around.
+
+     ghost  = flat on the chassis, lettering at ink @ .65 (4.71:1)
+     struck = raised to #F3F1EC, a shadow under it, lettering at full ink
+              (14.70:1), and its mark filled solid
+
+   Values SNAP. There is no transition on any of it: a struck value is simply
+   on, which is DESIGN.md's motion rule and also the honest behaviour of a
+   physical switch. */
+.plate {
+  display: block; position: relative;
+  padding: var(--s-3) var(--s-4);
+  background: transparent; cursor: pointer;
+  color: var(--ghost);
+}
+.plate .name { display: block; font-weight: 700; font-size: 15px; letter-spacing: -.005em; }
+.plate .detail { display: block; font-size: 13px; margin-top: 2px; }
+.plate:hover { background: var(--chassis-lift); }
+
+/* The mark. A filled square, ghost ink when unlit and full ink when struck --
+   drawn with `background`, never with a border, because the border budget is
+   three and all three are already spoken for. */
+.mark { position: absolute; left: 0; top: var(--s-4); width: 4px; height: 12px; background: currentColor; }
+
+.plate--struck,
+.plate--struck:hover { background: var(--chassis-lift); color: var(--ink); box-shadow: 0 1px 0 var(--shade-near), 0 3px 8px var(--shade-far); }
+.plate--struck .mark { width: 6px; height: 20px; }
+
+/* ---- the four groups ---------------------------------------------------- */
+
+.looks { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: var(--s-2); }
+
+/* THE PLACE LIST IS LETTERING, NOT PICTURES, AND THAT IS THE DIRECTION SPEAKING.
+   "Dies: the full-bleed place background -- a chassis is opaque, so the place
+   photographs move INSIDE the screen." So the eight places become a
+   silkscreened control legend, and the photograph of whichever one is struck
+   appears in the well. You look at the SCREEN to see what you chose, which is
+   what the screen is for; the body only tells you what the switches are. It is
+   also what saves the layout at 375px, where a horizontally scrolling carousel
+   of 272x152 photo cards was always the weakest part of the real page. */
+.places { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: var(--s-1) var(--s-2); }
+.places .when { display: block; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin-top: 3px; }
+
+.frames { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.framecard { flex: 1 1 8rem; min-width: 7.5rem; text-align: left; }
+.framecard .shape-wrap { display: flex; align-items: center; height: 26px; margin-bottom: var(--s-2); }
+/* NAMED BORDER EXCEPTION 2 of 3. A glyph depicting an aspect ratio -- "tall"
+   and "wide" read from it faster than from two numbers -- and not a device for
+   separating two things. Inherits `currentColor`, so it ghosts and strikes with
+   the lettering rather than needing its own two values. */
+.shape { display: block; border: 1px solid currentColor; }
+.shape--4x3  { width: 24px; height: 18px; }
+.shape--16x9 { width: 28px; height: 16px; }
+.shape--9x16 { width: 14px; height: 25px; }
+.framecard .ratio { display: block; font-weight: 700; font-size: 15px; }
+
+.quality { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: var(--s-2); }
+.quality .cr { display: block; font-size: 13px; font-weight: 700; letter-spacing: .1em; margin-top: 2px; }
+.flag { display: inline-block; margin-top: var(--s-2); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+
+/* An option the renderer cannot finish gets NO radio, so it is not merely
+   unclickable in a browser -- there is no control for a hand-written POST to
+   name either. It stays present and ghosted, because every value present is
+   the mechanic. */
+.plate--soon { cursor: default; }
+.plate--soon:hover { background: transparent; }
+
+/* ==========================================================================
+   step 1, the escape hatches, the commit block
+   ========================================================================== */
+
+.drop { display: block; background: var(--chassis-lift); padding: var(--s-5); box-shadow: 0 1px 0 var(--shade-near), 0 3px 8px var(--shade-far); cursor: pointer; }
+.drop input[type=file] { display: block; margin: var(--s-3) 0 0; font: inherit; font-size: 14px; color: var(--ink-dim); max-width: 100%; }
+.plus { display: block; font-size: 17px; font-weight: 700; }
+.say { display: block; margin-top: var(--s-2); font-size: 14px; color: var(--ink-dim); max-width: 60ch; }
+
+.escape { margin-top: var(--s-4); }
+.linky { font-weight: 700; color: var(--ink); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+
+/* Revealed by #pl-own, with no script -- the same trick the real page uses. */
+.ownplace { display: none; margin-top: var(--s-4); background: var(--chassis-lift); padding: var(--s-4); }
+.ownplace input[type=file] { display: block; margin-top: var(--s-2); font: inherit; font-size: 14px; color: var(--ink-dim); max-width: 100%; }
+
+.aside { margin-top: var(--s-4); }
+.aside summary { cursor: pointer; font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); }
+.aside summary:hover { color: var(--ink); }
+.aside input[type=text] {
+  display: block; width: 100%; max-width: 34rem; margin-top: var(--s-2);
+  font: inherit; font-size: 15px; padding: var(--s-2) var(--s-3);
+  background: var(--chassis-lift); color: var(--ink);
+}
+
+.facts { display: grid; grid-template-columns: auto 1fr; gap: var(--s-3) var(--s-5); align-items: center; margin: var(--s-6) 0; }
+.facts dt { font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); }
+.facts dd { margin: 0; font-weight: 700; }
+
+/* A COST IS A NUMBER THE TAPE OWNS, SO IT IS ON A SCREEN. Same component as the
+   masthead balance and the big well; it switches with the quality radio through
+   the same :checked rule that lights the card, so the number is right with
+   scripting switched off. */
+.pill { display: inline-flex; align-items: baseline; gap: var(--s-2); background: var(--well); padding: 2px var(--s-3) 3px; box-shadow: inset 0 1px 3px var(--well-recess); }
+.pill .osd { font-size: 19px; }
+.cost { display: none; }
+
+.field { margin: var(--s-6) 0; }
+.field label { display: block; font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: var(--s-2); }
+.field select { font: inherit; font-size: 15px; padding: var(--s-2) var(--s-3); background: var(--chassis-lift); color: var(--ink); }
+
+.check { display: flex; gap: var(--s-3); align-items: flex-start; margin: var(--s-6) 0; max-width: 66ch; }
+/* 24x24, not 16x16. WCAG 2.2 AA SC 2.5.8 asks 24x24 CSS px and this is the
+   control that gates spending credits. The compensating margin-top the 16px
+   box needed is gone with it -- CLAUDE.md section 6b. */
+.check input { width: 1.5rem; height: 1.5rem; margin: 0; flex: none; accent-color: var(--ink); }
+.consent-text { font-size: 13px; color: var(--ink-dim); }
+.consent-text span { display: block; margin-bottom: var(--s-2); }
+
+/* THE RECORD BUTTON IS THE ONE PLACE RED BELONGS ON THE CHASSIS.
+   Red is the machine speaking about itself, and this is the control that makes
+   the machine record. Lettering is #F3F1EC on #A82A22 = 6.16:1. No orange:
+   the cost beside it is a read-out and read-outs are on screens. */
+.record {
+  font: inherit; font-size: 15px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  background: var(--rec); color: var(--chassis-lift);
+  padding: var(--s-4) var(--s-6); cursor: pointer;
+  display: inline-flex; align-items: center; gap: var(--s-3);
+  box-shadow: 0 1px 0 var(--shade-near), 0 3px 8px var(--shade-far);
+}
+/* DERIVED: --rec multiplied by 0.85, i.e. the lamp pressed. #8F241D, and the
+   button's #F3F1EC lettering measures 7.63:1 against it -- computed, not eyeballed. */
+.record:hover { background: #8F241D; }
+.record[disabled] { background: transparent; color: var(--ghost); box-shadow: none; cursor: not-allowed; }
+.record .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--chassis-lift); flex: none; }
+.commit-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-4); }
+.reason { margin: var(--s-3) 0 0; font-size: 14px; color: var(--ink-dim); }
+
+/* ==========================================================================
+   the archive -- every tile is a tape, so every tile is a well
+   ========================================================================== */
+
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--s-4); }
+.tape { display: block; text-decoration: none; color: inherit; }
+.tape .well { display: block; padding: var(--s-2); }
+.tape .pic { aspect-ratio: 4 / 3; display: block; }
+.tape .strip-osd { display: flex; align-items: baseline; gap: var(--s-2); padding: var(--s-2) 2px 0; }
+.tape .osd { font-size: 17px; }
+.tape .osd--sm { font-size: 14px; }
+.tape .cap { display: block; padding: var(--s-2) 0 0; }
+.tape .what { display: block; font-weight: 700; font-size: 14px; }
+.tape .state { display: block; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--rec); margin-top: 2px; }
+.tape:hover .cap .what { text-decoration: underline; text-underline-offset: 3px; }
+
+.foot { margin-top: var(--s-8); padding-top: var(--s-5); color: var(--ink-dim); font-size: 13px; }
+.foot p { margin: 0 0 var(--s-2); max-width: 66ch; }
+
+/* ==========================================================================
+   FOCUS -- named border exception 1 of 3, and never removed
+   ========================================================================== */
+
+/* Every .statehook is 1x1 and clipped, which is what keeps CSS-only selection
+   in the tab order -- so the global outline matches, paints, and is invisible.
+   The visible control is the <label> further down the page, so the indicator
+   has to be DRAWN THERE. 19 of the 20 radios on the real signed-in page were
+   failing WCAG 2.4.7 (Level A) for exactly this reason until 2026-08-24. Every
+   hoisted radio in this file has a rule in the block below; there is no
+   `outline: none` anywhere in this stylesheet. */
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.well :focus-visible, .readout :focus-visible { outline-color: var(--osd); }
+
+#of-fleecepulli:focus-visible ~ .chassis .of-fleecepulli,
+#of-hemd-jeans:focus-visible ~ .chassis .of-hemd-jeans,
+#of-sommerkleid:focus-visible ~ .chassis .of-sommerkleid,
+#of-strickjacke:focus-visible ~ .chassis .of-strickjacke,
+#of-trainingsjacke:focus-visible ~ .chassis .of-trainingsjacke,
+#of-winterjacke:focus-visible ~ .chassis .of-winterjacke,
+#pl-autobahn-raststaette:focus-visible ~ .chassis .pl-autobahn-raststaette,
+#pl-balkon-waesche:focus-visible ~ .chassis .pl-balkon-waesche,
+#pl-hallenbad-nachmittag:focus-visible ~ .chassis .pl-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:focus-visible ~ .chassis .pl-kuechentisch-fruehstueck,
+#pl-ostsee-strand:focus-visible ~ .chassis .pl-ostsee-strand,
+#pl-plattenbau-treppenhaus:focus-visible ~ .chassis .pl-plattenbau-treppenhaus,
+#pl-schrebergarten-august:focus-visible ~ .chassis .pl-schrebergarten-august,
+#pl-wohnzimmer-abend:focus-visible ~ .chassis .pl-wohnzimmer-abend,
+#pl-own:focus-visible ~ .chassis .pl-own,
+#pl-own:focus-visible ~ .chassis .linky,
+#a-4x3:focus-visible ~ .chassis .a-4x3,
+#a-16x9:focus-visible ~ .chassis .a-16x9,
+#a-9x16:focus-visible ~ .chassis .a-9x16,
+#q-480p:focus-visible ~ .chassis .q-480p,
+#q-720p:focus-visible ~ .chassis .q-720p {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+  color: var(--ink);   /* the ring lifts the ghost to full ink, because a ring
+                          on an unreadable label is half an indicator */
+}
+
+/* ==========================================================================
+   THE STRIKE -- every :checked rule on the page
+   ========================================================================== */
+
+/* 1. the control lights */
+#of-fleecepulli:checked ~ .chassis .of-fleecepulli,
+#of-hemd-jeans:checked ~ .chassis .of-hemd-jeans,
+#of-sommerkleid:checked ~ .chassis .of-sommerkleid,
+#of-strickjacke:checked ~ .chassis .of-strickjacke,
+#of-trainingsjacke:checked ~ .chassis .of-trainingsjacke,
+#of-winterjacke:checked ~ .chassis .of-winterjacke,
+#pl-autobahn-raststaette:checked ~ .chassis .pl-autobahn-raststaette,
+#pl-balkon-waesche:checked ~ .chassis .pl-balkon-waesche,
+#pl-hallenbad-nachmittag:checked ~ .chassis .pl-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:checked ~ .chassis .pl-kuechentisch-fruehstueck,
+#pl-ostsee-strand:checked ~ .chassis .pl-ostsee-strand,
+#pl-plattenbau-treppenhaus:checked ~ .chassis .pl-plattenbau-treppenhaus,
+#pl-schrebergarten-august:checked ~ .chassis .pl-schrebergarten-august,
+#pl-wohnzimmer-abend:checked ~ .chassis .pl-wohnzimmer-abend,
+#pl-own:checked ~ .chassis .pl-own,
+#a-4x3:checked ~ .chassis .a-4x3,
+#a-16x9:checked ~ .chassis .a-16x9,
+#a-9x16:checked ~ .chassis .a-9x16,
+#q-480p:checked ~ .chassis .q-480p,
+#q-720p:checked ~ .chassis .q-720p {
+  background: var(--chassis-lift);
+  color: var(--ink);
+  box-shadow: 0 1px 0 var(--shade-near), 0 3px 8px var(--shade-far);
+}
+#of-fleecepulli:checked ~ .chassis .of-fleecepulli .mark,
+#of-hemd-jeans:checked ~ .chassis .of-hemd-jeans .mark,
+#of-sommerkleid:checked ~ .chassis .of-sommerkleid .mark,
+#of-strickjacke:checked ~ .chassis .of-strickjacke .mark,
+#of-trainingsjacke:checked ~ .chassis .of-trainingsjacke .mark,
+#of-winterjacke:checked ~ .chassis .of-winterjacke .mark,
+#pl-autobahn-raststaette:checked ~ .chassis .pl-autobahn-raststaette .mark,
+#pl-balkon-waesche:checked ~ .chassis .pl-balkon-waesche .mark,
+#pl-hallenbad-nachmittag:checked ~ .chassis .pl-hallenbad-nachmittag .mark,
+#pl-kuechentisch-fruehstueck:checked ~ .chassis .pl-kuechentisch-fruehstueck .mark,
+#pl-ostsee-strand:checked ~ .chassis .pl-ostsee-strand .mark,
+#pl-plattenbau-treppenhaus:checked ~ .chassis .pl-plattenbau-treppenhaus .mark,
+#pl-schrebergarten-august:checked ~ .chassis .pl-schrebergarten-august .mark,
+#pl-wohnzimmer-abend:checked ~ .chassis .pl-wohnzimmer-abend .mark,
+#pl-own:checked ~ .chassis .pl-own .mark,
+#a-4x3:checked ~ .chassis .a-4x3 .mark,
+#a-16x9:checked ~ .chassis .a-16x9 .mark,
+#a-9x16:checked ~ .chassis .a-9x16 .mark,
+#q-480p:checked ~ .chassis .q-480p .mark,
+#q-720p:checked ~ .chassis .q-720p .mark { width: 6px; height: 20px; }
+
+/* 2. the WELL answers. The picture, and every line of the read-out, is switched
+      by the same radios that light the control -- so "what have I chosen?" is
+      answered on the screen, in the tape's own voice, with no script. */
+#pl-autobahn-raststaette:checked     ~ .chassis .frame.f-autobahn-raststaette,
+#pl-balkon-waesche:checked           ~ .chassis .frame.f-balkon-waesche,
+#pl-hallenbad-nachmittag:checked     ~ .chassis .frame.f-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:checked ~ .chassis .frame.f-kuechentisch-fruehstueck,
+#pl-ostsee-strand:checked            ~ .chassis .frame.f-ostsee-strand,
+#pl-plattenbau-treppenhaus:checked   ~ .chassis .frame.f-plattenbau-treppenhaus,
+#pl-schrebergarten-august:checked    ~ .chassis .frame.f-schrebergarten-august,
+#pl-wohnzimmer-abend:checked         ~ .chassis .frame.f-wohnzimmer-abend,
+#pl-own:checked                      ~ .chassis .frame.f-own { display: block; }
+#pl-own:checked ~ .chassis .frame.f-own { display: grid; }
+#pl-own:checked ~ .chassis .ownplace { display: block; }
+
+#pl-autobahn-raststaette:checked     ~ .chassis .osd-place.o-autobahn-raststaette,
+#pl-balkon-waesche:checked           ~ .chassis .osd-place.o-balkon-waesche,
+#pl-hallenbad-nachmittag:checked     ~ .chassis .osd-place.o-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:checked ~ .chassis .osd-place.o-kuechentisch-fruehstueck,
+#pl-ostsee-strand:checked            ~ .chassis .osd-place.o-ostsee-strand,
+#pl-plattenbau-treppenhaus:checked   ~ .chassis .osd-place.o-plattenbau-treppenhaus,
+#pl-schrebergarten-august:checked    ~ .chassis .osd-place.o-schrebergarten-august,
+#pl-wohnzimmer-abend:checked         ~ .chassis .osd-place.o-wohnzimmer-abend,
+#pl-own:checked                      ~ .chassis .osd-place.o-own,
+#of-fleecepulli:checked    ~ .chassis .osd-look.o-fleecepulli,
+#of-hemd-jeans:checked     ~ .chassis .osd-look.o-hemd-jeans,
+#of-sommerkleid:checked    ~ .chassis .osd-look.o-sommerkleid,
+#of-strickjacke:checked    ~ .chassis .osd-look.o-strickjacke,
+#of-trainingsjacke:checked ~ .chassis .osd-look.o-trainingsjacke,
+#of-winterjacke:checked    ~ .chassis .osd-look.o-winterjacke,
+#a-4x3:checked  ~ .chassis .osd-frame.o-4x3,
+#a-16x9:checked ~ .chassis .osd-frame.o-16x9,
+#a-9x16:checked ~ .chassis .osd-frame.o-9x16,
+#q-480p:checked ~ .chassis .osd-res.o-480p,
+#q-720p:checked ~ .chassis .osd-res.o-720p,
+#q-480p:checked ~ .chassis .cost.c-480p,
+#q-720p:checked ~ .chassis .cost.c-720p { display: inline; }
+.osd-place, .osd-look, .osd-frame, .osd-res { display: none; }
+
+/* 3. THE FRAME SHAPE RESHAPES THE PICTURE IN THE WELL, and what does not fit
+      the shape is pillarboxed or letterboxed on the well's own ground -- which
+      is what the delivered file actually does. Choosing a shape is therefore
+      not an abstract radio: you watch the tape change shape. */
+/* ALL THREE SHAPES ARE HEIGHT-DRIVEN, and that is the whole reason nothing
+   overflows: `.picture` keeps `height: 100%` of the clamped screen box and only
+   its aspect-ratio changes, so its WIDTH is derived and is at its largest for
+   16:9 -- 208 x 16/9 = 370px inside a 392px well on desktop, and 165 x 16/9 =
+   293px inside a 319px well at 375px. Driving 16:9 from `width: 100%` instead
+   looks identical on a laptop and silently overflows the screen box by 13px,
+   which is measured rather than guessed: it did, before this comment existed. */
+#a-16x9:checked ~ .chassis .picture { aspect-ratio: 16 / 9; }
+#a-9x16:checked ~ .chassis .picture { aspect-ratio: 9 / 16; }
+
+/* ==========================================================================
+   RESPONSIVE -- and this direction's hardest problem, answered
+   ========================================================================== */
+
+/* THE CHASSIS/LCD RELATIONSHIP AT A NARROW VIEWPORT.
+   The doc names it: "the chassis metaphor has to survive a phone, where there
+   is no room for a strip of controls BESIDE a screen." The answer is that the
+   relationship is INSET, not ADJACENT, and inset survives a rotation of the
+   layout while adjacent does not.
+
+   >= 64rem (1024px, the repo's own breakpoint -- 62rem/992 was rejected in
+   CLAUDE.md 6c for being on no device list): screen on the left in a sticky
+   column, controls in the flow column to its right. That is a flip-out
+   camcorder seen from behind, and it mirrors the 1:2 sticky-anchor grid the
+   real signed-in page already proved.
+
+   < 64rem: the two rotate rather than compete. The well goes full width at the
+   TOP, still with a margin of chassis on all four sides, and the controls run
+   beneath it in one column. Three things keep the metaphor intact:
+     - the well is still INSET in the chassis, with the same recess shadow, so
+       it still reads as a screen let into a body rather than as a dark band;
+     - the tape still LEADS THE FIRST VIEWPORT, which is this direction's
+       structural claim and the thing PRODUCT.md has asked for all along. At
+       375x667 the strip, masthead, well and legend measure ~470px, so the tape
+       is above the fold with room to spare;
+     - after the big well scrolls away the tape still has a voice, because the
+       masthead balance is the same component at readout size. The screen never
+       fully leaves the page.
+   What is NOT attempted is a sticky well on a phone. A screen pinned to the
+   top of a 667px viewport eats a third of it for the whole session, which is
+   the point at which an object metaphor starts costing the user something
+   real. */
+@media (min-width: 64rem) {
+  .body-grid { display: grid; grid-template-columns: minmax(0, 26rem) minmax(0, 1fr); gap: var(--s-8); align-items: start; }
+  .deck { position: sticky; top: var(--s-5); margin-bottom: 0; }
+  .chassis { padding-left: var(--s-6); padding-right: var(--s-6); }
+  .strip { padding-left: var(--s-6); padding-right: var(--s-6); }
+}
+
+@media (max-width: 26rem) {
+  .step-head { gap: var(--s-3); }
+  .stepno { width: 2.75rem; }
+  .stepno-n { font-size: 26px; }
+  .record { width: 100%; justify-content: center; padding-left: var(--s-4); padding-right: var(--s-4); }
+
+  /* THE MOCKUP'S OWN HEADER STRIP IS THE ONLY THING COMPETING WITH THE TAPE FOR
+     THE FIRST VIEWPORT, and it is furniture that the real page would not carry.
+     Measured at 375x812 before this rule the well's bottom edge sat at 664px,
+     which is above the fold there and BELOW it on a 667px-tall phone -- so the
+     direction's one structural claim would have been true on the tester's
+     device and false on the oldest one still in use. Tightened here rather than
+     by cutting the thesis, which is the thing the strip exists to say. */
+  .strip { padding: var(--s-3) var(--s-4) var(--s-4); }
+  .strip-say { font-size: 14px; }
+  .masthead { padding: var(--s-3) 0; margin-bottom: var(--s-4); }
+  .app-h1 { font-size: 30px; }
+}
+
+/* Everything that moves is cancelled here, DESIGN.md's motion rule. */
+@media (prefers-reduced-motion: reduce) {
+  .osd-rec { animation: none; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- THE HOISTED RADIOS. They sit at the top of <body> and are siblings of
+     `.chassis`, because every rule that strikes a control, switches the picture
+     in the well or rewrites a line of the read-out is a `#id:checked ~ .chassis`
+     rule. In the real app they are joined back to the form by `form="tape"`;
+     there is no form here because there is nothing to post.
+
+     THERE IS NO JAVASCRIPT IN THIS FILE. Not "almost none" -- there is no
+     script element at all. Selection, the picture in the well, the frame
+     shape, the read-out, the cost line and the reveal of the place upload are
+     all CSS, which is the mechanic DESIGN.md calls the world's central one and
+     the reason this direction fits the codebase rather than fighting it. -->
+<input class="statehook" type="radio" name="outfit" id="of-fleecepulli">
+<input class="statehook" type="radio" name="outfit" id="of-hemd-jeans">
+<input class="statehook" type="radio" name="outfit" id="of-sommerkleid">
+<input class="statehook" type="radio" name="outfit" id="of-strickjacke">
+<input class="statehook" type="radio" name="outfit" id="of-trainingsjacke" checked>
+<input class="statehook" type="radio" name="outfit" id="of-winterjacke">
+<input class="statehook" type="radio" name="place" id="pl-autobahn-raststaette">
+<input class="statehook" type="radio" name="place" id="pl-balkon-waesche">
+<input class="statehook" type="radio" name="place" id="pl-hallenbad-nachmittag">
+<input class="statehook" type="radio" name="place" id="pl-kuechentisch-fruehstueck">
+<input class="statehook" type="radio" name="place" id="pl-ostsee-strand">
+<input class="statehook" type="radio" name="place" id="pl-plattenbau-treppenhaus">
+<input class="statehook" type="radio" name="place" id="pl-schrebergarten-august" checked>
+<input class="statehook" type="radio" name="place" id="pl-wohnzimmer-abend">
+<input class="statehook" type="radio" name="place" id="pl-own">
+<input class="statehook" type="radio" name="aspect" id="a-4x3" checked>
+<input class="statehook" type="radio" name="aspect" id="a-16x9">
+<input class="statehook" type="radio" name="aspect" id="a-9x16">
+<input class="statehook" type="radio" name="resolution" id="q-480p" checked>
+<input class="statehook" type="radio" name="resolution" id="q-720p">
+
+<header class="strip seam">
+  <div class="strip-in">
+    <p class="strip-k silk">Timestamp &mdash; light UI direction 02 of 3</p>
+    <p class="strip-name">THE FLIP-OUT</p>
+    <p class="strip-say">The page is the camcorder&rsquo;s own body, and the only dark thing on
+    the site is the screen. The 2003 warmth is <b>quarantined, not translated</b>: STRUCK&rsquo;s
+    <b>#FF8A1E</b> survives unchanged at <b>7.71:1</b> inside the one lit well, and never once
+    appears outside it. Everything else is silver-grey chassis and hard silkscreened lettering.</p>
+  </div>
+</header>
+
+<main class="chassis">
+
+<header class="masthead seam">
+  <a class="wordmark" href="#">
+    <span class="lamp" aria-hidden="true"></span>TIMESTAMP
+  </a>
+  <nav class="nav">
+    <!-- The balance is a read-out, so it is on a screen. The repo's orange SVG
+         ring cannot live on the chassis in this world: orange may not leave the
+         well. This is the same component as the big well, at readout size. -->
+    <span class="readout">
+      <span class="osd">82</span><span class="osd osd-k">CR</span>
+    </span>
+    <a href="#">Plans</a>
+    <button type="button">Sign out</button>
+  </nav>
+</header>
+
+<div class="body-grid">
+
+  <!-- ===================================================================
+       THE DECK. This is the direction's signature and the reason it is the
+       only one of the three that makes "the tape leads the first viewport"
+       STRUCTURAL rather than optional: the well is the first thing under the
+       masthead on every viewport width, before a single control is offered.
+       =================================================================== -->
+  <div class="deck">
+    <div class="well">
+
+      <div class="osd-row">
+        <!-- REC in ORANGE, inside the well: this is the TAPE speaking. The red
+             REC below the well is the MACHINE speaking about itself. Same word,
+             two colours, two planes -- the geographic rule, drawn rather than
+             described. -->
+        <span class="osd osd-rec">&#9679;&nbsp;REC</span>
+        <span class="osd osd--sm">0:00:15</span>
+        <span class="osd osd--sm osd-push">25.08.2026</span>
+      </div>
+
+      <div class="screen">
+        <div class="picture" aria-hidden="true">
+          <div class="frame f-autobahn-raststaette"></div>
+          <div class="frame f-balkon-waesche"></div>
+          <div class="frame f-hallenbad-nachmittag"></div>
+          <div class="frame f-kuechentisch-fruehstueck"></div>
+          <div class="frame f-ostsee-strand"></div>
+          <div class="frame f-plattenbau-treppenhaus"></div>
+          <div class="frame f-schrebergarten-august"></div>
+          <div class="frame f-wohnzimmer-abend"></div>
+          <div class="frame f-own"><span class="osd">Your own photograph<br>goes here</span></div>
+        </div>
+      </div>
+
+      <div class="osd-row osd-row--foot">
+        <span class="osd">
+          <span class="osd-place o-autobahn-raststaette">Autobahn rest stop at dusk</span>
+          <span class="osd-place o-balkon-waesche">Balcony, washing on the line</span>
+          <span class="osd-place o-hallenbad-nachmittag">Indoor swimming pool</span>
+          <span class="osd-place o-kuechentisch-fruehstueck">Tiled kitchen at breakfast</span>
+          <span class="osd-place o-ostsee-strand">Baltic beach, out of season</span>
+          <span class="osd-place o-plattenbau-treppenhaus">Concrete stairwell</span>
+          <span class="osd-place o-schrebergarten-august">Allotment garden, late August</span>
+          <span class="osd-place o-wohnzimmer-abend">Living room, television on</span>
+          <span class="osd-place o-own">Your own place</span>
+        </span>
+      </div>
+
+      <div class="osd-row">
+        <span class="osd osd--sm">
+          <span class="osd-look o-fleecepulli">Half-zip fleece</span>
+          <span class="osd-look o-hemd-jeans">Checked shirt and jeans</span>
+          <span class="osd-look o-sommerkleid">Cotton summer dress</span>
+          <span class="osd-look o-strickjacke">Knitted cardigan</span>
+          <span class="osd-look o-trainingsjacke">Tracksuit jacket</span>
+          <span class="osd-look o-winterjacke">Padded winter jacket</span>
+        </span>
+        <span class="osd osd--sm osd-push">
+          <span class="osd-frame o-4x3">4:3</span><span class="osd-frame o-16x9">16:9</span><span class="osd-frame o-9x16">9:16</span>
+          &nbsp;&middot;&nbsp;
+          <span class="osd-res o-480p">480P</span><span class="osd-res o-720p">720P</span>
+          &nbsp;&middot;&nbsp;SP
+        </span>
+      </div>
+
+    </div>
+
+    <!-- The strip of chassis beside the screen: a red lamp and a silkscreened
+         legend, the NIGHTSHOT / 700x DIGITAL ZOOM idiom. The lamp is lit
+         because a tape IS being made right now -- the third tile on the shelf
+         below is still Working. A lamp that is always on says nothing. -->
+    <div class="bezel">
+      <span class="bezel-lamp">
+        <span class="lamp lamp--big" aria-hidden="true"></span>
+        <span class="silk">Rec</span>
+      </span>
+      <ul class="legend">
+        <li>15 sec</li>
+        <li>1080&times;1920 out</li>
+        <li>Photo &rarr; tape</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       THE CONTROLS. Four choices and a Record button, exactly the content of
+       scripts/web/views.mjs homePage(): the photo, the look, the place, the
+       frame shape, the quality, the cost, the balance, the consent gate.
+       =================================================================== -->
+  <div class="controls">
+
+    <div class="app-head">
+      <h1 class="app-h1">One photo, one look, one place.</h1>
+      <p class="lede">Fifteen seconds that look like they came off a camcorder tape in a
+      German suburb, some time around 2003.</p>
+    </div>
+
+    <section class="panel">
+      <div class="step-head seam">
+        <p class="stepno"><span class="stepno-k">STEP</span><span class="stepno-n">01</span></p>
+        <div class="step-say">
+          <h2 class="title">Your photo</h2>
+          <p class="sub">Uploaded once, kept in your library &mdash; the person in every tape.</p>
+        </div>
+      </div>
+      <label class="drop" for="photo">
+        <span class="plus">+ Add photo</span>
+        <span class="say">A clear photo of your face. JPEG, PNG or WebP, up to 12&nbsp;MB.
+        The location and camera data are stripped before anything else happens.</span>
+        <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp">
+      </label>
+    </section>
+
+    <section class="panel">
+      <div class="step-head seam">
+        <p class="stepno"><span class="stepno-k">STEP</span><span class="stepno-n">02</span></p>
+        <div class="step-say">
+          <h2 class="title">The look</h2>
+          <p class="sub">Only what is on the body &mdash; the place carries everything else.</p>
+        </div>
+      </div>
+      <div class="looks">
+        <label class="plate of-fleecepulli" for="of-fleecepulli"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Half-zip fleece</span><span class="detail">an oversized half-zip fleece pullover in marl grey</span></label>
+        <label class="plate of-hemd-jeans" for="of-hemd-jeans"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Checked shirt and jeans</span><span class="detail">a checked flannel shirt with the sleeves rolled to the&hellip;</span></label>
+        <label class="plate of-sommerkleid" for="of-sommerkleid"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Cotton summer dress</span><span class="detail">a thin cotton sundress with a small floral print</span></label>
+        <label class="plate of-strickjacke" for="of-strickjacke"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Knitted cardigan</span><span class="detail">a knitted wool cardigan in burgundy with leather-look&hellip;</span></label>
+        <label class="plate of-trainingsjacke" for="of-trainingsjacke"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Tracksuit jacket</span><span class="detail">a zip-up tracksuit jacket in navy with two white stripes&hellip;</span></label>
+        <label class="plate of-winterjacke" for="of-winterjacke"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Padded winter jacket</span><span class="detail">a quilted padded jacket in deep blue with a fur-trimmed&hellip;</span></label>
+      </div>
+      <details class="aside">
+        <summary>Or describe what you are wearing</summary>
+        <p class="hint">Used only when no card above is chosen.</p>
+        <input type="text" name="outfitText" maxlength="200" placeholder="a green anorak">
+      </details>
+    </section>
+
+    <section class="panel">
+      <div class="step-head seam">
+        <p class="stepno"><span class="stepno-k">STEP</span><span class="stepno-n">03</span></p>
+        <div class="step-say">
+          <h2 class="title">The place</h2>
+          <p class="sub">Somewhere ordinary. That is the whole idea.</p>
+        </div>
+      </div>
+
+      <!-- THE PLACES ARE LETTERING, NOT PICTURES, AND THAT IS THE DIRECTION
+           SPEAKING, NOT A SHORTCUT. "Dies: the full-bleed place background --
+           a chassis is opaque, so the place photographs move INSIDE the
+           screen." So the eight places are a silkscreened control legend, and
+           the photograph of whichever one is struck appears in the well above.
+           You look at the SCREEN to see what you chose; the body only tells you
+           what the switches are. It also retires the horizontally scrolling
+           carousel of 272x152 photo cards, which was the weakest thing on the
+           real page at 375px and the reason the escape hatch had to be
+           sign-posted in prose. -->
+      <div class="places">
+        <label class="plate pl-autobahn-raststaette" for="pl-autobahn-raststaette"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Autobahn rest stop at dusk</span><span class="when">Dusk</span></label>
+        <label class="plate pl-balkon-waesche" for="pl-balkon-waesche"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Balcony, washing on the line</span><span class="when">Midday</span></label>
+        <label class="plate pl-hallenbad-nachmittag" for="pl-hallenbad-nachmittag"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Indoor swimming pool</span><span class="when">Afternoon</span></label>
+        <label class="plate pl-kuechentisch-fruehstueck" for="pl-kuechentisch-fruehstueck"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Tiled kitchen at breakfast</span><span class="when">Early morning</span></label>
+        <label class="plate pl-ostsee-strand" for="pl-ostsee-strand"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Baltic beach, out of season</span><span class="when">Afternoon</span></label>
+        <label class="plate pl-plattenbau-treppenhaus" for="pl-plattenbau-treppenhaus"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Concrete stairwell</span><span class="when">Midday</span></label>
+        <label class="plate pl-schrebergarten-august" for="pl-schrebergarten-august"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Allotment garden, late August</span><span class="when">Late afternoon</span></label>
+        <label class="plate pl-wohnzimmer-abend" for="pl-wohnzimmer-abend"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Living room, television on</span><span class="when">Night</span></label>
+        <label class="plate pl-own" for="pl-own"><span class="mark" aria-hidden="true"></span>
+          <span class="name">Use my own place</span><span class="when">Your photograph</span></label>
+      </div>
+
+      <p class="hint escape">Somewhere else in mind?
+        <label class="linky" for="pl-own">Upload a photo of it</label>
+        or <label class="linky" for="pl-own">describe it below</label> &mdash;
+        your actual childhood garden beats any description of one.</p>
+
+      <div class="ownplace">
+        <p class="silk">A second photograph</p>
+        <p class="hint">Used as a reference alongside your face.</p>
+        <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp">
+      </div>
+
+      <details class="aside">
+        <summary>Or describe the place</summary>
+        <p class="hint">Used only when no card above is chosen.</p>
+        <input type="text" name="placeText" maxlength="200" placeholder="my grandmother&#39;s kitchen">
+      </details>
+    </section>
+
+    <section class="panel">
+      <div class="step-head seam">
+        <p class="stepno"><span class="stepno-k">STEP</span><span class="stepno-n">04</span></p>
+        <div class="step-say">
+          <h2 class="title">The tape</h2>
+          <p class="sub">One of these is a choice. The rest is what a camcorder tape is.</p>
+        </div>
+      </div>
+
+      <p class="eyebrow">Frame</p>
+      <div class="frames">
+        <label class="plate framecard a-4x3" for="a-4x3"><span class="mark" aria-hidden="true"></span>
+          <span class="shape-wrap"><span class="shape shape--4x3" aria-hidden="true"></span></span>
+          <span class="ratio">4:3</span><span class="detail">The camcorder shape</span></label>
+        <label class="plate framecard a-16x9" for="a-16x9"><span class="mark" aria-hidden="true"></span>
+          <span class="shape-wrap"><span class="shape shape--16x9" aria-hidden="true"></span></span>
+          <span class="ratio">16:9</span><span class="detail">Widescreen</span></label>
+        <label class="plate framecard a-9x16" for="a-9x16"><span class="mark" aria-hidden="true"></span>
+          <span class="shape-wrap"><span class="shape shape--9x16" aria-hidden="true"></span></span>
+          <span class="ratio">9:16</span><span class="detail">Phone</span></label>
+      </div>
+      <p class="hint">Every tape is <strong>fifteen seconds</strong>. 4:3 is what a camcorder
+      actually recorded; 9:16 fills a phone screen for Reels and TikTok, and 16:9 is the
+      landscape shape YouTube wants. <strong>Pick one and watch the picture in the well change
+      shape</strong> &mdash; what does not fit is matted on the screen&rsquo;s own ground, which is
+      what the delivered file does too.</p>
+
+      <p class="eyebrow">Quality</p>
+      <div class="quality">
+        <label class="plate q-480p" for="q-480p"><span class="mark" aria-hidden="true"></span>
+          <span class="name">480p</span><span class="cr">~21 CR</span>
+          <span class="detail">Cheaper. Slightly softer, because it sits just under the tape&rsquo;s own resolution.</span>
+          <span class="flag">Recommended</span></label>
+        <label class="plate q-720p" for="q-720p"><span class="mark" aria-hidden="true"></span>
+          <span class="name">720p</span><span class="cr">~46 CR</span>
+          <span class="detail">The native fit &mdash; nothing is thrown away.</span></label>
+        <span class="plate plate--soon"><span class="mark" aria-hidden="true"></span>
+          <span class="name">1080p</span><span class="cr">~103 CR</span>
+          <span class="detail">Nothing gained over 720p: the tape discards everything above its own raster.</span>
+          <span class="flag">Coming soon</span></span>
+      </div>
+      <p class="hint">Every option delivers the same 1080&times;1920 file. What changes is how much
+      detail exists before the tape &mdash; and the tape works at 720&times;576, so above that there
+      is nothing left to keep.</p>
+
+      <dl class="facts">
+        <dt>Length</dt>
+        <dd>15 SEC</dd>
+        <dt>Estimated cost</dt>
+        <dd><span class="pill"><span class="osd cost c-480p">~21 CR</span><span class="osd cost c-720p">~46 CR</span></span></dd>
+        <dt>Credits</dt>
+        <dd><span class="pill"><span class="osd">82 CR</span></span></dd>
+      </dl>
+
+      <div class="field">
+        <label for="stillCount">How many looks to choose from</label>
+        <p class="hint">We make this many photos of you in the scene first. You pick your
+        favourite &mdash; only then is the video made, so a likeness you do not like never
+        costs you a tape.</p>
+        <select id="stillCount" name="stillCount">
+          <option>1</option><option selected>3</option><option>5</option>
+        </select>
+      </div>
+
+      <label class="check">
+        <input type="checkbox" id="consent" name="consent">
+        <span class="consent-text">
+          <span>I confirm that the person in this photo is me, or is an adult who has agreed to
+          appear in a video made from it. I will not upload a photo of anyone who has not agreed,
+          and I will not upload a photo of a child.</span>
+          <span>I understand that this photo is sent to an AI service to generate the video, that
+          its location and camera information are removed first, that the photo is deleted after 7
+          days and the finished video after 30 days, and that I can ask for either to be deleted
+          sooner.</span>
+        </span>
+      </label>
+
+      <div class="commit-row">
+        <button type="button" class="record">
+          <span class="dot" aria-hidden="true"></span>Record the tape
+        </button>
+        <span class="pill"><span class="osd cost c-480p">&minus;21 CR</span><span class="osd cost c-720p">&minus;46 CR</span></span>
+      </div>
+      <p class="reason">82 CR on the meter &mdash; three 480p tapes, or one 720p with a 480p after it.</p>
+    </section>
+
+  </div>
+</div>
+
+<!-- ===================================================================
+     THE ARCHIVE. Every tile IS a tape, so every tile is a well: the
+     photograph and the burnt-in date are inside the dark rectangle, and the
+     lettering under it is on the chassis. That is the same rule the masthead
+     readout and the big well obey, applied a third time, which is what makes
+     it a rule rather than one dark rectangle somebody liked.
+     =================================================================== -->
+<section class="panel">
+  <div class="step-head seam">
+    <p class="stepno"><span class="stepno-k">SHELF</span><span class="stepno-n">&#9679;</span></p>
+    <div class="step-say">
+      <h2 class="title">Your tapes</h2>
+      <p class="sub">Every recording stays on the shelf.</p>
+    </div>
+  </div>
+  <div class="shelf">
+    <a class="tape" href="#">
+      <span class="well">
+        <span class="pic f-ostsee-strand"></span>
+        <span class="strip-osd"><span class="osd">25.08.2026</span><span class="osd osd--sm osd-push">0:15 &middot; 4:3</span></span>
+      </span>
+      <span class="cap"><span class="what">Baltic beach, out of season</span></span>
+    </a>
+    <a class="tape" href="#">
+      <span class="well">
+        <span class="pic f-wohnzimmer-abend"></span>
+        <span class="strip-osd"><span class="osd">24.08.2026</span><span class="osd osd--sm osd-push">0:15 &middot; 9:16</span></span>
+      </span>
+      <span class="cap"><span class="what">Living room, television on</span></span>
+    </a>
+    <a class="tape" href="#">
+      <span class="well">
+        <span class="pic f-hallenbad-nachmittag"></span>
+        <span class="strip-osd"><span class="osd">25.08.2026</span><span class="osd osd--sm osd-push">&mdash;&mdash;:&mdash;&mdash;</span></span>
+      </span>
+      <span class="cap">
+        <span class="what">Indoor swimming pool</span>
+        <span class="state">Working</span>
+      </span>
+    </a>
+  </div>
+</section>
+
+<footer class="foot seam-top">
+  <p>Your photo is deleted after 7 days and the video after 30. You can ask for either sooner.</p>
+  <p>Date-stamp lettering is VT323 by Peter Hull, under the SIL Open Font Licence 1.1.</p>
+</footer>
+
+</main>
+</body>
+</html>

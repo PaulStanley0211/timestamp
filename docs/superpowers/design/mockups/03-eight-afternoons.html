@@ -1,0 +1,1253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EIGHT AFTERNOONS &mdash; Timestamp light UI, direction 3</title>
+
+<!-- ===================================================================
+     EIGHT AFTERNOONS  ·  a MOCKUP, not the product.
+
+     One file, no JavaScript, no build step. Selection is the repo's own
+     mechanic: hoisted `position: fixed` radios at the top of <body>, a
+     sibling combinator for the strike, and `:has()` for the one new thing
+     this direction adds -- a two-line token swap per place.
+
+     EVERY COLOUR HERE COMES FROM THE MEASURED TABLE in
+     docs/superpowers/design/2026-08-25-light-ui-directions.md, direction 3.
+     Nothing is derived from `hsl(H 78% 34%)`; that formula fails 4.5:1 on
+     five of the eight places and Schrebergarten measures 3.09:1 under it.
+     Where a value was needed that the table does not give, the derivation
+     and the computed ratio are stated in a comment beside it.
+
+     The numbers on this page are real: 21 CR at 480p and 46 CR at 720p
+     (CLAUDE.md section 26, measured against fal's invoice), the 42 CR free
+     grant, fifteen seconds, and the eight place ids from presets/places/.
+     =================================================================== -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
+<style>
+/* -------------------------------------------------------------------------
+   1. THE TWO PROPERTIES THAT CARRY THE WHOLE DIRECTION
+
+   Registered so they can be TRANSITIONED. An unregistered custom property
+   changes instantly; registered as <color> it interpolates, which is how the
+   900ms cross-fade that already exists in static.mjs survives the move from
+   eight photograph layers to a flat wash. If @property is unsupported the
+   page still works: the literal values in :root stand in and the swap snaps.
+   ------------------------------------------------------------------------- */
+@property --wash   { syntax: '<color>'; inherits: true; initial-value: #FBFAF8; }
+@property --struck { syntax: '<color>'; inherits: true; initial-value: #171512; }
+
+:root {
+  /* --- the world layer, straight off the direction's token table --------- */
+
+  /* near-white, barely warm. Neutral BECAUSE it has to host eight hues. */
+  --page: #FBFAF8;
+
+  /* 14.41:1 at worst across all eight washes (worst: wohnzimmer-abend). */
+  --ink: #171512;
+
+  /* labels. 4.99:1 at worst across all eight washes. */
+  --ink-dim: #655F57;
+
+  /* GHOST -- and this is the one place the doc's own number had to move.
+     The doc measures ink @ .6 against `--page` and gets 4.68:1. That is
+     correct and it is not the whole question, because this direction does
+     not leave the page at `--page`. Measured against the eight washes the
+     same opacity gives 4.49 / 4.49 / 4.60 / 4.53 / 4.46 / 4.59 / 4.62 and
+     **4.41:1 on wohnzimmer-abend** -- four of the eight below the floor.
+     Raised to .62 here: 5.02:1 on the neutral page and 4.69:1 at its worst,
+     wohnzimmer-abend again. Every one of the nine grounds clears 4.5:1.
+
+     Written as a COLOUR rather than as `opacity`, because an element opacity
+     would also fade the wash swatch inside a card and the two would compound.
+     rgba(23,21,18,.62) composites to exactly the same pixel as ink at
+     opacity .62 over the same ground. */
+  --ghost: rgba(23, 21, 18, 0.62);
+
+  /* A SUNK PLANE, derived here because the table does not carry one.
+     Ink at 3% over whatever wash is current: 1.06:1 against the wash, so it
+     reads as a shallow tray and never as a box. Everything that sits on it
+     was re-measured against the WORST of the nine possible grounds --
+     ink 12.93:1, ink-dim 4.70:1, ghost 4.58:1, stamp-ink 4.53:1, struck
+     4.67:1. All clear 4.5:1, which is why the sink is 3% and not the 5.5%
+     first tried: at 5.5% ink-dim fell to 4.48:1 on the violet wash. */
+  --sink: rgba(23, 21, 18, 0.03);
+
+  /* THE DATE, AND NOTHING ELSE. Two values, and the split between them is by
+     GROUND rather than by size, which is stricter than the doc's rule.
+       --stamp     lives only on the tape, where it measures 5.38:1 against
+                   the surround #0B0A09 -- body-text legal, not merely large.
+       --stamp-ink is the date anywhere on paper: 4.80:1 at its worst across
+                   the eight washes, 5.82:1 on the neutral page.
+     `--stamp` is kept OFF the washes deliberately: it measures 2.91:1 on
+     wohnzimmer-abend, which fails even the 3:1 large-text bar. */
+  --stamp: #E4581F;
+  --stamp-ink: #B03A0B;
+
+  /* The tape's own surround, from the output contract. The only dark surface
+     in this world, and it is the artifact rather than the chrome. */
+  --tape: #0B0A09;
+
+  /* The two that move. Neutral until a place is struck. */
+  --wash: #FBFAF8;
+  --struck: #171512;   /* page-white on ink: 17.47:1 */
+
+  /* --- the 4px spacing scale, unchanged. STRUCTURAL. --------------------- */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
+
+  --r: 18px;
+  --r-sm: 10px;
+
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* VT323 is the repo's bundled TapeOSD. Google Fonts here because a single
+     mockup file cannot self-host; the product keeps the committed .ttf and
+     its OFL licence, which is what the CSP and determinism both require. */
+  --osd: 'VT323', ui-monospace, 'Courier New', monospace;
+}
+
+/* -------------------------------------------------------------------------
+   2. THE EIGHT AFTERNOONS
+
+   Below is what `presetCss` would emit per place. It already emits four
+   `:checked` rules for each one; this direction adds the FIRST rule in each
+   block and deletes the `text-shadow` half of the others. That is the
+   "~80% already built" claim, made concrete.
+
+   The wash/struck pairs are the doc's measured table, verbatim. Recomputed
+   before use and they reproduce: 5.03 / 5.08 / 5.01 / 5.16 / 5.04 / 5.02 /
+   5.01 / 5.21 -- the doc's own figures to within rounding.
+
+   THE INVARIANT THAT MAKES THE TABLE SOUND: striking a place both sets its
+   `--struck` and floods the ground with its `--wash`, so a struck value is
+   ALWAYS measured against the ground it caused. There is no pairing of hue
+   and ground that the eight rows do not cover.
+   ------------------------------------------------------------------------- */
+
+/* sodium vapour */
+body:has(#pl-autobahn-raststaette:checked)     { --wash: #F7E8DE; --struck: #9F4B14; } /* 5.03:1 */
+/* midday sky */
+body:has(#pl-balkon-waesche:checked)           { --wash: #DEF0F7; --struck: #126B8F; } /* 5.08:1 */
+/* chlorinated teal */
+body:has(#pl-hallenbad-nachmittag:checked)     { --wash: #DEF7F6; --struck: #0E746D; } /* 5.01:1 */
+/* butter, early sun */
+body:has(#pl-kuechentisch-fruehstueck:checked) { --wash: #F7F0DE; --struck: #815F10; } /* 5.16:1 */
+/* cold Baltic */
+body:has(#pl-ostsee-strand:checked)            { --wash: #DEEAF7; --struck: #1661B6; } /* 5.04:1 */
+/* institutional green */
+body:has(#pl-plattenbau-treppenhaus:checked)   { --wash: #DEF7EC; --struck: #0F7649; } /* 5.02:1 */
+/* late-summer grass */
+body:has(#pl-schrebergarten-august:checked)    { --wash: #ECF7DE; --struck: #48740E; } /* 5.01:1 */
+/* the television */
+body:has(#pl-wohnzimmer-abend:checked)         { --wash: #F3DEF7; --struck: #9B16B6; } /* 5.21:1 */
+
+/* THE HOLE THE DOC NAMES, SHOWN RATHER THAN HIDDEN. A visitor who brings
+   their own place gets the neutral page -- the least engaging state, handed
+   to the person doing the most interesting thing. Left neutral on purpose,
+   so the owner can see the size of it rather than read about it. */
+body:has(#pl-own:checked) { --wash: #FBFAF8; --struck: #171512; }
+
+/* The swatch each card wears. A card carries its place's own light whether
+   or not it is struck, so the rail reads as eight afternoons laid side by
+   side before anything is chosen. In the product these are one declaration:
+   the photograph on top, the wash beneath as the 404 fallback, exactly the
+   two-layer `background-image` presetCss writes today. */
+.sw--pl-autobahn-raststaette     { background-color: #F7E8DE; }
+.sw--pl-balkon-waesche           { background-color: #DEF0F7; }
+.sw--pl-hallenbad-nachmittag     { background-color: #DEF7F6; }
+.sw--pl-kuechentisch-fruehstueck { background-color: #F7F0DE; }
+.sw--pl-ostsee-strand            { background-color: #DEEAF7; }
+.sw--pl-plattenbau-treppenhaus   { background-color: #DEF7EC; }
+.sw--pl-schrebergarten-august    { background-color: #ECF7DE; }
+.sw--pl-wohnzimmer-abend         { background-color: #F3DEF7; }
+.sw--pl-own                      { background-color: #FBFAF8; }
+
+/* -------------------------------------------------------------------------
+   3. THE PAGE
+   ------------------------------------------------------------------------- */
+* { box-sizing: border-box; }
+/* No background here on purpose: body's propagates to the canvas, so one
+   declaration paints and transitions the whole viewport including overscroll. */
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  padding: 0 var(--s-4) var(--s-8);
+  background-color: var(--wash);
+  color: var(--ink);
+  font-family: var(--sans);
+  /* 16px, which also closes CLAUDE.md section 6c's outstanding Readable Font
+     Size item. The colour is loud in this world, so the type is quiet. */
+  font-size: 16px;
+  line-height: 1.6;
+  /* Two transitions, deliberately overlapping. The registered properties
+     interpolate for everything that reads var(--wash) / var(--struck); the
+     plain background-color transition is the fallback in a browser without
+     @property, where the custom property snaps but the paint still fades. */
+  transition: --wash 900ms ease, --struck 900ms ease, background-color 900ms ease;
+}
+
+/* NEVER REMOVED. The first of the two borders this world permits. */
+:focus-visible { outline: 2px solid var(--struck); outline-offset: 3px; }
+
+/* The radios. Hoisted, `position: fixed`, 1x1, still in the tab order.
+   `fixed` and not `absolute` is a bug fix rather than tidiness: clicking a
+   label focuses its input and the browser scrolls that input into view,
+   which under `absolute` threw the page back to the top by 1641px, measured. */
+.statehook {
+  position: fixed;
+  top: 0; left: 0;
+  pointer-events: none;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wrap { max-width: 66rem; margin: 0 auto; position: relative; }
+
+/* --- the identification strip ------------------------------------------ */
+
+.strip {
+  max-width: 66rem;
+  margin: 0 auto;
+  padding: var(--s-5) var(--s-5) var(--s-6);
+  background-color: var(--sink);
+  border-radius: 0 0 var(--r) var(--r);
+  transition: background-color 900ms ease;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 0;
+}
+.strip-k {
+  margin: 0;
+  font-family: var(--osd);
+  font-size: 14px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.strip h1 {
+  margin: var(--s-2) 0 var(--s-3);
+  font-family: var(--osd);
+  font-size: clamp(34px, 8vw, 56px);
+  line-height: 0.92;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 400;
+  color: var(--struck);
+  transition: color 900ms ease;
+}
+.strip .thesis {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 18px;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+.strip .note {
+  margin: var(--s-5) 0 0;
+  max-width: 74ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-dim);
+}
+.strip .note b { color: var(--ink); font-weight: 600; }
+.strip .note code {
+  font-family: var(--osd);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+/* --- masthead ----------------------------------------------------------- */
+
+.masthead {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-4); flex-wrap: wrap;
+  padding: var(--s-6) 0 var(--s-7);
+}
+.wordmark {
+  display: inline-flex; align-items: baseline; gap: var(--s-2);
+  font-family: var(--osd);
+  font-size: 30px;
+  letter-spacing: 0.3em;
+  color: var(--ink);
+  text-decoration: none;
+}
+/* The one hue that is neither the wash nor the date: the record lamp, and
+   the refusal line beneath the button. `#A82A22` is the doc's own FLIP-OUT
+   `--rec`, borrowed rather than invented -- measured here against all nine
+   grounds this page can be in: 6.67:1 on the neutral page, 5.50:1 at its
+   worst wash (wohnzimmer-abend), 5.18:1 on the sunk plane.
+   RED IS THE MACHINE SPEAKING ABOUT ITSELF; orange is the date and nothing
+   else. Two accents that cannot be confused because they never share a job. */
+.rec {
+  font-size: 0.5em;
+  color: #A82A22;
+  animation: blink 1.6s steps(1, end) infinite;
+  transform: translateY(-0.2em);
+}
+@keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.12; } }
+
+.nav { display: flex; align-items: center; gap: var(--s-5); flex-wrap: wrap; }
+.nav a, .nav button {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-dim); text-decoration: none;
+}
+.nav a:hover, .nav button:hover { color: var(--struck); }
+
+/* The credit ring, mechanism unchanged: pathLength="100" redefines the
+   circle's own length as 100 units, so the dash array is literally
+   "percent full, percent empty" and no circumference arithmetic exists. */
+.creds { display: inline-flex; align-items: center; gap: var(--s-2); }
+.ring { width: 24px; height: 24px; }
+.ring-track { fill: none; stroke: var(--ghost); stroke-width: 2.5; opacity: 0.3; }
+.ring-fill {
+  fill: none; stroke: var(--struck); stroke-width: 2.5;
+  transform: rotate(-90deg); transform-origin: 12px 12px;
+  transition: stroke 900ms ease;
+}
+/* Low is said in words, not in a second colour. An orange ring would be the
+   date orange doing a second job, which is the exact failure the palette
+   rule exists to prevent. */
+.creds--low .ring-fill { stroke: #A82A22; }
+.creds-n { font-family: var(--osd); font-size: 23px; letter-spacing: 0.05em; }
+.creds-u { font-size: 11px; letter-spacing: 0.14em; color: var(--ink-dim); }
+
+/* --- the page head ------------------------------------------------------ */
+
+.app-head { margin-bottom: var(--s-7); }
+.app-h1 {
+  margin: 0 0 var(--s-3);
+  font-size: clamp(29px, 5.6vw, 40px);
+  line-height: 1.06;
+  letter-spacing: -0.022em;
+  font-weight: 600;
+  max-width: 17ch;
+  text-wrap: balance;
+}
+.lede { margin: 0; max-width: 66ch; color: var(--ink-dim); font-size: 17px; }
+
+/* --- panels. No boxes: grouping is the wash, and space. ----------------- */
+
+.panel { margin: 0 0 var(--s-8); }
+.step-head { display: flex; gap: var(--s-4); align-items: flex-start; margin-bottom: var(--s-5); }
+.stepno {
+  margin: 0; min-width: 2.6rem;
+  font-family: var(--osd);
+  font-size: 46px; line-height: 0.78;
+  color: var(--struck);
+  transition: color 900ms ease;
+}
+.stepno .k {
+  display: block;
+  font-family: var(--sans);
+  font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: var(--s-1);
+}
+.step-say { flex: 1 1 auto; min-width: 0; }
+.step-say .title { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.012em; }
+.step-say .sub { margin: var(--s-1) 0 0; color: var(--ink-dim); font-size: 15px; max-width: 58ch; }
+
+.hint { color: var(--ink-dim); font-size: 14px; max-width: 62ch; }
+.eyebrow {
+  margin: var(--s-6) 0 var(--s-3);
+  font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+/* --- step 01, the photo ------------------------------------------------- */
+
+.drop {
+  display: block;
+  padding: var(--s-6) var(--s-5);
+  background-color: var(--sink);
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: background-color 900ms ease;
+}
+.drop .plus {
+  display: inline-block;
+  font-family: var(--osd);
+  font-size: 26px; letter-spacing: 0.06em;
+  color: var(--struck);
+  transition: color 900ms ease;
+}
+.drop .say { display: block; margin-top: var(--s-3); color: var(--ink-dim); font-size: 14px; max-width: 46ch; }
+.drop input[type=file] { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); }
+
+/* --- the look: six outfit cards ---------------------------------------- */
+
+.looks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  gap: var(--s-3);
+}
+.lookcard {
+  display: block;
+  padding: var(--s-4);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  background-color: transparent;
+  transition: background-color 300ms ease;
+}
+.lookcard:hover { background-color: var(--sink); }
+.lookcard .name {
+  display: block;
+  font-size: 16px; font-weight: 600;
+  color: var(--ghost);
+}
+.lookcard .detail {
+  display: block; margin-top: var(--s-1);
+  font-size: 13px; line-height: 1.45;
+  color: var(--ghost);
+}
+/* The mark that says struck. A filled square in the place's own hue --
+   not a tick glyph, not a border. */
+.mark {
+  display: block; width: 14px; height: 14px;
+  margin-bottom: var(--s-3);
+  border-radius: 3px;
+  background-color: var(--ghost);
+  opacity: 0.25;
+  transition: background-color 900ms ease, opacity 200ms ease;
+}
+
+/* --- the place rail: the eight afternoons ------------------------------- */
+
+.rail {
+  display: flex;
+  gap: var(--s-3);
+  overflow-x: auto;
+  padding: var(--s-1) var(--s-1) var(--s-4);
+  margin: 0 calc(var(--s-1) * -1);
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  /* The thumb is deliberately faint. A heavy one draws a full-width
+     horizontal line under the rail, which is the one thing this world
+     forbids -- and it is browser chrome, so it cannot be argued into the
+     list of two permitted borders. */
+  scrollbar-color: rgba(23, 21, 18, 0.16) transparent;
+}
+.placecard {
+  flex: 0 0 16rem;
+  scroll-snap-align: start;
+  cursor: pointer;
+  padding: var(--s-2);
+  border-radius: var(--r-sm);
+  background-color: transparent;
+  transition: transform 300ms cubic-bezier(.2, 1.5, .4, 1), background-color 300ms ease;
+}
+.placecard:hover { background-color: var(--sink); }
+/* 16:9, because one file is both the card thumbnail and the full-bleed
+   layer, and a portrait card threw away two thirds of the width -- measured,
+   the Autobahn card lost its kiosk entirely. If these ever go portrait the
+   photographs have to be re-shot; do not just change the numbers back. */
+/* THE SWATCH IS NEVER GHOSTED, and that was a real finding rather than a
+   preference. The first version put unlit swatches at opacity .5, which is
+   correct grammar on a fixed ground and wrong here: half-strength wash A
+   composited over flooded wash B is a MIXTURE of the two, so once the page
+   floods, all eight afternoons collapse toward the current one and the rail
+   stops being eight afternoons at all -- exactly the thing being sold.
+   Every swatch therefore stays at full strength. The strike is carried by
+   the mark, the caption colour and the plate, which is DESIGN.md's own
+   ruling that the distinction is carried by colour, never by making a value
+   invisible. It also means the struck card's swatch matches the ground it
+   caused, which is the point made literally. */
+.swatch {
+  display: block;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+}
+.placecard .cap { display: block; padding: var(--s-3) var(--s-1) var(--s-1); }
+.placecard .mark { width: 10px; height: 10px; margin-bottom: var(--s-2); }
+.placecard .name { display: block; font-size: 15px; font-weight: 600; color: var(--ghost); }
+.placecard .when {
+  display: block; margin-top: 2px;
+  font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ghost);
+}
+/* The carousel dots. Present-but-unlit is the same grammar one size down. */
+.dots { display: flex; gap: var(--s-2); margin: var(--s-2) 0 var(--s-5); }
+.dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background-color: var(--ghost); opacity: 0.3;
+  transition: background-color 900ms ease, opacity 200ms ease;
+}
+
+.escape { margin: 0 0 var(--s-4); }
+.linky {
+  color: var(--struck);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 900ms ease;
+}
+.ownplace {
+  display: none;
+  padding: var(--s-4);
+  margin-bottom: var(--s-4);
+  background-color: var(--sink);
+  border-radius: var(--r-sm);
+}
+.hint--flush { margin-top: 0; }
+.aside { margin-top: var(--s-4); }
+.aside summary { cursor: pointer; font-size: 14px; color: var(--ink-dim); }
+.aside input[type=text] {
+  display: block; width: 100%; max-width: 30rem; margin-top: var(--s-2);
+  padding: var(--s-3);
+  font: inherit; font-size: 15px;
+  color: var(--ink);
+  background-color: var(--sink);
+  border: 0; border-radius: var(--r-sm);
+}
+
+/* --- step 04: frame, quality, cost, consent ----------------------------- */
+
+.frames { display: flex; gap: var(--s-3); flex-wrap: wrap; }
+.framecard {
+  flex: 1 1 9rem;
+  padding: var(--s-4);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 300ms ease;
+}
+.framecard:hover { background-color: var(--sink); }
+/* THE SECOND PERMITTED BORDER, and the only one on this page. A glyph
+   depicting an aspect ratio is not a device for separating two things --
+   "tall" and "wide" read from it faster than from two numbers. */
+.shape {
+  display: block;
+  border: 1px solid var(--ghost);
+  border-radius: 2px;
+  margin-bottom: var(--s-3);
+  transition: border-color 900ms ease;
+}
+.shape--43  { width: 32px; height: 24px; }
+.shape--169 { width: 40px; height: 22.5px; }
+.shape--916 { width: 18px; height: 32px; }
+.framecard .ratio {
+  display: block; font-family: var(--osd); font-size: 24px; letter-spacing: 0.06em;
+  color: var(--ghost);
+}
+.framecard .detail { display: block; font-size: 13px; color: var(--ghost); }
+
+.quality { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--s-3); }
+.qualitycard {
+  padding: var(--s-4);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background-color 300ms ease;
+}
+.qualitycard:hover { background-color: var(--sink); }
+.qualitycard .name { display: block; font-family: var(--osd); font-size: 26px; letter-spacing: 0.05em; color: var(--ghost); }
+.qualitycard .cr { display: block; font-size: 13px; letter-spacing: 0.1em; color: var(--ghost); }
+.qualitycard .detail { display: block; margin-top: var(--s-2); font-size: 13px; line-height: 1.45; color: var(--ghost); }
+/* A deferred option is a GHOST like every other unlit value, not a faded
+   one: an element opacity here would drop its text below the floor, and the
+   flag already says why it cannot be picked. */
+.qualitycard--soon { cursor: default; }
+.qualitycard .flag {
+  display: inline-block; margin-top: var(--s-2);
+  font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--s-2) var(--s-5);
+  margin: var(--s-6) 0 0;
+  padding: var(--s-4) var(--s-5);
+  background-color: var(--sink);
+  border-radius: var(--r-sm);
+  transition: background-color 900ms ease;
+}
+.facts dt { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-dim); align-self: center; }
+.facts dd { margin: 0; font-family: var(--osd); font-size: 22px; letter-spacing: 0.05em; }
+/* One cost per resolution, switched by the same :checked rule that styles
+   the card. A cost that only updated with JavaScript would be blank on the
+   one page where a number decides whether somebody spends. */
+.cost { display: none; }
+
+.check { display: flex; gap: var(--s-3); margin: var(--s-6) 0 var(--s-5); align-items: flex-start; }
+/* 24x24, not 16x16. WCAG 2.2 SC 2.5.8 asks 24 CSS px, and this control gates
+   both signing up and spending credits. */
+.check input { width: 1.5rem; height: 1.5rem; margin: 0; flex: 0 0 auto; accent-color: var(--struck); }
+.consent-text { font-size: 13px; line-height: 1.5; color: var(--ink-dim); max-width: 62ch; }
+.consent-text span { display: block; }
+.consent-text span + span { margin-top: var(--s-2); }
+
+.record {
+  display: inline-block;
+  padding: var(--s-4) var(--s-6);
+  font: inherit; font-size: 16px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--page);
+  background-color: var(--struck);
+  border: 0; border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 900ms ease, transform 160ms cubic-bezier(.2, 1.5, .4, 1);
+}
+.record:hover { transform: translateY(-1px); }
+.reason { margin: var(--s-3) 0 0; font-size: 13px; color: #A82A22; }
+.why { display: none; }
+.quiet { color: var(--ink-dim); }
+
+/* --- the archive -------------------------------------------------------- */
+
+.shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--s-4);
+}
+.tape { display: block; text-decoration: none; color: inherit; border-radius: var(--r-sm); overflow: hidden; }
+/* THE TAPE ITSELF. Dark, because that is the output contract's surround, and
+   it is the artifact rather than the chrome. The date is burned into it in
+   #E4581F at 5.38:1 -- the one place orange appears in this world. */
+.poster {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  background-color: var(--tape);
+  display: grid; place-items: center;
+}
+/* An imported photograph stays UNTINTED -- it is the subject and the world
+   does not colour it. This grey stands in for one; it deliberately does not
+   take the wash. */
+.frame4x3 {
+  width: 88%; aspect-ratio: 4 / 3;
+  background-image: linear-gradient(158deg, #8C877F 0%, #46423C 100%);
+}
+.burn {
+  position: absolute; right: 8%; bottom: 12%;
+  font-family: var(--osd); font-size: 15px; letter-spacing: 0.08em;
+  color: var(--stamp);
+}
+/* The caption plate carries the tape's OWN place, not the current flood.
+   Two groups on two different washes need no line between them -- which is
+   the closest this direction gets to STRUCK's original argument. */
+.tape .cap { display: block; padding: var(--s-3); }
+.tape .what { display: block; font-size: 14px; font-weight: 600; }
+.tape .when { display: block; margin-top: 2px; font-family: var(--osd); font-size: 15px; letter-spacing: 0.06em; color: var(--stamp-ink); }
+.empty { padding: var(--s-6); background-color: var(--sink); border-radius: var(--r); }
+
+/* --- the read-out, and it is a judging aid as much as a flourish -------- */
+
+.readout {
+  margin-top: var(--s-8);
+  padding: var(--s-4) var(--s-5);
+  background-color: var(--sink);
+  border-radius: var(--r);
+  font-family: var(--osd);
+  font-size: 17px;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+  transition: background-color 900ms ease;
+}
+.readout b { color: var(--struck); font-weight: 400; transition: color 900ms ease; }
+.rd { display: none; }
+.rd--none { display: block; }
+
+/* -------------------------------------------------------------------------
+   4. THE STRIKE
+
+   Everything below is what `presetCss` emits per catalog entry today, with
+   the `text-shadow` half of each rule deleted -- paper does not glow.
+   The selector shape is unchanged: a hoisted radio, a sibling combinator,
+   and the card class the markup actually renders.
+   ------------------------------------------------------------------------- */
+
+/* one value struck out of all values present -- places */
+#pl-autobahn-raststaette:checked     ~ .wrap .pc--pl-autobahn-raststaette,
+#pl-balkon-waesche:checked           ~ .wrap .pc--pl-balkon-waesche,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .pc--pl-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .pc--pl-kuechentisch-fruehstueck,
+#pl-ostsee-strand:checked            ~ .wrap .pc--pl-ostsee-strand,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .pc--pl-plattenbau-treppenhaus,
+#pl-schrebergarten-august:checked    ~ .wrap .pc--pl-schrebergarten-august,
+#pl-wohnzimmer-abend:checked         ~ .wrap .pc--pl-wohnzimmer-abend,
+#pl-own:checked                      ~ .wrap .pc--pl-own { transform: scale(1.03); }
+
+#pl-autobahn-raststaette:checked     ~ .wrap .pc--pl-autobahn-raststaette,
+#pl-balkon-waesche:checked           ~ .wrap .pc--pl-balkon-waesche,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .pc--pl-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .pc--pl-kuechentisch-fruehstueck,
+#pl-ostsee-strand:checked            ~ .wrap .pc--pl-ostsee-strand,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .pc--pl-plattenbau-treppenhaus,
+#pl-schrebergarten-august:checked    ~ .wrap .pc--pl-schrebergarten-august,
+#pl-wohnzimmer-abend:checked         ~ .wrap .pc--pl-wohnzimmer-abend,
+#pl-own:checked                      ~ .wrap .pc--pl-own { background-color: var(--sink); }
+
+#pl-autobahn-raststaette:checked     ~ .wrap .pc--pl-autobahn-raststaette .mark,
+#pl-balkon-waesche:checked           ~ .wrap .pc--pl-balkon-waesche .mark,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .pc--pl-hallenbad-nachmittag .mark,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .pc--pl-kuechentisch-fruehstueck .mark,
+#pl-ostsee-strand:checked            ~ .wrap .pc--pl-ostsee-strand .mark,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .pc--pl-plattenbau-treppenhaus .mark,
+#pl-schrebergarten-august:checked    ~ .wrap .pc--pl-schrebergarten-august .mark,
+#pl-wohnzimmer-abend:checked         ~ .wrap .pc--pl-wohnzimmer-abend .mark,
+#pl-own:checked                      ~ .wrap .pc--pl-own .mark { background-color: var(--struck); opacity: 1; }
+
+#pl-autobahn-raststaette:checked     ~ .wrap .pc--pl-autobahn-raststaette .name,
+#pl-balkon-waesche:checked           ~ .wrap .pc--pl-balkon-waesche .name,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .pc--pl-hallenbad-nachmittag .name,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .pc--pl-kuechentisch-fruehstueck .name,
+#pl-ostsee-strand:checked            ~ .wrap .pc--pl-ostsee-strand .name,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .pc--pl-plattenbau-treppenhaus .name,
+#pl-schrebergarten-august:checked    ~ .wrap .pc--pl-schrebergarten-august .name,
+#pl-wohnzimmer-abend:checked         ~ .wrap .pc--pl-wohnzimmer-abend .name,
+#pl-own:checked                      ~ .wrap .pc--pl-own .name,
+#pl-autobahn-raststaette:checked     ~ .wrap .pc--pl-autobahn-raststaette .when,
+#pl-balkon-waesche:checked           ~ .wrap .pc--pl-balkon-waesche .when,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .pc--pl-hallenbad-nachmittag .when,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .pc--pl-kuechentisch-fruehstueck .when,
+#pl-ostsee-strand:checked            ~ .wrap .pc--pl-ostsee-strand .when,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .pc--pl-plattenbau-treppenhaus .when,
+#pl-schrebergarten-august:checked    ~ .wrap .pc--pl-schrebergarten-august .when,
+#pl-wohnzimmer-abend:checked         ~ .wrap .pc--pl-wohnzimmer-abend .when,
+#pl-own:checked                      ~ .wrap .pc--pl-own .when { color: var(--struck); }
+
+/* the carousel dot for the struck place */
+#pl-autobahn-raststaette:checked     ~ .wrap .dot--pl-autobahn-raststaette,
+#pl-balkon-waesche:checked           ~ .wrap .dot--pl-balkon-waesche,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .dot--pl-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .dot--pl-kuechentisch-fruehstueck,
+#pl-ostsee-strand:checked            ~ .wrap .dot--pl-ostsee-strand,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .dot--pl-plattenbau-treppenhaus,
+#pl-schrebergarten-august:checked    ~ .wrap .dot--pl-schrebergarten-august,
+#pl-wohnzimmer-abend:checked         ~ .wrap .dot--pl-wohnzimmer-abend,
+#pl-own:checked                      ~ .wrap .dot--pl-own { background-color: var(--struck); opacity: 1; }
+
+/* the read-out at the foot names the measured pair for the struck place */
+#pl-autobahn-raststaette:checked     ~ .wrap .rd--pl-autobahn-raststaette,
+#pl-balkon-waesche:checked           ~ .wrap .rd--pl-balkon-waesche,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .rd--pl-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .rd--pl-kuechentisch-fruehstueck,
+#pl-ostsee-strand:checked            ~ .wrap .rd--pl-ostsee-strand,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .rd--pl-plattenbau-treppenhaus,
+#pl-schrebergarten-august:checked    ~ .wrap .rd--pl-schrebergarten-august,
+#pl-wohnzimmer-abend:checked         ~ .wrap .rd--pl-wohnzimmer-abend,
+#pl-own:checked                      ~ .wrap .rd--pl-own { display: block; }
+
+body:has(#pl-autobahn-raststaette:checked)     .rd--none,
+body:has(#pl-balkon-waesche:checked)           .rd--none,
+body:has(#pl-hallenbad-nachmittag:checked)     .rd--none,
+body:has(#pl-kuechentisch-fruehstueck:checked) .rd--none,
+body:has(#pl-ostsee-strand:checked)            .rd--none,
+body:has(#pl-plattenbau-treppenhaus:checked)   .rd--none,
+body:has(#pl-schrebergarten-august:checked)    .rd--none,
+body:has(#pl-wohnzimmer-abend:checked)         .rd--none,
+body:has(#pl-own:checked)                      .rd--none { display: none; }
+
+/* the escape hatch reveals the place upload, exactly as it does today */
+#pl-own:checked ~ .wrap .ownplace { display: block; }
+
+/* the focus ring, one per hoisted radio, drawn on the label that stands in
+   for it. 19 of the signed-in page's keyboard stops had no visible focus at
+   all until this existed, because a 1x1 clipped input paints an invisible
+   outline. It also lifts the ghost to full strength -- an outline inherits
+   its element's opacity, so a ring on a ghost is drawn at ghost strength on
+   exactly the controls that most need it. */
+#pl-autobahn-raststaette:focus-visible     ~ .wrap .pc--pl-autobahn-raststaette,
+#pl-balkon-waesche:focus-visible           ~ .wrap .pc--pl-balkon-waesche,
+#pl-hallenbad-nachmittag:focus-visible     ~ .wrap .pc--pl-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:focus-visible ~ .wrap .pc--pl-kuechentisch-fruehstueck,
+#pl-ostsee-strand:focus-visible            ~ .wrap .pc--pl-ostsee-strand,
+#pl-plattenbau-treppenhaus:focus-visible   ~ .wrap .pc--pl-plattenbau-treppenhaus,
+#pl-schrebergarten-august:focus-visible    ~ .wrap .pc--pl-schrebergarten-august,
+#pl-wohnzimmer-abend:focus-visible         ~ .wrap .pc--pl-wohnzimmer-abend,
+#pl-own:focus-visible                      ~ .wrap .pc--pl-own,
+#of-fleecepulli:focus-visible   ~ .wrap .lc--of-fleecepulli,
+#of-hemd-jeans:focus-visible    ~ .wrap .lc--of-hemd-jeans,
+#of-sommerkleid:focus-visible   ~ .wrap .lc--of-sommerkleid,
+#of-strickjacke:focus-visible   ~ .wrap .lc--of-strickjacke,
+#of-trainingsjacke:focus-visible ~ .wrap .lc--of-trainingsjacke,
+#of-winterjacke:focus-visible   ~ .wrap .lc--of-winterjacke,
+#a-4x3:focus-visible  ~ .wrap .fc--a-4x3,
+#a-16x9:focus-visible ~ .wrap .fc--a-16x9,
+#a-9x16:focus-visible ~ .wrap .fc--a-9x16,
+#q-480p:focus-visible ~ .wrap .qc--q-480p,
+#q-720p:focus-visible ~ .wrap .qc--q-720p {
+  outline: 2px solid var(--struck);
+  outline-offset: 3px;
+}
+
+/* one value struck out of all values present -- outfits */
+#of-fleecepulli:checked    ~ .wrap .lc--of-fleecepulli .name,
+#of-hemd-jeans:checked     ~ .wrap .lc--of-hemd-jeans .name,
+#of-sommerkleid:checked    ~ .wrap .lc--of-sommerkleid .name,
+#of-strickjacke:checked    ~ .wrap .lc--of-strickjacke .name,
+#of-trainingsjacke:checked ~ .wrap .lc--of-trainingsjacke .name,
+#of-winterjacke:checked    ~ .wrap .lc--of-winterjacke .name { color: var(--struck); }
+
+#of-fleecepulli:checked    ~ .wrap .lc--of-fleecepulli .detail,
+#of-hemd-jeans:checked     ~ .wrap .lc--of-hemd-jeans .detail,
+#of-sommerkleid:checked    ~ .wrap .lc--of-sommerkleid .detail,
+#of-strickjacke:checked    ~ .wrap .lc--of-strickjacke .detail,
+#of-trainingsjacke:checked ~ .wrap .lc--of-trainingsjacke .detail,
+#of-winterjacke:checked    ~ .wrap .lc--of-winterjacke .detail { color: var(--ink); }
+
+#of-fleecepulli:checked    ~ .wrap .lc--of-fleecepulli,
+#of-hemd-jeans:checked     ~ .wrap .lc--of-hemd-jeans,
+#of-sommerkleid:checked    ~ .wrap .lc--of-sommerkleid,
+#of-strickjacke:checked    ~ .wrap .lc--of-strickjacke,
+#of-trainingsjacke:checked ~ .wrap .lc--of-trainingsjacke,
+#of-winterjacke:checked    ~ .wrap .lc--of-winterjacke { background-color: var(--sink); }
+
+#of-fleecepulli:checked    ~ .wrap .lc--of-fleecepulli .mark,
+#of-hemd-jeans:checked     ~ .wrap .lc--of-hemd-jeans .mark,
+#of-sommerkleid:checked    ~ .wrap .lc--of-sommerkleid .mark,
+#of-strickjacke:checked    ~ .wrap .lc--of-strickjacke .mark,
+#of-trainingsjacke:checked ~ .wrap .lc--of-trainingsjacke .mark,
+#of-winterjacke:checked    ~ .wrap .lc--of-winterjacke .mark { background-color: var(--struck); opacity: 1; }
+
+/* one value struck out of all values present -- frame shape */
+#a-4x3:checked  ~ .wrap .fc--a-4x3 .ratio,
+#a-16x9:checked ~ .wrap .fc--a-16x9 .ratio,
+#a-9x16:checked ~ .wrap .fc--a-9x16 .ratio { color: var(--struck); }
+#a-4x3:checked  ~ .wrap .fc--a-4x3 .detail,
+#a-16x9:checked ~ .wrap .fc--a-16x9 .detail,
+#a-9x16:checked ~ .wrap .fc--a-9x16 .detail { color: var(--ink); }
+#a-4x3:checked  ~ .wrap .fc--a-4x3 .shape,
+#a-16x9:checked ~ .wrap .fc--a-16x9 .shape,
+#a-9x16:checked ~ .wrap .fc--a-9x16 .shape { border-color: var(--struck); }
+#a-4x3:checked  ~ .wrap .fc--a-4x3,
+#a-16x9:checked ~ .wrap .fc--a-16x9,
+#a-9x16:checked ~ .wrap .fc--a-9x16 { background-color: var(--sink); }
+
+/* one value struck out of all values present -- quality, and the cost and
+   the refusal switch with it */
+#q-480p:checked ~ .wrap .qc--q-480p .name,
+#q-720p:checked ~ .wrap .qc--q-720p .name,
+#q-480p:checked ~ .wrap .qc--q-480p .cr,
+#q-720p:checked ~ .wrap .qc--q-720p .cr { color: var(--struck); }
+#q-480p:checked ~ .wrap .qc--q-480p .detail,
+#q-720p:checked ~ .wrap .qc--q-720p .detail { color: var(--ink); }
+#q-480p:checked ~ .wrap .qc--q-480p,
+#q-720p:checked ~ .wrap .qc--q-720p { background-color: var(--sink); }
+#q-480p:checked ~ .wrap .cost--q-480p,
+#q-720p:checked ~ .wrap .cost--q-720p { display: inline; }
+#q-720p:checked ~ .wrap .why--q-720p { display: block; }
+
+/* -------------------------------------------------------------------------
+   5. RESPONSIVE
+
+   Two columns at exactly 1024px -- on the device list the responsive rules
+   name, unlike the 992px that was there before. A 320px anchor and a 640px
+   flow column, measured 1:2; the sticky photograph is the argument, because
+   it is the identity anchor for every choice made beside it.
+   ------------------------------------------------------------------------- */
+@media (min-width: 64rem) {
+  #tape {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 640px);
+    gap: var(--s-8);
+    align-items: start;
+  }
+  .panel--anchor { position: sticky; top: var(--s-5); grid-column: 1; grid-row: 1 / span 3; }
+  .panel--choice, .panel--commit { grid-column: 2; }
+
+  /* The strip earns its full width: the thesis reads down the left, the
+     method note sits beside it rather than under a half-empty band. */
+  .strip { grid-template-columns: minmax(0, 1fr) minmax(0, 27rem); column-gap: var(--s-8); align-items: start; }
+  .strip-k, .strip h1, .strip .thesis { grid-column: 1; }
+  .strip .note { grid-column: 2; grid-row: 1 / span 3; margin-top: 0; align-self: end; }
+  .strip .thesis { font-size: 21px; }
+}
+
+@media (max-width: 26rem) {
+  .stepno { font-size: 38px; min-width: 2.1rem; }
+  .placecard { flex: 0 0 13.5rem; }
+  .shelf { grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+
+<body>
+
+<!-- THE HOISTED RADIOS. Top of <body> so that `:checked ~ .wrap` can reach
+     every card, and `body:has(...)` can reach the page's own ground. In the
+     product they carry `form="tape"`, which is what puts them back into the
+     submission; that attribute is kept here so the markup is the real one. -->
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-fleecepulli" value="fleecepulli">
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-hemd-jeans" value="hemd-jeans">
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-sommerkleid" value="sommerkleid">
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-strickjacke" value="strickjacke">
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-trainingsjacke" value="trainingsjacke">
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-winterjacke" value="winterjacke">
+
+<input class="statehook" type="radio" form="tape" name="place" id="pl-autobahn-raststaette" value="autobahn-raststaette">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-balkon-waesche" value="balkon-waesche">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-hallenbad-nachmittag" value="hallenbad-nachmittag">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-kuechentisch-fruehstueck" value="kuechentisch-fruehstueck">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-ostsee-strand" value="ostsee-strand">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-plattenbau-treppenhaus" value="plattenbau-treppenhaus">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-schrebergarten-august" value="schrebergarten-august">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-wohnzimmer-abend" value="wohnzimmer-abend">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-own" value="">
+
+<input class="statehook" type="radio" form="tape" name="aspect" id="a-4x3" value="4:3" checked>
+<input class="statehook" type="radio" form="tape" name="aspect" id="a-16x9" value="16:9">
+<input class="statehook" type="radio" form="tape" name="aspect" id="a-9x16" value="9:16">
+
+<input class="statehook" type="radio" form="tape" name="resolution" id="q-480p" value="480p" checked>
+<input class="statehook" type="radio" form="tape" name="resolution" id="q-720p" value="720p">
+
+<header class="strip">
+  <p class="strip-k">Timestamp &middot; light UI &middot; direction 3 of 3</p>
+  <h1>Eight&nbsp;Afternoons</h1>
+  <p class="thesis">The page has no colour of its own; the memory you choose colours it.</p>
+  <p class="note"><b>Pick a place in step 03 and the whole page floods with that place&rsquo;s
+    light</b> &mdash; ground, headings, marks, the Record button, the read-out at the foot.
+    CSS only: hoisted <code>position:fixed</code> radios plus <code>:has()</code>, no script anywhere.
+    All eight washes and their struck hues come from the measured table in the light-directions
+    doc; the <code>hsl(H 78% 34%)</code> formula is not used, because it fails 4.5:1 on five of
+    the eight. One value was extended: the <b>ghost moves from .6 to .62</b>, because .6 was
+    measured against <code>--page</code> only and gives 4.41:1 once the page is flooded with
+    wohnzimmer-abend. Orange appears exactly once on this page &mdash; the date burned into a
+    tape in the archive.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="masthead">
+    <a class="wordmark" href="#"><span class="rec" aria-hidden="true">&#9679;</span>TIMESTAMP</a>
+    <nav class="nav">
+      <span class="creds creds--low" title="21 CR — about 1 more tape">
+        <svg class="ring" viewBox="0 0 24 24" role="img" aria-label="21 CR — about 1 more tape">
+          <circle class="ring-track" cx="12" cy="12" r="9"></circle>
+          <circle class="ring-fill" cx="12" cy="12" r="9" pathLength="100" stroke-dasharray="50 50"></circle>
+        </svg>
+        <span class="creds-n">21</span><span class="creds-u">CR</span>
+      </span>
+      <a href="#">Plans</a>
+      <a href="#">Sign out</a>
+    </nav>
+  </div>
+
+  <main>
+    <div class="app-head">
+      <h1 class="app-h1">One photo, one look, one place.</h1>
+      <p class="lede">Fifteen seconds that look like they came off a camcorder tape in a
+      German suburb, some time around 2003.</p>
+    </div>
+
+    <form id="tape">
+
+      <section class="panel panel--anchor">
+        <div class="step-head">
+          <p class="stepno"><span class="k">Step</span>01</p>
+          <div class="step-say">
+            <h2 class="title">Your photo</h2>
+            <p class="sub">Uploaded once, kept in your library &mdash; the person in every tape.</p>
+          </div>
+        </div>
+        <label class="drop" for="photo">
+          <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp">
+          <span class="plus">+ Add photo</span>
+          <span class="say">A clear photo of your face. JPEG, PNG or WebP, up to 12&nbsp;MB.
+          The location and camera data are stripped before anything else happens.</span>
+        </label>
+      </section>
+
+      <section class="panel panel--choice">
+        <div class="step-head">
+          <p class="stepno"><span class="k">Step</span>02</p>
+          <div class="step-say">
+            <h2 class="title">The look</h2>
+            <p class="sub">Only what is on the body &mdash; the place carries everything else.</p>
+          </div>
+        </div>
+        <div class="looks">
+          <label class="lookcard lc--of-fleecepulli" for="of-fleecepulli">
+            <span class="mark" aria-hidden="true"></span>
+            <span class="name">Half-zip fleece</span>
+            <span class="detail">Oversized marl grey, zip to the collar</span>
+          </label>
+          <label class="lookcard lc--of-hemd-jeans" for="of-hemd-jeans">
+            <span class="mark" aria-hidden="true"></span>
+            <span class="name">Checked shirt and jeans</span>
+            <span class="detail">Sleeves rolled, stonewashed straight leg</span>
+          </label>
+          <label class="lookcard lc--of-sommerkleid" for="of-sommerkleid">
+            <span class="mark" aria-hidden="true"></span>
+            <span class="name">Cotton summer dress</span>
+            <span class="detail">Small floral print, narrow straps</span>
+          </label>
+          <label class="lookcard lc--of-strickjacke" for="of-strickjacke">
+            <span class="mark" aria-hidden="true"></span>
+            <span class="name">Knitted cardigan</span>
+            <span class="detail">Burgundy wool, leather-look buttons</span>
+          </label>
+          <label class="lookcard lc--of-trainingsjacke" for="of-trainingsjacke">
+            <span class="mark" aria-hidden="true"></span>
+            <span class="name">Tracksuit jacket</span>
+            <span class="detail">Navy, two white stripes down each sleeve</span>
+          </label>
+          <label class="lookcard lc--of-winterjacke" for="of-winterjacke">
+            <span class="mark" aria-hidden="true"></span>
+            <span class="name">Padded winter jacket</span>
+            <span class="detail">Deep blue quilting, fur-trimmed hood</span>
+          </label>
+        </div>
+        <details class="aside">
+          <summary>Or describe what you are wearing</summary>
+          <p class="hint">Used only when no card above is chosen.</p>
+          <input type="text" name="outfitText" maxlength="200" placeholder="a green anorak">
+        </details>
+      </section>
+
+      <section class="panel panel--choice">
+        <div class="step-head">
+          <p class="stepno"><span class="k">Step</span>03</p>
+          <div class="step-say">
+            <h2 class="title">The place</h2>
+            <p class="sub">Somewhere ordinary. That is the whole idea.</p>
+          </div>
+        </div>
+
+        <!-- THE SIGNATURE. Eight afternoons laid side by side, each carrying its
+             own light before anything is chosen, and striking one floods the
+             page with it. Every card here is a real preset id from
+             presets/places/; in the product each swatch also carries
+             /places/<id>.jpg on top of it, untinted. -->
+        <div class="rail">
+          <label class="placecard pc--pl-autobahn-raststaette" for="pl-autobahn-raststaette">
+            <span class="swatch sw--pl-autobahn-raststaette" aria-hidden="true"></span>
+            <span class="cap"><span class="mark" aria-hidden="true"></span><span class="name">Autobahn rest stop at dusk</span><span class="when">Dusk</span></span>
+          </label>
+          <label class="placecard pc--pl-balkon-waesche" for="pl-balkon-waesche">
+            <span class="swatch sw--pl-balkon-waesche" aria-hidden="true"></span>
+            <span class="cap"><span class="mark" aria-hidden="true"></span><span class="name">Balcony, washing on the line</span><span class="when">Midday</span></span>
+          </label>
+          <label class="placecard pc--pl-hallenbad-nachmittag" for="pl-hallenbad-nachmittag">
+            <span class="swatch sw--pl-hallenbad-nachmittag" aria-hidden="true"></span>
+            <span class="cap"><span class="mark" aria-hidden="true"></span><span class="name">Indoor swimming pool</span><span class="when">Afternoon</span></span>
+          </label>
+          <label class="placecard pc--pl-kuechentisch-fruehstueck" for="pl-kuechentisch-fruehstueck">
+            <span class="swatch sw--pl-kuechentisch-fruehstueck" aria-hidden="true"></span>
+            <span class="cap"><span class="mark" aria-hidden="true"></span><span class="name">Tiled kitchen at breakfast</span><span class="when">Early morning</span></span>
+          </label>
+          <label class="placecard pc--pl-ostsee-strand" for="pl-ostsee-strand">
+            <span class="swatch sw--pl-ostsee-strand" aria-hidden="true"></span>
+            <span class="cap"><span class="mark" aria-hidden="true"></span><span class="name">Baltic beach, out of season</span><span class="when">Afternoon</span></span>
+          </label>
+          <label class="placecard pc--pl-plattenbau-treppenhaus" for="pl-plattenbau-treppenhaus">
+            <span class="swatch sw--pl-plattenbau-treppenhaus" aria-hidden="true"></span>
+            <span class="cap"><span class="mark" aria-hidden="true"></span><span class="name">Concrete stairwell</span><span class="when">Midday</span></span>
+          </label>
+          <label class="placecard pc--pl-schrebergarten-august" for="pl-schrebergarten-august">
+            <span class="swatch sw--pl-schrebergarten-august" aria-hidden="true"></span>
+            <span class="cap"><span class="mark" aria-hidden="true"></span><span class="name">Allotment garden, late August</span><span class="when">Late afternoon</span></span>
+          </label>
+          <label class="placecard pc--pl-wohnzimmer-abend" for="pl-wohnzimmer-abend">
+            <span class="swatch sw--pl-wohnzimmer-abend" aria-hidden="true"></span>
+            <span class="cap"><span class="mark" aria-hidden="true"></span><span class="name">Living room, television on</span><span class="when">Night</span></span>
+          </label>
+          <label class="placecard pc--pl-own" for="pl-own">
+            <span class="swatch sw--pl-own" aria-hidden="true"></span>
+            <span class="cap"><span class="mark" aria-hidden="true"></span><span class="name">Use my own place</span><span class="when">Your photograph</span></span>
+          </label>
+        </div>
+
+        <div class="dots" aria-hidden="true">
+          <span class="dot dot--pl-autobahn-raststaette"></span>
+          <span class="dot dot--pl-balkon-waesche"></span>
+          <span class="dot dot--pl-hallenbad-nachmittag"></span>
+          <span class="dot dot--pl-kuechentisch-fruehstueck"></span>
+          <span class="dot dot--pl-ostsee-strand"></span>
+          <span class="dot dot--pl-plattenbau-treppenhaus"></span>
+          <span class="dot dot--pl-schrebergarten-august"></span>
+          <span class="dot dot--pl-wohnzimmer-abend"></span>
+          <span class="dot dot--pl-own"></span>
+        </div>
+
+        <p class="hint escape">Somewhere else in mind?
+          <label class="linky" for="pl-own">Upload a photo of it</label>
+          or <label class="linky" for="pl-own">describe it below</label> &mdash;
+          your actual childhood garden beats any description of one.</p>
+
+        <div class="ownplace">
+          <p class="hint hint--flush">A second photograph, used as a reference alongside your face.</p>
+          <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp">
+        </div>
+
+        <details class="aside">
+          <summary>Or describe the place</summary>
+          <p class="hint">Used only when no card above is chosen.</p>
+          <input type="text" name="placeText" maxlength="200" placeholder="my grandmother&#39;s kitchen">
+        </details>
+      </section>
+
+      <section class="panel panel--commit">
+        <div class="step-head">
+          <p class="stepno"><span class="k">Step</span>04</p>
+          <div class="step-say">
+            <h2 class="title">The tape</h2>
+            <p class="sub">One of these is a choice. The rest is what a camcorder tape is.</p>
+          </div>
+        </div>
+
+        <p class="eyebrow">Frame</p>
+        <div class="frames">
+          <label class="framecard fc--a-4x3" for="a-4x3">
+            <span class="shape shape--43" aria-hidden="true"></span>
+            <span class="ratio">4:3</span>
+            <span class="detail">The camcorder shape</span>
+          </label>
+          <label class="framecard fc--a-16x9" for="a-16x9">
+            <span class="shape shape--169" aria-hidden="true"></span>
+            <span class="ratio">16:9</span>
+            <span class="detail">Widescreen</span>
+          </label>
+          <label class="framecard fc--a-9x16" for="a-9x16">
+            <span class="shape shape--916" aria-hidden="true"></span>
+            <span class="ratio">9:16</span>
+            <span class="detail">Phone</span>
+          </label>
+        </div>
+        <p class="hint">Every tape is <strong>fifteen seconds</strong>. 4:3 is what a camcorder
+        actually recorded; 9:16 fills a phone screen for Reels and TikTok, and 16:9 is the
+        landscape shape YouTube wants.</p>
+
+        <p class="eyebrow">Quality</p>
+        <div class="quality">
+          <label class="qualitycard qc--q-480p" for="q-480p">
+            <span class="name">480p</span>
+            <span class="cr">~21 CR</span>
+            <span class="detail">Cheaper. Slightly softer, because it sits just under the tape&rsquo;s own resolution.</span>
+            <span class="flag">Recommended</span>
+          </label>
+          <label class="qualitycard qc--q-720p" for="q-720p">
+            <span class="name">720p</span>
+            <span class="cr">~46 CR</span>
+            <span class="detail">The native fit &mdash; nothing is thrown away.</span>
+          </label>
+          <span class="qualitycard qualitycard--soon">
+            <span class="name">1080p</span>
+            <span class="cr">~103 CR</span>
+            <span class="detail">Nothing gained over 720p: the tape discards everything above its own raster.</span>
+            <span class="flag">Coming soon</span>
+          </span>
+        </div>
+        <p class="hint">Every option delivers the same 1080&times;1920 file. What changes is how much
+        detail exists before the tape &mdash; and the tape works at 720&times;576, so above that there
+        is nothing left to keep.</p>
+
+        <dl class="facts">
+          <dt>Length</dt><dd>15 SEC</dd>
+          <dt>Estimated cost</dt>
+          <dd>
+            <span class="cost cost--q-480p">~21 CR</span>
+            <span class="cost cost--q-720p">~46 CR</span>
+          </dd>
+          <dt>Credits</dt><dd>21 CR</dd>
+        </dl>
+
+        <label class="check">
+          <input type="checkbox" id="consent" name="consent" value="yes">
+          <span class="consent-text">
+            <span>I confirm that the person in this photo is me, or is an adult who has agreed to
+            appear in a video made from it. I will not upload a photo of anyone who has not
+            agreed, and I will not upload a photo of a child.</span>
+            <span>I understand that this photo is sent to an AI service to generate the video,
+            that its location and camera information are removed first, that the photo is deleted
+            after 7 days and the finished video after 30 days, and that I can ask for either to be
+            deleted sooner.</span>
+          </span>
+        </label>
+
+        <button type="button" class="record">&#10685; Record the tape</button>
+        <p class="reason why why--q-720p">Not enough credits &mdash; a 720p tape costs ~46 CR and you have 21 CR.
+          <a class="quiet" href="#">See the plans</a></p>
+      </section>
+
+    </form>
+
+    <section class="panel panel--archive">
+      <div class="step-head">
+        <p class="stepno"><span class="k">Archive</span>&#9679;</p>
+        <div class="step-say">
+          <h2 class="title">Your tapes</h2>
+          <p class="sub">Every recording stays on the shelf, in the light it was made in.</p>
+        </div>
+      </div>
+      <div class="shelf">
+        <a class="tape" href="#">
+          <span class="poster">
+            <span class="frame4x3" aria-hidden="true"></span>
+            <span class="burn">21.08.2026</span>
+          </span>
+          <span class="cap sw--pl-schrebergarten-august">
+            <span class="what">Allotment garden, late August</span>
+            <span class="when">21.08.2026</span>
+          </span>
+        </a>
+        <a class="tape" href="#">
+          <span class="poster">
+            <span class="frame4x3" aria-hidden="true"></span>
+            <span class="burn">14.08.2026</span>
+          </span>
+          <span class="cap sw--pl-ostsee-strand">
+            <span class="what">Baltic beach, out of season</span>
+            <span class="when">14.08.2026</span>
+          </span>
+        </a>
+        <a class="tape" href="#">
+          <span class="poster">
+            <span class="frame4x3" aria-hidden="true"></span>
+            <span class="burn">02.08.2026</span>
+          </span>
+          <span class="cap sw--pl-wohnzimmer-abend">
+            <span class="what">Living room, television on</span>
+            <span class="when">02.08.2026</span>
+          </span>
+        </a>
+        <a class="tape" href="#">
+          <span class="poster">
+            <span class="frame4x3" aria-hidden="true"></span>
+            <span class="burn">27.07.2026</span>
+          </span>
+          <span class="cap sw--pl-hallenbad-nachmittag">
+            <span class="what">Indoor swimming pool</span>
+            <span class="when">27.07.2026</span>
+          </span>
+        </a>
+      </div>
+    </section>
+
+    <!-- The read-out. It is a flourish and it is also the judging aid: it
+         names the exact pair in play and the ratio measured for it, so the
+         owner can check the claim rather than take it. -->
+    <div class="readout">
+      <span class="rd rd--none">no place struck &mdash; ground <b>#FBFAF8</b>, struck value falls back to ink <b>#171512</b> &middot; 17.47:1</span>
+      <span class="rd rd--pl-autobahn-raststaette">autobahn-raststaette &mdash; wash <b>#F7E8DE</b> &middot; struck <b>#9F4B14</b> &middot; <b>5.03:1</b></span>
+      <span class="rd rd--pl-balkon-waesche">balkon-waesche &mdash; wash <b>#DEF0F7</b> &middot; struck <b>#126B8F</b> &middot; <b>5.08:1</b></span>
+      <span class="rd rd--pl-hallenbad-nachmittag">hallenbad-nachmittag &mdash; wash <b>#DEF7F6</b> &middot; struck <b>#0E746D</b> &middot; <b>5.01:1</b></span>
+      <span class="rd rd--pl-kuechentisch-fruehstueck">kuechentisch-fruehstueck &mdash; wash <b>#F7F0DE</b> &middot; struck <b>#815F10</b> &middot; <b>5.16:1</b></span>
+      <span class="rd rd--pl-ostsee-strand">ostsee-strand &mdash; wash <b>#DEEAF7</b> &middot; struck <b>#1661B6</b> &middot; <b>5.04:1</b></span>
+      <span class="rd rd--pl-plattenbau-treppenhaus">plattenbau-treppenhaus &mdash; wash <b>#DEF7EC</b> &middot; struck <b>#0F7649</b> &middot; <b>5.02:1</b></span>
+      <span class="rd rd--pl-schrebergarten-august">schrebergarten-august &mdash; wash <b>#ECF7DE</b> &middot; struck <b>#48740E</b> &middot; <b>5.01:1</b> (the formula gave 3.09:1)</span>
+      <span class="rd rd--pl-wohnzimmer-abend">wohnzimmer-abend &mdash; wash <b>#F3DEF7</b> &middot; struck <b>#9B16B6</b> &middot; <b>5.21:1</b></span>
+      <span class="rd rd--pl-own">your own place &mdash; no wash exists for it, so the page stays neutral. The doc calls this the direction&rsquo;s real hole.</span>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>
