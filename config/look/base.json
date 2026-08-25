@@ -119,7 +119,14 @@
       "swellHz": 0,
       "swellDepth": 0.5,
       "echoDelayMs": 0,
-      "echoDecay": 0
+      "echoDecay": 0,
+      "tone": {
+        "_comment": "A fluorescent buzz, a kitchen clock -- the ambience block above is noise only, and these two are TONES, built the same way the capstan two sections up is: sine partials, summed, band-limited. `tones` is the switch, empty by default, so a place with no tone configured is bit-identical to the bed before this existed. `tickHz` is the one thing a mains hum and a capstan whir do not need: 0 (or absent) plays the partials as a continuous hum, and a positive value gates them to a brief periodic burst instead -- `tickDuration` seconds on, silence for the rest of `1/tickHz` seconds. No seed anywhere in here: sine is a pure function of frequency and time, not stochastic, the same fact the capstan section already rests on.",
+        "tones": [],
+        "lowpass": 4000,
+        "tickHz": 0,
+        "tickDuration": 0
+      }
     },
     "bus": {
       "_comment": "Band-limit the sum a second time, apply the one fixed makeup gain, end in a real ceiling. The 190 Hz highpass is authentic -- a camcorder built-in mic had no low end -- which is why the capstan is voiced as harmonics above it rather than as its fundamental below it.",

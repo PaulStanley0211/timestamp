@@ -384,3 +384,157 @@ test('every shipped place that names an ambience names a real path', () => {
   assert.ok(base.audio.ambience, 'base.json carries an ambience block');
   assert.equal(base.audio.ambience.amplitude, 0, 'and it is silent by default');
 });
+
+// ---------------------------------------------------------------------------
+// the place's own tone -- a fluorescent buzz, a kitchen clock
+//
+// Section 20 built the ambience layer as NOISE only -- filtered anoisesrc,
+// optionally swelling, optionally in a room -- and left two shipped places
+// wanting more than that. The stairwell preset's own prompt names "a
+// flickering fluorescent tube"; the kitchen preset's own eraProps names "a
+// wall clock with hands" and its motionHint says "the second hand moves on
+// the clock". Neither of those is noise. Both are TONES, and the capstan two
+// sections up already proves a tone belongs in this file: sine sources,
+// summed with normalize=0, band-limited, mixed into the bus at a level
+// calibrated by ear and by meter, exactly like the motor whir is.
+//
+// `audio.ambience.tone` is that same mechanism applied to a place instead of
+// to the machine, plus the one new trick a hum and a whir do not need: a tick
+// is not continuous. `tickHz` gates the sine to a brief periodic burst using
+// ffmpeg's per-frame `volume` expression, because `tremolo` -- the flutter the
+// capstan already uses -- is a smooth sinusoidal swell and a clock does not
+// swell, it clicks. Silent by default (`tones: []`), for the same reason
+// `ambience.amplitude` defaults to 0: a place that names nothing must be
+// bit-identical to the bed before this feature existed.
+// ---------------------------------------------------------------------------
+
+const withTone = (over) => {
+  const { look } = loadLookProfile(base, { audio: { ambience: { tone: over } } });
+  return buildAudioFilter(look, cfg);
+};
+
+test('a place with no tone configured changes the graph not at all', () => {
+  const { look } = loadLookProfile(base);
+  const graph = buildAudioFilter(look, cfg);
+  assert.ok(!graph.includes('[tone]'), 'no tone chain');
+  assert.match(graph, /amix=inputs=2:normalize=0,\s*aformat/,
+    'the bus still mixes exactly the two machine layers with no place configured');
+});
+
+test('no tones means no tone chain at all, even if lowpass or tickHz is set', () => {
+  // Mirrors the capstan rule (`tones.length` is the switch, not the presence
+  // of the block) so a preset cannot half-configure a tone into existence.
+  const graph = withTone({ tones: [], lowpass: 4000, tickHz: 1, tickDuration: 0.02 });
+  assert.ok(!graph.includes('[tone]'));
+});
+
+test('a single tone is a sine that joins the bus exactly like the capstan does', () => {
+  const graph = withTone({ tones: [{ hz: 2400, volume: 0.06 }], lowpass: 4000 });
+  assert.match(graph, /sine=f=2400:r=48000:d=15,volume=0\.06\[tone0\]/);
+  assert.match(graph, /\[tone0\]amix=inputs=1:normalize=0,lowpass=f=4000\[tone\]/);
+});
+
+test('a two-partial buzz sums both tones with normalize=0, exactly like the capstan sub-mix', () => {
+  const graph = withTone({ tones: [{ hz: 100, volume: 0.025 }, { hz: 300, volume: 0.01 }], lowpass: 2000 });
+  assert.match(graph, /sine=f=100:r=48000:d=15,volume=0\.025\[tone0\]/);
+  assert.match(graph, /sine=f=300:r=48000:d=15,volume=0\.01\[tone1\]/);
+  assert.match(graph, /\[tone0\]\[tone1\]amix=inputs=2:normalize=0,lowpass=f=2000\[tone\]/);
+});
+
+test('a continuous tone never emits the periodic gate', () => {
+  // A mains hum does not click. Absent, or explicitly 0, both mean "hum".
+  for (const over of [{ tones: [{ hz: 100, volume: 0.02 }], lowpass: 2000 },
+    { tones: [{ hz: 100, volume: 0.02 }], lowpass: 2000, tickHz: 0 }]) {
+    const graph = withTone(over);
+    assert.ok(!graph.includes('eval=frame'), 'a hum with no tickHz must not be gated');
+  }
+});
+
+test('a tick gates the tone to a brief periodic burst instead of a continuous hum', () => {
+  const graph = withTone({ tones: [{ hz: 2400, volume: 0.06 }], lowpass: 4000, tickHz: 1, tickDuration: 0.02 });
+  assert.match(graph, /volume=volume='if\(lt\(mod\(t,1\),0\.02\),1,0\)':eval=frame/,
+    'once a second, a 20ms window -- the shape of a clock tick, not a hum');
+});
+
+test('the tick period is 1/tickHz, not tickHz itself', () => {
+  // A clock ticking twice a second gates every 0.5s, not every 2s. Getting
+  // this inverted would make a faster clock sound slower.
+  const graph = withTone({ tones: [{ hz: 2400, volume: 0.06 }], lowpass: 4000, tickHz: 2, tickDuration: 0.02 });
+  assert.match(graph, /mod\(t,0\.5\)/);
+});
+
+test('every amix in a toned graph carries normalize=0, tone included', () => {
+  const graph = withTone({ tones: [{ hz: 100, volume: 0.02 }, { hz: 300, volume: 0.01 }], lowpass: 2000 });
+  const mixes = [...graph.matchAll(/amix=[^,;\]]*/g)].map((m) => m[0]);
+  assert.ok(mixes.length >= 2, 'the tone sub-mix and the outer bus should both be amix');
+  for (const mix of mixes) {
+    assert.match(mix, /(^|:)normalize=0(:|$)/,
+      `${mix} would silently divide by its input count and scale away the tone level`);
+  }
+});
+
+test('the tone bus input joins the same final amix as hiss and capstan', () => {
+  const graph = withTone({ tones: [{ hz: 100, volume: 0.02 }], lowpass: 2000 });
+  assert.match(graph, /\[hiss\]\[capstan\]\[tone\]amix=inputs=3:normalize=0,\s*aformat/);
+});
+
+test('a tone joins alongside ambience noise too, in the order hiss, capstan, ambience, tone', () => {
+  const { look } = loadLookProfile(base, {
+    audio: { ambience: { amplitude: 0.2, tone: { tones: [{ hz: 100, volume: 0.02 }], lowpass: 2000 } } },
+  });
+  const graph = buildAudioFilter(look, cfg);
+  assert.match(graph, /\[hiss\]\[capstan\]\[amb\]\[tone\]amix=inputs=4:normalize=0,\s*aformat/);
+});
+
+test('a tone sine needs no seed, exactly like the capstan needs none', () => {
+  // Neither generator is stochastic -- ffmpeg's `sine` source is a pure
+  // function of frequency and time, so there is nothing here for audioSeed to
+  // seed, the same reasoning that already applies to the capstan two sections
+  // up. Only anoisesrc (hiss, ambience) draws from the seed.
+  const graph = withTone({ tones: [{ hz: 100, volume: 0.02 }], lowpass: 2000 });
+  const toneChain = graph.split(';').find((c) => c.includes('[tone0]'));
+  assert.ok(!/seed=/.test(toneChain), 'a tone sine has no seed to set');
+});
+
+test('the shipped base profile is silent for tone by default, like it is for ambience', () => {
+  assert.ok(base.audio.ambience.tone, 'base.json carries a tone block');
+  assert.deepEqual(base.audio.ambience.tone.tones, [], 'and it names no partials by default');
+});
+
+test('the stairwell preset carries a fluorescent buzz in mains territory, continuous not ticking', () => {
+  // "The fluorescent buzz the preset mentions wants a TONE and this layer
+  // only makes noise" was the note left in the ambience commit -- this is
+  // that note closed out.
+  const raw = JSON.parse(fs.readFileSync(path.join(ROOT, 'presets/places/plattenbau-treppenhaus.json'), 'utf8'));
+  const tone = raw.lookOverride?.audio?.ambience?.tone;
+  assert.ok(tone && Array.isArray(tone.tones) && tone.tones.length >= 1,
+    'the flickering-tube preset should carry a tone');
+  for (const t of tone.tones) {
+    assert.ok(t.hz >= 50 && t.hz <= 400, `${t.hz} Hz is not mains-hum territory (50/60 Hz and its harmonics)`);
+    assert.ok(t.volume > 0 && t.volume <= 0.15, `${t.volume} is not a quiet, capstan-scale tone volume`);
+  }
+  assert.ok(!tone.tickHz, 'a fluorescent tube hums continuously, it does not tick');
+});
+
+test('the kitchen preset carries a clock tick at one beat per second, not a hum', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(ROOT, 'presets/places/kuechentisch-fruehstueck.json'), 'utf8'));
+  const tone = raw.lookOverride?.audio?.ambience?.tone;
+  assert.ok(tone && Array.isArray(tone.tones) && tone.tones.length >= 1,
+    'the wall-clock preset should carry a tone');
+  assert.equal(tone.tickHz, 1, 'the preset\'s own motionHint says the second hand moves -- once a second');
+  assert.ok(tone.tickDuration > 0 && tone.tickDuration <= 0.1, 'a tick is a click, not a beep');
+  for (const t of tone.tones) assert.ok(t.volume > 0 && t.volume <= 0.15, `${t.volume} is louder than a click should be`);
+});
+
+test('no other shipped place invented a tone of its own', () => {
+  const withTones = new Set(['plattenbau-treppenhaus', 'kuechentisch-fruehstueck']);
+  const dir = path.join(ROOT, 'presets/places');
+  for (const file of fs.readdirSync(dir)) {
+    const id = file.replace(/\.json$/, '');
+    if (withTones.has(id)) continue;
+    const raw = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+    const tone = raw.lookOverride?.audio?.ambience?.tone;
+    assert.ok(!tone || !Array.isArray(tone.tones) || tone.tones.length === 0,
+      `${id} should not carry a tone -- only the fluorescent stairwell and the kitchen clock do`);
+  }
+});

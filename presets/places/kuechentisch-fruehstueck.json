@@ -41,7 +41,19 @@
         "color": "brown",
         "highpass": 200,
         "lowpass": 500,
-        "volume": 0.11
+        "volume": 0.11,
+        "tone": {
+          "_comment": "The wall clock this preset's own eraProps names, and whose second hand the motionHint already says moves. A tick is not noise and not a hum -- it is a single brief click once a second, which is exactly what tickHz buys that the ambience block above cannot: mod(t,1) gates a 2400 Hz partial on for 20ms out of every 1000ms and silent the rest, so the INTEGRATED loudness contribution stays tiny (2% duty cycle) even though the instantaneous burst is louder than a continuous tone would need to be to read as a click at all. 2400 Hz sits well inside the mic's 8 kHz ceiling and above the room tone's own 500 Hz lowpass, so it is never confused with the fridge hum underneath it.",
+          "tones": [
+            {
+              "hz": 2400,
+              "volume": 0.06
+            }
+          ],
+          "lowpass": 4000,
+          "tickHz": 1,
+          "tickDuration": 0.02
+        }
       }
     }
   }

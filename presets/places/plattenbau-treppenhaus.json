@@ -34,14 +34,30 @@
     },
     "audio": {
       "ambience": {
-        "_comment": "Concrete and a long stairwell. A much longer echo than the swimming hall and no swell at all: nothing in a stairwell moves except the door somewhere below. The fluorescent buzz the preset mentions wants a TONE and this layer only makes noise -- see CLAUDE.md.",
+        "_comment": "Concrete and a long stairwell. A much longer echo than the swimming hall and no swell at all: nothing in a stairwell moves except the door somewhere below. The tube itself is voiced separately, below, because a hum is a tone and this layer is noise only.",
         "amplitude": 0.2,
         "color": "brown",
         "highpass": 200,
         "lowpass": 1800,
         "volume": 0.14,
         "echoDelayMs": 320,
-        "echoDecay": 0.35
+        "echoDecay": 0.35,
+        "tone": {
+          "_comment": "The flickering fluorescent tube this preset's own prompt and motionHint both name. A magnetic ballast on German 50 Hz mains hums at 100 Hz -- twice the line frequency, because the core is pulled on both halves of the AC cycle -- and an ageing, flickering one carries an audible 300 Hz third harmonic on top, which is what turns a smooth hum into a buzz. No tickHz: unlike the kitchen clock this is continuous, the way a struggling ballast actually sounds. Volumes are capstan-scale (0.03/0.011 there) because this is felt as texture, not heard as a lead element -- lowpass 2000 keeps it inside the same band the room's own ambience already uses.",
+          "tones": [
+            {
+              "hz": 100,
+              "volume": 0.03
+            },
+            {
+              "hz": 300,
+              "volume": 0.012
+            }
+          ],
+          "lowpass": 2000,
+          "tickHz": 0,
+          "tickDuration": 0
+        }
       }
     }
   }
