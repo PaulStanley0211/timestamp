@@ -1,6 +1,13 @@
 # Credit packs, and what a tape actually costs — design
 
-**Status:** approved 2026-08-24, not started.
+**Status:** approved 2026-08-24. **§5 and §6 BUILT 2026-08-25** — the checkout
+redirect and the webhook, against a placeholder Price id. What is NOT built, and
+each is a separate decision rather than an oversight: the §2.1 repricing (21 CR
+at 480p) which is gated on §7; the §2.4 twelve-month expiry, which §9 lists as
+needing Paul and which must not be switched on until something writes the
+negative ledger row that realises it; and §3's free tape with its global ceiling.
+**The Price id in `config/credits.json` is `null`, so nothing can be bought yet**
+— the button renders disabled and the route answers 503.
 **Supersedes:** `2026-08-21-stripe-subscriptions-design.md`, which is kept
 because most of it survives verbatim — see §1.
 

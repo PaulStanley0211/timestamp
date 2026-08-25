@@ -143,6 +143,12 @@ export const REQUIRED_AUTH = Object.freeze([
   // with a price tag on it, so the unit the user spends is a credit and the
   // price of a tape is computed from the resolution it is rendered at.
   'creditCost', 'balanceOf', 'debitCredits', 'refundCredits',
+  // ADDED 2026-08-25 WITH THE STRIPE WEBHOOK. It is in this list rather than
+  // called optimistically because the caller is the one route in the app that
+  // is holding somebody's money: a `grantCredits` that is missing must fail as
+  // "the accounts module is not available", which Stripe retries, and never as
+  // `undefined is not a function` inside a handler that has already answered.
+  'grantCredits',
   // `authenticate` returns the SAME error and the same message for an unknown
   // email and a wrong password, and burns equal work either way. The web layer
   // renders what it is given rather than deciding for itself, because the two
@@ -347,6 +353,40 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
   }
 
   /**
+   * Add credits, from a payment that has already been verified.
+   *
+   * NOT REACHABLE FROM A FORM. `credits.mjs` makes this rule in capitals and
+   * this seam does not soften it: the only caller is the Stripe webhook, after
+   * an HMAC over the raw request body has proved Stripe sent it, and the
+   * `ref` it passes is the Stripe event id so a redelivery is a no-op rather
+   * than a second payout.
+   *
+   * Returns `{granted, credits, ref}` -- `granted: false` means this exact
+   * event has already been honoured, which is a 200 and not an error.
+   */
+  async function grant(account, { credits, reason, ref }) {
+    return (await api()).grantCredits(account, { credits, reason, ref });
+  }
+
+  /**
+   * An account by id, for a request that has no session to resolve.
+   *
+   * The id is checked against `ACCOUNT_ID_RE` first for the same reason
+   * `ownerDir` checks it: it came from a webhook payload and it is about to
+   * become a path component, and "it came from Stripe" is how directory
+   * traversal gets written the second time.
+   */
+  async function accountById(accountId) {
+    if (!ACCOUNT_ID_RE.test(String(accountId ?? ''))) return null;
+    const mod = await api();
+    try {
+      return mod.loadAccount({ root, accountId }) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Spend the credits for one tape.
    *
    * Called at ENQUEUE, never at completion. A user who starts twelve renders in
@@ -471,6 +511,8 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
     balance,
     cost,
     resolutions,
+    grant,
+    accountById,
     debit,
     refund,
     claimJob,

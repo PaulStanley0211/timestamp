@@ -16,7 +16,7 @@
     "compose": "node scripts/compose/compose-cli.mjs",
     "expand": "node scripts/expand/expand-cli.mjs",
     "render": "node --env-file-if-exists=.env scripts/render/render.mjs",
-    "web": "node scripts/web/server-cli.mjs",
+    "web": "node --env-file-if-exists=.env scripts/web/server-cli.mjs",
     "worker": "node --env-file-if-exists=.env scripts/worker/worker-cli.mjs",
     "queue": "node scripts/queue/queue-cli.mjs",
     "jobs": "node scripts/render/jobs-cli.mjs",

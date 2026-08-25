@@ -127,9 +127,24 @@ because `config/pricing.json` is still all estimates and a plan priced above an
 unmeasured cost is a guess with a price tag on it.
 
 **Nothing in this module may touch a card number, a CVV, or a bank detail.**
-There is no payment code here at all. The pricing page describes plans and links
-to a hosted checkout that does not exist yet; `plan` is set by an operator or a
-future webhook, never by a form the user fills in.
+There is no payment code here at all, and that survived the checkout being
+built. `plan` is set by an operator, never by a form the user fills in.
+
+**The hosted checkout exists as of 2026-08-25**, and it is deliberately outside
+this module: `scripts/billing/` creates a Stripe Checkout Session over plain
+`fetch` and the web layer answers `303` to Stripe's own domain, where the card
+is entered. Two rules make that safe and both are asserted rather than stated:
+
+- **The browser sends a pack id and nothing else.** No amount, no currency, no
+  credit count. The id is resolved against `config/credits.json` on the server,
+  and an id that is unknown or withdrawn is a `400`.
+- **Credits are granted by a signature-verified webhook and by nothing else.**
+  Not by the checkout call, and not by the page Stripe redirects back to —
+  that page is reachable by anybody who can read a url. The Stripe event id is
+  the ledger's idempotency `ref`, so a redelivery is a no-op rather than a
+  second payout.
+
+The design is `docs/superpowers/specs/2026-08-24-credit-packs-pricing-design.md`.
 
 ---
 

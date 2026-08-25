@@ -7,17 +7,17 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-24, end of day) — THE PREMISE IS PROVEN
+## START HERE (2026-08-25) — THE PREMISE IS PROVEN, AND THERE IS A CHECKOUT
 
-**1138 tests / 1136 pass / 0 fail / 2 skipped.** The skips are the
+**1197 tests / 1195 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
-**Tree clean. Branch PUSHED**: `origin/ui-redesign-signed-in-page` tracks;
-`origin/main` is still `b6f64a3`, so it is **twenty-four commits ahead and
-nothing is merged.** Opening a PR is Paul's call, not a prerequisite.
+Branch `ui-redesign-signed-in-page`; `origin/main` is still `b6f64a3`, so
+nothing is merged. Opening a PR is Paul's call, not a prerequisite.
 
 **This block is a HANDOFF, not a diary.** Everything struck through has moved
-into a numbered section. Sections 22, 23 and 24 are today's and are the ones
-worth reading before touching money, the web pages, or resolutions.
+into a numbered section. Section 25 is the newest and is the one to read before
+touching money; 22, 23 and 24 are the day before's, on cost, the web pages and
+resolutions.
 
 ### The one thing to know
 
@@ -45,11 +45,18 @@ section 24.
 
 ### PICK UP HERE
 
-**The next piece of work is the Stripe checkout and webhook.** The spec is
-`docs/superpowers/specs/2026-08-24-credit-packs-pricing-design.md`, approved,
-and its one precondition — grants being idempotent — is **closed**. Nothing
-technical blocks it. What is not yet decided is the NUMBER on the Price, and
-§7 of that spec lists the three gates for it.
+**The Stripe checkout and webhook are BUILT — section 25.** `POST
+/api/billing/checkout` creates a hosted Checkout Session and 303s to Stripe;
+`POST /api/stripe/webhook` verifies an HMAC over the raw body and is the only
+thing in this application that grants credits. 59 tests, no npm dependency, no
+card field anywhere.
+
+**What is left is not code. It is a Stripe Price, and a Price is immutable**, so
+§7 of `docs/superpowers/specs/2026-08-24-credit-packs-pricing-design.md` gates
+creating one on three things and two of them are Paul's (items 1 and 2 below).
+`config/credits.json` carries `stripePriceId: null`; the button renders disabled
+and the route answers 503 until it is filled in. **Nothing can be bought today
+and that is the designed state, not a gap.**
 
 **PAUL'S, and nobody else can do them:**
 
@@ -77,8 +84,13 @@ technical blocks it. What is not yet decided is the NUMBER on the Price, and
 
 **CLAUDE'S, ready to go:**
 
-5. **Build the checkout redirect and the webhook** against a placeholder Price
-   id, per the spec. The Price id is the only thing that has to wait.
+5. ~~**Build the checkout redirect and the webhook.**~~ **DONE 2026-08-25,
+   section 25.** What is left of it is Paul's: create the Price in Stripe once
+   the gates are clear, paste the id into `config/credits.json`, and put
+   `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in `.env` (see
+   `.env.example`). **Verify with `stripe listen` before anything is live** —
+   the Stripe CLI is already on this machine and delivers genuinely-signed
+   events to localhost, so the whole path can be proven with no public url.
 6. **The estimator cannot tell 480p from 720p.** `--dry-run` quotes the
    identical `$2.079` at both. Fix by pricing video on fal's token formula
    rather than per second — `config/credits.json` already carries the formula
@@ -88,8 +100,15 @@ technical blocks it. What is not yet decided is the NUMBER on the Price, and
    struck/ghost grammar at all. Section 23. **Possibly moot** if the UI world
    changes — check item 3 first.
 8. **The Supabase spec**, then a plan, then code. Not before. Section 5.
-   **NOTE: a credit PACK does not need it** — see §4 of the pricing spec.
-   Revenue is not blocked behind that migration.
+   **NOTE: a credit PACK does not need it** — see §4 of the pricing spec, and
+   section 25 for the pack that shipped on the file ledger. Revenue is not
+   blocked behind that migration.
+9. **THE FREE TAPE IS STILL THE OLD ONE, and §3 of the pricing spec is not
+   built.** Signup still grants `creditsPerPeriod` from the `free` plan every
+   period rather than one real tape once, and **there is no global ceiling on
+   free tapes.** §3 calls that ceiling "the single most important line in this
+   section" and it does not exist: the difference between a good day and a
+   drained fal balance is still a number nobody set. Not started, not blocked.
 
 ### Two cheap wins nobody has taken
 
@@ -1378,6 +1397,105 @@ seven figures. Not done; it changes `estimateVideo`'s signature and every
 caller.
 
 ---
+
+### 25. THE CHECKOUT AND THE WEBHOOK (2026-08-25) — money can be taken, and is not
+
+**§5 and §6 of the credit-packs spec are built.** Four new files, two new routes,
+59 new tests, and **zero npm dependencies** — Stripe's API is form-encoded HTTPS
+and its signatures are HMAC-SHA256, so `fetch` and `node:crypto` are the whole
+client.
+
+```
+scripts/billing/stripe.mjs   the protocol: one POST, one signature verifier
+scripts/billing/packs.mjs    what is for sale, resolved from config/credits.json
+scripts/billing/billing.mjs  the seam: where the transport and the secrets go in
+config/credits.json          a new `packs` block -- $10, 40 CR, stripePriceId null
+```
+
+**NOTHING CAN BE BOUGHT TODAY AND THAT IS DELIBERATE.** `stripePriceId` is
+`null`, so the button on `/pricing` renders disabled and `POST
+/api/billing/checkout` answers **503 CHECKOUT_NOT_OPEN** without attempting a
+call. A Stripe Price is immutable — creating the wrong one costs a new Price —
+so it is the last thing to exist, gated on §7: meter the parked 720p job, fix the
+estimator, run the blind check.
+
+#### The five properties worth not breaking
+
+1. **The browser sends a pack id and nothing else.** No amount, no currency, no
+   credit count, and no `price_data` in the request to Stripe — the Price
+   object is the only thing that sets what is charged. A test posts
+   `credits=99999&amount=1&priceUSD=0.01` and asserts none of it reaches Stripe.
+2. **The webhook reads RAW BYTES.** `server.mjs` now has `readRawBody` as the
+   primitive and `readBody` as a `toString('utf8')` wrapper over it, rather
+   than the other way round. **The test that matters signs one byte sequence and
+   sends a different one that parses to the same object**; it passes only
+   because the handler hashed what arrived on the socket.
+3. **The event id is the ledger's `ref`.** A redelivery finds it and is a no-op.
+   Asserted against the REAL on-disk ledger — a fake that dedupes correctly
+   would only prove the fake dedupes correctly — on the row count as well as the
+   balance, because a compensating pair of rows leaves a balance right and an
+   audit log lying.
+4. **The status code is a message to Stripe and to nobody else.** 2xx means
+   "stop retrying". So an event this product ignores gets a **200**, and a
+   payment that could not be credited — no such account, no way to price it —
+   gets a **5xx**, which keeps it in the retry queue and then on the
+   failed-events list where a person can find it. A 200 on a payment we failed
+   to credit is money taken with the evidence thrown away.
+5. **The secret key goes to `api.stripe.com` and there is no parameter that
+   moves it.** That is finding F3 of the security review — `FAL_KEY` going to
+   every host on an allow-list — fixed in advance rather than repeated. A test
+   passes `baseUrl` and `apiBase` anyway and asserts they do nothing.
+
+#### Three things that will bite
+
+- **`form-action 'self'` blocks the redirect, not the form.** The buy button
+  posts same-origin and the handler 303s to `checkout.stripe.com`; Chrome
+  checks a form submission's REDIRECT target against `form-action`, so without
+  `https://checkout.stripe.com` in the directive the button silently does
+  nothing and there is no error anywhere. It is in the CSP in `sendHtml`.
+- **A new account is not empty.** `createAccount` grants the free plan's period
+  credits at signup, so any test asserting an absolute balance after a webhook
+  is really asserting the signup grant. Assert the DELTA, and filter the ledger
+  to rows carrying a `ref` — payments have one and the signup grant does not.
+- **`npm run web` now loads `.env`.** It has to, because that is where the two
+  Stripe secrets live. `npm test` is still a bare `node --test` and still does
+  not, which is guard 3 — and the server's billing seam is defaulted to one with
+  **no transport and no credentials**, so a test that somehow reached checkout
+  gets a `TypeError` rather than a bill. That is a fifth guard and it is
+  structural.
+
+#### What was deliberately NOT changed, and why each is a decision
+
+- **The tape price.** §2.1 wants 21 CR at 480p against today's 16; editing
+  `estimatedUSDPer15s` changes what a customer is charged and the config file
+  says in its own words that this is Paul's call. So **40 CR buys two 480p tapes
+  today and the spec sizes it at one** — safe, because nothing can be sold, and
+  written into the pack's `_comment` because the two numbers have to move in the
+  same edit.
+- **`grant.expiryDays` is still `null`.** §2.4 recommends 365 and §9 lists it as
+  open. Setting it today would show customers an expiry date that **no code
+  enforces** — nothing writes the negative ledger row that would realise it —
+  and a date the system does not honour is worse than no date.
+- **The free tape.** §3 in full, ceiling included. Not touched; item 9 above.
+- **The pricing page's visual grammar.** Item 3 of PICK UP HERE says DESIGN.md
+  gets rewritten first and the pages follow. The pack card reuses the existing
+  `.panel`/`.plan`/`.record` classes and adds no CSS, so it moves with whatever
+  replaces STRUCK instead of having to be undone.
+
+#### Proving it without a public url
+
+```bash
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+stripe trigger checkout.session.completed
+```
+
+The Stripe CLI (v1.50.0, already installed) delivers genuinely-signed events to
+a local server, so **the entire payment path can be proven before any public URL
+exists.** Only going live needs the deployed endpoint. Note that a `stripe
+trigger` event carries no `client_reference_id`, so it will land as a 500
+`NO_ACCOUNT_ON_SESSION` — which is the correct behaviour and is what that test
+asserts; a real purchase carries one.
+
 ---
 
 ## Where things stand (2026-08-20, later the same day)

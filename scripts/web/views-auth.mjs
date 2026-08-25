@@ -3,13 +3,25 @@
  *
  * WHY THERE IS NO PAYMENT FORM ON THIS PAGE, AND WHY THAT IS NOT AN OMISSION.
  * `docs/interfaces-app.md` §A: nothing in this product may touch a card number,
- * a CVV or a bank detail, and the pricing page describes plans and links to a
- * hosted checkout that does not exist yet. A "mockup" card field is the same
- * risk as a real one -- it is a text input on a public page asking for a card
- * number, and whether the bytes are stored is a detail the person typing them
- * cannot see. So: three panels of prose, the current plan marked, and a link.
- * If you are reading this because you were about to add a `<input name="cvv">`,
- * the answer is a hosted checkout redirect, not a field.
+ * a CVV or a bank detail. A "mockup" card field is the same risk as a real one
+ * -- it is a text input on a public page asking for a card number, and whether
+ * the bytes are stored is a detail the person typing them cannot see. If you
+ * are reading this because you were about to add an input named cvv, the answer
+ * is a hosted checkout redirect, not a field.
+ *
+ * WHAT THE BUY BUTTON ACTUALLY IS, SINCE 2026-08-25. A form with ONE hidden
+ * field carrying a pack id, posting to this origin. The server resolves the id
+ * against config/credits.json, creates a Checkout Session on Stripe's API and
+ * answers 303 to Stripe's own domain, where the card is entered. Nothing on
+ * this page names a price to the server, and nothing on this page is a payment
+ * field. The button is disabled until the pack has a Stripe Price, because a
+ * Price is immutable and creating one is gated -- section 7 of
+ * docs/superpowers/specs/2026-08-24-credit-packs-pricing-design.md.
+ *
+ * AND IT GRANTS NOTHING. Neither does the page Stripe returns to: the success
+ * banner below is driven by a query parameter that anybody can type, so it says
+ * "shortly" rather than claiming a balance it has no way to know about. The
+ * credits arrive on a signature-verified webhook or they do not arrive at all.
  *
  * WHY THESE FORMS CARRY NO CSRF TOKEN. The session cookie is `SameSite=Lax`, so
  * a cross-site form post arrives without it and lands as "not signed in" rather
@@ -123,7 +135,8 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
  *          currentPlan?: string|null}} data
  */
 export function pricingPage({
-  plans = [], resolutions = [], currentPlan = null, account = null, balance = null,
+  plans = [], resolutions = [], packs = [], currentPlan = null, account = null,
+  balance = null, checkout = null,
 } = {}) {
   const offered = resolutions.filter((r) => r.available && r.credits > 0);
 
@@ -157,6 +170,59 @@ export function pricingPage({
 
   const costs = offered.map((r) => h(`${r.id} — ~${r.credits} CR`)).join(' &middot; ');
 
+  /**
+   * Coming back from Stripe.
+   *
+   * ANYBODY CAN VISIT EITHER OF THESE. The wording is chosen on that basis: it
+   * thanks, and it does not assert that a balance has moved, because this page
+   * has no way to know and the webhook that does may not have arrived yet.
+   * Saying "your credits are ready" here would be a claim the server cannot
+   * back, on a url a stranger can type.
+   */
+  const returned = {
+    done: 'Thank you. Your credits will appear on your balance shortly, once the payment clears.',
+    cancelled: 'Nothing was charged. The pack is still here whenever you want it.',
+  }[String(checkout ?? '')] ?? null;
+
+  const packCards = packs.map((pack) => {
+    const each = pack.credits > 0 ? pack.priceUSD / pack.credits : 0;
+    return `
+    <section class="panel plan">
+      <p class="eyebrow">${h(pack.label)}</p>
+      <p class="price">${h(`${pack.priceUSD}`)}</p>
+      <p class="per">one payment, no renewal</p>
+      <ul>
+        <li>${h(`${pack.credits} credits`)}</li>
+        ${offered.map((r) => {
+    const n = Math.floor(pack.credits / r.credits);
+    const line = n === 0
+      ? `not enough for a ${r.id} tape`
+      : `${n} ${n === 1 ? 'tape' : 'tapes'} at ${r.id}`;
+    return `<li>${h(line)}</li>`;
+  }).join('')}
+        <li>${h(`about ${(each * 100).toFixed(0)}c a credit`)}</li>
+      </ul>
+      <form method="post" action="/api/billing/checkout">
+        <input type="hidden" name="pack" value="${h(pack.id)}">
+        <button type="submit" class="record"${pack.buyable ? '' : ' disabled'}>
+          ${h(pack.buyable ? 'Buy credits' : 'Not open yet')}
+        </button>
+      </form>
+      ${pack.buyable ? '' : '<p class="hint">Checkout opens once the price is set. Nothing is charged here.</p>'}
+    </section>`;
+  }).join('');
+
+  const packSection = packCards === '' ? '' : `
+  <section class="panel">
+    <p class="eyebrow">Credits</p>
+    <h1 class="headline">Buy a pack</h1>
+    <p class="sub">One payment, no subscription, nothing renews. The card is entered on the
+    payment provider's own page — this application never sees it.</p>
+    ${returned ? `<p class="notice">${h(returned)}</p>` : ''}
+  </section>
+
+  <div class="plans">${packCards}</div>`;
+
   const body = `
 <main>
   <section class="panel">
@@ -167,16 +233,18 @@ export function pricingPage({
     the tape gets hold of it.</p>
     <p class="hint">${costs || 'Costs are unavailable right now.'}</p>
     <p class="hint">There is no payment form here and there is not one anywhere else either.
-    When paid plans open, checkout is hosted by the payment provider and this application
+    Checkout is hosted by the payment provider on their own domain, and this application
     never sees a card number. To change a plan today, write to us.</p>
   </section>
+
+  ${packSection}
 
   <div class="plans">${cards}</div>
 
   <section class="panel">
     <p class="hint">Every figure on this page is an estimate of provider cost until a metered
-    run proves it, and it will be revisited when one does. Nothing renews automatically,
-    because nothing is charged yet. Credits do not expire.</p>
+    run proves it, and it will be revisited when one does. A pack is a single payment and
+    nothing renews. Credits do not expire.</p>
     <p class="actions"><a class="quiet" href="/">Back to the shelf</a></p>
   </section>
 </main>

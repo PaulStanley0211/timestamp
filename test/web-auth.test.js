@@ -202,6 +202,24 @@ function fakeAuth() {
       account.credits += -spent.delta;
       account.ledger.push({ jobId, delta: -spent.delta, at: new Date().toISOString() });
     },
+    /**
+     * Idempotent by `ref`, the way the real module is.
+     *
+     * ADDED 2026-08-25 with the Stripe webhook, and it is in this fake for one
+     * reason: `REQUIRED_AUTH` now names it, so a fake without it is a fake that
+     * no longer matches the documented surface -- which is the whole point of
+     * the assertion below. The REPLAY behaviour is tested against the real
+     * on-disk ledger in test/web-billing.test.js, because a fake that dedupes
+     * correctly would only ever prove that the fake dedupes correctly.
+     */
+    grantCredits(account, { credits, reason, ref = null }) {
+      if (ref !== null && account.ledger.some((e) => e.ref === ref)) {
+        return { granted: false, credits: 0, ref };
+      }
+      account.credits += credits;
+      account.ledger.push({ jobId: null, delta: credits, reason, ref, at: new Date().toISOString() });
+      return { granted: true, credits, ref };
+    },
   };
 }
 
@@ -835,8 +853,32 @@ test('no page in this app contains anything that collects payment details', asyn
       for (const tag of html.match(controls) ?? []) {
         assert.ok(!banned.test(tag), `${target} has a control that collects payment details: ${tag}`);
       }
-      assert.ok(!/<form[^>]*action="[^"]*(checkout|pay|billing|card)/i.test(html),
-        `${target} posts a form at something that sounds like payment`);
+      // A CHECKOUT FORM IS ALLOWED AND ITS CONTENTS ARE NOT.
+      //
+      // This assertion used to ban any form whose action mentioned checkout,
+      // billing or a card, and it was a proxy for "there is no way to pay from
+      // here" written while there was no way to pay from anywhere. Since
+      // 2026-08-25 there is one, by design: /pricing posts a pack id to
+      // /api/billing/checkout and the server answers 303 to Stripe's own
+      // domain, where the card is entered. Banning the form would ban the
+      // approved design.
+      //
+      // What replaces it is STRICTLY STRONGER than what it replaces. Rather
+      // than trusting a url not to sound like payment, this reads the form
+      // that exists and asserts it carries exactly one field, that the field
+      // is a pack id, and that the id is one the server sells. A future edit
+      // that adds an amount, a credit count or a price to that form fails
+      // here -- which the old regex, matching only on the action attribute,
+      // would have passed without a word.
+      for (const form of html.match(/<form\b[\s\S]*?<\/form>/gi) ?? []) {
+        if (!/action="[^"]*(checkout|pay|billing|card)/i.test(form)) continue;
+        assert.match(form, /action="\/api\/billing\/checkout"/,
+          `${target} posts at a payment-ish path that is not the checkout route: ${form}`);
+        const fields = form.match(/<input\b[^>]*>/gi) ?? [];
+        assert.equal(fields.length, 1, `the checkout form on ${target} carries more than a pack id`);
+        assert.match(fields[0], /name="pack"/, `the checkout form on ${target} sends something other than a pack id`);
+        assert.match(fields[0], /type="hidden"/, 'the pack id must not be typeable');
+      }
     }
   });
 });

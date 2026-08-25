@@ -89,6 +89,7 @@ import { aspectIds } from '../tapedeck/frame.mjs';
 import { homePage, landingPage, statusPage, selectPage, resultPage, errorPage } from './views.mjs';
 import { loginPage, signupPage, pricingPage, authUnavailablePage } from './views-auth.mjs';
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
+import { createBilling } from '../billing/billing.mjs';
 
 /** Anything a handler throws that has a status. Everything else becomes a 500
  *  with a generic message, because a filesystem error message contains an
@@ -131,7 +132,15 @@ const PLACE_IMAGE_RE = /^([A-Za-z0-9-]{1,64})\.jpg$/;
  *  and the health check. Keeping them out of the auth path means a missing
  *  `scripts/auth/` still serves the stylesheet, and a load balancer still gets
  *  an answer. */
-const NO_SESSION_ROUTES = new Set(['stylesheet', 'font', 'favicon', 'placeImage', 'health']);
+const NO_SESSION_ROUTES = new Set([
+  'stylesheet', 'font', 'favicon', 'placeImage', 'health',
+  // STRIPE SENDS NO COOKIE, so resolving a session for it is work that can only
+  // fail. Keeping it out of the session path also means a webhook is answered
+  // while the sign-in half of the app is degraded -- which matters, because the
+  // alternative to answering is Stripe retrying a payment that already
+  // happened.
+  'stripeWebhook',
+]);
 
 /** Routes that look at a session when there is one but must still render when
  *  `scripts/auth/` is unavailable. Exactly one, and it is the plans page: it is
@@ -185,7 +194,14 @@ function sendHtml(req, res, status, html, headers = {}) {
     'Content-Security-Policy':
       "default-src 'self'; img-src 'self' data:; media-src 'self'; "
       + "style-src 'self'; font-src 'self'; script-src 'unsafe-inline'; "
-      + "form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      // `form-action` LISTS STRIPE BECAUSE OF A REDIRECT, NOT A FORM. The buy
+      // button posts to this origin; the handler answers 303 to the hosted
+      // checkout page, and Chrome checks the redirect target of a form
+      // submission against this directive. Without the origin below the browser
+      // blocks the navigation and the button silently does nothing. It is one
+      // https origin, it is Stripe's own checkout host, and no page here posts
+      // to it directly.
+      + "form-action 'self' https://checkout.stripe.com; base-uri 'none'; frame-ancestors 'none'",
     ...headers,
   });
   res.end(req.method === 'HEAD' ? undefined : html);
@@ -213,7 +229,7 @@ function wantsHtml(req) {
  * endpoints that take one. Same discipline as the multipart parser and for the
  * same reason: checking the size after buffering is not a check.
  */
-function readBody(req, maxBytes = 8_192) {
+function readRawBody(req, maxBytes = 8_192) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let bytes = 0;
@@ -227,8 +243,23 @@ function readBody(req, maxBytes = 8_192) {
       chunks.push(chunk);
     });
     req.on('error', reject);
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
   });
+}
+
+/**
+ * The same read, decoded.
+ *
+ * EVERY CALLER BUT ONE WANTS THIS, and the one that does not is the Stripe
+ * webhook. Stripe signs the exact bytes it sent, so a handler that verifies a
+ * signature has to hash what arrived on the socket -- `toString('utf8')` is
+ * the identity on well-formed utf8 and quietly is not on anything else, and
+ * "quietly is not" over somebody's payment is not a risk worth taking for a
+ * convenience. `readRawBody` is therefore the primitive and this is the
+ * wrapper, rather than the other way round.
+ */
+async function readBody(req, maxBytes = 8_192) {
+  return (await readRawBody(req, maxBytes)).toString('utf8');
 }
 
 /** JSON or `application/x-www-form-urlencoded`, because the contact sheet and
@@ -307,6 +338,27 @@ export function createServer({
   ffprobeImpl = runFfprobe,
   auth = null,
   sessions = null,
+  /**
+   * The Stripe seam. Defaulted to a billing object WITH NO TRANSPORT AND NO
+   * CREDENTIALS, which is guard 4: a server built by a test can read the pack
+   * table out of config -- so the pricing page is the real page -- and cannot
+   * spend, because `createCheckoutSession` would raise a `TypeError` before it
+   * reached a socket. `server-cli.mjs` is the one caller that hands over a
+   * real transport.
+   */
+  billing = createBilling(),
+  /**
+   * Where this app is reachable from, for the two urls Stripe redirects a
+   * customer back to.
+   *
+   * NOT DERIVED FROM THE `Host` HEADER, and that is the point of the option.
+   * A success url built out of a request header is a success url an attacker
+   * can choose, and it is handed to Stripe to navigate a browser to. Absent, it
+   * falls back to this server's own bound address, which is right for local
+   * development and wrong in a way that is visible in deployment rather than
+   * exploitable.
+   */
+  publicUrl = process.env.TIMESTAMP_PUBLIC_URL || null,
   assetsRoot = `${REPO_ROOT}/assets`,
   nowImpl = () => new Date(),
   logImpl = (line) => process.stderr.write(`${line}\n`),
@@ -319,6 +371,13 @@ export function createServer({
   }
 
   const auths = sessions ?? createSessions({ root, auth });
+
+  // A DEFAULT PARAMETER ONLY FIRES ON `undefined`, and every other injectable
+  // seam in this signature is spelled `= null` -- so somebody passing
+  // `billing: null` by analogy would get a `TypeError` from inside a handler
+  // rather than a working server with no checkout. One line, and it makes the
+  // two spellings mean the same thing.
+  const sales = billing ?? createBilling();
 
   // Loaded once, at construction. A preset file that fails validation should
   // stop the server coming up, not produce a 500 on the first page view.
@@ -670,6 +729,51 @@ export function createServer({
   }
 
   // -------------------------------------------------------------------------
+  // money
+  // -------------------------------------------------------------------------
+
+  /**
+   * Where Stripe sends a customer back to.
+   *
+   * BUILT FROM CONFIGURATION AND FROM THIS SERVER'S OWN SOCKET, NEVER FROM THE
+   * REQUEST. The `Host` header is whatever the client typed, and a success url
+   * derived from it is a url an attacker chooses and Stripe navigates a browser
+   * to. There is no header read anywhere in this function on purpose.
+   */
+  function publicBase() {
+    if (publicUrl) return String(publicUrl).replace(/\/+$/, '');
+    const address = server.address();
+    const bound = address && typeof address === 'object' ? address.port : port;
+    return `http://${host}:${bound}`;
+  }
+
+  /**
+   * The packs, for the page. Degrades to nothing rather than taking the page
+   * down, for the same reason the plans do: `/pricing` is public prose and a
+   * module that will not load is not a reason to 503 it.
+   *
+   * `stripePriceId` is mapped to a boolean here and never rendered. A price id
+   * is not a secret, but it is also not something a page needs, and the rule
+   * that the browser never holds a price is easier to keep when there is no
+   * copy of one in the HTML.
+   */
+  async function packRows() {
+    try {
+      return (await sales.packs()).map((pack) => ({
+        id: pack.id,
+        label: pack.label,
+        priceUSD: pack.priceUSD,
+        credits: pack.credits,
+        available: pack.available,
+        buyable: pack.available && typeof pack.stripePriceId === 'string' && pack.stripePriceId.length > 0,
+      }));
+    } catch (err) {
+      logImpl(`[web] the packs could not be read: ${err?.message ?? err}`);
+      return [];
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // health
   // -------------------------------------------------------------------------
 
@@ -895,7 +999,7 @@ export function createServer({
      * handling never touches this code, and when it is wired it goes through a
      * hosted checkout. `plan` is set by an operator or a future webhook.
      */
-    async pricingPage(req, res, { account }) {
+    async pricingPage(req, res, { account, query }) {
       let plans = [];
       let resolutions = [];
       try {
@@ -913,10 +1017,185 @@ export function createServer({
       sendHtml(req, res, 200, pricingPage({
         plans,
         resolutions,
+        packs: await packRows(),
         currentPlan: account?.plan ?? null,
         account,
         balance,
+        // WHERE STRIPE SENDS SOMEBODY BACK TO, AND IT GRANTS NOTHING. This is a
+        // query parameter on a public page: anybody can type it, so it may
+        // change what the page SAYS and may never change what an account HAS.
+        // The credits arrive on the webhook, which is a different request with
+        // a signature on it.
+        checkout: query?.get('checkout') ?? null,
       }));
+    },
+
+    /**
+     * Buy a pack.
+     *
+     * THE BROWSER SENDS A PACK ID AND NOTHING ELSE. Any other field in the body
+     * is read by nothing -- there is no amount, no credit count and no price in
+     * this handler's vocabulary, so a tampered form has nothing to tamper with.
+     * The pack is resolved against `config/credits.json` and the Price id comes
+     * from there.
+     *
+     * IT GRANTS NOTHING, and neither does the page Stripe returns to. The only
+     * thing in this application that adds credits is `stripeWebhook` below.
+     */
+    async checkout(req, res, { account }) {
+      const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
+
+      let pack;
+      try {
+        pack = await sales.packFor(String(body.pack ?? ''));
+      } catch (err) {
+        if (err?.name !== 'PackError') throw err;
+        // 400: the caller named something we do not sell. The code travels so a
+        // client can tell "no such pack" from "withdrawn".
+        throw new HttpError(400, err.userMessage ?? 'That is not something we sell.', { code: err.code });
+      }
+
+      let session;
+      try {
+        session = await sales.createCheckoutSession({
+          priceId: pack.stripePriceId,
+          accountId: account.accountId,
+          packId: pack.id,
+          credits: pack.credits,
+          successUrl: `${publicBase()}/pricing?checkout=done`,
+          cancelUrl: `${publicBase()}/pricing?checkout=cancelled`,
+        });
+      } catch (err) {
+        if (err?.name !== 'StripeError') throw err;
+        // A PACK WITH NO PRICE IS A 503 AND NOT A 400, because the gap is ours.
+        // The customer asked for something real and the immutable object it
+        // needs has not been created yet -- section 7 of the spec -- so the
+        // honest answer is "not yet", not "you asked wrong".
+        if (err.code === 'NO_PRICE_ID' || err.code === 'NO_API_KEY') {
+          logImpl(`[web] checkout unavailable: ${err.message}`);
+          throw new HttpError(503, 'Checkout is not open yet.', { code: 'CHECKOUT_NOT_OPEN' });
+        }
+        // Everything else is Stripe refusing us, not the customer. The detail
+        // goes to the log; the caller gets a sentence and a 502, because the
+        // failure is upstream of this application.
+        logImpl(`[web] stripe refused a checkout session: ${err.message}`);
+        throw new HttpError(502, 'We could not start checkout. Please try again.', { code: 'CHECKOUT_FAILED' });
+      }
+
+      if (wantsHtml(req)) return redirect(res, session.url);
+      return sendJson(req, res, 200, { url: session.url, sessionId: session.id });
+    },
+
+    /**
+     * The only thing in this application that adds credits.
+     *
+     * NO SESSION, AND A STRONGER GATE THAN ONE. The request is authenticated by
+     * an HMAC-SHA256 over the exact bytes that arrived, keyed by a secret only
+     * Stripe and this server hold, and it is rejected if the signature is
+     * timestamped outside a five-minute window. Replay protection and
+     * idempotency are separate concerns and both are here: the window stops a
+     * captured request being sent again later, and the ledger's `ref` -- the
+     * Stripe event id -- stops Stripe's own legitimate retries from paying
+     * twice.
+     *
+     * WHAT THE STATUS CODES MEAN TO STRIPE, WHICH IS THE ONLY READER. A 2xx
+     * means "handled, stop retrying". Everything else means "try again", for up
+     * to three days, and then it appears on the failed-events list where a
+     * person can see it. So an event this product does not care about gets a
+     * 200 and an event that could not be honoured gets a 5xx -- and NEVER the
+     * other way round, because a 200 on a payment we failed to credit is money
+     * taken with the evidence thrown away.
+     */
+    async stripeWebhook(req, res) {
+      // 64 KiB. Stripe's own limit on an event payload is far below this and a
+      // webhook is not an upload endpoint; the cap is here because every other
+      // body in this file has one.
+      const raw = await readRawBody(req, 64 * 1024);
+
+      let event;
+      try {
+        event = sales.constructWebhookEvent({
+          payload: raw,
+          header: req.headers['stripe-signature'],
+          nowImpl,
+        });
+      } catch (err) {
+        if (err?.name !== 'StripeError') throw err;
+        // A MISSING SECRET IS OURS AND A BAD SIGNATURE IS THEIRS, and the two
+        // must not share a status. 503 keeps the event in Stripe's retry queue
+        // until the secret is configured; 400 says this request was never
+        // Stripe's to begin with.
+        const status = err.code === 'NO_WEBHOOK_SECRET' ? 503 : 400;
+        logImpl(`[web] stripe webhook refused (${err.code}): ${err.message}`);
+        return sendJson(req, res, status, {
+          error: { status, message: 'That webhook could not be verified.', code: err.code },
+        });
+      }
+
+      // ONE EVENT, BECAUSE THERE IS ONE PACK. Everything else is acknowledged
+      // so Stripe stops retrying events this product does not act on.
+      if (event.type !== 'checkout.session.completed') {
+        return sendJson(req, res, 200, { ok: true, granted: false, ignored: event.type });
+      }
+      const session = event.data?.object ?? {};
+      if (session.payment_status !== 'paid') {
+        // A completed session that was not paid is a real Stripe event and not
+        // a payment. Acknowledged, and nothing granted.
+        return sendJson(req, res, 200, { ok: true, granted: false, ignored: 'unpaid' });
+      }
+
+      const accountId = typeof session.client_reference_id === 'string' && session.client_reference_id.length > 0
+        ? session.client_reference_id
+        : session.metadata?.accountId;
+      if (typeof accountId !== 'string' || accountId.length === 0) {
+        logImpl(`[web] STRIPE EVENT ${event.id} IS A PAID SESSION WITH NO ACCOUNT ON IT -- credit it by hand`);
+        return sendJson(req, res, 500, {
+          error: { status: 500, message: 'That payment names no account.', code: 'NO_ACCOUNT_ON_SESSION' },
+        });
+      }
+
+      let grant;
+      try {
+        grant = await sales.grantForSession(session);
+      } catch (err) {
+        if (err?.name !== 'PackError') throw err;
+        logImpl(`[web] STRIPE EVENT ${event.id} CANNOT BE PRICED (${err.code}): ${err.message} -- credit it by hand`);
+        return sendJson(req, res, 500, {
+          error: { status: 500, message: 'That payment could not be priced.', code: err.code },
+        });
+      }
+      if (grant.mismatch) {
+        // Not a refusal. The customer is paid what they were promised, and the
+        // discrepancy is written where somebody will find it.
+        logImpl(`[web] stripe event ${event.id}: pack ${grant.packId} promised ${grant.credits} CR and config says otherwise`);
+      }
+
+      const account = await auths.accountById(accountId);
+      if (!account) {
+        // MONEY TAKEN AND NOWHERE TO PUT IT. A 200 here would make the event
+        // vanish; a 500 keeps it retrying and then leaves it on Stripe's failed
+        // list, which is the only place a person would ever go looking.
+        logImpl(`[web] STRIPE EVENT ${event.id} PAID FOR ACCOUNT ${accountId}, WHICH DOES NOT EXIST`);
+        return sendJson(req, res, 500, {
+          error: { status: 500, message: 'That payment names no account we hold.', code: 'NO_SUCH_ACCOUNT' },
+        });
+      }
+
+      // THE LEDGER WRITE LANDS BEFORE THE 200. A 200 sent first would tell
+      // Stripe to stop retrying the one thing that matters.
+      const result = await auths.grant(account, {
+        credits: grant.credits,
+        reason: `grant:pack:${grant.packId ?? 'unknown'}`,
+        // The Stripe event id. A redelivery finds this ref already in the
+        // ledger and is a no-op rather than a second payout.
+        ref: event.id,
+      });
+
+      return sendJson(req, res, 200, {
+        ok: true,
+        granted: result.granted === true,
+        credits: grant.credits,
+      });
     },
 
     // --- API -------------------------------------------------------------
@@ -1420,7 +1699,7 @@ export function createServer({
    * torn down once the response has flushed, because the remaining megabytes are
    * never going to be wanted and keep-alive would sit and wait for them.
    */
-  function fail(req, res, status, title, detail, jobId = null, { closeConnection = false } = {}) {
+  function fail(req, res, status, title, detail, jobId = null, { closeConnection = false, code = null } = {}) {
     if (res.headersSent) { res.end(); return; }
     if (closeConnection) {
       res.on('finish', () => { req.socket?.destroy(); });
@@ -1430,7 +1709,13 @@ export function createServer({
       sendHtml(req, res, status, errorPage({ status, title, detail, jobId }), headers);
       return;
     }
-    sendJson(req, res, status, { error: { status, message: title, detail } }, headers);
+    // THE CODE TRAVELS WHEN THERE IS ONE. A message is prose and gets reworded;
+    // a code is what a caller branches on, and `unauthenticated` has always sent
+    // one. Omitted rather than sent as null when a thrower did not name a code,
+    // so the envelope does not grow a field that is always empty.
+    sendJson(req, res, status, {
+      error: { status, message: title, detail, ...(code ? { code } : {}) },
+    }, headers);
   }
 
   /**
@@ -1504,7 +1789,7 @@ export function createServer({
     } catch (err) {
       if (err instanceof HttpError) {
         fail(req, res, err.status, err.message, null, matched.params?.id ?? null,
-          { closeConnection: err.closeConnection });
+          { closeConnection: err.closeConnection, code: err.code });
         return;
       }
       if (err instanceof AuthUnavailableError) {

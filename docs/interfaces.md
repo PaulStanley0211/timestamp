@@ -569,6 +569,8 @@ scripts/web/static.mjs     the one CSS file, the video, the poster
 | `GET` | `/api/jobs/:id/poster` | jpg |
 | `DELETE` | `/api/jobs/:id` | cancel + purge |
 | `GET` | `/api/health` | `{ok, ffmpeg, queue:{...}, worker:{lastSeen}}` |
+| `POST` | `/api/billing/checkout` | `{pack}` **and nothing else** → `200 {url, sessionId}`, or `303` to the hosted page for a browser. Never an amount. |
+| `POST` | `/api/stripe/webhook` | raw body, `Stripe-Signature`. No session — authenticated by HMAC. **The only thing that grants credits.** |
 
 **Pages**: `/` upload form · `/j/:id` status, polls every 2 s · `/j/:id/select`
 contact sheet · `/j/:id/result` the video, download, "make another".

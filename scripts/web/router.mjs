@@ -67,6 +67,15 @@ export const ROUTES = Object.freeze([
   { method: 'POST', pattern: '/logout', name: 'logout' },
   { method: 'GET', pattern: '/pricing', name: 'pricingPage' },
 
+  // --- money (docs/superpowers/specs/2026-08-24-credit-packs-pricing-design.md)
+  // The browser posts a PACK ID and nothing else. Everything priced is resolved
+  // on the server against config/credits.json; there is no route here that
+  // accepts an amount, and there must not be one.
+  { method: 'POST', pattern: '/api/billing/checkout', name: 'checkout' },
+  // NOT authenticated by session -- authenticated by an HMAC over the raw body.
+  // Stripe holds no cookie and never will.
+  { method: 'POST', pattern: '/api/stripe/webhook', name: 'stripeWebhook' },
+
   // Place card imagery. `assets/places/<id>.jpg` does not exist yet; a 404 here
   // is the designed state, and the CSS falls through to the gradient layer.
   { method: 'GET', pattern: '/places/:file', name: 'placeImage' },
@@ -120,6 +129,13 @@ export const PUBLIC_ROUTES = Object.freeze(new Set([
   // test/web-auth.test.js rather than implied by a redirect.
   'homePage',
   'health',
+  // PUBLIC BECAUSE STRIPE CANNOT LOG IN, and gated by something stronger than
+  // a session: an HMAC-SHA256 over the exact bytes of the request, keyed by a
+  // secret only Stripe and this server hold. A route in this list normally
+  // means "anybody may reach it"; here it means "the gate is not the session",
+  // and the gate that IS there refuses an unverified request before it can
+  // touch a ledger.
+  'stripeWebhook',
 ]));
 
 /** True when this route may be served to somebody with no session. */

@@ -177,6 +177,27 @@ export function creditConfig({ root = REPO_ROOT, reload = false } = {}) {
       });
     }
   }
+  // PACKS ARE CHECKED THE SAME WAY, AND THE STAKES ARE HIGHER THAN FOR A PLAN.
+  // A plan is granted by an operator who is looking at the screen. A pack is
+  // granted by a webhook nobody is watching, so a `credits` field lost in an
+  // edit would resolve to `undefined`, travel all the way to `grantCredits`,
+  // and be refused there as a bad integer -- AFTER the card was charged. The
+  // loud version of that failure is a process that will not start.
+  for (const [id, pack] of Object.entries(parsed?.packs ?? {})) {
+    if (id.startsWith('_')) continue; // `_comment` is documentation, not a pack
+    for (const key of ['id', 'label', 'priceUSD', 'credits', 'available', 'stripePriceId']) {
+      // `stripePriceId` is null until the Price exists, and `available` may be
+      // false, so PRESENCE is the test and not truthiness.
+      if (pack?.[key] === undefined) {
+        throw new AuthError(`pack ${id} in ${file} is missing ${key}`, { code: 'BAD_CREDIT_CONFIG' });
+      }
+    }
+    if (typeof pack._comment !== 'string' || pack._comment.length === 0) {
+      throw new AuthError(`pack ${id} in ${file} carries no _comment saying where its number came from`, {
+        code: 'BAD_CREDIT_CONFIG',
+      });
+    }
+  }
   creditConfigCache = deepFreeze(parsed);
   return creditConfigCache;
 }
