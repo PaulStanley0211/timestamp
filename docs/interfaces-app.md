@@ -57,7 +57,7 @@ free lunch. Phase 0 is what settles it.
 
 ---
 
-## A. Accounts, sessions, quota — `scripts/auth/`
+## A. Accounts, sessions, credits — `scripts/auth/`
 
 Zero dependencies. `node:crypto` has everything needed.
 
@@ -71,9 +71,21 @@ out/sessions/<sessionId>.json
 // scripts/auth/accounts.mjs
 export class AuthError extends Error {}      // .code .userMessage
 export const PLANS;                          // frozen, see below
-export function createAccount({ root, email, password, plan?, nowImpl? }): Account
+
+// ASYNC SINCE 2026-08-26, AND THE FOUR BELOW MUST BE AWAITED. Every scrypt
+// derivation now runs on the libuv threadpool instead of the event loop. A
+// derivation is ~30ms of deliberate CPU and 16 MiB of deliberate memory --
+// that is scrypt doing its job -- and done synchronously it froze the whole
+// process for its duration, including the status poll and the Stripe webhook.
+// A forgotten `await` here yields a Promise where a boolean or an Account is
+// expected, which reads as "login always succeeds" or "the account has no
+// fields". Grep for these four before assuming a call site is fine.
+export async function createAccount({ root, email, password, plan?, consent?, ceiling?, nowImpl?, rand? }): Promise<Account>
+export async function verifyPassword(account, password): Promise<boolean>
+export async function hashPassword(password, { params?, rand? }): Promise<string>
+export async function authenticate({ root, email, password, nowImpl? }): Promise<Account>  // throws BAD_CREDENTIALS
+
 export function findAccountByEmail({ root, email }): Account | null
-export function verifyPassword(account, password): boolean
 export function loadAccount({ root, accountId }): Account
 export function saveAccount(account): void
 export function setPlan(account, planId): void
@@ -86,30 +98,83 @@ export function signCookie(value, secret): string
 export function verifyCookie(signed, secret): string | null
 export function sessionSecret({ root }): string     // generated once, stored 0600-ish
 
-// scripts/auth/quota.mjs
-export function quotaFor(account, { nowImpl? }): { limit, used, remaining, resetsAt, planId }
-export function consumeQuota(account, { jobId, nowImpl? }): void   // throws QUOTA_EXCEEDED
-export function refundQuota(account, { jobId }): void
+// scripts/auth/credits.mjs
+// RENAMED FROM quota.mjs ON 2026-08-20 and this block was never updated --
+// corrected 2026-08-26. A flat "N tapes a month" quota stopped being honest
+// the moment a tape had two prices: a 720p tape costs ~2.2x a 480p one, so
+// the same allowance is three tapes or one depending on a choice made after
+// the plan was bought. The unit a person spends is a CREDIT, and the price of
+// a tape is computed from the resolution it is rendered at.
+export function creditCost({ resolution?, seconds?, tier? }): number   // throws RESOLUTION_UNAVAILABLE
+export function balanceOf(account): { credits, planId, grantedAt, expiresAt }
+export function balanceForId({ root, accountId, nowImpl? }): { credits, ... }
+export function ledgerFor(account): Entry[]                 // append-only; balance is SUM(delta), never stored
+export function debitCredits(account, { jobId, credits, reason?, nowImpl? }): void  // idempotent by jobId
+export function refundCredits(account, { jobId, reason?, spent?, nowImpl? }): void  // throws on spent:true
+export function grantCredits(account, { credits, reason, ref?, nowImpl? }): { granted, credits, ref }
+export function grantPlanPeriod(account, { planId?, nowImpl? }): void
+export function providerWasCalled(job): boolean             // reads job.steps; over-reports on purpose
+export function refundIfUnspent(account, job, { reason?, nowImpl? }): boolean
 ```
+
+**`refundIfUnspent` is the form worth copying, not a bare `refundCredits`.** It
+reads the manifest's steps and decides for itself whether a provider was ever
+asked for anything, so the rule lives in one place instead of being re-derived
+at every call site that thinks it knows. Both refund call sites — the web
+create handler's catch, the web cancel handler — and the worker's failure and
+cancellation paths go through it. `CLAUDE.md` §28 records where each call site
+is and how the worker reaches an account from a job id.
 
 **Password storage: `scrypt`, per-account 16-byte salt, stored as
 `scrypt$N$r$p$<salt b64>$<hash b64>`.** Compare with `timingSafeEqual`, never
 `===` — a string compare leaks the hash a byte at a time. Node's `scrypt` is in
 `node:crypto`; do not add a dependency for this and do not invent a scheme.
 
-**Sessions are opaque random ids in a cookie, not JWTs.** 32 bytes from
-`randomBytes`, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` when the request
-arrived over TLS. The cookie is HMAC-signed with `sessionSecret` so a forged id
-is rejected before any filesystem lookup. Server-side session records are what
-makes logout actually log out; a JWT cannot be revoked and this app can hand
-someone else's face to whoever holds the token.
+**EVERY REFUSAL COSTS THE SAME TIME, whatever the input.** An unknown address
+burns an equal derivation, and so does a password too long to be hashed at all
+— the two branches must not diverge in either direction. If they do, the wall
+clock answers "does this address have an account here", which for this product
+means "has this named person uploaded their face to a face-video service".
+`test/auth-accounts.test.js` pins the full four-cell matrix (known/unknown ×
+ordinary/oversized) as a proportion, never a wall-clock budget.
 
-**Quota is a rolling window on the account record**, `usage: [{jobId, at}]`.
-`consumeQuota` is called **when a job is enqueued**, not when it finishes —
-otherwise a user starts twelve renders in parallel and every one of them checks
-a limit none of them has consumed yet. `refundQuota` exists for the case where a
-job fails terminally before the provider was ever called; a job that failed
-*after* spending is not refunded, because the money is gone.
+**Sessions are opaque random ids in a cookie, not JWTs.** 32 bytes from
+`randomBytes`, `HttpOnly`, `SameSite=Lax`, `Path=/`. The cookie is HMAC-signed
+with `sessionSecret` so a forged id is rejected before any filesystem lookup.
+Server-side session records are what makes logout actually log out; a JWT
+cannot be revoked and this app can hand someone else's face to whoever holds
+the token.
+
+**`Secure` follows the socket, not a header.** `x-forwarded-proto` is whatever
+the client typed unless a proxy this deployment actually has rewrote it, so it
+is believed only when `TIMESTAMP_TRUST_PROXY=1` says an operator vouched for
+one. Default is socket TLS alone. Setting `Secure` off a client-typed header
+lets any request turn it on or off by asking.
+
+**`POST /login` and `POST /signup` need a signed double-submit pair.**
+`SameSite=Lax` stops a foreign page acting AS a session; it does nothing to
+stop one CREATING a session, because the login post needs no cookie at all —
+and a visitor silently signed in as somebody else uploads their face onto that
+somebody's shelf. So both routes require the `timestamp_csrf` cookie and a
+matching hidden `csrf` field, compared in constant time, plus a same-origin
+check when `Origin` is present. **A client — including a test — must GET the
+form first and carry both halves.** The pair is minted and verified by
+`csrfIssue`/`csrfCheck` in `scripts/web/session-middleware.mjs`.
+
+**Both routes are rate limited per client address**: 10 sign-in attempts a
+minute, 10 new accounts an hour (`AUTH_RATE_LIMITS`, exported from
+`server.mjs`). Keyed on the socket address and never on a header a client can
+type, checked before the body is read, answered `429` with `Retry-After`. A
+person mistypes a password four times; only a script needs eleven tries in a
+minute, and every try costs this process a deliberate derivation.
+
+**Credits are spent when a job is ENQUEUED**, not when it finishes — otherwise
+a user starts twelve renders in parallel and every one of them checks a balance
+none of them has spent yet. `debitCredits` is idempotent by `jobId`, so a
+re-enqueue of the same job is the same render rather than a second charge. A
+job that ends **without a tape** — a terminal failure, or a cancellation — is
+handed to `refundIfUnspent`, which gives back what the steps never spent; a job
+that failed *after* spending is not refunded, because the money is gone.
 
 ```js
 PLANS = {

@@ -11,8 +11,18 @@ Warm, grainy, quiet.
 
 **1284 tests / 1282 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
-Branch `ui-redesign-signed-in-page`; `origin/main` is still `b6f64a3`, so
-nothing is merged. Opening a PR is Paul's call, not a prerequisite.
+Branch `ui-redesign-signed-in-page`, **pushed 2026-08-26** (`6efb0e6..2464b35`);
+`origin/main` is still `b6f64a3`, **50 commits behind, nothing merged**.
+Opening a PR is Paul's call, not a prerequisite.
+
+**NO CI HAS RUN ON THIS BRANCH AND NONE WILL.** Both workflows trigger on
+`push: branches: [main]` and `pull_request` only, so a feature-branch push
+runs nothing. **The first CI run happens the moment a PR opens** — and Linux
+will be red on the two pre-existing tests in section 4 (one asserts how a
+particular ffprobe build spells `EXIF metadata` in side data, the other
+asserts ffmpeg's error wording). Neither is a product defect and neither
+comes from the security work; they are worth fixing BEFORE opening a PR
+rather than explaining afterwards.
 
 **ALL SEVEN ITEMS OF THE REVIEW'S FIX ORDER ARE CLOSED (2026-08-25/26),**
 one commit each, strict test-first, on this branch — see section 28. What
@@ -62,14 +72,29 @@ section 24.
 ### PICK UP HERE
 
 ~~**PICK UP AT SECTION 27: ONE COMMAND FINISHES THE PAYMENT DEMO.**~~ **DONE
-2026-08-25, midday — section 27.** Three terminals, no second payment: `stripe
-listen --forward-to 127.0.0.1:3000/api/stripe/webhook`, `npm run web`, `stripe
-events resend evt_1U8IWT0WJAHtsKz6p8dOUVen`. The redeliverable event landed
-clean — `ps6475961@gmail.com` **42 → 82**, one new ledger row — and resending
-that SAME event a second time moved nothing, proving the idempotency guard
-against genuine Stripe redelivery rather than a synthetic fixture. **The
-payment path is proven end to end: checkout, webhook signature, grant, and
-idempotent replay.**
+2026-08-25** — the payment path is proven end to end: checkout, webhook
+signature, grant, and idempotent replay against a genuine Stripe redelivery.
+**Read §27's banner before re-running it**: a test-mode event grants nothing
+now, on purpose.
+
+~~**THEN: THE SECURITY REVIEW'S FIX ORDER.**~~ **DONE 2026-08-25/26 — §28.**
+All seven items, one commit each, test-first, pushed. **Nothing in the fix
+order is left.**
+
+**SO WHAT IS ACTUALLY NEXT, in the order it is worth doing:**
+
+1. **Three things are Paul's and nothing else can proceed on two of them** —
+   items 1-3 in START HERE: fal's actual cost for the 720p run, the blind
+   check, and the UI direction that unblocks rewriting DESIGN.md. **None is
+   blocked on code.**
+2. **The two Linux CI failures (§4), BEFORE a PR is opened** — they are
+   assertions about one ffmpeg/ffprobe build's wording, not product defects,
+   and they will be the first thing anybody sees on the PR.
+3. **The rest of the review**, which is local only: what the fix order did not
+   cover is still open, and **one of it arms on the next `config/models.json`
+   edit**. Read the review's §3 before that edit, not after.
+4. **The Supabase plan**, then code — the spec exists, 11 questions are Paul's
+   (item 8).
 
 **What is left is Paul's, and only Paul's — items 1-3 in START HERE above.**
 Record fal's actual cost for the 720p run (item 1's remaining number), send
@@ -191,6 +216,21 @@ review's section 3 FIRST, same rule as before.
 
 ### Things that will bite you
 
+- **THE PASSWORD FUNCTIONS ARE ASYNC NOW** (2026-08-26). `hashPassword`,
+  `verifyPassword`, `authenticate` and `createAccount` all return Promises. A
+  forgotten `await` does not throw — it yields a truthy Promise where a boolean
+  was expected, which reads as **"every password is correct"**, or an Account
+  with no fields. Grep those four names before trusting a call site. §28.
+- **A test that posts `/login` or `/signup` must fetch the form FIRST.** Both
+  routes need the anti-forgery pair — the `timestamp_csrf` cookie off the GET
+  plus the hidden field out of the HTML — or they answer 403 and set no
+  session. Every web test file has a `csrfPair`/`signIn` helper; copy it rather
+  than posting bare. §28.
+- **A third inline `<script>` will not run.** `script-src` names the two
+  shipped scripts by hash and nothing else. New scripts go in `views.mjs`
+  beside `INLINE_SCRIPT_HASHES` or they are dead in the browser. §28.
+- **A test-mode Stripe event grants nothing**, deliberately, so the §27 replay
+  demo no longer moves credits. Not a regression.
 - **Read the prompt before blaming the model.** Twice the model was doing
   exactly what it was told: `Nothing dramatic happens` produced a tape with
   nothing happening, and `deep focus ... all the way to the shed` produced the
@@ -445,9 +485,16 @@ boxes with nothing above them. The landing page had already solved exactly this
 stale claim is worse than none: **this page is NOT zero-JavaScript and was not
 before.** There is an existing inline `<script>` doing two progressive-
 enhancement jobs (chosen filename, clearing the reason under an enabled button).
-It was not touched. **That makes the security note describing `script-src
-'unsafe-inline'` as sitting "in an app with zero scripts" STALE**, which changes
-how that finding should be judged when the rest of the report is worked through.
+It was not touched.
+
+**UPDATED 2026-08-26 — the CSP no longer says `'unsafe-inline'` at all.** That
+keyword named no scripts and therefore admitted every one of them, including
+anything an injection might write. `script-src` now names this product's two
+inline scripts BY HASH. **Both live as constants in `views.mjs` beside
+`INLINE_SCRIPT_HASHES`** — edit one and its hash follows automatically; add a
+third `<script>` anywhere else and the browser refuses to run it, with a test
+that hashes what pages actually ship failing first so the refusal is loud
+rather than a silently dead feature. See §28.
 
 **Measured, not asserted:** at `scrollY 1200` the anchor's top edge sits at 20px
 (its `1.25rem` offset); the 44px numeral contrasts **4.96:1** against its panel,
@@ -556,8 +603,9 @@ did nothing.
    question that decides whether the product exists.
 2. ~~**The UI redesign**~~ **DONE 2026-08-22, committed to a branch - section 6a.**
 3. ~~**The eight place photographs**~~ **DONE 2026-08-23 - section 10.**
-4. ~~**Commit and push.**~~ **COMMITTED, NOT PUSHED.** The tree is clean; the
-   push waits on the licence question in section 10.
+4. ~~**Commit and push.**~~ **PUSHED 2026-08-26.** The licence question that was
+   holding it was answered on 2026-08-24 (section 10). `origin/main` is still
+   `b6f64a3` and nothing is merged; **opening a PR remains Paul's call.**
 5. **The Supabase spec**, then a plan, then code. Not before.
 6. **The four sources of CI red** (section 4).
 7. **Three aspect ratios** - `docs/aspect-ratios-plan.md`. **Paul restated this
@@ -1709,6 +1757,15 @@ and the demo is finished; see below.**
 
 #### ~~FINISH IT WITH THIS — DO NOT PAY AGAIN~~ **FINISHED, NO SECOND PAYMENT**
 
+> **THIS RECORD IS HISTORY AND THE COMMANDS NO LONGER BEHAVE THIS WAY.**
+> Since 2026-08-26 the webhook grants credits only on an event that says it is
+> live, and `evt_1U8IWT0WJAHtsKz6p8dOUVen` is a **test-mode** event — so
+> replaying it today is answered `200` with `granted: false, ignored:
+> 'testmode'` and moves nothing. **That is correct and deliberate**, not a
+> regression: a test card costs its holder nothing while the credits it minted
+> would buy real fal renders at real cost. The path below was genuinely proven
+> when it ran; what proves it now is the test suite. See §28.
+
 Three terminals, exactly as prescribed:
 
 ```bash
@@ -2020,6 +2077,14 @@ machine, and is not restated here. **The findings the fix order did not cover
 are still open — including one that arms on the next `config/models.json`
 edit.**
 
+**PUSHED 2026-08-26 to `origin/ui-redesign-signed-in-page`** (`6efb0e6..2464b35`,
+plus `2464b35..HEAD` for the documentation pass). Before the push: all five
+`guards.yml` checks were run locally and pass, and every outgoing commit
+message and added line was grepped for finding identifiers — zero hits, because
+a fix is described here by what it does and never by the hole it closed. **The
+push is the irreversible line on a public repo; run those checks before the
+next one.**
+
 1. **`2305e81` — only a live-mode Stripe event grants credits.** The webhook
    checks the event's own mode immediately after signature verification;
    absence counts as not-live. A test-mode event is answered 200,
@@ -2074,7 +2139,12 @@ edit.**
 
 ## Not in scope
 
-**Billing.** Accounts, credits, Stripe, rate limits. Not until the thing works and Phase 0 has an answer.
+~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT
+and this line is kept only so nobody cites it.** Accounts and the credit ledger
+shipped 2026-08-20, Stripe checkout and the webhook 2026-08-25 (§25, §27), and
+per-address rate limiting on the two credential routes 2026-08-26 (§28). What
+is still true is the spirit: **nothing here takes a card number**, and checkout
+is hosted on the provider's own domain.
 
 ~~The web app~~ — **no longer out of scope.** Paul reordered on 2026-08-20: build the app end to end with generation stubbed, *then* uploads, *then* real video APIs. See "Where things stand" at the top.
 
