@@ -89,6 +89,7 @@ import { aspectIds } from '../tapedeck/frame.mjs';
 import { homePage, landingPage, statusPage, selectPage, resultPage, errorPage } from './views.mjs';
 import { loginPage, signupPage, pricingPage, authUnavailablePage } from './views-auth.mjs';
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
+import { createRateLimiter } from './rate-limit.mjs';
 import { createBilling } from '../billing/billing.mjs';
 
 /** Anything a handler throws that has a status. Everything else becomes a 500
@@ -149,6 +150,23 @@ const NO_SESSION_ROUTES = new Set([
  *  is NOT here -- a sign-in form that cannot possibly work should say so before
  *  somebody types a password into it, not after. */
 const AUTH_OPTIONAL_ROUTES = new Set(['pricingPage', 'homePage']);
+
+/**
+ * How often one address may knock on the two public credential routes.
+ *
+ * Login is bounded per minute: a person mistypes a password three or four
+ * times; only a script needs eleven tries in sixty seconds, and every try
+ * costs this process a deliberate ~30ms derivation. Signup is bounded per
+ * hour, because accounts are what the free signup grant is spent on and a
+ * loop that opens them is spending a budget that never refills.
+ *
+ * Exported so the tests exercise the same numbers the server enforces rather
+ * than a copy that can drift.
+ */
+export const AUTH_RATE_LIMITS = Object.freeze({
+  login: Object.freeze({ max: 10, windowMs: 60_000 }),
+  signup: Object.freeze({ max: 10, windowMs: 3_600_000 }),
+});
 
 /** How many tapes the shelf renders. A shelf is a page, not an archive dump. */
 const SHELF_LIMIT = 60;
@@ -371,6 +389,35 @@ export function createServer({
   }
 
   const auths = sessions ?? createSessions({ root, auth });
+
+  /**
+   * One limiter per credential route, keyed by the SOCKET address and never by
+   * a header. `x-forwarded-for` is whatever the client typed, so keying on it
+   * hands every script its own unlimited lane. Behind a proxy the socket
+   * address collapses every visitor into one key, which throttles everybody
+   * together -- the failure direction that costs patience rather than the
+   * giveaway budget, until a proxy is actually part of the deployment.
+   */
+  const limiters = {
+    login: createRateLimiter({ ...AUTH_RATE_LIMITS.login, nowImpl }),
+    signup: createRateLimiter({ ...AUTH_RATE_LIMITS.signup, nowImpl }),
+  };
+
+  /** True when the 429 has been sent and the handler must stop. Decided before
+   *  the body is read: the refusal must not depend on -- or reveal -- anything
+   *  about what was being attempted. */
+  function refuseOverLimit(req, res, which, page) {
+    const key = req.socket?.remoteAddress ?? 'unknown';
+    const { allowed, retryAfterS } = limiters[which].check(key);
+    if (allowed) return false;
+    const message = which === 'login'
+      ? 'Too many sign-in attempts from your connection. Please wait a minute and try again.'
+      : 'Too many new accounts from your connection. Please try again later.';
+    const headers = { 'Retry-After': String(retryAfterS) };
+    if (wantsHtml(req)) sendHtml(req, res, 429, page({ error: message }), headers);
+    else sendJson(req, res, 429, { error: { status: 429, message } }, headers);
+    return true;
+  }
 
   // A DEFAULT PARAMETER ONLY FIRES ON `undefined`, and every other injectable
   // seam in this signature is spelled `= null` -- so somebody passing
@@ -911,6 +958,7 @@ export function createServer({
      * people's faces.
      */
     async login(req, res) {
+      if (refuseOverLimit(req, res, 'login', loginPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const password = String(body.password ?? '');
@@ -925,7 +973,7 @@ export function createServer({
         // is rendered unchanged -- an "improvement" that told them apart would
         // turn this form into an account-enumeration oracle on a site that
         // stores photographs of people's faces.
-        account = mod.authenticate({ root, email, password });
+        account = await mod.authenticate({ root, email, password });
       } catch (err) {
         account = null;
         refusal = err?.userMessage ?? null;
@@ -942,6 +990,7 @@ export function createServer({
     },
 
     async signup(req, res) {
+      if (refuseOverLimit(req, res, 'signup', (opts) => signupPage({ ...opts, consentText }))) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const password = String(body.password ?? '');
@@ -969,7 +1018,7 @@ export function createServer({
       const mod = await auths.api();
       let account;
       try {
-        account = mod.createAccount({ root, email, password });
+        account = await mod.createAccount({ root, email, password });
       } catch (err) {
         // `AuthError` carries `.userMessage` by contract; anything else is ours
         // and gets a sentence rather than a stack trace.

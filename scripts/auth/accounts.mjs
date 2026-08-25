@@ -61,6 +61,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 import { assertConsent, recordConsent } from '../safety/consent.mjs';
@@ -498,6 +499,17 @@ function assertUsablePassword(password) {
 }
 
 /**
+ * The derivation itself, and it is ASYNC ON PURPOSE -- the work runs on the
+ * libuv threadpool, not the event loop. A derivation is ~30ms of deliberate
+ * CPU and 16 MiB of deliberate memory; done synchronously, every one of them
+ * freezes the whole process -- every status poll, every page, the Stripe
+ * webhook holding somebody's money -- for its full duration, and login and
+ * signup are public routes. The test that pins this is the one asserting the
+ * event loop keeps turning while a derivation is in flight.
+ */
+const scryptAsync = promisify(crypto.scrypt);
+
+/**
  * `scrypt$N$r$p$<salt b64>$<hash b64>`.
  *
  * Everything needed to verify is inside the string, which is what makes the
@@ -505,11 +517,11 @@ function assertUsablePassword(password) {
  * people who chose the same password have the same digest, and one precomputed
  * table opens every account on the service at once.
  */
-export function hashPassword(password, { params = SCRYPT, rand = crypto } = {}) {
+export async function hashPassword(password, { params = SCRYPT, rand = crypto } = {}) {
   assertUsablePassword(password);
   const salt = rand.randomBytes(params.saltBytes ?? SCRYPT.saltBytes);
   const { N, r, p, keylen, maxmem } = { ...SCRYPT, ...params };
-  const hash = crypto.scryptSync(password, salt, keylen, { N, r, p, maxmem });
+  const hash = await scryptAsync(password, salt, keylen, { N, r, p, maxmem });
   return `scrypt$${N}$${r}$${p}$${salt.toString('base64')}$${hash.toString('base64')}`;
 }
 
@@ -541,7 +553,7 @@ export function parsePassword(encoded) {
  * mistake would be a crash on the login path for every account created before
  * the change -- a total outage produced by a one-line tuning edit.
  */
-export function verifyPassword(account, password) {
+export async function verifyPassword(account, password) {
   const encoded = typeof account === 'string' ? account : account?.password;
   const parsed = parsePassword(encoded);
   if (parsed === null) return false;
@@ -550,7 +562,7 @@ export function verifyPassword(account, password) {
 
   let candidate;
   try {
-    candidate = crypto.scryptSync(password, parsed.salt, parsed.hash.length, {
+    candidate = await scryptAsync(password, parsed.salt, parsed.hash.length, {
       N: parsed.N, r: parsed.r, p: parsed.p, maxmem: SCRYPT.maxmem,
     });
   } catch {
@@ -564,12 +576,12 @@ export function verifyPassword(account, password) {
 /** The work an unknown email must also do, so "no such account" and "wrong
  *  password" take the same wall-clock time. It derives against a throwaway salt
  *  at today's default cost, which is what a freshly created account pays. */
-function burnEqualWork(password) {
+async function burnEqualWork(password) {
   const text = typeof password === 'string' && Buffer.byteLength(password, 'utf8') <= PASSWORD.maxBytes
     ? password
     : 'x';
   try {
-    crypto.scryptSync(text, crypto.randomBytes(SCRYPT.saltBytes), SCRYPT.keylen, {
+    await scryptAsync(text, crypto.randomBytes(SCRYPT.saltBytes), SCRYPT.keylen, {
       N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: SCRYPT.maxmem,
     });
   } catch { /* the point is the time spent, not the digest */ }
@@ -985,7 +997,7 @@ function rootOf(account) {
  * agreed to is stored verbatim for the reason scripts/safety/consent.mjs
  * explains. A block that IS passed and is not granted is a refusal, not a shrug.
  */
-export function createAccount({
+export async function createAccount({
   root = REPO_ROOT,
   email,
   password,
@@ -1041,7 +1053,7 @@ export function createAccount({
     accountId,
     email: address,
     emailHash: hash,
-    password: hashPassword(password, { rand }),
+    password: await hashPassword(password, { rand }),
     plan: planId,
     createdAt: at,
     updatedAt: at,
@@ -1289,13 +1301,13 @@ export function listAccounts({ root = REPO_ROOT, nowImpl = defaultNow } = {}) {
  * they will have reintroduced the enumeration oracle, and the test that catches
  * it is the one asserting both branches take comparable time.
  */
-export function authenticate({ root = REPO_ROOT, email, password, nowImpl = defaultNow }) {
+export async function authenticate({ root = REPO_ROOT, email, password, nowImpl = defaultNow }) {
   const account = findAccountByEmail({ root, email, nowImpl });
   if (account === null) {
-    burnEqualWork(password);
+    await burnEqualWork(password);
     throw badCredentials();
   }
-  if (!verifyPassword(account, password)) throw badCredentials();
+  if (!(await verifyPassword(account, password))) throw badCredentials();
   return account;
 }
 

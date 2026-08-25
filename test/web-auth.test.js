@@ -22,7 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-import { createServer, safeNext } from '../scripts/web/server.mjs';
+import { createServer, safeNext, AUTH_RATE_LIMITS } from '../scripts/web/server.mjs';
 import { ROUTES, PUBLIC_ROUTES, isPublicRoute } from '../scripts/web/router.mjs';
 import {
   createSessions, parseCookies, serializeCookie, isSecureRequest,
@@ -261,12 +261,13 @@ async function signIn(base, email, password) {
   return res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
 }
 
-async function withApp(run, { auth = fakeAuth(), queue = fakeQueue(), sessions = null } = {}) {
+async function withApp(run, { auth = fakeAuth(), queue = fakeQueue(), sessions = null, nowImpl = null } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-auth-'));
   const app = createServer({
     root, cfg: CFG, queue, port: 0, auth: sessions ? null : auth, sessions,
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
     logImpl: () => {},
+    ...(nowImpl ? { nowImpl } : {}),
   });
   const port = await app.listen();
   try {
@@ -517,6 +518,88 @@ test('a wrong password and an unknown email are the same 401 and the same senten
     assert.ok(a.includes('That email and password do not match an account.'));
     assert.ok(b.includes('That email and password do not match an account.'));
     assert.ok(!b.includes('no such account'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// the limiter
+// ---------------------------------------------------------------------------
+
+const login = (base, { email = 'a@example.com', password = 'nope', accept = 'application/json' } = {}) =>
+  fetch(`${base}/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept },
+    body: new URLSearchParams({ email, password }),
+    redirect: 'manual',
+  });
+
+const signup = (base, email, { accept = 'application/json' } = {}) =>
+  fetch(`${base}/signup`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept },
+    body: new URLSearchParams({ email, password: 'a long enough password', consent: 'yes' }),
+    redirect: 'manual',
+  });
+
+/**
+ * The guessing has to stop being free. Password checks are deliberately
+ * expensive, both routes are public, and a script does not get tired -- so
+ * after enough attempts from one address inside one window, the only answer
+ * is 429, before any account work happens. The right password is refused too:
+ * the decision is made per address before credentials are looked at, which is
+ * what makes the refusal say nothing about any account.
+ */
+test('repeated login attempts from one address are refused, right password included', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+
+    for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) {
+      assert.equal((await login(base)).status, 401, `attempt ${i + 1} is an ordinary refusal`);
+    }
+    const over = await login(base);
+    assert.equal(over.status, 429);
+    assert.match(over.headers.get('retry-after') ?? '', /^[0-9]+$/, 'a 429 without Retry-After is a puzzle, not an answer');
+    const body = await over.json();
+    assert.equal(body.error.status, 429);
+    assert.ok(!body.error.message.includes('a@example.com'));
+
+    const right = await login(base, { password: 'a long enough password' });
+    assert.equal(right.status, 429, 'the limit must hold before credentials are examined, or it can be probed around');
+
+    // The browser form gets a page with the sentence on it, same as every other
+    // refusal on these routes.
+    const html = await login(base, { accept: 'text/html' });
+    assert.equal(html.status, 429);
+    assert.ok((await html.text()).includes('Too many'));
+  });
+});
+
+test('the login window closes, and a genuine sign-in works again', async () => {
+  let nowMs = Date.UTC(2026, 7, 25, 12, 0, 0);
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+
+    for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) await login(base);
+    assert.equal((await login(base)).status, 429);
+
+    nowMs += AUTH_RATE_LIMITS.login.windowMs + 1000;
+    const after = await login(base, { password: 'a long enough password' });
+    assert.equal(after.status, 200, 'a closed window must not keep refusing a genuine sign-in');
+  }, { nowImpl: () => new Date(nowMs) });
+});
+
+/** Accounts are what the free grant is spent on, so creating them from a script
+ *  must cost something. The refusal happens before the handler runs: nothing is
+ *  written, and the account count proves it. */
+test('signup attempts from one address are bounded, and no account is created past the bound', async () => {
+  await withApp(async ({ base, auth }) => {
+    for (let i = 0; i < AUTH_RATE_LIMITS.signup.max; i += 1) {
+      assert.equal((await signup(base, `fresh-${i}@example.com`)).status, 201, `signup ${i + 1} is ordinary`);
+    }
+    const over = await signup(base, 'one-too-many@example.com');
+    assert.equal(over.status, 429);
+    assert.match(over.headers.get('retry-after') ?? '', /^[0-9]+$/);
+    assert.equal(auth.accounts.size, AUTH_RATE_LIMITS.signup.max, 'an account was created past the refusal');
   });
 });
 

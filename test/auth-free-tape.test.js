@@ -82,7 +82,7 @@ function grab(fn) {
 // the number itself
 // --------------------------------------------------------------------------
 
-test('the ceiling is config, not a constant in the code', () => {
+test('the ceiling is config, not a constant in the code', async () => {
   // The point of the whole exercise is that somebody can CHANGE this number
   // without reading any JavaScript. If it were a literal in accounts.mjs it
   // would be a number nobody set, which is the exact thing section 3 objects to.
@@ -91,7 +91,7 @@ test('the ceiling is config, not a constant in the code', () => {
   assert.ok(Number.isInteger(fromFile) && fromFile >= 0, 'a ceiling must be a non-negative whole number of tapes');
 });
 
-test('a fresh installation has granted nothing and has the whole ceiling left', (t) => {
+test('a fresh installation has granted nothing and has the whole ceiling left', async (t) => {
   const root = makeRoot(t);
   const state = freeTapeState({ root });
   assert.equal(state.granted, 0);
@@ -107,9 +107,9 @@ test('a fresh installation has granted nothing and has the whole ceiling left', 
 // granting, and withholding
 // --------------------------------------------------------------------------
 
-test('a free signup takes one off the ceiling and opens the ledger with the grant', (t) => {
+test('a free signup takes one off the ceiling and opens the ledger with the grant', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { email: 'one@example.com' });
+  const account = await signUp(root, { email: 'one@example.com' });
 
   assert.equal(balanceOf(account).credits, PLANS.free.creditsPerPeriod);
   assert.deepEqual(ledgerFor(account).map((e) => [e.delta, e.reason]), [
@@ -118,25 +118,25 @@ test('a free signup takes one off the ceiling and opens the ledger with the gran
   assert.equal(freeTapeState({ root }).granted, 1);
 });
 
-test('a PAID plan does not touch the ceiling, because paid credits are not free spend', (t) => {
+test('a PAID plan does not touch the ceiling, because paid credits are not free spend', async (t) => {
   const root = makeRoot(t);
   // The ceiling bounds what this product gives away. An account that arrived
   // with a plan attached is not giving anything away, and counting it would
   // exhaust the free allowance on people who are not using it.
-  const account = signUp(root, { email: 'paid@example.com', plan: 'shelf' });
+  const account = await signUp(root, { email: 'paid@example.com', plan: 'shelf' });
 
   assert.equal(balanceOf(account).credits, PLANS.shelf.creditsPerPeriod);
   assert.equal(freeTapeState({ root }).granted, 0);
 });
 
-test('at the ceiling the signup still works and the grant is withheld, loudly, in the ledger', (t) => {
+test('at the ceiling the signup still works and the grant is withheld, loudly, in the ledger', async (t) => {
   const root = makeRoot(t);
-  signUp(root, { email: 'first@example.com', ceiling: 1 });
+  await signUp(root, { email: 'first@example.com', ceiling: 1 });
 
   // SIGNUP MUST NOT FAIL. A person who cannot create an account cannot ever
   // become a customer, and the ceiling is about spend rather than about
   // registration. What they do not get is the free credits.
-  const second = signUp(root, { email: 'second@example.com', ceiling: 1 });
+  const second = await signUp(root, { email: 'second@example.com', ceiling: 1 });
 
   assert.equal(balanceOf(second).credits, 0);
   assert.equal(freeTapeState({ root, ceiling: 1 }).exhausted, true);
@@ -150,23 +150,23 @@ test('at the ceiling the signup still works and the grant is withheld, loudly, i
   ]);
 });
 
-test('a ceiling of zero is the kill switch, and it works on the very first signup', (t) => {
+test('a ceiling of zero is the kill switch, and it works on the very first signup', async (t) => {
   const root = makeRoot(t);
   // The reason this case gets its own test: a bound implemented as `granted >
   // ceiling` instead of `granted >= ceiling` is correct for every number except
   // zero, and zero is the one somebody sets at 2am when the balance is
   // draining. Off-by-one here means the kill switch does not kill anything.
-  const account = signUp(root, { email: 'nobody@example.com', ceiling: 0 });
+  const account = await signUp(root, { email: 'nobody@example.com', ceiling: 0 });
 
   assert.equal(balanceOf(account).credits, 0);
   assert.equal(freeTapeState({ root, ceiling: 0 }).granted, 0);
   assert.equal(freeTapeState({ root, ceiling: 0 }).exhausted, true);
 });
 
-test('the count is read back off disk, not remembered in the process', (t) => {
+test('the count is read back off disk, not remembered in the process', async (t) => {
   const root = makeRoot(t);
-  signUp(root, { email: 'a@example.com' });
-  signUp(root, { email: 'b@example.com' });
+  await signUp(root, { email: 'a@example.com' });
+  await signUp(root, { email: 'b@example.com' });
 
   // THE ENTRIES-OF TRAP, IN ITS OTHER FORM. The `ref` dedupe was written to
   // disk correctly, left off a projection, and was therefore idempotent in
@@ -179,7 +179,7 @@ test('the count is read back off disk, not remembered in the process', (t) => {
   assert.equal(freeTapeState({ root }).granted, 2);
 });
 
-test('the register lives beside the account index and cannot collide with an account id', (t) => {
+test('the register lives beside the account index and cannot collide with an account id', async (t) => {
   const root = makeRoot(t);
   const { dir } = accountsRoot(root);
   const paths = freeTapePaths(root);
@@ -194,7 +194,7 @@ test('the register lives beside the account index and cannot collide with an acc
 // reserving directly
 // --------------------------------------------------------------------------
 
-test('reserveFreeTape hands out exactly the ceiling and then refuses forever', (t) => {
+test('reserveFreeTape hands out exactly the ceiling and then refuses forever', async (t) => {
   const root = makeRoot(t);
   const taken = [];
   for (let i = 0; i < 5; i += 1) taken.push(reserveFreeTape({ root, ceiling: 3, nowImpl: clock() }).reserved);
@@ -202,7 +202,7 @@ test('reserveFreeTape hands out exactly the ceiling and then refuses forever', (
   assert.equal(freeTapeState({ root, ceiling: 3 }).granted, 3, 'a refusal must not increment');
 });
 
-test('a ceiling that is not a whole non-negative number is refused rather than defaulted', () => {
+test('a ceiling that is not a whole non-negative number is refused rather than defaulted', async () => {
   // A DEFAULT IN THE MONEY PATH IS A GUESS THAT BILLS SOMEBODY. A ceiling that
   // falls back to Infinity because the config was mistyped is worse than no
   // ceiling at all, because the file says there is one.
@@ -215,9 +215,9 @@ test('a ceiling that is not a whole non-negative number is refused rather than d
 // once ever, not once a period
 // --------------------------------------------------------------------------
 
-test('grantPlanPeriod refuses the free plan, because the free tape is once ever', (t) => {
+test('grantPlanPeriod refuses the free plan, because the free tape is once ever', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { email: 'repeat@example.com' });
+  const account = await signUp(root, { email: 'repeat@example.com' });
   const before = balanceOf(account).credits;
 
   // Section 3: "One real tape, ever, per verified account. Not monthly. A
@@ -228,9 +228,9 @@ test('grantPlanPeriod refuses the free plan, because the free tape is once ever'
   assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, before);
 });
 
-test('a paid plan still grants its period, because that is what was paid for', (t) => {
+test('a paid plan still grants its period, because that is what was paid for', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { email: 'shelf@example.com', plan: 'shelf' });
+  const account = await signUp(root, { email: 'shelf@example.com', plan: 'shelf' });
   assert.equal(grantPlanPeriod(account, { planId: 'shelf', nowImpl: clock(T0 + 1000) }), PLANS.shelf.creditsPerPeriod);
 });
 
@@ -263,7 +263,7 @@ const flags = new Int32Array(shared);
 
   let result;
   try {
-    const account = createAccount({
+    const account = await createAccount({
       root, email: 'racer' + index + '@example.com', password: ${JSON.stringify(PW)},
       plan: 'free', ceiling, nowImpl,
     });

@@ -76,9 +76,9 @@ function signUp(root, { email = 'paul@example.com', password = PW, plan, consent
 
 /** The thrown error itself, for the cases where the assertion is about two
  *  errors being indistinguishable rather than about one error matching. */
-function grab(fn) {
+async function grab(fn) {
   try {
-    fn();
+    await fn();
   } catch (err) {
     return err;
   }
@@ -101,8 +101,8 @@ function walk(dir, prefix = '') {
 // password storage
 // --------------------------------------------------------------------------
 
-test('a stored password is scrypt$N$r$p$salt$hash and carries its own parameters', () => {
-  const encoded = hashPassword(PW);
+test('a stored password is scrypt$N$r$p$salt$hash and carries its own parameters', async () => {
+  const encoded = await hashPassword(PW);
   const [scheme, N, r, p, salt, hash] = encoded.split('$');
 
   assert.equal(scheme, 'scrypt');
@@ -116,42 +116,42 @@ test('a stored password is scrypt$N$r$p$salt$hash and carries its own parameters
   assert.ok(!encoded.includes(PW));
 });
 
-test('the parameters in the string are what verification uses, so the cost can be raised later', () => {
+test('the parameters in the string are what verification uses, so the cost can be raised later', async () => {
   // A record written at a deliberately lower cost -- what an account created
   // three years ago looks like after SCRYPT.N has been raised twice.
-  const old = hashPassword(PW, { params: { ...SCRYPT, N: 1024 } });
+  const old = await hashPassword(PW, { params: { ...SCRYPT, N: 1024 } });
   assert.equal(parsePassword(old).N, 1024);
-  assert.equal(verifyPassword({ password: old }, PW), true,
+  assert.equal(await verifyPassword({ password: old }, PW), true,
     'an old record must keep working at its own cost, or raising N logs everybody out permanently');
-  assert.equal(verifyPassword({ password: old }, 'wrong-password-here'), false);
+  assert.equal(await verifyPassword({ password: old }, 'wrong-password-here'), false);
 
   // And a record written at a different keylen verifies too, because keylen is
   // read from the stored hash rather than from today's constant. Getting this
   // wrong is not a wrong answer, it is timingSafeEqual throwing on the login
   // path for every pre-existing account at once.
-  const other = hashPassword(PW, { params: { ...SCRYPT, keylen: 32 } });
+  const other = await hashPassword(PW, { params: { ...SCRYPT, keylen: 32 } });
   assert.equal(Buffer.from(other.split('$')[5], 'base64').length, 32);
-  assert.equal(verifyPassword({ password: other }, PW), true);
+  assert.equal(await verifyPassword({ password: other }, PW), true);
 });
 
-test('two accounts with the same password get different salts and different hashes', (t) => {
+test('two accounts with the same password get different salts and different hashes', async (t) => {
   const root = makeRoot(t);
-  const a = signUp(root, { email: 'a@example.com' });
-  const b = signUp(root, { email: 'b@example.com' });
+  const a = await signUp(root, { email: 'a@example.com' });
+  const b = await signUp(root, { email: 'b@example.com' });
 
   assert.notEqual(a.password, b.password, 'a shared digest means one rainbow table opens every account');
   assert.notEqual(parsePassword(a.password).salt.toString('hex'), parsePassword(b.password).salt.toString('hex'));
-  assert.equal(verifyPassword(a, PW), true);
-  assert.equal(verifyPassword(b, PW), true);
+  assert.equal(await verifyPassword(a, PW), true);
+  assert.equal(await verifyPassword(b, PW), true);
 });
 
-test('a malformed or hand-edited password record fails closed instead of throwing', () => {
+test('a malformed or hand-edited password record fails closed instead of throwing', async () => {
   for (const broken of [
     undefined, null, 42, '', 'not-a-hash', 'scrypt$16384$8$1$onlyfive',
     'bcrypt$16384$8$1$AAAA$AAAA', 'scrypt$x$8$1$AAAA$AAAA', 'scrypt$16384$8$1$$AAAA',
-    `${hashPassword(PW)}$extra`,
+    `${await hashPassword(PW)}$extra`,
   ]) {
-    assert.equal(verifyPassword({ password: broken }, PW), false, `${JSON.stringify(broken)} must be a no, not a crash`);
+    assert.equal(await verifyPassword({ password: broken }, PW), false, `${JSON.stringify(broken)} must be a no, not a crash`);
   }
   // A truncated hash is the one that nearly got through, and it is worth
   // spelling out: scrypt ends in a single-iteration PBKDF2, so its output at a
@@ -159,13 +159,13 @@ test('a malformed or hand-edited password record fails closed instead of throwin
   // reads the key length from the stored hash -- which it has to -- a record
   // truncated to six bytes verified against the correct password and was
   // brute-forceable in seconds. MIN_HASH_BYTES is what refuses it.
-  const truncated = hashPassword(PW).split('$').map((part, i) => (i === 5 ? part.slice(0, 8) : part)).join('$');
+  const truncated = (await hashPassword(PW)).split('$').map((part, i) => (i === 5 ? part.slice(0, 8) : part)).join('$');
   assert.equal(Buffer.from(truncated.split('$')[5], 'base64').length, 6);
-  assert.equal(verifyPassword({ password: truncated }, PW), false);
+  assert.equal(await verifyPassword({ password: truncated }, PW), false);
   assert.equal(parsePassword(truncated), null);
 });
 
-test('verifyPassword compares with timingSafeEqual and never with a string compare', () => {
+test('verifyPassword compares with timingSafeEqual and never with a string compare', async () => {
   // A source tripwire, not a proof. The property -- that the comparison does not
   // return early on the first differing byte -- is not observable from outside
   // without a statistical timing rig, and the way it gets lost is somebody
@@ -176,57 +176,57 @@ test('verifyPassword compares with timingSafeEqual and never with a string compa
   assert.doesNotMatch(source, /\.password\s*===\s*/);
 });
 
-test('passwords are bounded at both ends', (t) => {
+test('passwords are bounded at both ends', async (t) => {
   const root = makeRoot(t);
   const short = 'a'.repeat(PASSWORD.minChars - 1);
-  assert.throws(() => signUp(root, { password: short }), (err) => {
+  await assert.rejects(() => signUp(root, { password: short }), (err) => {
     assert.equal(err.code, 'BAD_PASSWORD');
     assert.match(err.userMessage, /at least/);
     return true;
   });
   // scrypt is memory-hard by design, so an unbounded password field is a
   // denial-of-service request wearing a login form.
-  assert.throws(() => signUp(root, { password: 'a'.repeat(PASSWORD.maxBytes + 1) }), /exceeds/);
-  assert.equal(verifyPassword({ password: hashPassword(PW) }, 'a'.repeat(PASSWORD.maxBytes + 1)), false);
+  await assert.rejects(() => signUp(root, { password: 'a'.repeat(PASSWORD.maxBytes + 1) }), /exceeds/);
+  assert.equal(await verifyPassword({ password: await hashPassword(PW) }, 'a'.repeat(PASSWORD.maxBytes + 1)), false);
 });
 
 // --------------------------------------------------------------------------
 // email
 // --------------------------------------------------------------------------
 
-test('email is normalised in exactly one place, so capitalisation cannot fork an account', (t) => {
+test('email is normalised in exactly one place, so capitalisation cannot fork an account', async (t) => {
   const root = makeRoot(t);
   assert.equal(normaliseEmail('  Paul@Example.COM '), 'paul@example.com');
   assert.equal(emailHash('  Paul@Example.COM '), emailHash('paul@example.com'));
 
-  const account = signUp(root, { email: 'Paul@Example.com' });
+  const account = await signUp(root, { email: 'Paul@Example.com' });
   assert.equal(account.email, 'paul@example.com');
 
-  assert.throws(() => signUp(root, { email: ' PAUL@EXAMPLE.COM ' }), (err) => {
+  await assert.rejects(() => signUp(root, { email: ' PAUL@EXAMPLE.COM ' }), (err) => {
     assert.equal(err.code, 'EMAIL_TAKEN');
     return true;
   });
   assert.equal(findAccountByEmail({ root, email: 'PAUL@example.com ' }).accountId, account.accountId);
 });
 
-test('a duplicate signup leaves no orphan account directory behind', (t) => {
+test('a duplicate signup leaves no orphan account directory behind', async (t) => {
   const root = makeRoot(t);
-  const first = signUp(root);
+  const first = await signUp(root);
   const before = fs.readdirSync(accountsRoot(root).dir).filter((n) => ACCOUNT_ID_RE.test(n));
 
-  assert.throws(() => signUp(root, { password: 'a-different-password' }), /EMAIL_TAKEN|already exists/);
+  await assert.rejects(() => signUp(root, { password: 'a-different-password' }), /EMAIL_TAKEN|already exists/);
 
   const after = fs.readdirSync(accountsRoot(root).dir).filter((n) => ACCOUNT_ID_RE.test(n));
   assert.deepEqual(after, before, 'the losing signup must clean up the record it wrote');
   assert.deepEqual(after, [first.accountId]);
   // And the surviving account still belongs to whoever registered first.
-  assert.equal(verifyPassword(loadAccount({ root, accountId: first.accountId }), PW), true);
+  assert.equal(await verifyPassword(loadAccount({ root, accountId: first.accountId }), PW), true);
 });
 
-test('the index directory is a list of hashes, not a list of everybody email address', (t) => {
+test('the index directory is a list of hashes, not a list of everybody email address', async (t) => {
   const root = makeRoot(t);
-  signUp(root, { email: 'paul@example.com' });
-  signUp(root, { email: 'someone.else@example.org' });
+  await signUp(root, { email: 'paul@example.com' });
+  await signUp(root, { email: 'someone.else@example.org' });
 
   const { index } = accountsRoot(root);
   const names = fs.readdirSync(index);
@@ -239,10 +239,10 @@ test('the index directory is a list of hashes, not a list of everybody email add
   }
 });
 
-test('an unusable email is refused before anything is written', (t) => {
+test('an unusable email is refused before anything is written', async (t) => {
   const root = makeRoot(t);
   for (const bad of ['', '   ', 'nope', 'no@domain', 'two@@at.com', 'with space@example.com', `${'a'.repeat(250)}@example.com`, null, 7]) {
-    assert.throws(() => signUp(root, { email: bad }), (err) => {
+    await assert.rejects(() => signUp(root, { email: bad }), (err) => {
       assert.equal(err.code, 'BAD_EMAIL');
       assert.match(err.userMessage, /email address/);
       return true;
@@ -255,9 +255,9 @@ test('an unusable email is refused before anything is written', (t) => {
 // records
 // --------------------------------------------------------------------------
 
-test('an account round-trips through disk with exactly the fields it was written with', (t) => {
+test('an account round-trips through disk with exactly the fields it was written with', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  const account = await signUp(root);
   const loaded = loadAccount({ root, accountId: account.accountId, nowImpl: clock() });
 
   assert.deepEqual(JSON.parse(JSON.stringify(loaded)), JSON.parse(JSON.stringify(account)));
@@ -283,9 +283,9 @@ test('an account round-trips through disk with exactly the fields it was written
   assert.equal(loaded.paths.record, accountPaths(root, account.accountId).record);
 });
 
-test('no temporary file survives a create or a save', (t) => {
+test('no temporary file survives a create or a save', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  const account = await signUp(root);
   setPlan(account, 'shelf');
   saveAccount(account);
 
@@ -293,9 +293,9 @@ test('no temporary file survives a create or a save', (t) => {
   assert.deepEqual(leftovers, [], 'tmp + rename means the tmp is gone; a stray one is a half-written account');
 });
 
-test('saving against a copy that has gone stale is refused rather than silently winning', (t) => {
+test('saving against a copy that has gone stale is refused rather than silently winning', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  const account = await signUp(root);
 
   // Two readers of the same account. This is the web process and the operator
   // CLI, or two requests, and without the rev check the second save silently
@@ -316,9 +316,9 @@ test('saving against a copy that has gone stale is refused rather than silently 
   assert.equal(loadAccount({ root, accountId: account.accountId }).plan, 'shelf', 'the first write stands');
 });
 
-test('updateAccount reloads inside the lock, so it cannot lose the other writer edit', (t) => {
+test('updateAccount reloads inside the lock, so it cannot lose the other writer edit', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  const account = await signUp(root);
   const stale = loadAccount({ root, accountId: account.accountId, nowImpl: clock() });
 
   updateAccount({ root, accountId: account.accountId, nowImpl: clock() }, (record) => {
@@ -336,7 +336,7 @@ test('updateAccount reloads inside the lock, so it cannot lose the other writer 
   assert.equal(after.ledger.length, 2, 'the plan change must not have erased the debit');
 });
 
-test('an account id is validated before it is concatenated into a path', (t) => {
+test('an account id is validated before it is concatenated into a path', async (t) => {
   const root = makeRoot(t);
   for (const bad of ['..', '../../etc/passwd', 'a/b', 'CON', '', null, 'ZZZZ', 'abc']) {
     assert.throws(() => loadAccount({ root, accountId: bad }), (err) => {
@@ -351,9 +351,9 @@ test('an account id is validated before it is concatenated into a path', (t) => 
   });
 });
 
-test('a record whose schemaVersion is unknown is refused instead of guessed at', (t) => {
+test('a record whose schemaVersion is unknown is refused instead of guessed at', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  const account = await signUp(root);
   const file = accountPaths(root, account.accountId).record;
   fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), schemaVersion: 99 }));
 
@@ -362,7 +362,7 @@ test('a record whose schemaVersion is unknown is refused instead of guessed at',
     return true;
   });
   // And a corrupt account must not hide the healthy ones from the operator.
-  signUp(root, { email: 'other@example.com' });
+  await signUp(root, { email: 'other@example.com' });
   assert.equal(listAccounts({ root }).length, 1);
 });
 
@@ -370,7 +370,7 @@ test('a record whose schemaVersion is unknown is refused instead of guessed at',
 // plans and consent
 // --------------------------------------------------------------------------
 
-test('PLANS is frozen, has a monthly and an annual rate, and comes from config', () => {
+test('PLANS is frozen, has a monthly and an annual rate, and comes from config', async () => {
   assert.deepEqual(PLAN_IDS, ['free', 'shelf', 'archive']);
   assert.ok(Object.isFrozen(PLANS) && Object.isFrozen(PLANS.free));
 
@@ -400,9 +400,9 @@ test('PLANS is frozen, has a monthly and an annual rate, and comes from config',
   }
 });
 
-test('setPlan takes a known plan id and nothing else', (t) => {
+test('setPlan takes a known plan id and nothing else', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'shelf' });
+  const account = await signUp(root, { plan: 'shelf' });
   assert.equal(account.plan, 'shelf');
 
   setPlan(account, 'archive');
@@ -414,11 +414,11 @@ test('setPlan takes a known plan id and nothing else', (t) => {
     });
   }
   assert.equal(account.plan, 'archive', 'a rejected plan must not have been half-applied');
-  assert.throws(() => signUp(root, { email: 'x@example.com', plan: 'enterprise' }), /BAD_PLAN|unknown plan/);
+  await assert.rejects(() => signUp(root, { email: 'x@example.com', plan: 'enterprise' }), /BAD_PLAN|unknown plan/);
   assert.equal(assertPlanId('free'), 'free');
 });
 
-test('a record with an unrecognisable plan falls back downward, to the cheapest', () => {
+test('a record with an unrecognisable plan falls back downward, to the cheapest', async () => {
   // Falling back to `archive` would hand out four free renders a month to
   // anything with a typo in it. Falling back to `free` costs a support email.
   assert.equal(planFor({ plan: 'gold' }).id, 'free');
@@ -427,9 +427,9 @@ test('a record with an unrecognisable plan falls back downward, to the cheapest'
   assert.equal(planFor({ plan: 'shelf' }).creditsPerPeriod, PLANS.shelf.creditsPerPeriod);
 });
 
-test('signup records the exact consent wording, and refuses a box that was not ticked', (t) => {
+test('signup records the exact consent wording, and refuses a box that was not ticked', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { consent: { granted: true, text: CONSENT_TEXT } });
+  const account = await signUp(root, { consent: { granted: true, text: CONSENT_TEXT } });
 
   assert.equal(account.consent.granted, true);
   assert.equal(account.consent.text, CONSENT_TEXT, 'the wording is stored verbatim, not a version number');
@@ -439,7 +439,7 @@ test('signup records the exact consent wording, and refuses a box that was not t
   // Reused from scripts/safety/consent.mjs rather than reimplemented: the same
   // gate, so the same two wire encodings of "no" are still refused.
   for (const granted of [false, 'on', 'false', undefined, 1]) {
-    assert.throws(() => signUp(root, { email: 'n@example.com', consent: { granted, text: CONSENT_TEXT } }),
+    await assert.rejects(() => signUp(root, { email: 'n@example.com', consent: { granted, text: CONSENT_TEXT } }),
       (err) => {
         assert.equal(err.name, 'ConsentError');
         return true;
@@ -448,24 +448,24 @@ test('signup records the exact consent wording, and refuses a box that was not t
   assert.equal(listAccounts({ root }).length, 1);
 });
 
-test('an already-recorded consent block is accepted as-is, and a broken one is not', (t) => {
+test('an already-recorded consent block is accepted as-is, and a broken one is not', async (t) => {
   const root = makeRoot(t);
   const older = consentText({ photoDays: 3, jobDays: 10 });
-  const account = signUp(root, { consent: { granted: true, at: new Date(T0 - 60_000).toISOString(), text: older } });
+  const account = await signUp(root, { consent: { granted: true, at: new Date(T0 - 60_000).toISOString(), text: older } });
 
   assert.equal(account.consent.text, older, 'consent to the wording that was shown, not to today\'s');
   assert.equal(account.consent.at, new Date(T0 - 60_000).toISOString());
 
-  assert.throws(() => signUp(root, { email: 'z@example.com', consent: { granted: true, at: 'not-a-date', text: older } }),
+  await assert.rejects(() => signUp(root, { email: 'z@example.com', consent: { granted: true, at: 'not-a-date', text: older } }),
     (err) => {
       assert.equal(err.name, 'ConsentError');
       return true;
     });
 });
 
-test('consent is optional in the signature, and absent means absent rather than assumed', (t) => {
+test('consent is optional in the signature, and absent means absent rather than assumed', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  const account = await signUp(root);
   assert.equal(account.consent, null, 'a missing consent block must never be recorded as a granted one');
 });
 
@@ -473,21 +473,21 @@ test('consent is optional in the signature, and absent means absent rather than 
 // login
 // --------------------------------------------------------------------------
 
-test('authenticate returns the account for the right password', (t) => {
+test('authenticate returns the account for the right password', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
-  const got = authenticate({ root, email: ' PAUL@example.com ', password: PW });
+  const account = await signUp(root);
+  const got = await authenticate({ root, email: ' PAUL@example.com ', password: PW });
   assert.equal(got.accountId, account.accountId);
   assert.equal(got.email, 'paul@example.com');
 });
 
-test('a wrong password and an unknown email are the same error with the same message', (t) => {
+test('a wrong password and an unknown email are the same error with the same message', async (t) => {
   const root = makeRoot(t);
-  signUp(root);
+  await signUp(root);
 
-  const wrong = grab(() => authenticate({ root, email: 'paul@example.com', password: 'not-the-password' }));
-  const unknown = grab(() => authenticate({ root, email: 'nobody@example.com', password: PW }));
-  const malformed = grab(() => authenticate({ root, email: 'not-an-email', password: PW }));
+  const wrong = await grab(() => authenticate({ root, email: 'paul@example.com', password: 'not-the-password' }));
+  const unknown = await grab(() => authenticate({ root, email: 'nobody@example.com', password: PW }));
+  const malformed = await grab(() => authenticate({ root, email: 'not-an-email', password: PW }));
 
   for (const err of [wrong, unknown, malformed]) {
     assert.ok(err instanceof AuthError);
@@ -502,9 +502,9 @@ test('a wrong password and an unknown email are the same error with the same mes
   assert.equal(wrong.userMessage, unknown.userMessage);
 });
 
-test('an unknown email costs the same work as a wrong password, so the timing is not an oracle', (t) => {
+test('an unknown email costs the same work as a wrong password, so the timing is not an oracle', async (t) => {
   const root = makeRoot(t);
-  signUp(root);
+  await signUp(root);
 
   // A PROPORTION, not a wall-clock budget. `npm test` runs files in parallel,
   // so an absolute margin here would be measuring the machine's load rather
@@ -517,11 +517,11 @@ test('an unknown email costs the same work as a wrong password, so the timing is
   const unknown = [];
   for (let i = 0; i < 5; i += 1) {
     let at = process.hrtime.bigint();
-    try { authenticate({ root, email: 'paul@example.com', password: 'not-the-password' }); } catch { /* expected */ }
+    try { await authenticate({ root, email: 'paul@example.com', password: 'not-the-password' }); } catch { /* expected */ }
     known.push(Number(process.hrtime.bigint() - at));
 
     at = process.hrtime.bigint();
-    try { authenticate({ root, email: `nobody-${i}@example.com`, password: 'not-the-password' }); } catch { /* expected */ }
+    try { await authenticate({ root, email: `nobody-${i}@example.com`, password: 'not-the-password' }); } catch { /* expected */ }
     unknown.push(Number(process.hrtime.bigint() - at));
   }
   const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
@@ -533,15 +533,58 @@ test('an unknown email costs the same work as a wrong password, so the timing is
     `an unknown email answered in ${unknownMs.toFixed(1)}ms against ${knownMs.toFixed(1)}ms for a wrong password -- that gap is an enumeration oracle`);
 });
 
-test('a dangling index entry reads as "no account", not as a crash on the login form', (t) => {
+/**
+ * Whether anything else got to run while `work` was deriving. `setImmediate`
+ * fires on the next turn of the event loop, so if the derivation holds the
+ * loop for its whole ~30ms, the flag is still false at the moment the work
+ * settles -- and one busy login has frozen every other request in the
+ * process, including the Stripe webhook holding somebody's money.
+ */
+async function loopTurnedDuring(work) {
+  let turned = false;
+  setImmediate(() => { turned = true; });
+  let turnedAtSettle = null;
+  await Promise.resolve()
+    .then(work)
+    .catch(() => { /* a refusal is fine -- the assertion is about the loop */ })
+    .finally(() => { turnedAtSettle = turned; });
+  return turnedAtSettle;
+}
+
+test('the event loop keeps turning while a login attempt derives, on both branches', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  await signUp(root);
+
+  assert.equal(
+    await loopTurnedDuring(() => authenticate({ root, email: 'paul@example.com', password: 'not-the-password' })),
+    true,
+    'a wrong-password check held the event loop for its whole derivation',
+  );
+  assert.equal(
+    await loopTurnedDuring(() => authenticate({ root, email: 'nobody@example.com', password: 'not-the-password' })),
+    true,
+    'an unknown-email burn held the event loop for its whole derivation',
+  );
+});
+
+test('the event loop keeps turning while a signup derives its hash', async (t) => {
+  const root = makeRoot(t);
+  assert.equal(
+    await loopTurnedDuring(() => signUp(root, { email: 'busy@example.com' })),
+    true,
+    'a signup held the event loop for its whole derivation',
+  );
+});
+
+test('a dangling index entry reads as "no account", not as a crash on the login form', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
   // The shape a signup that died between writing the record and claiming the
   // index would leave, inverted: index present, record gone.
   fs.rmSync(accountPaths(root, account.accountId).dir, { recursive: true, force: true });
 
   assert.equal(findAccountByEmail({ root, email: 'paul@example.com' }), null);
-  assert.throws(() => authenticate({ root, email: 'paul@example.com', password: PW }), (err) => {
+  await assert.rejects(() => authenticate({ root, email: 'paul@example.com', password: PW }), (err) => {
     assert.equal(err.code, 'BAD_CREDENTIALS');
     return true;
   });
@@ -551,7 +594,7 @@ test('a dangling index entry reads as "no account", not as a crash on the login 
 // money safety
 // --------------------------------------------------------------------------
 
-test('there is no payment code anywhere in scripts/auth', () => {
+test('there is no payment code anywhere in scripts/auth', async () => {
   // The rule from docs/interfaces-app.md: nothing in this module may touch a
   // card number, a CVV or a bank detail. A tripwire rather than a review habit,
   // because the way this rule gets broken is one well-meant field added during
@@ -565,9 +608,9 @@ test('there is no payment code anywhere in scripts/auth', () => {
   }
 });
 
-test('an account record holds no field that could ever carry a payment instrument', (t) => {
+test('an account record holds no field that could ever carry a payment instrument', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'archive', consent: { granted: true, text: CONSENT_TEXT } });
+  const account = await signUp(root, { plan: 'archive', consent: { granted: true, text: CONSENT_TEXT } });
   const onDisk = JSON.parse(fs.readFileSync(accountPaths(root, account.accountId).record, 'utf8'));
 
   assert.deepEqual(Object.keys(onDisk).sort(), [

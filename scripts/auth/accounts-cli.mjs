@@ -153,7 +153,7 @@ function usage() {
   console.log('  by a webhook from a hosted checkout that this process never sees.\n');
 }
 
-function main() {
+async function main() {
   const { command, positional, flags, values } = parseArgs(process.argv.slice(2));
   const json = flags.has('json');
   const root = values.root ?? REPO_ROOT;
@@ -266,7 +266,7 @@ function main() {
     }
     const password = values.password ?? generatePassword();
     const generated = !values.password;
-    const account = createAccount({
+    const account = await createAccount({
       root,
       email: values.email,
       password,
@@ -394,7 +394,7 @@ function main() {
 }
 
 try {
-  main();
+  await main();
 } catch (err) {
   if (err instanceof AuthError) {
     // `.message` here rather than `.userMessage`: the operator is the one person
