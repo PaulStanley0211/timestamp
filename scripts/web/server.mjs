@@ -842,6 +842,23 @@ export function createServer({
   }
 
   /**
+   * `logImpl` is caller-supplied, and every call to it below sits inside a
+   * catch block reporting a sweep that already failed -- with nothing above
+   * it to catch a SECOND throw. Review finding, 2026-08-26: a `logImpl` that
+   * itself throws while reporting a caught failure escaped
+   * `sweepIdentityLitter` uncaught, which is exactly the crash that
+   * function's own contract exists to rule out. Reproduced by the reviewer
+   * both as a rejected `listen()` and as an escaping rejection on a later
+   * timer tick, with no `unhandledRejection` handler anywhere in this
+   * codebase to catch the second one -- that one takes the whole process
+   * down, not just the sweep. Every `logImpl` call in `sweepIdentityLitter`
+   * goes through this instead of calling it directly.
+   */
+  function safeLog(line) {
+    try { logImpl(line); } catch { /* a broken logger must not be able to crash the sweep it is reporting on */ }
+  }
+
+  /**
    * Sweep the three identity litter directories once. Called at `listen()`
    * and then on `identitySweepMs`, same shape as `worker.mjs`'s
    * `sweepRetention` -- once at startup, then unref'd and hourly, never the
@@ -856,6 +873,14 @@ export function createServer({
    * two are wrapped here because `oauth-store.mjs` and `pending-signup.mjs`
    * are out of scope for this task and their own directory-creation step
    * (`dirFor`) is not guarded internally.
+   *
+   * THIS FUNCTION NEVER THROWS -- not "should not", DOES NOT: every
+   * statement capable of throwing (the three sweeps, and every line
+   * reporting on them) is inside a try/catch, or is `safeLog`. Both call
+   * sites below ALSO guard the call, deliberately -- belt and braces, because
+   * this is the one function in the slice whose entire contract is that it
+   * cannot take anything down, and trusting a single layer of that is how
+   * the bug above happened the first time.
    */
   async function sweepIdentityLitter() {
     let oauthRemoved = null;
@@ -865,24 +890,24 @@ export function createServer({
       const oauth = await oauthApi();
       oauthRemoved = oauth.sweepOAuth({ root, nowImpl });
     } catch (err) {
-      logImpl(`[web] sweepOAuth failed, out/oauth left unswept this pass: ${err?.message ?? err}`);
+      safeLog(`[web] sweepOAuth failed, out/oauth left unswept this pass: ${err?.message ?? err}`);
     }
     try {
       const identity = await identityApi();
       pendingRemoved = identity.sweepPending({ root, nowImpl });
     } catch (err) {
-      logImpl(`[web] sweepPending failed, out/pending-signups left unswept this pass: ${err?.message ?? err}`);
+      safeLog(`[web] sweepPending failed, out/pending-signups left unswept this pass: ${err?.message ?? err}`);
     }
     try {
       verifyRemoved = sweepVerifyAttempts({ root, nowImpl });
     } catch (err) {
-      logImpl(`[web] sweepVerifyAttempts failed, out/verify-attempts left unswept this pass: ${err?.message ?? err}`);
+      safeLog(`[web] sweepVerifyAttempts failed, out/verify-attempts left unswept this pass: ${err?.message ?? err}`);
     }
     // Only when something happened -- an hourly "removed nothing" line is
     // exactly how the worker's own retention sweep decided to stay quiet, and
     // for the same reason: a line nobody reads stops being read.
     if (oauthRemoved || pendingRemoved || verifyRemoved) {
-      logImpl(`[web] identity sweep: oauth=${oauthRemoved ?? 0} pending=${pendingRemoved ?? 0} verify=${verifyRemoved ?? 0}`);
+      safeLog(`[web] identity sweep: oauth=${oauthRemoved ?? 0} pending=${pendingRemoved ?? 0} verify=${verifyRemoved ?? 0}`);
     }
   }
 
@@ -3295,8 +3320,22 @@ export function createServer({
       // the result of `listen()` without waiting an hour. Then unref'd and
       // hourly -- see `IDENTITY_SWEEP_MS` -- so the timer is never the reason
       // `close()` hangs or a clean shutdown does not exit.
-      await sweepIdentityLitter();
-      sweepTimer = setIntervalImpl(() => { sweepIdentityLitter(); }, identitySweepMs);
+      //
+      // BOTH GUARDED HERE TOO, even though `sweepIdentityLitter` cannot throw
+      // on its own terms (see its doc comment) -- belt and braces on the one
+      // function whose entire job is not taking anything down with it.
+      // Review finding, 2026-08-26: the first version guarded only the sweep
+      // TARGETS and left the reporting path bare, so `listen()` itself
+      // rejected (the port never bound) and, worse, an escaping rejection on
+      // a later tick had nothing to catch it -- this codebase installs no
+      // `process.on('unhandledRejection')` anywhere, so that crashes the
+      // process outright rather than merely failing a sweep.
+      try {
+        await sweepIdentityLitter();
+      } catch { /* see sweepIdentityLitter's own doc comment: never fatal */ }
+      sweepTimer = setIntervalImpl(() => {
+        sweepIdentityLitter().catch(() => {});
+      }, identitySweepMs);
       if (typeof sweepTimer?.unref === 'function') sweepTimer.unref();
       return boundPort;
     },

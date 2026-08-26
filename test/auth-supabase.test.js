@@ -149,14 +149,20 @@ test('main() actually hands supabaseFromEnv() to createServer, not just builds i
     'createServer({...}) has no supabase key -- the client is built and never handed to the server that needs it');
 });
 
-// Ambiguity this task resolved deliberately: absent-vs-partial are different
-// shapes and must not collapse to the same behaviour. All three env values
-// missing is an ordinary, expected shape (a test build, a fresh checkout) and
-// degrades. Two out of three present is what a `.env` looks like when
-// somebody pasted a URL and one key and forgot the third -- a misconfigured
-// deployment that would otherwise boot looking healthy and silently 503 every
-// identity route. That must be loud, not degraded.
-test('a partial Supabase configuration throws instead of silently disabling identity', async () => {
+// RULING, 2026-08-26, OVERTURNING AN EARLIER VERSION OF THIS TEST: absent and
+// partial are different shapes -- all three env values missing is an
+// ordinary, expected shape (a test build, a fresh checkout) and degrades.
+// Two out of three present is what a `.env` looks like when somebody pasted
+// a URL and one key and forgot the third. The FIRST version of this task made
+// that throw, refusing to boot the whole app -- rendering, billing, the
+// shelf, every route -- over one misconfigured identity variable. Coordinator
+// overruled it: the blast radius was wrong for a trigger as mundane as a
+// secret rotation or non-atomic env propagation leaving an instance
+// transiently holding two of three values. It must be LOUD, not FATAL:
+// `supabaseFromEnv` degrades to `null` exactly like `absent`, and it is
+// `main()`'s startup banner (`supabaseBannerLines`, tested below) that carries
+// the loudness.
+test('a partial Supabase configuration does not throw -- it degrades to null, same as fully absent', async () => {
   const mod = await import('../scripts/web/server-cli.mjs');
   const partials = [
     { SUPABASE_URL: 'https://x.supabase.co' },
@@ -165,17 +171,68 @@ test('a partial Supabase configuration throws instead of silently disabling iden
     { SUPABASE_SECRET_KEY: 'sb_secret_x' },
   ];
   for (const env of partials) {
-    assert.throws(
-      () => mod.supabaseFromEnv(env),
-      (err) => {
-        assert.ok(err instanceof Error, `expected an Error for ${JSON.stringify(env)}`);
-        // The values themselves must never appear in the thrown message --
-        // only the NAMES of what is present or missing.
-        assert.ok(!/x\.supabase\.co|sb_publishable_x|sb_secret_x/.test(err.message),
-          'the error must name which env vars are missing, never their values');
-        return true;
-      },
-      `expected a throw for ${JSON.stringify(env)}`,
-    );
+    assert.doesNotThrow(() => mod.supabaseFromEnv(env), `supabaseFromEnv must not throw for ${JSON.stringify(env)}`);
+    assert.equal(mod.supabaseFromEnv(env), null, `expected null (identity disabled) for ${JSON.stringify(env)}`);
   }
+});
+
+test('describeSupabaseConfig names what is present and missing, across all three states, never a value', async () => {
+  const mod = await import('../scripts/web/server-cli.mjs');
+  const secretValue = 'sb_secret_do-not-print-this-anywhere';
+
+  const absent = mod.describeSupabaseConfig({});
+  assert.equal(absent.state, 'absent');
+  assert.deepEqual(absent.present, []);
+  assert.deepEqual(absent.missing.slice().sort(), mod.SUPABASE_ENV_KEYS.slice().sort());
+
+  const partial = mod.describeSupabaseConfig({ SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SECRET_KEY: secretValue });
+  assert.equal(partial.state, 'partial');
+  assert.deepEqual(partial.present.slice().sort(), ['SUPABASE_SECRET_KEY', 'SUPABASE_URL']);
+  assert.deepEqual(partial.missing, ['SUPABASE_PUBLISHABLE_KEY']);
+
+  const configured = mod.describeSupabaseConfig({
+    SUPABASE_URL: 'https://x.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_x',
+    SUPABASE_SECRET_KEY: secretValue,
+  });
+  assert.equal(configured.state, 'configured');
+  assert.deepEqual(configured.missing, []);
+
+  // NEVER A VALUE. Every array entry, across every state, is one of the three
+  // env var NAMES and nothing else.
+  for (const result of [absent, partial, configured]) {
+    for (const name of [...result.present, ...result.missing]) {
+      assert.ok(mod.SUPABASE_ENV_KEYS.includes(name), `"${name}" is not an env var name -- a value leaked into the description`);
+    }
+  }
+});
+
+// The banner is what makes `partial` LOUD rather than merely non-fatal --
+// tested as a pure function (`supabaseBannerLines`) rather than by running
+// `main()` itself, because `main()`'s own shutdown path calls `process.exit`,
+// which a test must never trigger on the process running it.
+test('supabaseBannerLines is prominent and names the missing variables on a partial config, and never leaks a value', async () => {
+  const mod = await import('../scripts/web/server-cli.mjs');
+  const secretValue = 'sb_secret_do-not-print-this-either';
+
+  const partialLines = mod.supabaseBannerLines(
+    mod.describeSupabaseConfig({ SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SECRET_KEY: secretValue }),
+  );
+  const partialText = partialLines.join('\n');
+  assert.match(partialText, /MISCONFIGURED/, 'a partial config must say so, not "identity configured"');
+  assert.match(partialText, /DISABLED/i);
+  assert.match(partialText, /SUPABASE_PUBLISHABLE_KEY/, 'the missing variable must be named');
+  assert.doesNotMatch(partialText, new RegExp(secretValue), 'a present value must never reach the banner');
+  assert.doesNotMatch(partialText, /x\.supabase\.co/, 'a present value must never reach the banner');
+
+  const configuredLines = mod.supabaseBannerLines(mod.describeSupabaseConfig({
+    SUPABASE_URL: 'https://x.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_x',
+    SUPABASE_SECRET_KEY: secretValue,
+  }));
+  assert.match(configuredLines.join('\n'), /identity configured/);
+  assert.doesNotMatch(configuredLines.join('\n'), new RegExp(secretValue));
+
+  const absentLines = mod.supabaseBannerLines(mod.describeSupabaseConfig({}));
+  assert.match(absentLines.join('\n'), /NO SUPABASE_\*/);
 });

@@ -146,7 +146,8 @@ export async function doctor({ cfg, env = process.env, root = REPO_ROOT } = {}) 
   // `node --env-file-if-exists=.env scripts/preflight/doctor.mjs`. That gap
   // was offered to the owner once and not taken up; this task does not
   // silently fix it.
-  for (const key of ['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY']) {
+  const SUPABASE_KEYS = ['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY'];
+  for (const key of SUPABASE_KEYS) {
     checks.push(check(
       key,
       Boolean(env[key]),
@@ -154,6 +155,27 @@ export async function doctor({ cfg, env = process.env, root = REPO_ROOT } = {}) 
       { fatal: false },
     ));
   }
+
+  // A COMBINED CHECK, ON TOP OF THE THREE ABOVE. Coordinator ruling,
+  // 2026-08-26: two of three `SUPABASE_*` values present is not the same
+  // shape as none of them -- it is what a secret rotation or a non-atomic
+  // env propagation leaves behind, transiently, on a deployment that would
+  // otherwise look fully configured. `supabaseFromEnv` (`server-cli.mjs`)
+  // boots on it regardless, so this is still non-fatal here too -- but it is
+  // reported as a distinct problem rather than left for someone to notice by
+  // reading three separate present/not-set lines and doing the arithmetic
+  // themselves. Names only, never a value.
+  const supaPresent = SUPABASE_KEYS.filter((key) => Boolean(env[key]));
+  const supaMissing = SUPABASE_KEYS.filter((key) => !env[key]);
+  const supaPartial = supaPresent.length > 0 && supaMissing.length > 0;
+  checks.push(check(
+    'SUPABASE_CONFIG',
+    !supaPartial,
+    supaPartial
+      ? `PARTIAL -- present: ${supaPresent.join(', ')}; missing: ${supaMissing.join(', ')} -- identity is DISABLED until all three are set`
+      : (supaPresent.length === 3 ? 'all three present' : 'all three absent -- identity disabled, nothing else affected'),
+    { fatal: false },
+  ));
 
   return { ok: checks.every((c) => c.ok || !c.fatal), checks, font, version };
 }

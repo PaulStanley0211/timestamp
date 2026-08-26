@@ -160,6 +160,32 @@ export const SUPABASE_ENV_KEYS = Object.freeze([
 ]);
 
 /**
+ * Where the three `SUPABASE_*` values stand: none of them (`absent`, an
+ * ordinary and expected shape -- a fresh checkout, a test build, `npm test`
+ * which never loads `.env`), all three (`configured`), or -- named on its own
+ * because it is not the same thing as `absent` -- some but not all
+ * (`partial`, what a `.env` looks like when someone pasted the URL and one
+ * key and forgot the third, or renamed a variable and missed a call site).
+ *
+ * RULING, 2026-08-26 (overturned an earlier version of this function that
+ * THREW on `partial` and refused to boot at all): the blast radius was wrong.
+ * A single mis-set identity variable was taking down rendering, billing, the
+ * shelf, every route -- not just identity -- on a trigger as mundane as a
+ * secret rotation or non-atomic env propagation leaving an instance
+ * transiently holding two of three values. Fail-loud, not fail-fatal: this
+ * function only ever returns a description, `supabaseFromEnv` below only
+ * ever returns a client or `null`, and `main()` is the one place a `partial`
+ * result gets a prominent stderr warning -- naming which values are missing,
+ * never a value itself -- while the app boots and serves everything else.
+ */
+export function describeSupabaseConfig(env = process.env) {
+  const present = SUPABASE_ENV_KEYS.filter((key) => typeof env[key] === 'string' && env[key].length > 0);
+  const missing = SUPABASE_ENV_KEYS.filter((key) => !present.includes(key));
+  const state = present.length === 0 ? 'absent' : missing.length === 0 ? 'configured' : 'partial';
+  return { present, missing, state };
+}
+
+/**
  * The one place a real Supabase transport is built, for the same reason this
  * file is the one place Stripe's is: `scripts/auth/supabase-auth.mjs` has no
  * default `fetchImpl`, so a caller that forgets to inject one gets a
@@ -168,40 +194,16 @@ export const SUPABASE_ENV_KEYS = Object.freeze([
  * the fal transport making exactly this mistake, and this export is what
  * keeps `createServer({ supabase })` from repeating it.
  *
- * `null` WHEN ALL THREE VALUES ARE ABSENT, AND THE APP STILL BOOTS. `.env` is
- * not loaded by `npm test`, so a test build has no identity provider by
- * construction; `createServer`'s own default for `supabase` is already
+ * `null` UNLESS ALL THREE VALUES ARE PRESENT, AND THE APP STILL BOOTS EITHER
+ * WAY -- `absent` and `partial` both return `null` here; see
+ * `describeSupabaseConfig` for why they used to be treated differently and
+ * are not any more. `createServer`'s own default for `supabase` is already
  * `null`, and the code-entry routes degrade to one 503 sentence rather than
- * the process refusing to start. This function is what `main()` below calls
- * to decide which of those two shapes to build.
- *
- * A PARTIAL CONFIGURATION THROWS, ON PURPOSE, RATHER THAN DEGRADING. Every
- * other config gap in this file (`STRIPE_SECRET_KEY`, a missing worker
- * module) costs only the feature it configures, because "absent" is an
- * ordinary, expected shape for a dev machine or a fresh checkout. Two out of
- * three `SUPABASE_*` values present is not that -- it is what a `.env` looks
- * like when someone pasted the URL and one key and forgot the third, or
- * renamed a variable and missed a call site. Degrading it to "identity
- * disabled" would boot a production deployment that LOOKS configured (the
- * banner would need a fourth state to say otherwise) and quietly serves 503
- * on every identity route until somebody notices by hand. Refusing to start
- * is the loud version of the same finding: `main()`'s existing
- * `.catch((err) => { process.stderr.write(...); process.exit(1); })` prints
- * this error's message and exits, so the operator sees one sentence naming
- * which values are set and which are missing -- never a value itself -- on
- * the first run rather than an incident later.
+ * the process refusing to start. This function never throws.
  */
 export function supabaseFromEnv(env = process.env) {
-  const present = SUPABASE_ENV_KEYS.filter((key) => typeof env[key] === 'string' && env[key].length > 0);
-  if (present.length === 0) return null;
-  if (present.length < SUPABASE_ENV_KEYS.length) {
-    const missing = SUPABASE_ENV_KEYS.filter((key) => !present.includes(key));
-    throw new Error(
-      `Supabase is partially configured: ${present.join(', ')} ${present.length === 1 ? 'is' : 'are'} set, `
-      + `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not. Set all three of `
-      + `${SUPABASE_ENV_KEYS.join(', ')} together, or none at all to run with identity routes disabled.`,
-    );
-  }
+  const { state } = describeSupabaseConfig(env);
+  if (state !== 'configured') return null;
   return createSupabaseAuth({
     url: env.SUPABASE_URL,
     publishableKey: env.SUPABASE_PUBLISHABLE_KEY,
@@ -212,15 +214,50 @@ export function supabaseFromEnv(env = process.env) {
   });
 }
 
+/**
+ * The startup banner's Supabase lines, as an array `main()` just logs one by
+ * one -- pulled out to a pure function so a test can pin exactly what gets
+ * printed for all three states without spawning the CLI (`main()`'s own
+ * shutdown path calls `process.exit`, which a test must never trigger on the
+ * process running it).
+ *
+ * `absent` and `configured` are each one line, matching the shape every
+ * other config gap in this banner already uses (`checkout`, `webhook`).
+ * `partial` gets a second, prominent block ABOVE the one-line summary --
+ * ruling, 2026-08-26: this is the one state where "the button does nothing"
+ * is not the whole story, because the deployment looks configured otherwise.
+ * NEVER a value, on any line, in any state -- only the env var NAMES that are
+ * present or missing.
+ */
+export function supabaseBannerLines({ state, present, missing }) {
+  const line = `  supabase   ${
+    state === 'configured' ? 'identity configured'
+      : state === 'partial' ? `MISCONFIGURED, missing ${missing.join(', ')} -- identity disabled`
+        : 'NO SUPABASE_* -- /login, /signup and /auth/google will 503'
+  }`;
+  if (state !== 'partial') return [line];
+  return [
+    '',
+    '  *** SUPABASE MISCONFIGURED -- IDENTITY IS DISABLED ***',
+    `  present: ${present.join(', ') || '(none)'}`,
+    `  missing: ${missing.join(', ')}`,
+    '  Set all three of SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY,',
+    '  or none at all, in .env. /login, /signup and /auth/google will 503 until then.',
+    '',
+    line,
+  ];
+}
+
 export async function main(argv = process.argv.slice(2), { log = console.log } = {}) {
   const opts = parseArgs(argv);
   if (opts.help) { log(USAGE); return 0; }
 
   const cfg = JSON.parse(fs.readFileSync(`${REPO_ROOT}/config/render.json`, 'utf8'));
   const queue = createQueue({ root: opts.root });
-  // THE ONE PLACE A REAL TRANSPORT IS HANDED TO SUPABASE, and the one place
-  // this can throw before anything is listening -- see `supabaseFromEnv`'s
-  // own comment on why a partial configuration is loud rather than degraded.
+  // THE ONE PLACE A REAL TRANSPORT IS HANDED TO SUPABASE. Never throws --
+  // see `describeSupabaseConfig`'s own comment on why `partial` boots loudly
+  // rather than refusing to start.
+  const supabaseConfig = describeSupabaseConfig();
   const supabase = supabaseFromEnv();
   const app = createServer({
     root: opts.root,
@@ -242,10 +279,7 @@ export async function main(argv = process.argv.slice(2), { log = console.log } =
   log(`  Timestamp  http://${opts.host}:${bound}`);
   log(`  root       ${opts.root}`);
   log(`  provider   ${opts.provider}`);
-  // Said out loud at startup, because "the button does nothing" is the symptom
-  // of every one of these being absent and none of them is visible from a page.
-  // NEVER a key or url -- present/absent is the whole of what this line says.
-  log(`  supabase   ${supabase ? 'identity configured' : 'NO SUPABASE_* -- /login, /signup and /auth/google will 503'}`);
+  for (const line of supabaseBannerLines(supabaseConfig)) log(line);
   log(`  checkout   ${process.env.STRIPE_SECRET_KEY ? 'stripe key set' : 'NO STRIPE_SECRET_KEY -- /pricing will 503 on buy'}`);
   log(`  webhook    ${process.env.STRIPE_WEBHOOK_SECRET ? 'signing secret set' : 'NO STRIPE_WEBHOOK_SECRET -- deliveries will 503'}`);
   if (process.env.STRIPE_WEBHOOK_SECRET) {

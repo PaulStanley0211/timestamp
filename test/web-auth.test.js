@@ -31,6 +31,7 @@ import { BAD_CREDENTIALS_MESSAGE, emailHash } from '../scripts/auth/accounts.mjs
 import { putPending, PENDING_DIR } from '../scripts/auth/pending-signup.mjs';
 import { putVerifier, OAUTH_DIR } from '../scripts/auth/oauth-store.mjs';
 import { DEFAULT_RETENTION_SWEEP_MS } from '../scripts/worker/worker.mjs';
+import { supabaseFromEnv } from '../scripts/web/server-cli.mjs';
 import { ROUTES, PUBLIC_ROUTES, isPublicRoute } from '../scripts/web/router.mjs';
 import {
   createSessions, parseCookies, serializeCookie, isSecureRequest,
@@ -1618,6 +1619,89 @@ test('a sweep that cannot even create its own directory does not take listen() d
     );
     assert.ok(logs.some((l) => l.includes('sweepOAuth failed')), 'the failure must reach the log, not vanish');
     assert.ok(logs.some((l) => l.includes('sweepPending failed')), 'the failure must reach the log, not vanish');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Review finding, 2026-08-26: the test above proves a sweep TARGET failure is
+// contained, but its `logImpl` is `(line) => logs.push(line)`, which cannot
+// itself throw -- so it never exercised the RECOVERY path at all. The first
+// version of `sweepIdentityLitter` called `logImpl` directly from inside each
+// catch block, with nothing above it to catch a second throw; a `logImpl`
+// that itself threw escaped the function entirely, which the reviewer
+// reproduced as `listen()` rejecting outright (the port never binds) and,
+// worse, as an unhandled rejection on a later interval tick -- this codebase
+// installs no `process.on('unhandledRejection')` anywhere, so that crashes
+// the whole process, not just the sweep. This test uses a `logImpl` that
+// actually throws, and forces a real sweep-target failure so that `logImpl`
+// is genuinely invoked rather than merely present.
+test('a logImpl that itself throws while reporting a sweep failure cannot crash listen(), the repeating tick, or the process', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-sweep-'));
+  fs.mkdirSync(path.join(root, 'out'), { recursive: true });
+  // Force sweepOAuth to actually fail, so its catch block's logImpl call is
+  // exercised rather than this test proving nothing.
+  fs.writeFileSync(path.join(root, 'out', 'oauth'), 'not a directory');
+
+  let tick;
+  const fakeSetInterval = (fn) => {
+    tick = fn;
+    return { unref() {} };
+  };
+  const fakeClearInterval = () => {};
+
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), supabase: null,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
+    logImpl: () => { throw new Error('the logger itself is broken'); },
+    setIntervalImpl: fakeSetInterval, clearIntervalImpl: fakeClearInterval,
+  });
+
+  const unhandled = [];
+  const onUnhandledRejection = (err) => unhandled.push(err);
+  process.on('unhandledRejection', onUnhandledRejection);
+  try {
+    await assert.doesNotReject(
+      () => app.listen(),
+      'sweepIdentityLitter must not throw even when its OWN error-reporting throws',
+    );
+    assert.equal(typeof tick, 'function', 'the repeating sweep was never scheduled');
+    // Invoke the interval callback directly, exactly as the real timer would
+    // on the next hour -- proving the REPEAT is guarded too, not just the
+    // first pass inside listen().
+    tick();
+    // Let any rejection surface as `unhandledRejection` before asserting none did.
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(unhandled, [], 'a broken logger must never produce an unhandled rejection on a later tick');
+  } finally {
+    process.off('unhandledRejection', onUnhandledRejection);
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Coordinator ruling, 2026-08-26: a partial Supabase config must boot and
+// must keep serving everything that is not identity -- rendering, billing,
+// the shelf, every route. `supabaseFromEnv` degrading to `null` is only half
+// the proof; this is the other half, built the same way `createServer` is
+// built with `supabase: null` everywhere else in this file, except the null
+// here comes from a genuinely partial env rather than an absent one.
+test('a server built from a PARTIAL Supabase config still boots and still serves a non-identity route', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-partial-'));
+  const partialEnv = { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SECRET_KEY: 'sb_secret_x' };
+  const supabase = supabaseFromEnv(partialEnv);
+  assert.equal(supabase, null, 'a partial config must hand createServer null, not a half-built client');
+
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), supabase,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed', logImpl: () => {},
+  });
+  const port = await app.listen();
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/`, { headers: { accept: 'text/html' } });
+    assert.equal(res.status, 200, 'the landing page must still serve when identity is misconfigured, not merely absent');
   } finally {
     await app.close();
     fs.rmSync(root, { recursive: true, force: true });

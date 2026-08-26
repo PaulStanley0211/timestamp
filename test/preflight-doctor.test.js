@@ -6,8 +6,10 @@
  * `test/ffmpeg-output.test.js`) only use `resolveFont`. This file is the
  * first coverage of the checks list, and it is scoped to what this task
  * changed -- present/not-set reporting for `SUPABASE_URL`,
- * `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY`, never the values,
- * never fatal (an identity-less build must still be able to render).
+ * `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` individually, plus the
+ * combined `SUPABASE_CONFIG` check that flags a PARTIAL configuration (some
+ * but not all three) as a distinct problem -- never the values, never fatal
+ * (an identity-less OR misconfigured build must still be able to render).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -68,12 +70,25 @@ test('doctor reports all three Supabase values present/not-set, never fatal, and
 
   // A partial configuration is still reported per-value here -- doctor is
   // reporting, not gating, so it says what it sees for each of the three
-  // independently. `supabaseFromEnv` is the one that treats "some but not
-  // all" as loud misconfiguration; that decision is covered in
-  // `test/auth-supabase.test.js`, not repeated here.
+  // independently.
   assert.equal(findCheck(withSome, 'SUPABASE_URL').ok, true);
   assert.equal(findCheck(withSome, 'SUPABASE_PUBLISHABLE_KEY').ok, false);
   assert.equal(findCheck(withSome, 'SUPABASE_SECRET_KEY').ok, true);
+
+  // `SUPABASE_CONFIG` is the combined check, and it is the one that flags a
+  // PARTIAL configuration as a problem worth noticing rather than something
+  // the operator has to derive by reading three separate present/not-set
+  // lines and doing the arithmetic themselves. Never fatal -- coordinator
+  // ruling, 2026-08-26: `supabaseFromEnv` boots and degrades on a partial
+  // config exactly like an absent one; `main()`'s startup banner
+  // (`supabaseBannerLines`, tested in `test/auth-supabase.test.js`) is the
+  // loud half of that decision, not this gate.
+  assert.equal(findCheck(withNone, 'SUPABASE_CONFIG').ok, true, 'all three absent is not a problem');
+  assert.equal(findCheck(withAll, 'SUPABASE_CONFIG').ok, true, 'all three present is not a problem');
+  assert.equal(findCheck(withSome, 'SUPABASE_CONFIG').ok, false, 'two of three present must be flagged as a problem');
+  assert.equal(findCheck(withSome, 'SUPABASE_CONFIG').fatal, false, 'still not fatal -- the app boots on it regardless');
+  assert.match(findCheck(withSome, 'SUPABASE_CONFIG').detail, /SUPABASE_PUBLISHABLE_KEY/,
+    'the missing variable must be named in the combined check too');
 
   // NEVER THE VALUE. Every check's own detail string, across every report --
   // a leak in any one of them, including one unrelated to Supabase, is the
