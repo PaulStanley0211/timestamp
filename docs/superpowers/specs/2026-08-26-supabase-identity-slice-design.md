@@ -255,6 +255,27 @@ while the page still says only the one sentence. The existing per-IP limiter in
 `scripts/web/rate-limit.mjs` still fronts these routes; Supabase's limit is a
 backstop, not the first line.
 
+**4.4 Signup leaks "User already registered", and it is OUR job to swallow it.**
+Added 2026-08-26 after checking the behaviour rather than assuming it.
+
+Supabase returns an obfuscated, fake user object for a signup against an
+existing address **only when email confirmation AND phone confirmation are both
+enabled**. With either one off it returns the error "User already registered".
+The live project reports `"phone": false`, so **this project takes the leaking
+path**, and turning phone confirmation on to fix it would mean adopting SMS,
+Twilio and a per-message cost to close a hole we can close in our own handler
+for nothing.
+
+So the signup route **must not surface Supabase's signup error at all**. A
+successful signup and a signup against an existing address render the identical
+page — the same "check your email" sentence, the same status, the same headers.
+The person who genuinely owns that address still receives mail from the earlier
+account and can reset; the stranger probing addresses learns nothing.
+
+This is the same oracle as §4.3 arriving through a different door, and it is
+worth stating separately because the fix is in a different handler and a test
+that covers login says nothing about signup.
+
 ---
 
 ## 5. The transport, and the bug this repo has already paid for once
@@ -273,11 +294,46 @@ day after it was fixed in the renderer. So: **the injection goes in
 transport and already loads `.env`, and it is the only place that does it. No
 other command in this repo needs to authenticate a person.
 
-**Configuration is two values:** `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
-**No service-role key.** Every call this slice makes — signup, token, recover,
-user update, logout — is served by the anon key plus, where needed, the user's
-own transient access token. A key that never enters this address space cannot
-leak out of it, and this slice does not need it.
+**Configuration is three values**, corrected 2026-08-26 against the current
+docs and verified against the live project:
+
+```
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
+```
+
+**Two corrections to what this section said when it was first written.**
+
+**The key names changed.** New projects issue `sb_publishable_…` and
+`sb_secret_…`; the legacy `anon` / `service_role` JWT keys still work but are
+not what a project created today presents. Any instruction naming
+`SUPABASE_ANON_KEY` is describing a project older than this one.
+
+**A secret key IS required, and the earlier claim that none was needed was
+wrong.** Supabase Auth rate-limits **per IP address**, token bucket, 30 requests
+to a bucket. A server-side app calling the auth endpoints for everybody presents
+**one IP**, so every person's sign-in would draw on a single shared bucket and
+one determined user would lock out the rest. The documented remedy is the
+`Sb-Forwarded-For` header carrying the end user's real IP — **and that header is
+only honoured when the request is made with a secret key.** Per-user rate
+limiting is not optional for a login page, so the secret key is not optional
+either.
+
+That costs the property this section originally claimed. The secret key confers
+admin over the auth service — it can create and delete users. It sits in `.env`
+beside `FAL_KEY` and `STRIPE_SECRET_KEY`, never reaches a browser (this app has
+no client JavaScript by rule), and is used only by `server-cli.mjs`. **It must
+never be logged and never rendered.** The publishable key is kept for the calls
+that do not need elevation, so that the secret key's blast radius stays as small
+as the design allows.
+
+**Verified against the live project on 2026-08-26** (`wtwldjflvmpwoxblqect`):
+`GET /auth/v1/settings` with the publishable key returns 200 with
+`"google": true`, `"email": true` and `"mailer_autoconfirm": false`; the secret
+key returns 200 on `/auth/v1/admin/users` and the publishable key returns 401 on
+the same endpoint. Provider, password login and email confirmation are on, and
+the two keys carry the privileges this design assumes.
 
 `npm run doctor` should report both as present/not-set without printing them.
 Note the known gap recorded in CLAUDE.md: `doctor` has no
@@ -372,6 +428,12 @@ The cases that carry the design:
 12. **`server-cli.mjs` injects the transport** — the test that Bug 1 did not have.
     Assert on the wiring, not on the protocol module in isolation, because a unit
     test of the protocol module passes while production is unwired.
+13. **Signup against an existing address renders exactly what a new signup
+    renders** — §4.4. Same status, same body, same headers, asserted on all
+    three, with the upstream faked as "User already registered".
+14. **`Sb-Forwarded-For` carries the end user's IP, not the server's** — §5.
+    Without this the rate limiter buckets every user together, and the symptom
+    is a login page that works for one person at a time.
 
 Failure modes inherited from parent §1.3 and re-tested here in file terms: an
 identity resolved but the account write failing must **fail closed** — no
@@ -395,13 +457,26 @@ None of this can be done from here; it needs consoles and an account.
    `http://127.0.0.1:3000/**` to the redirect allow-list. (Localhost is
    permitted; see §0.1.)
 5. Supabase → Authentication → enable **Confirm email**.
-6. Supabase → enable the setting that **suppresses "user already registered"**,
-   which is otherwise an enumeration oracle in Supabase's own response
-   (parent §1.3).
-7. Put `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `.env`. Nothing else.
-8. Before any real volume: replace Supabase's built-in mailer, which is
-   rate-limited and documented as being for testing only, with real SMTP. The
-   forgot-password flow is only as reliable as the mail behind it.
+6. **There is no dashboard setting that suppresses "user already registered".**
+   This step said there was, and that was wrong. The obfuscated response needs
+   email *and* phone confirmation both on. §4.4 handles it in our own signup
+   handler instead, which costs nothing and adopts no SMS provider.
+7. Put `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` in
+   `.env`. See §5 for why the secret key is needed and what it costs.
+8. **Custom SMTP, and sooner than "before real volume".** Supabase's built-in
+   mailer sends **2 recovery emails per hour for the whole project**, and
+   confirmation mail shares the same constrained sender. With confirmation on,
+   that number is the ceiling on signups and on password resets combined. It is
+   adequate for one developer testing and it is not adequate for a third
+   concurrent user. Treat it as a prerequisite for anyone but the owner using
+   this, not as a launch-day nicety.
+9. **Free projects pause after a week of inactivity.** A paused project means
+   nobody can sign in, sign up or reset. Sessions already minted survive,
+   because they are files here — which is decision 3 paying off, and not a
+   reason to leave the project paused.
+
+**Steps 1–7 were completed and verified on 2026-08-26.** Project ref
+`wtwldjflvmpwoxblqect`. What the verification could NOT prove is listed in §10.
 
 ---
 
@@ -409,21 +484,29 @@ None of this can be done from here; it needs consoles and an account.
 
 Deliberately, with the reason:
 
-1. **What `npm run accounts -- create` becomes.** §7. Not needed to ship the
+1. **What the 2026-08-26 verification could NOT prove.** `GET /auth/v1/settings`
+   reports `"google": true` **whether or not the Google client id and secret are
+   correct** — it reports that a provider is switched on, not that it works. Nor
+   can it see the redirect allow-list or the Google console's test-user list.
+   Parent §7 already ruled on this: the only evidence that settles the OAuth
+   round trip is one real round trip. It cannot happen before the code exists,
+   and it is the first thing to run once it does. Six causes share the one
+   symptom "sign in with Google does not work"; expect to bisect them.
+2. **What `npm run accounts -- create` becomes.** §7. Not needed to ship the
    login page; needed before the command misleads somebody.
-2. **The login timing asymmetry is now Supabase's.** §4.3. Our own equal-time
+3. **The login timing asymmetry is now Supabase's.** §4.3. Our own equal-time
    refusal was built deliberately and is measured by a test; once Supabase
    answers, the wall clock is outside our control. Named, not fixed, and not
    pretended away.
-3. **Whether a Supabase project-level outage should degrade to anything better
+4. **Whether a Supabase project-level outage should degrade to anything better
    than a 503 on login.** Parent §1.3 notes everybody already signed in stays
    signed in, because sessions are ours. That property holds here for free.
    Whether the signed-out experience deserves more than an error page is a
    product question, not a security one.
-4. **Account deletion.** Deleting a local account now leaves a Supabase user
+5. **Account deletion.** Deleting a local account now leaves a Supabase user
    behind. Out of scope for the slice and it must not be forgotten — it is a
    privacy commitment in the consent text, which promises deletion.
-5. **Everything in the parent's §9 that this slice does not reach:** questions
+6. **Everything in the parent's §9 that this slice does not reach:** questions
    2, 3, 6, 7 and 8 remain the parent's and remain unanswered. Question 11 —
    whether the scrypt import was genuinely impossible — is now **moot for this
    slice**, which never attempts an import.
