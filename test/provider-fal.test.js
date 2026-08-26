@@ -257,9 +257,28 @@ export function falUnderTest({ transport = makeFalTransport(), models = testMode
 }
 
 let dirSeq = 0;
+/**
+ * A directory this process alone writes to.
+ *
+ * THE PID IS NOT DECORATION. `dirSeq` counts per process while the path it
+ * builds is shared, and `node --test` runs test FILES in parallel processes --
+ * `provider-contract.test.js` imports `falContractCase` from this file, so two
+ * processes run this module at once, both start the counter at zero and both
+ * walk the same `build/provider-fal/<label>-<n>` names. `mkdirSync` with
+ * `recursive` does not complain when the name is already there, so the
+ * collision is silent, and when the two processes reach the same media key at
+ * the same moment they are two ffmpegs writing one path: whoever reads between
+ * the truncate and the first byte gets zero bytes and the provider raises
+ * `empty_download`. That is the 720p pixel test failing about three runs in
+ * eight while passing every time in isolation (CLAUDE.md section 4) -- it is a
+ * collision between two test processes and never a defect in the provider.
+ *
+ * Same fix and same reason as the tmp name in `scripts/auth/accounts.mjs`,
+ * which carries a pid for the same class of shared-path race.
+ */
 function tmpDir(label) {
   dirSeq += 1;
-  const dir = path.join(REPO_ROOT, 'build', 'provider-fal', `${label}-${dirSeq}`);
+  const dir = path.join(REPO_ROOT, 'build', 'provider-fal', `${label}-${process.pid}-${dirSeq}`);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
