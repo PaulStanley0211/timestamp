@@ -24,6 +24,16 @@
  * types at 11pm. `--password=` still works for the case where a person is
  * standing there choosing their own.
  *
+ * WHAT THAT PASSWORD IS ACTUALLY GOOD FOR NOW: NOTHING A BROWSER CAN REACH.
+ * As of the Supabase identity slice (2026-08-26), `/login` asks Supabase
+ * whether a password is right; the local scrypt hash `create` writes is
+ * never read by any request path. So this command still runs, still writes
+ * an account and a hash, and still prints a password -- and that password
+ * cannot sign anyone in. Its future is an open question (parent spec's open
+ * question 5): an inspector, an `invite` command, or removal. See
+ * `docs/superpowers/specs/2026-08-26-supabase-identity-slice-design.md` §7
+ * and §10.4. Do not treat a password this prints as a working credential.
+ *
  * Usage:
  *   npm run accounts -- list [--json]
  *   npm run accounts -- create --email=<addr> [--plan=free] [--password=<pw>] [--consent]
@@ -140,6 +150,7 @@ function usage() {
   console.log(`\nusage: npm run accounts -- <${COMMANDS.join('|')}> [options]\n`);
   console.log('  list                                       every account, with its plan and its balance');
   console.log('  create --email=<addr> [--plan=free]         make an account; prints a generated password');
+  console.log('    (that password cannot sign anyone in -- /login asks Supabase now, not this file)');
   console.log('  set-plan --email=<addr> --plan=<planId>     change which plan somebody is on');
   console.log('  grant <accountId> <credits> --reason=..     add credits (negative corrects a mistake)');
   console.log('  grant --email=<addr> --period               grant one period of the account current plan');
