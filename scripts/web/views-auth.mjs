@@ -130,7 +130,7 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
     label: 'Password',
     type: 'password',
     autocomplete: 'new-password',
-    hint: 'At least ten characters. Stored as a scrypt hash and never in plain text.',
+    hint: 'At least ten characters. Sent over HTTPS to our identity provider to verify; this server never stores your password or a hash of it.',
   })}
 
       <label class="check">
@@ -293,7 +293,7 @@ export function resetCompletePage({ email = '', error = null, csrf = '' } = {}) 
     label: 'New password',
     type: 'password',
     autocomplete: 'new-password',
-    hint: 'At least ten characters. Stored as a scrypt hash and never in plain text.',
+    hint: 'At least ten characters. Sent over HTTPS to our identity provider to verify; this server never stores your password or a hash of it.',
   })}
       <button type="submit" class="record">Set the new password</button>
     </form>
