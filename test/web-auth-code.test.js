@@ -697,6 +697,24 @@ test('a signup post that cannot prove it came from this form is refused, and Sup
   assert.equal(calls.length, 0, 'the credential was looked at before Supabase was');
 });
 
+test('an address that is shaped enough to fool isAddressShaped but not emailHash refuses cleanly, not a 500', async (t) => {
+  // Whole-branch review finding 2: `isAddressShaped` is a cheap shape test,
+  // but `putPending` calls `emailHash`, which runs `normaliseEmail` --
+  // STRICTER, and `a@b..com` is the concrete address that passes the first
+  // and throws on the second (verified directly against both regexes). Every
+  // other address-taking handler (`verifyCode`, `resetComplete`) wraps this;
+  // `signup` did not, so this shape reached `ident.putPending` uncaught and
+  // turned into a third response shape -- a 500 -- on the one route whose
+  // §4.4 contract is "two outcomes, one page".
+  const { base, csrf, cookie, calls } = await startWithFakeSupabase(t, { pendingConsent: null });
+  const res = await postForm(`${base}/signup`,
+    { email: 'a@b..com', password: 'a genuinely long password', consent: 'on', csrf }, cookie);
+  assert.equal(res.status, 400, 'a shape Supabase would also refuse must render the ordinary refusal page, not crash');
+  assert.equal(calls.length, 0, 'an address normaliseEmail refuses must never reach Supabase');
+  const body = await res.text();
+  assert.ok(body.includes('email address'), 'the ordinary shape-refusal page did not render');
+});
+
 test('a JSON client is told 202 and the same next, whichever branch Supabase took', async (t) => {
   const shapes = [];
   for (const upstream of ['ok', 'user-already-registered']) {

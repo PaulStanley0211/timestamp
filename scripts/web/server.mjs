@@ -2362,6 +2362,23 @@ export function createServer({
         return reject('Please confirm the statement before creating an account.');
       }
 
+      // BOTH CHECKS, AND THEY ARE NOT THE SAME CHECK -- whole-branch review
+      // finding 2, same reasoning `verifyCode` and `resetComplete` already
+      // carry next to their own `emailHash` calls. `isAddressShaped` above is
+      // this file's cheap shape test; `emailHash` runs `normaliseEmail`,
+      // which is STRICTER (`a@b..com` passes the first and throws on the
+      // second). `putPending` below calls `emailHash` internally and would
+      // throw UNCAUGHT -- a third response shape (a 500) on the one route
+      // whose §4.4 contract just above is "two outcomes, one page". Checked
+      // here, before the upstream call, so a shape Supabase would also refuse
+      // never spends one.
+      const ident = await identityApi();
+      try {
+        ident.emailHash(email);
+      } catch {
+        return reject('That does not look like an email address.');
+      }
+
       // FROM HERE THE TWO OUTCOMES -- A FRESH ADDRESS AND ONE THAT ALREADY HAS
       // AN ACCOUNT -- MUST RENDER THE SAME PAGE. Supabase answers a taken
       // address with `user_already_exists` / 422 unless BOTH email and phone
@@ -2387,7 +2404,9 @@ export function createServer({
       // `/verify` reads this same file via `takePending`. Consent never goes
       // to Supabase -- it is an agreement with this service, not proof of a
       // mailbox -- so it is recorded here regardless of what Supabase said.
-      const ident = await identityApi();
+      // `emailHash` was already proved to succeed on this exact string above
+      // (pure and deterministic -- no side effect that a second call could
+      // disagree with), so this cannot throw the way it used to.
       ident.putPending({
         root, email, consent: recordConsent({ granted: true, text: consentText, nowImpl }), nowImpl,
       });
