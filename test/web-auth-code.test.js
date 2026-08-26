@@ -575,6 +575,78 @@ test('a cross-site post is refused before the body is read', async (t) => {
   assert.equal(calls.length, 0);
 });
 
+// ---------------------------------------------------------------------------
+// THE ORIGIN CHECK, AGAINST WHAT A REAL BROWSER ACTUALLY SENDS
+//
+// Every page this app serves carries `Referrer-Policy: no-referrer`. Chrome
+// answers that by sending `Origin: null` on a form POST -- INCLUDING a
+// same-origin one. Measured 2026-08-27 with a two-page probe differing in that
+// one header: with it, `origin="null" sec-fetch-site=same-origin`; without it,
+// `origin="http://localhost:3100"`. `new URL('null')` throws, so the old check
+// read its own pages as forgeries and REFUSED EVERY FORM IN THE APP -- signup,
+// sign-in, verify, resend, reset and the Google button alike.
+//
+// The suite did not catch it because it only ever exercised the two origins a
+// browser does not send here: absent (undici's default, accepted) and
+// `https://evil.example` (refused). The value real browsers produce was
+// untested, so 1568 tests passed against an app nobody could sign up to.
+//
+// `Sec-Fetch-Site` is the browser's own account of the request. Page script
+// cannot set it -- it is a forbidden header name -- so it is a better witness
+// than `Origin`, which the referrer policy is entitled to blank.
+// ---------------------------------------------------------------------------
+
+test('a form post from this app\'s own page is accepted even though the browser blanked the Origin', async (t) => {
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  const res = await postForm(`${base}/verify/resend`, { email: 'a@b.com', csrf }, cookie, {
+    headers: { origin: 'null', 'sec-fetch-site': 'same-origin' },
+  });
+  assert.equal(res.status, 200, 'the app refuses the only kind of form post a real browser makes');
+});
+
+test('an opaque origin the browser itself calls cross-site is still refused', async (t) => {
+  // The sandboxed-iframe case the old `catch { return false }` was written for.
+  // It is still refused -- now on the browser's word rather than on a parse
+  // failure that could not tell the two apart.
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  const res = await postForm(`${base}/verify/resend`, { email: 'a@b.com', csrf }, cookie, {
+    headers: { origin: 'null', 'sec-fetch-site': 'cross-site' },
+  });
+  assert.equal(res.status, 403);
+});
+
+test('same-site is not same-origin, and a sibling subdomain is refused', async (t) => {
+  // `same-site` means the registrable domain matches, not the origin. A
+  // subdomain an attacker controls is same-site and must not be same-origin.
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  const res = await postForm(`${base}/verify/resend`, { email: 'a@b.com', csrf }, cookie, {
+    headers: { origin: 'https://evil.example', 'sec-fetch-site': 'same-site' },
+  });
+  assert.equal(res.status, 403);
+});
+
+test('the browser\'s account of the request beats an Origin header that agrees with Host', async (t) => {
+  // A matching `Origin` is only as trustworthy as whoever set it. When the
+  // browser says the request came from somewhere else, that wins.
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  const res = await postForm(`${base}/verify/resend`, { email: 'a@b.com', csrf }, cookie, {
+    headers: { origin: base, 'sec-fetch-site': 'cross-site' },
+  });
+  assert.equal(res.status, 403);
+});
+
+test('a client that sends no Sec-Fetch-Site still falls back to the Origin check, both ways', async (t) => {
+  // curl, a server-to-server caller, and every test above this line. The old
+  // behaviour has to survive exactly as it was for them.
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  const absent = await postForm(`${base}/verify/resend`, { email: 'a@b.com', csrf }, cookie);
+  assert.equal(absent.status, 200, 'no Origin and no Sec-Fetch-Site must still be allowed');
+  const foreign = await postForm(`${base}/verify/resend`, { email: 'a@b.com', csrf }, cookie, {
+    headers: { origin: 'https://evil.example' },
+  });
+  assert.equal(foreign.status, 403, 'a foreign Origin with no Sec-Fetch-Site must still be refused');
+});
+
 test('one address cannot be walked from one connection past the per-IP bound', async (t) => {
   // The per-IP limiter is the third of §4.5's three bounds and is the one that
   // stops an attacker cycling addresses rather than codes.

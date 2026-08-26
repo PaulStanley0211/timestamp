@@ -945,19 +945,44 @@ export function createServer({
   }
 
   /**
-   * A post that says where it came from must say here. Browsers put the
-   * posting page's origin on every form submission; a value naming another
-   * site is a cross-site post whatever else it carries. ABSENCE PASSES --
-   * non-browser clients name nothing, and the anti-forgery token below still
-   * gates them -- so this is the cheap early layer, not the proof.
+   * Did this post come from one of our own pages?
+   *
+   * `Sec-Fetch-Site` IS ASKED FIRST, AND IT HAS TO BE. Every page this server
+   * sends carries `Referrer-Policy: no-referrer` -- a deliberate choice, so a
+   * `/j/<id>` url can never ride out in a `Referer`. Chrome answers that policy
+   * by sending `Origin: null` on a form POST, INCLUDING A SAME-ORIGIN ONE.
+   * Measured 2026-08-27 against a two-page probe differing in that one header:
+   * with it, `origin="null" sec-fetch-site=same-origin`; without it,
+   * `origin="http://localhost:3100"`. `new URL('null')` throws, so reading
+   * `Origin` alone meant this server called its OWN pages forgeries and
+   * REFUSED EVERY FORM IT SERVES -- signup, sign-in, verify, resend, reset and
+   * the Google button. The suite was green throughout, because it only ever
+   * sent the two values a browser does not send here: absent, and a foreign
+   * origin.
+   *
+   * `Sec-Fetch-Site` is the browser's own account of where the request came
+   * from. It is a FORBIDDEN HEADER NAME, so page script cannot set or forge
+   * it, which makes it a better witness than an `Origin` the referrer policy
+   * is entitled to blank. Only `same-origin` passes: `same-site` is a
+   * different origin under the same registrable domain -- a subdomain someone
+   * else controls -- and `cross-site` and `none` are not us either.
+   *
+   * WHEN IT IS ABSENT the old `Origin` reasoning stands unchanged, for curl,
+   * for server-to-server callers, and for every test written before this. A
+   * post that names another site is cross-site whatever else it carries.
+   * ABSENCE PASSES -- non-browser clients name nothing, and the anti-forgery
+   * token below still gates them -- so this is the cheap early layer, not the
+   * proof.
    */
   function sameOriginPost(req) {
+    const site = req.headers['sec-fetch-site'];
+    if (typeof site === 'string' && site !== '') return site === 'same-origin';
     const origin = req.headers.origin;
     if (origin === undefined) return true;
     try {
       return new URL(origin).host === String(req.headers.host ?? '');
     } catch {
-      // 'null' and anything else unparseable: an opaque origin is not this one.
+      // An opaque origin from a client too old to tell us what it is.
       return false;
     }
   }
