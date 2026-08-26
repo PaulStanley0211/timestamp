@@ -9,7 +9,7 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-08-26) — THE IDENTITY SLICE IS BUILT, WIRED AND REVIEWED
 
-**1555 tests / 1553 pass / 0 fail / 2 skipped.** The skips are the
+**1570 tests / 1568 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 Branch `supabase-identity-slice`, **not yet pushed**; `origin/main` is still
 `b6f64a3`, nothing merged. Opening a PR is Paul's call, not a prerequisite.
@@ -106,16 +106,15 @@ order is left.**
    only evidence that settles the OAuth round trip is one real round trip,"
    and that cannot happen from this machine.
 
-   **A THIRD THING, and it is the one most likely to strand a real person.**
-   `POST /verify/resend` does not resend — it 303s back to `/signup?email=`,
-   because `supabase-auth.mjs` has no resend method and a fresh signup code
-   needs the password this service deliberately does not keep. That only
-   works if Supabase re-sends the confirmation when signup is repeated for an
-   unconfirmed user. **That behaviour has never been observed against the
-   live project.** If it does not hold, somebody whose code never arrives
-   loops `/verify` -> `/signup` -> `/verify` forever with no way out. The
-   concrete remedy is Supabase's `POST /auth/v1/resend` — roughly eight
-   lines plus a test. **Verify this before anybody but Paul uses the app.**
+   ~~**A THIRD THING, and it is the one most likely to strand a real person.**
+   `POST /verify/resend` does not resend.~~ **CLOSED 2026-08-26 — §29.** It
+   resends now, through Supabase's documented `POST /auth/v1/resend`, which
+   needs no password. **The assumption was removed rather than tested**: the
+   app no longer depends on whether a repeated signup re-sends to an
+   unconfirmed address, so that behaviour never has to be observed. The four
+   upstream outcomes are indistinguishable on the page, the five-guess counter
+   is still untouched by a resend, and the hint that promised a password
+   prompt is gone with the route that needed it.
 
 **What is left is Paul's, and only Paul's — items 1-3 in START HERE above.**
 Record fal's actual cost for the 720p run (item 1's remaining number), send
@@ -2206,6 +2205,58 @@ next one.**
    chosen design (2026-08-26): default never, opt in the day a
    TLS-terminating proxy actually exists. One test was changed deliberately
    with his sign-off — it pinned the old header-trusting behaviour by name.
+
+---
+
+### 29. `/verify/resend` ACTUALLY RESENDS — 2026-08-26, the loop that could strand somebody
+
+**The gap.** `POST /verify/resend` did not resend. It answered 303 to
+`/signup?email=`, because `supabase-auth.mjs` had no way to ask for a code and
+a fresh signup call needs the password this service deliberately keeps nowhere.
+That route only works if Supabase re-sends the confirmation when signup is
+repeated for an unconfirmed address — **behaviour never once observed against
+the live project.** If it does not hold, somebody whose first code never
+arrived loops `/verify` → `/signup` → `/verify` with no way out, and nothing in
+the app can tell that it is happening.
+
+**What it does now.** `resendSignupCode({ email, clientIp })` posts
+`{ type: 'signup', email }` to Supabase's documented `POST /auth/v1/resend`,
+which needs no password. The handler calls it and re-renders the code page with
+a notice; the person never leaves the field they are waiting to fill.
+**The assumption is gone rather than tested** — that was the choice, because
+confirming the repeat-signup behaviour would have cost a live round trip and
+left the app resting on undocumented behaviour either way.
+
+**Three properties are pinned by tests, not by intention:**
+
+1. **One sentence, whatever happened.** `resendSignupCode` swallows and logs
+   its own failures exactly as `sendRecovery` does. An unknown address, an
+   address already confirmed, a second ask inside Supabase's own sixty-second
+   window, and a transport that never answers all leave as
+   `RESEND_SENT_MESSAGE` over a 200 — compared byte for byte across all four,
+   headers included. Rendering the difference would reopen on this page the
+   enumeration oracle `/verify` exists to close. **That test was checked
+   against a deliberately-leaking build before being trusted**: remove the
+   swallow and it fails.
+2. **The attempt counter is still untouched.** Five guesses per code, not five
+   per resend. The pre-existing bypass test covers it unchanged.
+3. **A malformed address never reaches Supabase** and is answered identically
+   anyway — the same `isAddressShaped` guard `verifyPage` applies to `?email=`.
+
+**The page copy changed with it.** The hint promised "you will be asked for
+your password again", which described the old 303 and is now false — and false
+in the direction that stops somebody pressing the button. It states the
+sixty-second rule and says the password is not needed.
+
+**+7 tests** (3 in `test/auth-supabase.test.js`, 4 in
+`test/web-auth-code.test.js`), each written failing first. The suite is
+**1570 / 1568 pass / 0 fail / 2 skipped**. The web four register three times
+apiece in a whole-suite run, because sibling files import that file's shared
+harness — that is why the total moved by 15 and not by 7.
+
+**This closes the third of the three things the handoff named. The other two
+are still Paul's:** the `{{ .Token }}` template edit, and one real Google round
+trip.
 
 ---
 

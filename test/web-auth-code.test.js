@@ -493,6 +493,67 @@ test('asking for a new code does not hand back the five guesses already spent', 
   assert.equal(res.status, 401, 'a resend reset the attempt counter, which is the whole bypass');
 });
 
+// ---------------------------------------------------------------------------
+// the resend itself -- the one gap in this slice that could strand a real
+// person. `/verify/resend` used to 303 back to /signup, on the assumption that
+// repeating a signup makes Supabase re-send the confirmation to an unconfirmed
+// address. That behaviour was never observed against the live project, and if
+// it does not hold, somebody whose code never arrived loops /verify ->
+// /signup -> /verify forever. These three tests pin the documented endpoint
+// instead, so nothing here depends on the guess.
+// ---------------------------------------------------------------------------
+
+test('asking for a new code asks Supabase to send one, and leaves the person on the page that takes it', async (t) => {
+  const { base, csrf, cookie, calls } = await startWithFakeSupabase(t, { correctCode: '123456' });
+
+  const res = await postForm(`${base}/verify/resend`, { email: 'a@b.com', csrf }, cookie);
+  assert.equal(res.status, 200);
+  const body = await res.text();
+
+  const sent = calls.filter((c) => c.pathname.endsWith('/auth/v1/resend'));
+  assert.equal(sent.length, 1, 'nothing was asked of Supabase, so no new code exists');
+  assert.deepEqual(sent[0].body, { type: 'signup', email: 'a@b.com' });
+
+  // The whole point of the change: the person stays here with the field in
+  // front of them, instead of being sent back to re-type a password to get a
+  // code they already asked for.
+  assert.match(body, /name="code"/, 'the person was moved off the page that takes the code');
+  assert.ok(body.includes('a@b.com'), 'the page no longer says where the code went');
+  assert.match(body, /class="notice"/, 'nothing on the page says a code was asked for');
+  assert.match(body, /on its way/i);
+});
+
+test('a resend answers identically whether Supabase sends the code, refuses it, or cannot be reached', async (t) => {
+  // Same contract as `/verify` itself: "that address is not waiting to be
+  // confirmed" tells a stranger which addresses have accounts on a service
+  // that stores photographs of faces. Four upstream outcomes, one answer.
+  const upstream = [
+    async () => ({ status: 200, json: {} }),
+    async () => ({ status: 400, json: { error_code: 'user_not_found', msg: 'User not found' } }),
+    async () => ({ status: 429, json: { error_code: 'over_email_send_rate_limit', msg: 'slow down' } }),
+    async () => { throw new Error('ECONNRESET'); },
+  ];
+  const shapes = [];
+  for (const reply of upstream) {
+    const { base, csrf, cookie } = await startWithFakeSupabase(t, { reply });
+    const res = await postForm(`${base}/verify/resend`, { email: 'a@b.com', csrf }, cookie);
+    shapes.push(await shapeOf(res));
+  }
+  for (const [i, shape] of shapes.slice(1).entries()) {
+    assert.deepEqual(shape, shapes[0], `upstream outcome ${i + 1} is distinguishable from a success`);
+  }
+});
+
+test('a resend for something that is not an address is answered the same way and never reaches Supabase', async (t) => {
+  const { base, csrf, cookie, calls } = await startWithFakeSupabase(t, {});
+  const res = await postForm(`${base}/verify/resend`, { email: 'not-an-address', csrf }, cookie);
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.match(body, /on its way/i, 'a malformed address is distinguishable from a real one');
+  assert.equal(calls.filter((c) => c.pathname.endsWith('/auth/v1/resend')).length, 0,
+    'an unusable address was still sent upstream');
+});
+
 test('a post that cannot prove it came from this form spends nothing and asks nothing', async (t) => {
   const { base, csrf, cookie, calls } = await startWithFakeSupabase(t, { correctCode: '123456' });
   const forged = await postForm(`${base}/verify`, { email: 'a@b.com', code: '123456', csrf: 'not-a-token' }, cookie);
@@ -543,6 +604,20 @@ test('the code page is reachable with no session and takes the address in the qu
   assert.match(body, /maxlength="6"/);
   assert.match(body, /name="csrf"/);
   assert.match(body, /60 seconds|a minute/i, 'the resend control does not state the rule');
+});
+
+test('the resend control does not promise a password prompt that no longer happens', async (t) => {
+  // The old route sent the person back to /signup, so the hint warned them
+  // they would have to type the password again. `/verify/resend` now asks
+  // Supabase directly and never leaves this page. A hint describing the old
+  // route is worse than no hint: it tells somebody who is already waiting for
+  // a code that pressing the button means starting over, which is the reason
+  // they would not press it.
+  const { base } = await startWithFakeSupabase(t, {});
+  const res = await getPage(`${base}/verify?email=${encodeURIComponent('a@b.com')}`);
+  const body = await res.text();
+  assert.doesNotMatch(body, /asked for your password again/i);
+  assert.match(body, /60 seconds|a minute/i, 'the resend control still has to state the rule');
 });
 
 test('an address the account store refuses is refused the same way a wrong code is', async (t) => {

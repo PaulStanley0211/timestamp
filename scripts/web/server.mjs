@@ -225,6 +225,18 @@ export const VERIFY_ATTEMPTS_DIR = 'out/verify-attempts';
  */
 export const CODE_REFUSED_MESSAGE = 'That code is not right, or it has expired. Ask for a new one below.';
 
+/**
+ * What the page says after a resend, whatever actually happened upstream.
+ *
+ * "If" is doing real work in that first word, and it is not hedging. Supabase
+ * answers a resend for an unknown address, an already-confirmed address, and
+ * one asked for twice inside its own sixty-second window all differently, and
+ * rendering any of those tells a stranger which addresses have accounts here.
+ * The conditional is what lets one honest sentence cover every case: it never
+ * claims a mail was sent, and it never denies it either.
+ */
+export const RESEND_SENT_MESSAGE = 'If that address is waiting to be confirmed, a new code is on its way. It can take a minute to arrive.';
+
 /** What a dead code says. Distinct from the refusal above and free to be,
  *  because it discloses nothing a caller does not already know: they made the
  *  attempts themselves, and an address that never signed up reaches this
@@ -1706,15 +1718,24 @@ export function createServer({
     /**
      * "Send me a new code."
      *
-     * WHAT THIS DOES NOT DO, AND WHY SAYING SO IS THE POINT. A new code needs
-     * the password, because Supabase issues one by repeating the signup call,
-     * and this service deliberately does not keep the password anywhere --
-     * there is no session yet and nothing on disk holds it. So the honest
-     * answer is to send the person back to the signup form with the address
-     * they were confirming already filled in, rather than to render "a new code
-     * is on its way" over a request nobody made. A button that quietly does
-     * nothing is worse than no button: the next move is to click it eight more
-     * times.
+     * THIS ASKS SUPABASE FOR A CODE. IT USED TO SEND THE PERSON BACK TO THE
+     * SIGNUP FORM, and the difference is the one gap in this slice that could
+     * strand somebody. The old route reasoned that a new code needs the
+     * password -- true of the signup call, which is how Supabase re-issues one
+     * -- and this service deliberately keeps the password nowhere. So it 303'd
+     * to `/signup?email=`, which only ever works if repeating a signup makes
+     * Supabase re-send the confirmation to an unconfirmed address. THAT WAS
+     * NEVER OBSERVED AGAINST THE LIVE PROJECT. If it does not hold, somebody
+     * whose first code never arrived loops /verify -> /signup -> /verify with
+     * no way out at all. `POST /auth/v1/resend` is the documented endpoint for
+     * exactly this, needs no password, and removes the dependency.
+     *
+     * ONE SENTENCE, WHATEVER HAPPENED. `resendSignupCode` swallows its own
+     * failures by contract: an unknown address, an address already confirmed,
+     * and a second ask inside Supabase's own sixty-second window all leave
+     * here as `RESEND_SENT_MESSAGE` over a 200. Rendering the difference would
+     * be the account-enumeration oracle `/verify` two handlers up exists to
+     * close, reopened on the page next door.
      *
      * IT DOES NOT TOUCH THE ATTEMPT COUNTER, and that is the bypass this route
      * would otherwise be. If asking for a new code returned the five guesses,
@@ -1734,11 +1755,18 @@ export function createServer({
       const csrf = String(body.csrf ?? '');
       if (!(await auths.csrfCheck(req, csrf))) return refuseForgery(req, res, 'verify', { email });
 
-      // Only an address-shaped value is carried onward, so the destination is
-      // always this app's own signup page with at most one tidy query value.
-      const to = isAddressShaped(email) ? `/signup?email=${encodeURIComponent(email)}` : '/signup';
-      if (wantsHtml(req)) return redirect(res, to, 303);
-      return sendJson(req, res, 200, { next: to });
+      // Only an address-shaped value goes upstream or back onto the page --
+      // the same guard `verifyPage` applies to `?email=`, for the same reason.
+      // Anything else is answered identically without a pointless round trip.
+      const shaped = isAddressShaped(email) ? email : '';
+      if (shaped) await sb.resendSignupCode({ email: shaped, clientIp: clientIpOf(req) });
+
+      // The token that just verified rides back out, so the person still holds
+      // a valid pair for the code they are now waiting for.
+      if (wantsHtml(req)) {
+        return sendHtml(req, res, 200, verifyPage({ email: shaped, notice: RESEND_SENT_MESSAGE, csrf }));
+      }
+      return sendJson(req, res, 200, { ok: true });
     },
 
     /**

@@ -173,9 +173,10 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
  * permits one code request per address per sixty seconds and a code lasts an
  * hour. A button that quietly does nothing for a minute is indistinguishable
  * from a broken button, and the person's next move is to click it eight more
- * times. It also says out loud that the password will be asked for again --
- * this service does not keep it, which is a property worth stating rather than
- * apologising for.
+ * times. The rule is stated so the wait reads as the rule rather than as a
+ * fault. It also says the password is not needed: `/verify/resend` asks
+ * Supabase directly and returns to this page, and somebody already waiting on
+ * a code needs to know the button does not mean starting over.
  */
 export function verifyPage({ email = '', error = null, notice = null, csrf = '' } = {}) {
   const body = `
@@ -204,8 +205,8 @@ export function verifyPage({ email = '', error = null, notice = null, csrf = '' 
     <form method="post" action="/verify/resend">
       ${csrfField(csrf)}
       <input type="hidden" name="email" value="${h(email)}">
-      <p class="hint">No code? One can be sent per address every 60 seconds. You will be
-      asked for your password again — this site does not keep it.</p>
+      <p class="hint">No code? One can be sent per address every 60 seconds. Your password
+      is not needed and you will stay on this page.</p>
       <button type="submit" class="quiet">Send a new code</button>
     </form>
 

@@ -88,6 +88,31 @@ export function createSupabaseAuth({ url, publishableKey, secretKey, fetchImpl, 
       return { pending: true };
     },
 
+    /**
+     * "Send me a new code."
+     *
+     * WHY THIS EXISTS RATHER THAN A SECOND `signUp`. Supabase also re-sends a
+     * confirmation when signup is repeated for an unconfirmed user, but that
+     * needs the password, which this service deliberately keeps nowhere -- and
+     * the behaviour has never been observed against the live project. Relying
+     * on it meant somebody whose first code never arrived could loop /verify
+     * -> /signup -> /verify with no way out. `/resend` is the documented
+     * endpoint, needs no password, and removes the guess.
+     *
+     * Answers the same way for a known and an unknown address, by contract --
+     * the same enumeration defence as `sendRecovery`. Logged like `revoke`'s
+     * refusal rather than swallowed silently: a resend that fails leaves no
+     * other trace anywhere, because the page cannot say so either.
+     */
+    async resendSignupCode({ email, clientIp = null }) {
+      try {
+        await call('/resend', { body: { type: 'signup', email }, clientIp });
+      } catch (err) {
+        logImpl(`[supabase] resend refused: ${err.message}`);
+      }
+      return { ok: true };
+    },
+
     /** The six-digit code. `type: 'signup'` is the confirmation flow. */
     async verifyCode({ email, token, type = 'signup', clientIp = null }) {
       const payload = await call('/verify', { body: { email, token, type }, clientIp });

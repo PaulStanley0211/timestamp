@@ -131,6 +131,74 @@ test('revoke resolves { ok: true } even when the upstream logout fails, and logs
   assert.ok(logs.some((line) => line.includes('revoke')), 'a failed revoke must leave a trace in the logs');
 });
 
+
+// ---------------------------------------------------------------------------
+// resendSignupCode -- the way out of the loop the handoff named.
+//
+// `/verify/resend` used to send the person back to the signup form, because
+// this module had no way to ask for a new code and a fresh signup call needs
+// the password this service deliberately does not keep. That only ever worked
+// if Supabase re-sent the confirmation when signup was repeated for an
+// unconfirmed user -- behaviour NOBODY HAS EVER OBSERVED against the live
+// project. If it does not hold, somebody whose first code never arrived loops
+// /verify -> /signup -> /verify with no way out. `POST /auth/v1/resend` is the
+// documented endpoint for exactly this, needs no password, and removes the
+// dependency on that guess entirely.
+// ---------------------------------------------------------------------------
+
+test('resendSignupCode asks Supabase for a new signup code and carries the end user IP', async () => {
+  const fetchImpl = fakeFetch(() => json(200, {}));
+  const sb = createSupabaseAuth({ ...CFG, fetchImpl });
+
+  const result = await sb.resendSignupCode({ email: 'a@b.com', clientIp: '203.0.113.7' });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(fetchImpl.calls.length, 1, 'exactly one upstream call');
+  const [call] = fetchImpl.calls;
+  assert.equal(call.url, 'https://example.supabase.co/auth/v1/resend');
+  assert.equal(call.opts.method, 'POST');
+  // `type: 'signup'` is the confirmation flow, the same one `verifyCode` reads
+  // back. Any other type re-sends the wrong mail for this page.
+  assert.deepEqual(JSON.parse(call.opts.body), { type: 'signup', email: 'a@b.com' });
+  assert.equal(call.opts.headers['Sb-Forwarded-For'], '203.0.113.7');
+  assert.equal(call.opts.headers.apikey, CFG.secretKey, 'forwarding is only honoured for a secret key');
+});
+
+// The same enumeration defence `sendRecovery` carries, and for the same
+// reason: a resend must answer identically whether the address exists, is
+// already confirmed, is merely being asked for too often (Supabase permits one
+// per address per sixty seconds), or cannot be reached at all. If a later edit
+// rethrows on one of these, this is the test that catches the oracle it opens.
+test('resendSignupCode resolves the identical { ok: true } across success and every failure shape, and never lets an error escape', async () => {
+  const outcomes = [];
+
+  const okFetch = fakeFetch(() => json(200, {}));
+  outcomes.push(await createSupabaseAuth({ ...CFG, fetchImpl: okFetch }).resendSignupCode({ email: 'known@b.com' }));
+
+  const unknownAddressFetch = fakeFetch(() => json(400, { error_code: 'user_not_found', msg: 'no such user' }));
+  outcomes.push(await createSupabaseAuth({ ...CFG, fetchImpl: unknownAddressFetch }).resendSignupCode({ email: 'unknown@b.com' }));
+
+  const alreadyConfirmedFetch = fakeFetch(() => json(422, { error_code: 'user_already_exists', msg: 'already confirmed' }));
+  outcomes.push(await createSupabaseAuth({ ...CFG, fetchImpl: alreadyConfirmedFetch }).resendSignupCode({ email: 'known@b.com' }));
+
+  const rateLimitedFetch = fakeFetch(() => json(429, { error_code: 'over_email_send_rate_limit', msg: 'slow down' }));
+  outcomes.push(await createSupabaseAuth({ ...CFG, fetchImpl: rateLimitedFetch }).resendSignupCode({ email: 'known@b.com' }));
+
+  const transportFailFetch = async () => { throw new Error('ECONNRESET'); };
+  outcomes.push(await createSupabaseAuth({ ...CFG, fetchImpl: transportFailFetch }).resendSignupCode({ email: 'known@b.com' }));
+
+  for (const outcome of outcomes) {
+    assert.deepEqual(outcome, { ok: true });
+  }
+});
+
+test('a refused resend leaves a trace in the log, since nothing else can tell anyone it failed', async () => {
+  const logs = [];
+  const fetchImpl = fakeFetch(() => json(429, { error_code: 'over_email_send_rate_limit', msg: 'slow down' }));
+  const sb = createSupabaseAuth({ ...CFG, fetchImpl, logImpl: (line) => logs.push(line) });
+  await sb.resendSignupCode({ email: 'a@b.com' });
+  assert.ok(logs.some((line) => line.includes('resend')), 'a failed resend must be diagnosable');
+});
 // ---------------------------------------------------------------------------
 // Task 13 -- `server-cli.mjs` is the one place a REAL transport is handed to
 // `createSupabaseAuth`, for the reason CLAUDE.md's Bug 1 exists: a unit test
