@@ -91,7 +91,10 @@ export function loginPage({ error = null, email = '', next = '', notice = null, 
       <button type="submit" class="record">Sign in</button>
     </form>
 
-    <p class="actions"><a class="quiet" href="/signup">No account yet? Create one.</a></p>
+    <p class="actions">
+      <a class="quiet" href="/auth/reset">Forgot password?</a>
+      <a class="quiet" href="/signup">No account yet? Create one.</a>
+    </p>
   </section>
 </main>
 `;
@@ -211,6 +214,95 @@ export function verifyPage({ email = '', error = null, notice = null, csrf = '' 
 </main>
 `;
   return layout({ title: 'Timestamp - confirm your email', body, bodyClass: 'page-verify', wrapClass: 'wrap--narrow', chrome: false });
+}
+
+/**
+ * `/auth/reset` -- "forgot password?", start of spec §5's recovery half.
+ *
+ * WHY THIS PAGE NEVER SAYS WHETHER THE ADDRESS HAS AN ACCOUNT. The server
+ * answers this form identically whatever was typed -- `sendRecovery` always
+ * resolves `{ok: true}` -- so the copy here is written to be true either way:
+ * "if that address has an account" rather than "we have sent your code".
+ *
+ * WHY THERE IS NO `next` FIELD. Unlike `/login` and `/signup`, this flow does
+ * not end at a destination the person was trying to reach -- it ends at
+ * `/login`, because a completed reset signs every device out and the honest
+ * next step is signing in again with the new password.
+ */
+export function resetPage({ error = null, email = '', csrf = '' } = {}) {
+  const body = `
+<main>
+  <section class="panel">
+    <p class="eyebrow">Forgot password</p>
+    <h1 class="headline">Get back in</h1>
+    <p class="sub">Enter the address you signed up with. If it has an account, a six-digit
+    code — the same kind used to confirm a new signup — is on its way.</p>
+
+    ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
+
+    <form method="post" action="/auth/reset">
+      ${csrfField(csrf)}
+      ${field({ id: 'email', name: 'email', label: 'Email', type: 'email', value: email, autocomplete: 'username' })}
+      <button type="submit" class="record">Send a reset code</button>
+    </form>
+
+    <p class="actions"><a class="quiet" href="/login">Remembered it? Sign in.</a></p>
+  </section>
+</main>
+`;
+  return layout({ title: 'Timestamp - reset your password', body, bodyClass: 'page-reset', wrapClass: 'wrap--narrow', chrome: false });
+}
+
+/**
+ * `/auth/reset/complete` -- the code, and the new password, in one form.
+ *
+ * WHY THE EMAIL IS TYPED HERE RATHER THAN CARRIED FROM `/auth/reset`. That
+ * route's redirect target must be identical for a known and an unknown
+ * address -- spec §5's whole point -- so it cannot carry the address in the
+ * query the way `/verify`'s does. The person types it again, exactly as they
+ * typed the password itself; this page never learns which addresses exist.
+ *
+ * WHY THE CODE FIELD MATCHES `/verify`'s, ATTRIBUTE FOR ATTRIBUTE. Same
+ * six-digit shape, same reasons: `inputmode="numeric"` for a numeric keypad,
+ * `autocomplete="one-time-code"` for the notification-to-field shortcut,
+ * `maxlength="6"` so a stray paste cannot spend a guess on noise.
+ */
+export function resetCompletePage({ email = '', error = null, csrf = '' } = {}) {
+  const body = `
+<main>
+  <section class="panel">
+    <p class="eyebrow">Check your email</p>
+    <h1 class="headline">Set a new password</h1>
+    <p class="sub">If that address has an account, a six-digit code is on its way. It lasts
+    an hour. Completing this signs every device out, including this one.</p>
+
+    ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
+
+    <form method="post" action="/auth/reset/complete">
+      ${csrfField(csrf)}
+      ${field({ id: 'email', name: 'email', label: 'Email', type: 'email', value: email, autocomplete: 'username' })}
+      <div class="field">
+        <label for="code">Confirmation code</label>
+        <input type="text" id="code" name="code" value=""
+               inputmode="numeric" autocomplete="one-time-code" maxlength="6"
+               pattern="[0-9]{6}" spellcheck="false" required>
+      </div>
+      ${field({
+    id: 'password',
+    name: 'password',
+    label: 'New password',
+    type: 'password',
+    autocomplete: 'new-password',
+    hint: 'At least ten characters. Stored as a scrypt hash and never in plain text.',
+  })}
+      <button type="submit" class="record">Set the new password</button>
+    </form>
+
+    <p class="actions"><a class="quiet" href="/auth/reset">No code yet? Ask for one.</a></p>
+  </section>
+</main>
+`;
+  return layout({ title: 'Timestamp - set a new password', body, bodyClass: 'page-reset-complete', wrapClass: 'wrap--narrow', chrome: false });
 }
 
 /**

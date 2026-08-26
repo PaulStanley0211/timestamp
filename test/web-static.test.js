@@ -42,6 +42,7 @@ import {
 } from '../scripts/web/views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
+  resetPage, resetCompletePage,
 } from '../scripts/web/views-auth.mjs';
 
 /** The `.statehook` block, from its selector to its closing brace. */
@@ -253,6 +254,8 @@ function renderedPages() {
     ['login', loginPage({})],
     ['signup', signupPage({ consentText: 'I am in this photo.' })],
     ['verify', verifyPage({ email: 'a@b.com' })],
+    ['reset', resetPage({})],
+    ['reset-complete', resetCompletePage({ email: 'a@b.com' })],
     ['pricing', pricingPage({ plans, resolutions, currentPlan: null })],
     ['status', statusPage({ view })],
     ['select', selectPage({ view, stills: [] })],

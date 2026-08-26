@@ -86,6 +86,18 @@ export const ROUTES = Object.freeze([
   { method: 'POST', pattern: '/verify', name: 'verifyCode' },
   { method: 'POST', pattern: '/verify/resend', name: 'verifyResend' },
 
+  // --- "forgot password?" (spec §5, task 11) ------------------------------
+  // NOT behind a session, and for the same reason `/verify` is not: a person
+  // who forgot their password has, by definition, no session to prove who
+  // they are with. `/auth/reset` sends the mail; `/auth/reset/complete` takes
+  // the same six-digit shape `/verify` does, plus the new password, and is
+  // the one route in this file that ends by destroying every session for the
+  // account rather than starting one.
+  { method: 'GET', pattern: '/auth/reset', name: 'resetPage' },
+  { method: 'POST', pattern: '/auth/reset', name: 'reset' },
+  { method: 'GET', pattern: '/auth/reset/complete', name: 'resetCompletePage' },
+  { method: 'POST', pattern: '/auth/reset/complete', name: 'resetComplete' },
+
   // --- money (docs/superpowers/specs/2026-08-24-credit-packs-pricing-design.md)
   // The browser posts a PACK ID and nothing else. Everything priced is resolved
   // on the server against config/credits.json; there is no route here that
@@ -142,6 +154,10 @@ export const PUBLIC_ROUTES = Object.freeze(new Set([
   // account they end in does not exist until they succeed, so requiring a
   // session would make the flow unreachable rather than safe.
   'verifyPage', 'verifyCode', 'verifyResend',
+  // The reset flow. Same reasoning as the code-entry flow immediately above:
+  // the whole point is to recover access with no session, so gating it behind
+  // one would make the flow unreachable rather than safe.
+  'resetPage', 'reset', 'resetCompletePage', 'resetComplete',
   'pricingPage',
   // PUBLIC SINCE 2026-08-21, AND IT IS THE ONE ENTRY HERE THAT SERVES TWO
   // DIFFERENT PAGES. `/` used to 303 a signed-out visitor to `/login`, which

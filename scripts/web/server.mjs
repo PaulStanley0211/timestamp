@@ -91,6 +91,7 @@ import {
 } from './views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
+  resetPage, resetCompletePage,
 } from './views-auth.mjs';
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
@@ -229,6 +230,11 @@ export const CODE_REFUSED_MESSAGE = 'That code is not right, or it has expired. 
  *  attempts themselves, and an address that never signed up reaches this
  *  message on exactly the same schedule as one that did. */
 export const CODE_EXHAUSTED_MESSAGE = 'Too many attempts on that code. Ask for a new one in an hour.';
+
+/** Shown on `/login` after `/auth/reset/complete` succeeds. Reached only via
+ *  this server's own redirect, never from user input, so it is safe to state
+ *  plainly rather than defensively. */
+export const RESET_DONE_NOTICE = 'Your password has been changed. Every device was signed out — sign in again with your new password.';
 
 /**
  * The one sentence every failure of the Google round trip gets, whatever
@@ -723,6 +729,13 @@ export function createServer({
     signup: createRateLimiter({ ...AUTH_RATE_LIMITS.signup, nowImpl }),
     verify: createRateLimiter({ ...AUTH_RATE_LIMITS.verify, nowImpl }),
     google: createRateLimiter({ ...AUTH_RATE_LIMITS.google, nowImpl }),
+    // `/auth/reset` -- the route that sends the recovery mail. Supabase's own
+    // mailer sends two recovery emails an hour, project-wide, so this bound
+    // exists to stop one connection from spending that budget on its own.
+    // `/auth/reset/complete` reuses the `verify` limiter below: it is the same
+    // six-digit code shape and the same per-IP address-cycling risk `/verify`
+    // already guards against, not a new one.
+    reset: createRateLimiter({ ...AUTH_RATE_LIMITS.reset, nowImpl }),
   };
 
   /** The Supabase client, or null. Named short because every identity handler
@@ -836,6 +849,8 @@ export function createServer({
       let page;
       if (which === 'login') page = loginPage({ error: message, csrf: token, ...extras });
       else if (which === 'verify') page = verifyPage({ error: message, csrf: token, ...extras });
+      else if (which === 'reset') page = resetPage({ error: message, csrf: token, ...extras });
+      else if (which === 'resetComplete') page = resetCompletePage({ error: message, csrf: token, ...extras });
       else page = signupPage({ error: message, csrf: token, consentText, ...extras });
       return sendHtml(req, res, 403, page, headers);
     }
@@ -849,6 +864,7 @@ export function createServer({
     signup: 'Too many new accounts from your connection. Please try again later.',
     verify: 'Too many code attempts from your connection. Please try again later.',
     google: 'Too many attempts to sign in with Google from your connection. Please wait a minute and try again.',
+    reset: 'Too many reset requests from your connection. Please try again later.',
   });
 
   /** True when the 429 has been sent and the handler must stop. Decided before
@@ -1388,7 +1404,11 @@ export function createServer({
     async loginPage(req, res, { query, account }) {
       if (account) return redirect(res, safeNext(query?.get('next')) || '/');
       const { token, setCookie } = await auths.csrfIssue(req);
-      return sendHtml(req, res, 200, loginPage({ next: safeNext(query?.get('next')), csrf: token }),
+      // `?reset=done` arrives only from this server's own redirect at the end
+      // of `resetComplete`, never from anything a caller typed meaning
+      // something else, so it is safe to render as a plain notice.
+      const notice = query?.get('reset') === 'done' ? RESET_DONE_NOTICE : null;
+      return sendHtml(req, res, 200, loginPage({ next: safeNext(query?.get('next')), csrf: token, notice }),
         setCookie ? { 'Set-Cookie': setCookie } : {});
     },
 
@@ -1703,6 +1723,239 @@ export function createServer({
 
       if (wantsHtml(req)) return redirect(res, next || '/', 303, { 'Set-Cookie': cookie });
       return sendJson(req, res, 200, { accountId, next: next || '/' }, { 'Set-Cookie': cookie });
+    },
+
+    // --- "forgot password?" (spec §5, task 11) ----------------------------
+
+    /**
+     * The request form.
+     *
+     * NO SESSION REQUIRED AND NONE ASSUMED. A person reaching this page has,
+     * by definition, no working credential -- that is the whole reason they
+     * are here -- so unlike `loginPage` this does not redirect an already
+     * signed-in visitor away. Their own session (if any) is untouched by
+     * anything on this page; it is `resetComplete`, not this one, that ends
+     * every session on the account.
+     */
+    async resetPage(req, res) {
+      if (!sb) return identityUnavailable(req, res);
+      const { token, setCookie } = await auths.csrfIssue(req);
+      return sendHtml(req, res, 200, resetPage({ csrf: token }),
+        setCookie ? { 'Set-Cookie': setCookie } : {});
+    },
+
+    /**
+     * Send the recovery mail.
+     *
+     * MUST ANSWER IDENTICALLY FOR A KNOWN AND AN UNKNOWN ADDRESS -- status,
+     * body AND headers -- or this becomes an account-enumeration oracle on a
+     * service that stores photographs of people's faces. `sb.sendRecovery`
+     * already swallows its own upstream failure and always resolves
+     * `{ok: true}` for exactly this reason; this handler adds no branch that
+     * could undo that guarantee. Every exit is the SAME fixed redirect,
+     * whatever was typed and whatever `sendRecovery` did upstream -- and
+     * that redirect names no path component or query value derived from the
+     * address, because a location that echoed it back would let two
+     * requests for two different addresses be told apart by comparing
+     * `Location` headers, which is the same oracle wearing a different hat.
+     *
+     * NO RESEND ON FAILURE, AND RATE-LIMITED PER CONNECTION. Supabase's own
+     * mailer sends two recovery emails an hour, project-wide; a silent retry
+     * here would spend that budget on somebody else's behalf, which is why
+     * this is bounded by `AUTH_RATE_LIMITS.reset` rather than retried.
+     */
+    async reset(req, res) {
+      if (!sb) return identityUnavailable(req, res);
+      if (refuseOverLimit(req, res, 'reset', resetPage)) return undefined;
+      if (!sameOriginPost(req)) return refuseForgery(req, res, 'reset');
+      const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
+      const email = String(body.email ?? '').trim();
+      const csrf = String(body.csrf ?? '');
+
+      // Same order, same reason as every other credential-adjacent post in
+      // this file: proven origin before anything it says is acted on.
+      if (!(await auths.csrfCheck(req, csrf))) return refuseForgery(req, res, 'reset', { email });
+
+      // Only a shaped address is worth sending upstream at all. Skipping the
+      // call for an unshaped one costs nothing here -- `sendRecovery` never
+      // varies its own answer on what it was given, so the response below is
+      // identical either way.
+      if (isAddressShaped(email)) {
+        await sb.sendRecovery({ email, clientIp: clientIpOf(req) });
+      }
+
+      const to = '/auth/reset/complete';
+      if (wantsHtml(req)) return redirect(res, to, 303);
+      return sendJson(req, res, 200, { next: to });
+    },
+
+    /**
+     * The code-and-new-password page.
+     *
+     * THE ADDRESS IS NEVER PREFILLED FROM `reset`'S REDIRECT, because that
+     * redirect's whole point is to carry nothing that could distinguish a
+     * known address from an unknown one. The person types it again here,
+     * exactly as `/verify` would have them retype nothing at all -- except
+     * here there is no signup moment to have echoed it back from.
+     */
+    async resetCompletePage(req, res) {
+      if (!sb) return identityUnavailable(req, res);
+      const { token, setCookie } = await auths.csrfIssue(req);
+      return sendHtml(req, res, 200, resetCompletePage({ csrf: token }),
+        setCookie ? { 'Set-Cookie': setCookie } : {});
+    },
+
+    /**
+     * Confirm the code, and set the new password.
+     *
+     * THE SAME SIX DIGITS, THE SAME FIVE GUESSES, THE SAME COUNTER. `type:
+     * 'recovery'` is the only difference from `verifyCode` in what is asked
+     * of Supabase; every attempt-limiting rule from spec §4.5 applies
+     * unchanged, and it is enforced with the SAME `chargeCodeAttempt` /
+     * `clearCodeAttempts` pair keyed on the same address hash -- not a
+     * second counter, or a script could double its guess budget by choosing
+     * which of the two routes to spend it against for the same code.
+     *
+     * ORDER, PER SPEC §5, WITH ONE INSERTION FOR THIS TASK. EXCHANGE
+     * (`sb.verifyCode`) -> RESOLVE (`resolveIdentity`) -> USE
+     * (`updatePassword`, which needs the access token the exchange just
+     * produced and therefore must run WHILE IT IS STILL ALIVE, i.e. before
+     * anything revokes it) -> destroy every session on the account -> REVOKE
+     * (best-effort, wrapped exactly as `login` wraps it: the reset is
+     * already complete by then, so a throw here must never turn it into a
+     * failure).
+     *
+     * WHY EVERY DEVICE IS SIGNED OUT. A password reset happens because
+     * somebody else may have had the old one. Supabase revoking its own
+     * tokens does nothing to this app's sessions -- ours are the ones that
+     * actually work here -- so the reset is not complete until
+     * `destroySessionsForAccount` has run, and that call is unconditional:
+     * it is not skipped for the account whose session, if any, made this
+     * very request.
+     *
+     * CONSENT, HANDLED EXACTLY AS `login` HANDLES IT, NOT REINVENTED.
+     * `resolveIdentity` can create an account for an identity it has never
+     * resolved before; the consent parked at signup is consumed via
+     * `takePending` and, if `resolveIdentity` throws, RE-PARKED so a retry
+     * that later succeeds does not open an account with no record of the
+     * agreement.
+     *
+     * NOTHING FROM `SupabaseAuthError` OR AN ACCOUNT ERROR MAY REACH THIS
+     * PAGE. A wrong code, an expired code, an address with no account, and
+     * an internal resolve-or-update failure all render the same imported
+     * constant; the upstream detail goes only to the log.
+     */
+    async resetComplete(req, res) {
+      if (!sb) return identityUnavailable(req, res);
+      if (refuseOverLimit(req, res, 'verify', resetCompletePage)) return undefined;
+      if (!sameOriginPost(req)) return refuseForgery(req, res, 'resetComplete');
+      const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
+      const email = String(body.email ?? '').trim();
+      const code = String(body.code ?? '').trim();
+      const password = String(body.password ?? '');
+      const csrf = String(body.csrf ?? '');
+
+      // BEFORE the code or the password are looked at. Same order, same
+      // reason as every other credential-bearing post in this file.
+      if (!(await auths.csrfCheck(req, csrf))) return refuseForgery(req, res, 'resetComplete', { email });
+
+      const refuse = (message, status = 401) => {
+        // The token that just verified rides back out, so the retry the
+        // person is about to make still carries a valid pair.
+        if (wantsHtml(req)) return sendHtml(req, res, status, resetCompletePage({ error: message, email, csrf }));
+        return sendJson(req, res, status, { error: { status, message } });
+      };
+
+      // Validation of the person's OWN new password. This is independent of
+      // whether the address has an account -- a form-quality question, not
+      // an existence question -- so checking it before anything is charged
+      // does not open the branch the identical-response rule at `reset`
+      // forbids; it is the same reasoning `signup` already applies to this
+      // exact field.
+      if (password.length < 10) return refuse('Please use at least ten characters.', 400);
+
+      // An address that is not an address has no code and no counter to
+      // spend, so it gets the same answer as a wrong code rather than a
+      // different one -- same reasoning as `verifyCode`.
+      if (!isAddressShaped(email)) return refuse(CODE_REFUSED_MESSAGE);
+
+      const ident = await identityApi();
+      let hash;
+      try {
+        hash = ident.emailHash(email);
+      } catch {
+        return refuse(CODE_REFUSED_MESSAGE);
+      }
+      const { allowed } = chargeCodeAttempt({ root, hash, nowImpl });
+      if (!allowed) return refuse(CODE_EXHAUSTED_MESSAGE);
+
+      // 1. EXCHANGE.
+      let identity;
+      try {
+        ({ identity } = await sb.verifyCode({
+          email, token: code, type: 'recovery', clientIp: clientIpOf(req),
+        }));
+      } catch (err) {
+        logImpl(`[web] reset refused: ${err?.message ?? err}`);
+        return refuse(CODE_REFUSED_MESSAGE);
+      }
+
+      // 2. RESOLVE, exactly as `login` does it.
+      const parked = ident.takePending({ root, email, nowImpl });
+
+      let accountId;
+      try {
+        ({ accountId } = await ident.resolveIdentity({
+          root, identity, consent: parked?.consent ?? null, nowImpl,
+        }));
+      } catch (err) {
+        // FAIL CLOSED, same reasoning as `login` and `verifyCode`: a 500 here
+        // would tell an attacker the code was right and only our own
+        // resolution failed, which is exactly the fact this handler exists
+        // to withhold. The consent goes back for the same reason `login`
+        // puts it back.
+        logImpl(`[web] reset could not resolve an identity: ${err?.stack ?? err}`);
+        if (parked) {
+          try { ident.putPending({ root, email, consent: parked.consent, nowImpl }); } catch { /* logged above */ }
+        }
+        return refuse(CODE_REFUSED_MESSAGE);
+      }
+
+      // 3. USE -- while the access token from step 1 is still alive.
+      try {
+        await sb.updatePassword({ accessToken: identity.accessToken, password });
+      } catch (err) {
+        logImpl(`[web] reset could not set the new password: ${err?.message ?? err}`);
+        return refuse(CODE_REFUSED_MESSAGE);
+      }
+
+      // The code and the new password both held, so the five guesses are
+      // given back -- same rule as `verifyCode`: cleared only on complete
+      // success, never on the way to it.
+      clearCodeAttempts({ root, hash });
+
+      // Every session belonging to this account, destroyed -- unconditionally,
+      // and before the best-effort revoke below. This is the reset: somebody
+      // changed a password because somebody else may have had it, and every
+      // device signed out is the correct, noticeable behaviour.
+      (await auths.api()).destroySessionsForAccount({ root, accountId });
+
+      // 4. REVOKE, best-effort, wrapped exactly as `login` wraps it: the
+      // reset already completed above, so a throw from here reaching the
+      // caller would turn a completed reset into a 500 with the password
+      // already changed and every session already gone -- strictly worse
+      // than a revoke that silently did nothing.
+      if (identity?.accessToken) {
+        try {
+          await sb.revoke({ accessToken: identity.accessToken });
+        } catch (err) {
+          logImpl(`[web] reset: revoke at the door failed: ${err?.message ?? err}`);
+        }
+      }
+
+      const to = '/login?reset=done';
+      if (wantsHtml(req)) return redirect(res, to, 303);
+      return sendJson(req, res, 200, { next: to });
     },
 
     /**
