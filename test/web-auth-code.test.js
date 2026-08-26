@@ -657,12 +657,14 @@ test('a JSON client is told the same thing in its own dialect', async (t) => {
  * `password` is a fixed 24 characters, comfortably past the 10-character
  * floor `signup` still enforces unchanged.
  */
-async function signupThrough(t, { upstream = 'ok', email = TEST_EMAIL, password = 'a genuinely long password' } = {}) {
+async function signupThrough(t, {
+  upstream = 'ok', email = TEST_EMAIL, password = 'a genuinely long password', accept = 'text/html',
+} = {}) {
   const { base, csrf, cookie } = await startWithFakeSupabase(t, {
     pendingConsent: null,
     failWith: upstream === 'ok' ? null : upstream,
   });
-  const res = await postForm(`${base}/signup`, { email, password, consent: 'on', csrf }, cookie);
+  const res = await postForm(`${base}/signup`, { email, password, consent: 'on', csrf }, cookie, { accept });
   return shapeOf(res);
 }
 
@@ -677,8 +679,22 @@ test('signup for an address that already exists is indistinguishable from a new 
   const taken = await signupThrough(t, { upstream: 'user-already-registered' });
   assert.equal(fresh.status, taken.status);
   assert.equal(fresh.location, taken.location);
-  assert.equal(fresh.body, taken.body, 'Supabase leaks it; we must not pass it on');
-  assert.equal(fresh.contentType, taken.contentType);
+
+  // WHOLE-BRANCH REVIEW FINDING 5(a): the html dialect's whole body is an
+  // empty redirect -- `redirect()` calls `res.end()` with no argument
+  // (server.mjs's `redirect` helper) -- so comparing `fresh.body` to
+  // `taken.body` (both `''`) and `fresh.contentType` to `taken.contentType`
+  // (both `null`) can never fail regardless of whether the two outcomes
+  // actually agree. The property IS proved above, by status and Location.
+  // The JSON dialect is where the response genuinely carries content, so
+  // that is exercised here instead of decorating the html comparison with
+  // assertions that cannot fail.
+  const freshJson = await signupThrough(t, { upstream: 'ok', accept: 'application/json' });
+  const takenJson = await signupThrough(t, { upstream: 'user-already-registered', accept: 'application/json' });
+  assert.equal(freshJson.status, takenJson.status);
+  assert.ok(freshJson.body.length > 2, 'the JSON body must carry real content for this comparison to mean anything');
+  assert.equal(freshJson.body, takenJson.body, 'Supabase leaks it; we must not pass it on');
+  assert.equal(freshJson.contentType, takenJson.contentType);
 });
 
 test('signup parks the consent and mints no session', async (t) => {
@@ -702,10 +718,19 @@ test('nothing SupabaseAuthError carries reaches the signup response, upstream fa
   for (const kind of ['user-already-registered', 'over_request_rate_limit', 'boom']) {
     const res = await signupThrough(t, { upstream: kind });
     assert.equal(res.status, 303, `signup must answer the same way whatever ${kind} was upstream`);
+
+    // WHOLE-BRANCH REVIEW FINDING 5(b): the html dialect's body is always
+    // empty (`redirect()` calls `res.end()` with no argument), so a leak
+    // check against `res.body` can never fail -- it is decoration, not proof.
+    // The JSON dialect actually carries content, so that is where the leak
+    // check has to run for it to mean anything.
+    const json = await signupThrough(t, { upstream: kind, accept: 'application/json' });
+    assert.equal(json.status, 202, `the JSON dialect must answer the same way whatever ${kind} was upstream`);
+    assert.ok(json.body.length > 2, 'the JSON body must carry real content for a leak check to mean anything');
     for (const leak of ['user_already_exists', 'over_request_rate_limit', 'error_code', 'SupabaseAuthError', 'supabase']) {
-      assert.ok(!res.body.toLowerCase().includes(leak.toLowerCase()), `${kind} leaked ${leak} onto the page`);
+      assert.ok(!json.body.toLowerCase().includes(leak.toLowerCase()), `${kind} leaked ${leak} onto the page`);
     }
-    assert.ok(!/\b(422|429|500)\b/.test(res.body), `${kind} leaked an upstream status onto the page`);
+    assert.ok(!/\b(422|429|500)\b/.test(json.body), `${kind} leaked an upstream status onto the page`);
   }
 });
 

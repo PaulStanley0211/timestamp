@@ -26,7 +26,7 @@ import {
 import {
   startWithFakeSupabase, postForm, getPage, shapeOf, TEST_EMAIL,
 } from './web-auth-code.test.js';
-import { findAccountByEmail } from '../scripts/auth/accounts.mjs';
+import { findAccountByEmail, createAccount } from '../scripts/auth/accounts.mjs';
 import { listSessions } from '../scripts/auth/session.mjs';
 import { putPending, takePending } from '../scripts/auth/pending-signup.mjs';
 
@@ -61,14 +61,31 @@ function identityJson({
 // §5's rule: identical for a known and an unknown address
 // ---------------------------------------------------------------------------
 
+/** The fixed "known" address every test below treats as one. Whole-branch
+ *  review finding 5(c): `startWithFakeSupabase(t, {})` creates NO account --
+ *  it only parks a pending SIGNUP consent for `TEST_EMAIL` ('a@b.com'), which
+ *  is not an account at all -- so every "known vs unknown" comparison in this
+ *  section used to compare one unknown address to another and could never
+ *  fail no matter what the code did. `startWithKnownAccount` creates a REAL
+ *  account for this address, directly through `createAccount` rather than a
+ *  full signup+verify round trip, because what this section proves is
+ *  `/auth/reset`'s own indifference to account existence, not the signup flow
+ *  that produces one. */
+const KNOWN_EMAIL = 'exists@example.com';
+async function startWithKnownAccount(t, opts = {}) {
+  const started = await startWithFakeSupabase(t, opts);
+  await createAccount({ root: started.root, email: KNOWN_EMAIL, password: 'a genuinely long enough password' });
+  return started;
+}
+
 async function resetRequest(t, email) {
-  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  const { base, csrf, cookie } = await startWithKnownAccount(t);
   const res = await postForm(`${base}/auth/reset`, { email, csrf }, cookie);
   return shapeOf(res);
 }
 
 test('a reset request answers identically for a known and an unknown address', async (t) => {
-  const known = await resetRequest(t, 'exists@example.com');
+  const known = await resetRequest(t, KNOWN_EMAIL);
   const unknown = await resetRequest(t, 'nobody@example.com');
   assert.equal(known.status, unknown.status);
   assert.equal(known.body, unknown.body);
@@ -78,7 +95,7 @@ test('a reset request answers identically for a known and an unknown address', a
 test('an address that is not even shaped like one gets the same answer too', async (t) => {
   // Format is not the oracle either -- only account existence is, and this
   // route never varies on it.
-  const shaped = await resetRequest(t, 'exists@example.com');
+  const shaped = await resetRequest(t, KNOWN_EMAIL);
   const garbage = await resetRequest(t, 'not-an-email-at-all');
   assert.equal(shaped.status, garbage.status);
   assert.equal(shaped.body, garbage.body);
@@ -87,8 +104,8 @@ test('an address that is not even shaped like one gets the same answer too', asy
 
 test('the two responses match on every header a client can read, not only the body', async (t) => {
   const shapes = [];
-  for (const email of ['exists@example.com', 'nobody@example.com']) {
-    const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  for (const email of [KNOWN_EMAIL, 'nobody@example.com']) {
+    const { base, csrf, cookie } = await startWithKnownAccount(t);
     const res = await postForm(`${base}/auth/reset`, { email, csrf }, cookie);
     const headers = [...res.headers]
       .filter(([k]) => k.toLowerCase() !== 'date')
@@ -100,8 +117,8 @@ test('the two responses match on every header a client can read, not only the bo
 });
 
 test('a shaped address is sent upstream and an unshaped one is not, with no visible difference', async (t) => {
-  const { base, csrf, cookie, calls } = await startWithFakeSupabase(t, {});
-  const shaped = await postForm(`${base}/auth/reset`, { email: 'exists@example.com', csrf }, cookie);
+  const { base, csrf, cookie, calls } = await startWithKnownAccount(t);
+  const shaped = await postForm(`${base}/auth/reset`, { email: KNOWN_EMAIL, csrf }, cookie);
   await shaped.text();
   const garbage = await postForm(`${base}/auth/reset`, { email: 'not-an-email-at-all', csrf }, cookie);
   await garbage.text();
@@ -110,14 +127,14 @@ test('a shaped address is sent upstream and an unshaped one is not, with no visi
 });
 
 test('a reset request lands on the same completion page whatever the address was, with no email in the url', async (t) => {
-  const { location } = await resetRequest(t, 'exists@example.com');
+  const { location } = await resetRequest(t, KNOWN_EMAIL);
   assert.equal(location, '/auth/reset/complete');
 });
 
 test('a JSON client is told the same next, whichever address it named', async (t) => {
   const shapes = [];
-  for (const email of ['exists@example.com', 'nobody@example.com']) {
-    const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  for (const email of [KNOWN_EMAIL, 'nobody@example.com']) {
+    const { base, csrf, cookie } = await startWithKnownAccount(t);
     const res = await postForm(`${base}/auth/reset`, { email, csrf }, cookie, { accept: 'application/json' });
     shapes.push(await shapeOf(res));
   }
