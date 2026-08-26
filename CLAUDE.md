@@ -86,7 +86,10 @@ order is left.**
    unblocks rewriting DESIGN.md**. **Neither is blocked on code.**
 2. **The two Linux CI failures (§4), BEFORE a PR is opened** — they are
    assertions about one ffmpeg/ffprobe build's wording, not product defects,
-   and they will be the first thing anybody sees on the PR.
+   and they will be the first thing anybody sees on the PR. ~~Plus the flaky
+   tests, which are a third source of red on that same first run.~~ **THE
+   FLAKES ARE DONE 2026-08-26 — all three, §4.** What is left on that first CI
+   run is these two.
 3. **The rest of the review**, which is local only: what the fix order did not
    cover is still open, and **one of it arms on the next `config/models.json`
    edit**. Read the review's §3 before that edit, not after.
@@ -467,21 +470,22 @@ Linux). Fixed in `d15f71c`.
 | `the fixture really does carry EXIF and GPS...` | Asserts `meta.sideData.includes('EXIF metadata')` - a claim about how one **ffprobe build names side_data**, not about the file. **The real strip test passes on Linux, byte-grep and all**, so EXIF stripping genuinely works. Fix: assert the bytes, or accept either spelling. |
 | `a broken filtergraph fails loudly...` | Asserts ffmpeg's error *wording*, which differs between the gyan.dev Windows build and Debian's. Fix: assert the failure and that stderr is non-empty, not the text. |
 
-**Plus two pre-existing FLAKY tests** (different problem - these fire only when
-`node --test` runs files in parallel and several ffmpegs compete):
+~~**Plus two pre-existing FLAKY tests**~~ **THE FLAKES ARE FIXED 2026-08-26 -
+THREE of them, one commit each, and not one by widening a margin.** They fired
+only when `node --test` ran files in parallel, and every one turned out to be a
+test measuring the machine rather than the code - which is why passing in
+isolation never cleared them.
 
-| Test | Rate across 8 full runs |
-|---|---|
-| `[fal] a 720p request downloads a 960x720 clip...` (`empty_download`) | ~3 in 8 |
-| `a concurrent reader never sees a truncated or invalid manifest` | ~2 in 8 |
+| Test | What was actually wrong | Fix |
+|---|---|---|
+| `[fal] a 720p request downloads a 960x720 clip...` (`empty_download`, ~3 in 8) | **`provider-contract.test.js` imports `falContractCase`, so node registers and runs the WHOLE fal file in that process too** - two processes at once, both starting `dirSeq` at zero, both walking the same `build/provider-fal/<label>-<n>`, and `mkdirSync` with `recursive` never complains. Logged over one full run: 92 claims from 2 processes, **44 names claimed by both**, `media-44` among them. Two ffmpegs on one path; a read between the truncate and the first byte gets zero bytes. | `c897845` - the pid goes in the directory name, exactly as it already does in `accounts.mjs`. Re-measured the same way after: **0 names shared**, the two now writing `media-30700-44` and `media-32764-44`. |
+| `a concurrent reader never sees a truncated or invalid manifest` (~2 in 8) | Starting the reader thread on a loaded machine ate the writer's 10s budget while the writer spun through `saveJob` competing with the very thread it was waiting for. `parsed > 0` then failed having proved nothing - **the exact trap this test's own comment describes being fixed once already**, one layer down. | `aba30a1` - the reader raises a flag on its first read and the writer `Atomics.wait`s for it, which hands the core over instead of contending for it. The guard is also stronger: it now counts reads taken **while** the manifest was being rewritten (19431 in an isolated run, against the 5 the writer waits for), and stands the run down as *skipped, with its reason*, when that count is zero. The `invalid` assertion is made first and always. |
+| `an oversized password takes the same work as a normal one, on both branches` (~2 in 5 - **this one was never listed here**) | Wall-clock medians of scrypt across four cells. Under load the four burn the same cpu to within a millisecond while their clocks spread 3.8x; in one measured run the cell reading **slowest** on the clock (539ms) was the one that had burned the **least** cpu (62ms). | `1dd8e02` - the comparison is made on `process.cpuUsage()`: work done, not time waited. **The 4x margin is unchanged**, and it was verified still to catch the early return by putting it back on both branches. The wall clock is still asserted - cpu time cannot see an `await` added to one branch only, which is what arrives with Supabase - but only when the run shows the machine was free enough for the number to mean anything. |
 
-Passing 3/3 in isolation is not evidence they are fine. They need the
-publish-your-progress fix, **not a widened timeout** - a test whose timing margin
-is narrower than machine variance tests the machine.
-
-**Four sources of red is how a build gets ignored - fixing these is worth doing
-early.** They were
-deliberately NOT papered over with retries or `continue-on-error`.
+**Two sources of red left, and both are the Linux ones above.** None of the
+three was papered over with a retry, a `continue-on-error` or a wider timeout:
+**a test whose timing margin is narrower than machine variance tests the
+machine**, and that ruling is what picked all three fixes.
 
 ### 5. SPECS WRITTEN - one needs rewriting before any code
 
