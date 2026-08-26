@@ -569,8 +569,10 @@ Deliberately, with the reason:
    round trip is one real round trip. It cannot happen before the code exists,
    and it is the first thing to run once it does. Six causes share the one
    symptom "sign in with Google does not work"; expect to bisect them.
-2. **Does a Google sign-in also get a code? Defaulted to NO, and the owner can
-   flip it.** Google returns `email_verified: true`; a code after Google proves
+2. **~~Does a Google sign-in also get a code?~~ CLOSED 2026-08-26: NO.** The
+   owner confirmed it after the trade-off was put to him in plain terms. Kept
+   here with its reasoning because it is the kind of decision somebody re-opens
+   in six months without knowing it was ever weighed. Google returns `email_verified: true`; a code after Google proves
    nothing that has not already been proven, so it would be friction sold as
    verification. It is also built differently — no signup is pending, so it
    would use `POST /auth/v1/otp` rather than the signup confirmation, and it
