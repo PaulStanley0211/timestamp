@@ -66,12 +66,16 @@ export function sweepOAuth({ root, nowImpl = defaultNow }) {
     try {
       const row = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (new Date(row.expiresAt).getTime() <= nowImpl().getTime()) {
-        fs.unlinkSync(file);
-        removed += 1;
+        try {
+          fs.unlinkSync(file);
+          removed += 1;
+        } catch { /* already gone */ }
       }
     } catch {
-      fs.unlinkSync(file);
-      removed += 1;
+      try {
+        fs.unlinkSync(file);
+        removed += 1;
+      } catch { /* already gone */ }
     }
   }
   return removed;
