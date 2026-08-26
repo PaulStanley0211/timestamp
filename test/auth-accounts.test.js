@@ -31,14 +31,17 @@ import {
   PLAN_IDS,
   SCHEMA_VERSION,
   SCRYPT,
+  SUPABASE_INDEX_DIR,
   accountPaths,
   creditConfig,
   accountsRoot,
   assertPlanId,
   authenticate,
+  claimAccount,
   createAccount,
   emailHash,
   findAccountByEmail,
+  findAccountBySupabaseId,
   hashPassword,
   listAccounts,
   loadAccount,
@@ -263,7 +266,7 @@ test('an account round-trips through disk with exactly the fields it was written
   assert.deepEqual(JSON.parse(JSON.stringify(loaded)), JSON.parse(JSON.stringify(account)));
   assert.deepEqual(Object.keys(loaded).sort(), [
     'accountId', 'consent', 'createdAt', 'email', 'emailHash', 'ledger',
-    'password', 'plan', 'rev', 'schemaVersion', 'updatedAt',
+    'password', 'plan', 'rev', 'schemaVersion', 'supabaseUserId', 'updatedAt',
   ]);
   assert.equal(loaded.schemaVersion, SCHEMA_VERSION);
   assert.equal(loaded.plan, DEFAULT_PLAN_ID);
@@ -659,10 +662,163 @@ test('an account record holds no field that could ever carry a payment instrumen
 
   assert.deepEqual(Object.keys(onDisk).sort(), [
     'accountId', 'consent', 'createdAt', 'email', 'emailHash', 'ledger',
-    'password', 'plan', 'rev', 'schemaVersion', 'updatedAt',
+    'password', 'plan', 'rev', 'schemaVersion', 'supabaseUserId', 'updatedAt',
   ], 'the record shape is closed: a new field here is a decision, not an accident');
   // `plan` is an id, not a price and not a subscription. Nothing here can be
   // charged.
   assert.equal(typeof onDisk.plan, 'string');
   assert.ok(Object.hasOwn(PLANS, onDisk.plan));
+});
+
+// --------------------------------------------------------------------------
+// supabase identity
+// --------------------------------------------------------------------------
+
+test('an account can be claimed by a supabase id, and the password dies with the claim', async (t) => {
+  const root = makeRoot(t);
+  const made = await signUp(root, { email: 'claim@example.com' });
+  assert.ok(made.password, 'precondition: a local hash exists');
+
+  const claimed = await claimAccount({ root, accountId: made.accountId, supabaseUserId: 'uuid-claim' });
+  assert.equal(claimed.supabaseUserId, 'uuid-claim');
+  assert.equal(claimed.password, null, 'a hash that gates nothing is a liability');
+
+  const found = findAccountBySupabaseId({ root, supabaseUserId: 'uuid-claim' });
+  assert.equal(found.accountId, made.accountId);
+});
+
+test('claiming preserves the ledger exactly', async (t) => {
+  const root = makeRoot(t);
+  const made = await signUp(root, { email: 'ledger@example.com' });
+  const before = JSON.stringify(made.ledger);
+  const claimed = await claimAccount({ root, accountId: made.accountId, supabaseUserId: 'uuid-led' });
+  assert.equal(JSON.stringify(claimed.ledger), before, 'a claim is not a new account');
+  assert.equal(claimed.plan, made.plan);
+});
+
+test('an unknown supabase id is null, not a throw', async (t) => {
+  const root = makeRoot(t);
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId: 'nope' }), null);
+});
+
+// RULING R1: createAccount owns the passwordless-create path too, because
+// Task 5's resolveIdentity calls `createAccount({ password: null, supabaseUserId })`
+// directly on a genuinely new identity, and that call must land an account
+// that is immediately findable -- not just a claim grafted onto an existing one.
+
+test('createAccount refuses a passwordless signup with no supabase identity to take its place', async (t) => {
+  const root = makeRoot(t);
+  // This is the relaxation's guard rail: `password: null` alone must never be
+  // enough. Without this test, a typo that drops `supabaseUserId` from a call
+  // site would silently create an account nobody -- not a password, not a
+  // Supabase login -- can ever sign in to again.
+  await assert.rejects(
+    () => createAccount({ root, email: 'no-identity@example.com', password: null, nowImpl: clock() }),
+    (err) => {
+      assert.equal(err.code, 'BAD_PASSWORD');
+      return true;
+    },
+    'a null password with no supabaseUserId must still be refused',
+  );
+  assert.deepEqual(listAccounts({ root }), []);
+});
+
+test('createAccount stores and indexes a supabaseUserId at creation, immediately findable', async (t) => {
+  const root = makeRoot(t);
+  const supabaseUserId = 'uuid-create';
+  const account = await createAccount({
+    root, email: 'passwordless@example.com', password: null, supabaseUserId, nowImpl: clock(),
+  });
+
+  assert.equal(account.password, null);
+  assert.equal(account.supabaseUserId, supabaseUserId);
+
+  const found = findAccountBySupabaseId({ root, supabaseUserId });
+  assert.equal(found.accountId, account.accountId);
+  assert.equal(found.password, null);
+  assert.ok(fs.existsSync(`${accountsRoot(root).dir}/${SUPABASE_INDEX_DIR}/${supabaseUserId}`));
+});
+
+test('an ordinary signup carries supabaseUserId: null and is not reachable through the supabase index', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root, { email: 'ordinary@example.com' });
+  assert.equal(account.supabaseUserId, null);
+  assert.equal(loadAccount({ root, accountId: account.accountId }).supabaseUserId, null);
+});
+
+test('a supabase id already claimed by a different account is refused, and the loser is left untouched', async (t) => {
+  const root = makeRoot(t);
+  const supabaseUserId = 'uuid-conflict';
+  const first = await createAccount({
+    root, email: 'first@example.com', password: null, supabaseUserId, nowImpl: clock(),
+  });
+  const second = await signUp(root, { email: 'second@example.com' });
+
+  await assert.rejects(
+    () => claimAccount({ root, accountId: second.accountId, supabaseUserId }),
+    (err) => {
+      assert.equal(err.code, 'SUPABASE_ID_TAKEN');
+      return true;
+    },
+  );
+
+  const reloaded = loadAccount({ root, accountId: second.accountId });
+  assert.notEqual(reloaded.password, null, 'a rejected claim must not have thrown the password away');
+  assert.equal(reloaded.supabaseUserId, null);
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId }).accountId, first.accountId,
+    'the winning claim must still stand');
+});
+
+test('createAccount refuses a supabaseUserId already claimed by another account, and cleans up after itself', async (t) => {
+  const root = makeRoot(t);
+  const supabaseUserId = 'uuid-double-create';
+  const first = await createAccount({
+    root, email: 'holder@example.com', password: null, supabaseUserId, nowImpl: clock(),
+  });
+
+  await assert.rejects(
+    () => createAccount({
+      root, email: 'newcomer@example.com', password: null, supabaseUserId, nowImpl: clock(),
+    }),
+    (err) => {
+      assert.equal(err.code, 'SUPABASE_ID_TAKEN');
+      return true;
+    },
+  );
+
+  // The loser's email must be free again and its account directory gone --
+  // the same orphan-free guarantee an email collision already gets.
+  assert.equal(findAccountByEmail({ root, email: 'newcomer@example.com' }), null);
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId }).accountId, first.accountId);
+});
+
+test('claiming the same account with the same supabase id twice is a no-op, not a conflict', async (t) => {
+  const root = makeRoot(t);
+  const supabaseUserId = 'uuid-retry';
+  const made = await signUp(root, { email: 'retry@example.com' });
+
+  await claimAccount({ root, accountId: made.accountId, supabaseUserId });
+  const again = await claimAccount({ root, accountId: made.accountId, supabaseUserId });
+  assert.equal(again.supabaseUserId, supabaseUserId);
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId }).accountId, made.accountId);
+});
+
+test('claimAccount and createAccount both refuse a malformed supabaseUserId rather than writing an unfindable claim', async (t) => {
+  const root = makeRoot(t);
+  const made = await signUp(root, { email: 'malformed@example.com' });
+
+  // A slash would otherwise become a path segment in the supabase index --
+  // exactly the kind of string this module's account-id validation already
+  // refuses to let anywhere near a path.
+  await assert.rejects(
+    () => claimAccount({ root, accountId: made.accountId, supabaseUserId: 'path/traversal' }),
+    (err) => err instanceof TypeError,
+  );
+  await assert.rejects(
+    () => createAccount({
+      root, email: 'malformed2@example.com', password: null, supabaseUserId: 'path/traversal', nowImpl: clock(),
+    }),
+    (err) => err instanceof TypeError,
+  );
+  assert.equal(findAccountByEmail({ root, email: 'malformed2@example.com' }), null);
 });

@@ -125,6 +125,36 @@ export const OWNERS_DIR = 'out/owners';
 export const INDEX_DIR = '_index';
 
 /**
+ * The second index, and why the email index is not enough.
+ *
+ * The Supabase user id is the STABLE key; an email is not, because a person can
+ * change their address at the provider and arrive with the same identity and a
+ * different mailbox.
+ */
+export const SUPABASE_INDEX_DIR = '_index-supabase';
+
+/**
+ * DELIBERATELY WIDER THAN "LOOKS LIKE A UUID". A real Supabase user id is hex
+ * and hyphens, but this file's own supabaseUserId fixtures (`uuid-claim`,
+ * `uuid-a`, `uuid-attacker`, ...) are not -- they are short mnemonic strings a
+ * test picked, and this module has no way to tell "a test id" from "a real
+ * one" nor any reason to. What actually matters here is PATH SAFETY: this
+ * string becomes a filename under `_index-supabase/`, so the only real
+ * requirement is that it cannot contain a path separator, a `.`, or anything
+ * else that would let it climb out of that directory. Alphanumeric-and-hyphen
+ * is exactly that bound, with a length ceiling so a hostile identity provider
+ * cannot hand back a multi-megabyte "id" and turn every lookup into a stat on
+ * an absurd filename.
+ */
+const SUPABASE_ID_RE = /^[0-9a-zA-Z-]{1,64}$/;
+
+function supabaseIndexPath(root, supabaseUserId) {
+  if (!SUPABASE_ID_RE.test(String(supabaseUserId ?? ''))) return null;
+  const { dir } = accountsRoot(root);
+  return `${dir}/${SUPABASE_INDEX_DIR}/${String(supabaseUserId)}`;
+}
+
+/**
  * How many free tapes this installation has given away, ever.
  *
  * THE ONLY PIECE OF GLOBAL STATE IN THE ACCOUNT STORE, and it is here rather
@@ -692,6 +722,34 @@ function tryExclusiveCreate(file, body) {
 }
 
 /**
+ * The same exclusive-create primitive as `tryExclusiveCreate`, writing plain
+ * text rather than JSON.
+ *
+ * WHY A SEPARATE FUNCTION RATHER THAN REUSING THE ONE ABOVE. The supabase
+ * index has to hold nothing but the account id, because its reader
+ * (`findAccountBySupabaseId`) validates the file's raw bytes against
+ * `ACCOUNT_ID_RE` -- a JSON-wrapped `"<id>"` would carry quotes that fail that
+ * match. Same collision-refusing shape, different serialisation.
+ */
+function tryExclusiveCreateText(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  let fd;
+  try {
+    fd = fs.openSync(file, 'wx');
+  } catch (err) {
+    if (err.code === 'EEXIST') return false;
+    if (TRANSIENT.has(err.code)) return false;
+    throw err;
+  }
+  try {
+    fs.writeFileSync(fd, text);
+  } finally {
+    fs.closeSync(fd);
+  }
+  return true;
+}
+
+/**
  * The lock body, tolerantly. `null` means absent, `undefined` means present but
  * not readable as JSON. Those are different facts and `stealIfStale` treats
  * them differently, so they do not get collapsed -- the same distinction, for
@@ -1011,6 +1069,12 @@ export async function createAccount({
   password,
   plan = DEFAULT_PLAN_ID,
   consent = null,
+  // Present so the Supabase identity path (Task 5's `resolveIdentity`) can
+  // create an account directly, rather than creating a local-password account
+  // and claiming it a moment later. `null` here means "an ordinary account";
+  // see `passwordless` below for the one case where it changes what a missing
+  // password means.
+  supabaseUserId = null,
   // Injected exactly as `nowImpl` and `rand` are, and for the same reason: a
   // test that wants to prove the ceiling holds should be able to state the
   // number it is testing instead of creating a hundred accounts to reach the
@@ -1020,7 +1084,27 @@ export async function createAccount({
   rand = crypto,
 }) {
   const address = normaliseEmail(email);
-  assertUsablePassword(password);
+
+  const hasSupabaseId = supabaseUserId !== null && supabaseUserId !== undefined;
+  let supabaseIndexFile = null;
+  if (hasSupabaseId) {
+    supabaseIndexFile = supabaseIndexPath(root, supabaseUserId);
+    if (!supabaseIndexFile) {
+      throw new TypeError('createAccount needs a well-formed supabaseUserId');
+    }
+  }
+
+  // THE ONLY DOOR THROUGH WHICH `assertUsablePassword` MAY BE SKIPPED. A
+  // Supabase-authenticated signup has no local password at all -- Supabase
+  // already proved who this is -- so `password: null` is a deliberate
+  // "nothing to hash", not an omission. But `password: null` ALONE is never
+  // enough: without a Supabase identity riding along, it would create an
+  // account no mechanism on earth can sign in to. Both conditions are
+  // required, or the relaxation is reachable by a caller that forgot the
+  // second argument.
+  const passwordless = password === null && hasSupabaseId;
+  if (!passwordless) assertUsablePassword(password);
+
   const planId = assertPlanId(plan);
   const hash = emailHash(address);
 
@@ -1061,8 +1145,15 @@ export async function createAccount({
     accountId,
     email: address,
     emailHash: hash,
-    password: await hashPassword(password, { rand }),
+    password: passwordless ? null : await hashPassword(password, { rand }),
     plan: planId,
+    // `null` for every account this slice predates. Set at creation, not only
+    // on a later claim, so Task 5's `resolveIdentity` can create a brand-new
+    // Supabase-authenticated account and find it again immediately through
+    // `findAccountBySupabaseId` -- CLAUDE.md's `entriesOf` lesson, generalised:
+    // a field written to disk and not named in the object literal that writes
+    // it reads back `undefined` forever.
+    supabaseUserId: hasSupabaseId ? String(supabaseUserId) : null,
     createdAt: at,
     updatedAt: at,
     // How many times this record has been written. `saveAccount` refuses a write
@@ -1080,25 +1171,51 @@ export async function createAccount({
     ledger: [opening],
   }, { root, nowImpl });
 
-  fs.mkdirSync(account.paths.dir, { recursive: true });
-  atomicWriteJson(account.paths.record, account, accountId);
+  // EVERYTHING BELOW RUNS UNDER THE ACCOUNT'S OWN LOCK (RULING R1). Nobody else
+  // can know this accountId until this function returns it, so the lock buys
+  // nothing against a concurrent reader of *this* account -- what it buys is a
+  // single critical section across BOTH index writes, so a crash or a racing
+  // caller can never observe the email index claimed and the Supabase index
+  // not, or the reverse. `withAccountLock` creates the account directory
+  // itself, so taking it before the directory technically "exists" is safe.
+  return withAccountLock({ root, accountId }, () => {
+    fs.mkdirSync(account.paths.dir, { recursive: true });
+    atomicWriteJson(account.paths.record, account, accountId);
 
-  if (!tryExclusiveCreate(indexPath(root, hash), { accountId })) {
-    // Somebody registered this address between the pre-check and here. Remove
-    // the record just written: it is unreachable, and its directory name is 16
-    // random bytes, so nothing else can possibly be pointing at it.
-    try { fs.rmSync(account.paths.dir, { recursive: true, force: true }); } catch { /* orphan, not a leak */ }
-    // And give the free tape back. This is the one place that may: the account
-    // it was reserved for has just been destroyed, so the reservation is
-    // provably unused rather than merely probably unused. Failing to release it
-    // costs a tape of headroom and nothing else, which is why the release is
-    // allowed to fail quietly and the reservation is not.
-    if (reservation.reserved && isFree) {
-      try { releaseFreeTape({ root, nowImpl }); } catch { /* headroom, not money */ }
+    if (!tryExclusiveCreate(indexPath(root, hash), { accountId })) {
+      // Somebody registered this address between the pre-check and here. Remove
+      // the record just written: it is unreachable, and its directory name is 16
+      // random bytes, so nothing else can possibly be pointing at it.
+      try { fs.rmSync(account.paths.dir, { recursive: true, force: true }); } catch { /* orphan, not a leak */ }
+      // And give the free tape back. This is the one place that may: the account
+      // it was reserved for has just been destroyed, so the reservation is
+      // provably unused rather than merely probably unused. Failing to release it
+      // costs a tape of headroom and nothing else, which is why the release is
+      // allowed to fail quietly and the reservation is not.
+      if (reservation.reserved && isFree) {
+        try { releaseFreeTape({ root, nowImpl }); } catch { /* headroom, not money */ }
+      }
+      throw emailTaken(address);
     }
-    throw emailTaken(address);
-  }
-  return account;
+
+    if (hasSupabaseId && !tryExclusiveCreateText(supabaseIndexFile, accountId)) {
+      // The same race as above, one identity later: somebody else's account
+      // already claims this Supabase user id. Unwind every write this call
+      // made -- the email index too, or the address is stuck pointing at a
+      // record we are about to delete.
+      try { fs.rmSync(indexPath(root, hash), { force: true }); } catch { /* best effort */ }
+      try { fs.rmSync(account.paths.dir, { recursive: true, force: true }); } catch { /* orphan, not a leak */ }
+      if (reservation.reserved && isFree) {
+        try { releaseFreeTape({ root, nowImpl }); } catch { /* headroom, not money */ }
+      }
+      throw new AuthError(`a different account already claims supabase id ${supabaseUserId}`, {
+        code: 'SUPABASE_ID_TAKEN',
+        userMessage: 'We could not create an account for that sign-in identity.',
+      });
+    }
+
+    return account;
+  });
 }
 
 function emailTaken(address) {
@@ -1188,6 +1305,84 @@ export function findAccountByEmail({ root = REPO_ROOT, email, nowImpl = defaultN
     if (err.code === 'NO_ACCOUNT' || err.code === 'BAD_ACCOUNT_ID') return null;
     throw err;
   }
+}
+
+/**
+ * Index lookup, then record load -- the Supabase-id twin of
+ * `findAccountByEmail`. Same contract: null for "no such account", including a
+ * malformed or unrecognisable id, and a throw reserved for something genuinely
+ * broken underneath a legitimate lookup.
+ */
+export function findAccountBySupabaseId({ root = REPO_ROOT, supabaseUserId, nowImpl = defaultNow }) {
+  const file = supabaseIndexPath(root, supabaseUserId);
+  if (!file) return null;
+  let accountId;
+  try {
+    accountId = fs.readFileSync(file, 'utf8').trim();
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+  if (!ACCOUNT_ID_RE.test(accountId)) return null;
+  try {
+    return loadAccount({ root, accountId, nowImpl });
+  } catch (err) {
+    if (err.code === 'NO_ACCOUNT' || err.code === 'BAD_ACCOUNT_ID') return null;
+    throw err;
+  }
+}
+
+/**
+ * Stamps a Supabase identity onto an account that predates this slice, and
+ * nulls the scrypt hash in the same write.
+ *
+ * WHY THE PASSWORD IS NULLED RATHER THAN KEPT. After this slice nothing in the
+ * request path calls `verifyPassword`. A hash that gates nothing is a liability
+ * with no remaining benefit -- it can only ever be stolen.
+ *
+ * WHY THE INDEX CLAIM HAPPENS *BEFORE* THE ACCOUNT IS MUTATED. The naive order
+ * -- save the account, then write the index -- means a claim that turns out to
+ * conflict with an existing one has already thrown this account's real
+ * password away for nothing. Checking the index first means a refused claim
+ * costs nothing: the account is untouched, including its own password, and can
+ * be claimed again by whichever identity actually owns it.
+ *
+ * WHY BOTH STEPS SHARE ONE LOCK ACQUISITION rather than going through
+ * `updateAccount` and writing the index after it returns. Two separate lock
+ * acquisitions leave a window between them: a second `claimAccount` racing for
+ * a *different* accountId is not serialised by this account's lock at all, and
+ * without a single critical section here two concurrent claims for the same
+ * supabaseUserId could both pass an index check that reads stale, each winning
+ * one race and losing the other -- an index file pointing at an account whose
+ * own `supabaseUserId` field says something else. One lock, held across both
+ * writes, is what rules that out.
+ */
+export async function claimAccount({ root = REPO_ROOT, accountId, supabaseUserId, nowImpl = defaultNow }) {
+  const file = supabaseIndexPath(root, supabaseUserId);
+  if (!file) throw new TypeError('claimAccount needs a well-formed supabaseUserId');
+
+  return withAccountLock({ root, accountId }, () => {
+    if (!tryExclusiveCreateText(file, accountId)) {
+      // Already claimed. If it is this same account re-claiming its own
+      // identity -- an OAuth callback retried, say -- that is not a conflict
+      // and must not throw away a password this account no longer has reason
+      // to need twice. Any other owner is a genuine conflict.
+      let existing;
+      try { existing = fs.readFileSync(file, 'utf8').trim(); } catch { existing = null; }
+      if (existing !== accountId) {
+        throw new AuthError(`a different account already claims supabase id ${supabaseUserId}`, {
+          code: 'SUPABASE_ID_TAKEN',
+          accountId,
+        });
+      }
+    }
+
+    const fresh = loadAccount({ root, accountId, nowImpl });
+    fresh.supabaseUserId = String(supabaseUserId);
+    fresh.password = null;
+    saveAccount(fresh);
+    return fresh;
+  });
 }
 
 /**
