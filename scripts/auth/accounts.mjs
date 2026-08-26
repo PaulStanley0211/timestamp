@@ -1277,6 +1277,19 @@ export function loadAccount({ root = REPO_ROOT, accountId, nowImpl = defaultNow 
       code: 'ACCOUNT_ID_MISMATCH', accountId,
     });
   }
+  // AN ABSENT `supabaseUserId` IS "UNCLAIMED", AND SAYING SO HERE IS THE WHOLE
+  // FIX. The field was added to `createAccount` without bumping
+  // `SCHEMA_VERSION` -- reasonably, since nothing about the existing fields
+  // changed -- so a record written before it still loads as valid and simply
+  // has no such key. It then read back `undefined`, and `claimAccount`'s guard
+  // is spelled `!== null`, which `undefined` fails: every account predating
+  // the identity slice was PERMANENTLY UNCLAIMABLE, refused as a takeover of
+  // an identity it had never had. Found 2026-08-27 by the owner typing a
+  // correct code and being told it was wrong, with six such records live.
+  // Normalising on the way out means one shape for every reader --
+  // `claimAccount`, `identity.mjs` and anything later -- instead of each
+  // remembering that `undefined` and `null` mean the same thing here.
+  if (record.supabaseUserId === undefined) record.supabaseUserId = null;
   return attach(record, { root, nowImpl });
 }
 

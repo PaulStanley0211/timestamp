@@ -730,6 +730,68 @@ test('an account can be claimed by a supabase id, and the password dies with the
   assert.equal(found.accountId, made.accountId);
 });
 
+// --------------------------------------------------------------------------
+// ACCOUNTS WRITTEN BEFORE `supabaseUserId` EXISTED
+//
+// The field was added to `createAccount` WITHOUT bumping `SCHEMA_VERSION`, so
+// a record written by the older code still loads as valid -- it simply has no
+// such key, and reads back `undefined` rather than `null`. `claimAccount`
+// guarded with `!== null`, which `undefined` fails, so every account that
+// predates the identity slice was PERMANENTLY UNCLAIMABLE: the guard fired on
+// a conflict that did not exist, `resolveIdentity` threw, and `/verify` failed
+// closed with the same sentence a wrong code gets. Six such records were in
+// the live store on 2026-08-27, including the owner's, and the symptom was a
+// person typing a correct code and being told it was wrong forever.
+// --------------------------------------------------------------------------
+
+test('an account written before supabaseUserId existed is unclaimed, not conflicted', async (t) => {
+  const root = makeRoot(t);
+  const made = await signUp(root, { email: 'legacy@example.com' });
+
+  // Exactly what the older `createAccount` left on disk: same schemaVersion,
+  // no `supabaseUserId` key at all.
+  const { record } = accountPaths(root, made.accountId);
+  const onDisk = JSON.parse(fs.readFileSync(record, 'utf8'));
+  delete onDisk.supabaseUserId;
+  fs.writeFileSync(record, JSON.stringify(onDisk, null, 2), 'utf8');
+  assert.ok(!('supabaseUserId' in JSON.parse(fs.readFileSync(record, 'utf8'))),
+    'precondition: the key is absent, not null');
+
+  const claimed = await claimAccount({ root, accountId: made.accountId, supabaseUserId: 'uuid-legacy' });
+  assert.equal(claimed.supabaseUserId, 'uuid-legacy');
+  assert.equal(claimed.password, null);
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId: 'uuid-legacy' }).accountId, made.accountId);
+});
+
+test('loadAccount reads a missing supabaseUserId as null, so every reader sees one shape', async (t) => {
+  const root = makeRoot(t);
+  const made = await signUp(root, { email: 'shape@example.com' });
+  const { record } = accountPaths(root, made.accountId);
+  const onDisk = JSON.parse(fs.readFileSync(record, 'utf8'));
+  delete onDisk.supabaseUserId;
+  fs.writeFileSync(record, JSON.stringify(onDisk, null, 2), 'utf8');
+
+  const loaded = loadAccount({ root, accountId: made.accountId });
+  assert.equal(loaded.supabaseUserId, null, 'absent must read as unclaimed, not as undefined');
+});
+
+test('a genuine rebind is still refused on an account that predates the field', async (t) => {
+  // The guard must not be loosened into uselessness: once an old record HAS
+  // been claimed, a second, different id is still the takeover this refuses.
+  const root = makeRoot(t);
+  const made = await signUp(root, { email: 'rebind@example.com' });
+  const { record } = accountPaths(root, made.accountId);
+  const onDisk = JSON.parse(fs.readFileSync(record, 'utf8'));
+  delete onDisk.supabaseUserId;
+  fs.writeFileSync(record, JSON.stringify(onDisk, null, 2), 'utf8');
+
+  await claimAccount({ root, accountId: made.accountId, supabaseUserId: 'uuid-first' });
+  await assert.rejects(
+    () => claimAccount({ root, accountId: made.accountId, supabaseUserId: 'uuid-second' }),
+    (err) => err instanceof AuthError && err.code === 'SUPABASE_ID_TAKEN',
+  );
+});
+
 test('claiming preserves the ledger exactly', async (t) => {
   const root = makeRoot(t);
   const made = await signUp(root, { email: 'ledger@example.com' });
