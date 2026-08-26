@@ -23,6 +23,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import { createServer, safeNext, AUTH_RATE_LIMITS } from '../scripts/web/server.mjs';
+import { SupabaseAuthError } from '../scripts/auth/supabase-auth.mjs';
 import { ROUTES, PUBLIC_ROUTES, isPublicRoute } from '../scripts/web/router.mjs';
 import {
   createSessions, parseCookies, serializeCookie, isSecureRequest,
@@ -223,6 +224,32 @@ function fakeAuth() {
   };
 }
 
+/**
+ * `signup` (task 8) now asks Supabase before parking anything, so a server
+ * built here needs a `supabase` even though this file's own subject is the
+ * local `scripts/auth/` surface above, not identity. This is the smallest
+ * thing that satisfies `sb.signUp` -- it is not `createSupabaseAuth`, and it
+ * never touches a network; that shape is covered end to end, transport and
+ * all, in `test/web-auth-code.test.js`.
+ *
+ * `taken` names addresses this fake treats as already registered, so a test
+ * can reproduce the one upstream shape that matters here -- Supabase refusing
+ * a taken address -- without standing up the real HTTPS transport for it.
+ */
+function fakeSupabaseIdentity({ taken = new Set() } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async signUp({ email, password, clientIp }) {
+      calls.push({ email, password, clientIp });
+      if (taken.has(String(email).toLowerCase())) {
+        throw new SupabaseAuthError('User already registered', { status: 422, code: 'user_already_exists' });
+      }
+      return { pending: true };
+    },
+  };
+}
+
 function multipart(parts) {
   const chunks = [];
   for (const p of parts) {
@@ -272,10 +299,13 @@ async function signIn(base, email, password) {
   return res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
 }
 
-async function withApp(run, { auth = fakeAuth(), queue = fakeQueue(), sessions = null, nowImpl = null, trustProxy = undefined } = {}) {
+async function withApp(run, {
+  auth = fakeAuth(), queue = fakeQueue(), sessions = null, nowImpl = null, trustProxy = undefined,
+  supabase = fakeSupabaseIdentity(),
+} = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-auth-'));
   const app = createServer({
-    root, cfg: CFG, queue, port: 0, auth: sessions ? null : auth, sessions,
+    root, cfg: CFG, queue, port: 0, auth: sessions ? null : auth, sessions, supabase,
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
     logImpl: () => {},
     ...(nowImpl ? { nowImpl } : {}),
@@ -283,7 +313,7 @@ async function withApp(run, { auth = fakeAuth(), queue = fakeQueue(), sessions =
   });
   const port = await app.listen();
   try {
-    await run({ base: `http://127.0.0.1:${port}`, root, app, auth, queue });
+    await run({ base: `http://127.0.0.1:${port}`, root, app, auth, queue, supabase });
   } finally {
     await app.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -455,8 +485,17 @@ test('the public pages answer without a session', async () => {
 // sign up, sign in, sign out
 // ---------------------------------------------------------------------------
 
-test('signing up creates the account, starts a session and lands on the shelf', async () => {
-  await withApp(async ({ base, auth }) => {
+/**
+ * Task 8 (2026-08-26): signup no longer creates a local account or a session.
+ * It asks Supabase to create the user, parks the consent record, and sends
+ * the person to `/verify` to type the code that proves the mailbox -- that is
+ * where the account is actually born (task 7). This test used to assert the
+ * account existed and a session cookie came back at this step; both are now
+ * wrong, on purpose, and are replaced below with the contract that succeeded
+ * it.
+ */
+test('signing up asks Supabase, parks the consent, and sends the person to verify -- no account and no session yet', async () => {
+  await withApp(async ({ base, auth, supabase }) => {
     const pair = await csrfPair(base, '/signup');
     const res = await fetch(`${base}/signup`, {
       method: 'POST',
@@ -465,12 +504,12 @@ test('signing up creates the account, starts a session and lands on the shelf', 
       redirect: 'manual',
     });
     assert.equal(res.status, 303);
-    assert.equal(res.headers.get('location'), '/');
-    assert.ok(auth.findAccountByEmail({ email: 'new@example.com' }), 'the account was not created');
-
-    const cookie = res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
-    const home = await fetch(`${base}/`, { headers: { cookie } });
-    assert.equal(home.status, 200);
+    assert.equal(res.headers.get('location'), '/verify?email=new%40example.com');
+    assert.deepEqual(res.headers.getSetCookie(), [], 'nobody is signed in until the mailbox is proved');
+    assert.equal(auth.findAccountByEmail({ email: 'new@example.com' }), null,
+      'an account must not exist before the code is confirmed');
+    assert.equal(supabase.calls.length, 1, 'Supabase was never asked to create the user');
+    assert.equal(supabase.calls[0].email, 'new@example.com');
   });
 });
 
@@ -494,18 +533,34 @@ test('sign-up refuses a bad address, a short password and a missing consent', as
   });
 });
 
-test('a duplicate email is refused in the words of the auth module', async () => {
+/**
+ * Task 8, replacing the test above: a taken address used to be refused here,
+ * in these words, at 400 -- and that was the oracle. Supabase answers
+ * `user_already_exists` for a taken address unless phone confirmation is also
+ * on (it is not, on this project), so passing that refusal on would let
+ * anybody test an address for an existing account. Now both branches render
+ * the same page; the byte-identical version of this test, against the real
+ * `createSupabaseAuth` transport, lives in `test/web-auth-code.test.js`. This
+ * one keeps the local-`scripts/auth/`-shaped angle: no wording about an
+ * existing account ever reaches the response, and no local account is
+ * created by the taken-address attempt either.
+ */
+test('an address Supabase already has answers exactly like a fresh one -- no wording, no 400', async () => {
+  const supabase = fakeSupabaseIdentity({ taken: new Set(['taken@example.com']) });
   await withApp(async ({ base, auth }) => {
-    auth.createAccount({ email: 'taken@example.com', password: 'a long enough password' });
     const pair = await csrfPair(base, '/signup');
     const res = await fetch(`${base}/signup`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
       body: new URLSearchParams({ email: 'taken@example.com', password: 'another long one', consent: 'yes', csrf: pair.csrf }),
+      redirect: 'manual',
     });
-    assert.equal(res.status, 400);
-    assert.ok((await res.text()).includes('That email already has an account.'));
-  });
+    assert.equal(res.status, 303, 'a taken address must not be a 400 any more');
+    assert.equal(res.headers.get('location'), '/verify?email=taken%40example.com');
+    const body = await res.text();
+    assert.ok(!body.toLowerCase().includes('already'), 'the old wording leaked back in');
+    assert.equal(auth.accounts.size, 0, 'signup must not create a local account, taken address or not');
+  }, { supabase });
 });
 
 /**
@@ -608,19 +663,24 @@ test('the login window closes, and a genuine sign-in works again', async () => {
   }, { nowImpl: () => new Date(nowMs) });
 });
 
-/** Accounts are what the free grant is spent on, so creating them from a script
- *  must cost something. The refusal happens before the handler runs: nothing is
- *  written, and the account count proves it. */
-test('signup attempts from one address are bounded, and no account is created past the bound', async () => {
-  await withApp(async ({ base, auth }) => {
+/**
+ * Since task 8, signup never creates a local account at all -- the account is
+ * born at `/verify`, minutes or days later. What "the refusal happens before
+ * the handler runs" means now is that Supabase is never even ASKED past the
+ * bound, which is why the assertion moved from `auth.accounts.size` (always
+ * zero here) to the fake Supabase's own call count.
+ */
+test('signup attempts from one address are bounded, and Supabase is never asked past the bound', async () => {
+  await withApp(async ({ base, auth, supabase }) => {
     const pair = await csrfPair(base, '/signup');
     for (let i = 0; i < AUTH_RATE_LIMITS.signup.max; i += 1) {
-      assert.equal((await signup(base, `fresh-${i}@example.com`, { pair })).status, 201, `signup ${i + 1} is ordinary`);
+      assert.equal((await signup(base, `fresh-${i}@example.com`, { pair })).status, 202, `signup ${i + 1} is ordinary`);
     }
     const over = await signup(base, 'one-too-many@example.com', { pair });
     assert.equal(over.status, 429);
     assert.match(over.headers.get('retry-after') ?? '', /^[0-9]+$/);
-    assert.equal(auth.accounts.size, AUTH_RATE_LIMITS.signup.max, 'an account was created past the refusal');
+    assert.equal(supabase.calls.length, AUTH_RATE_LIMITS.signup.max, 'Supabase was asked past the refusal');
+    assert.equal(auth.accounts.size, 0, 'signup must never create a local account directly');
   });
 });
 

@@ -1587,6 +1587,7 @@ export function createServer({
     },
 
     async signup(req, res) {
+      if (!sb) return identityUnavailable(req, res);
       if (refuseOverLimit(req, res, 'signup', (opts) => signupPage({ ...opts, consentText }))) return undefined;
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'signup');
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
@@ -1622,21 +1623,39 @@ export function createServer({
         return reject('Please confirm the statement before creating an account.');
       }
 
-      const mod = await auths.api();
-      let account;
+      // FROM HERE THE TWO OUTCOMES -- A FRESH ADDRESS AND ONE THAT ALREADY HAS
+      // AN ACCOUNT -- MUST RENDER THE SAME PAGE. Supabase answers a taken
+      // address with `user_already_exists` / 422 unless BOTH email and phone
+      // confirmation are on, and this project has phone confirmation OFF
+      // (verified against the live project 2026-08-26), so it takes the
+      // leaking path. Closing that by adopting SMS would mean paying Twilio to
+      // hide a string Supabase already tells us not to repeat. So the upstream
+      // answer is asked for, logged, and THROWN AWAY -- deliberately, and this
+      // comment is why: whatever Supabase said, signup below still parks the
+      // consent and sends the person to `/verify`, which is the only place
+      // that finds out which branch actually happened. Spec §4.4.
       try {
-        account = await mod.createAccount({ root, email, password });
+        await sb.signUp({ email, password, clientIp: clientIpOf(req) });
       } catch (err) {
-        // `AuthError` carries `.userMessage` by contract; anything else is ours
-        // and gets a sentence rather than a stack trace.
-        const message = err?.userMessage ?? 'That account could not be created.';
-        logImpl(`[web] signup failed: ${err?.stack ?? err}`);
-        return reject(message);
+        // `SupabaseAuthError` carries `.code` (the raw `error_code`), `.status`
+        // and `.message` -- none of the three may reach the response, or the
+        // "same page either way" guarantee above is just a comment. The log
+        // is the only place any of it goes.
+        logImpl(`[web] signup upstream: ${err?.message ?? err}`);
       }
 
-      const cookie = await auths.startSession(req, account.accountId);
-      if (wantsHtml(req)) return redirect(res, next || '/', 303, { 'Set-Cookie': cookie });
-      return sendJson(req, res, 201, { accountId: account.accountId }, { 'Set-Cookie': cookie });
+      // Parked BEFORE the redirect, so a code typed a moment later finds it:
+      // `/verify` reads this same file via `takePending`. Consent never goes
+      // to Supabase -- it is an agreement with this service, not proof of a
+      // mailbox -- so it is recorded here regardless of what Supabase said.
+      const ident = await identityApi();
+      ident.putPending({
+        root, email, consent: recordConsent({ granted: true, text: consentText, nowImpl }), nowImpl,
+      });
+
+      const to = `/verify?email=${encodeURIComponent(email)}`;
+      if (wantsHtml(req)) return redirect(res, to, 303);
+      return sendJson(req, res, 202, { next: to });
     },
 
     /** Destroys the server-side record as well as the cookie. That is the whole

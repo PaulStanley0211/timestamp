@@ -49,7 +49,8 @@ import { createSupabaseAuth } from '../scripts/auth/supabase-auth.mjs';
 import { listAccounts, loadAccount } from '../scripts/auth/accounts.mjs';
 import { balanceOf } from '../scripts/auth/credits.mjs';
 import { signCookie, SESSIONS_DIR, SECRET_FILE } from '../scripts/auth/session.mjs';
-import { putPending } from '../scripts/auth/pending-signup.mjs';
+import { putPending, takePending } from '../scripts/auth/pending-signup.mjs';
+import { CONSENT_TEXT } from '../scripts/safety/consent.mjs';
 
 const CFG = JSON.parse(fs.readFileSync(new URL('../config/render.json', import.meta.url), 'utf8'));
 
@@ -619,4 +620,98 @@ test('a JSON client is told the same thing in its own dialect', async (t) => {
   const payload = await res.json();
   assert.equal(payload.error.status, 503);
   assert.equal(typeof payload.error.message, 'string');
+});
+
+// ---------------------------------------------------------------------------
+// task 8 -- signup goes to Supabase, and stops confirming who exists
+// ---------------------------------------------------------------------------
+
+/**
+ * `startWithFakeSupabase` defaults to a pending consent already parked for
+ * `TEST_EMAIL` -- correct for the `/verify` tests above, which start midway
+ * through the flow, and wrong here: signup is what does the parking, so a
+ * test of signup must start with nothing parked or it cannot tell its own
+ * write from the fixture's.
+ *
+ * `password` is a fixed 24 characters, comfortably past the 10-character
+ * floor `signup` still enforces unchanged.
+ */
+async function signupThrough(t, { upstream = 'ok', email = TEST_EMAIL, password = 'a genuinely long password' } = {}) {
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {
+    pendingConsent: null,
+    failWith: upstream === 'ok' ? null : upstream,
+  });
+  const res = await postForm(`${base}/signup`, { email, password, consent: 'on', csrf }, cookie);
+  return shapeOf(res);
+}
+
+test('signup for an address that already exists is indistinguishable from a new one', async (t) => {
+  // Supabase answers `user_already_exists` / 422 for a taken address unless
+  // BOTH email and phone confirmation are on; this project has phone off
+  // (verified against the live project 2026-08-26), so it takes the leaking
+  // path. Closing it by adopting SMS would mean paying Twilio to hide a
+  // string, so this handler renders the same page either way -- and this is
+  // the test that proves it does.
+  const fresh = await signupThrough(t, { upstream: 'ok' });
+  const taken = await signupThrough(t, { upstream: 'user-already-registered' });
+  assert.equal(fresh.status, taken.status);
+  assert.equal(fresh.location, taken.location);
+  assert.equal(fresh.body, taken.body, 'Supabase leaks it; we must not pass it on');
+  assert.equal(fresh.contentType, taken.contentType);
+});
+
+test('signup parks the consent and mints no session', async (t) => {
+  const res = await signupThrough(t, { upstream: 'ok' });
+  assert.equal(res.status, 303);
+  assert.match(res.location, /^\/verify\?email=/);
+  assert.ok(!res.setCookie, 'nobody is signed in until the mailbox is proved');
+});
+
+test('the parked consent is exactly what takePending later hands to resolveIdentity', async (t) => {
+  const { base, csrf, cookie, root } = await startWithFakeSupabase(t, { pendingConsent: null });
+  const res = await postForm(`${base}/signup`, { email: TEST_EMAIL, password: 'a genuinely long password', consent: 'on', csrf }, cookie);
+  assert.equal(res.status, 303);
+  const parked = takePending({ root, email: TEST_EMAIL });
+  assert.ok(parked, 'signup did not park a consent record for /verify to find');
+  assert.equal(parked.consent.granted, true);
+  assert.equal(parked.consent.text, CONSENT_TEXT);
+});
+
+test('nothing SupabaseAuthError carries reaches the signup response, upstream failure or not', async (t) => {
+  for (const kind of ['user-already-registered', 'over_request_rate_limit', 'boom']) {
+    const res = await signupThrough(t, { upstream: kind });
+    assert.equal(res.status, 303, `signup must answer the same way whatever ${kind} was upstream`);
+    for (const leak of ['user_already_exists', 'over_request_rate_limit', 'error_code', 'SupabaseAuthError', 'supabase']) {
+      assert.ok(!res.body.toLowerCase().includes(leak.toLowerCase()), `${kind} leaked ${leak} onto the page`);
+    }
+    assert.ok(!/\b(422|429|500)\b/.test(res.body), `${kind} leaked an upstream status onto the page`);
+  }
+});
+
+test('a signup post that cannot prove it came from this form is refused, and Supabase is never asked', async (t) => {
+  const { base, cookie, calls } = await startWithFakeSupabase(t, { pendingConsent: null });
+  const res = await postForm(`${base}/signup`, {
+    email: TEST_EMAIL, password: 'a genuinely long password', consent: 'on', csrf: 'not-a-token',
+  }, cookie);
+  assert.equal(res.status, 403);
+  assert.equal(calls.length, 0, 'the credential was looked at before Supabase was');
+});
+
+test('a JSON client is told 202 and the same next, whichever branch Supabase took', async (t) => {
+  const shapes = [];
+  for (const upstream of ['ok', 'user-already-registered']) {
+    const { base, csrf, cookie } = await startWithFakeSupabase(t, {
+      pendingConsent: null,
+      failWith: upstream === 'ok' ? null : upstream,
+    });
+    const res = await postForm(`${base}/signup`,
+      { email: TEST_EMAIL, password: 'a genuinely long password', consent: 'on', csrf }, cookie,
+      { accept: 'application/json' });
+    shapes.push(await shapeOf(res));
+  }
+  for (const shape of shapes) {
+    assert.equal(shape.status, 202);
+    assert.deepEqual(JSON.parse(shape.body), { next: `/verify?email=${encodeURIComponent(TEST_EMAIL)}` });
+  }
+  assert.equal(shapes[0].body, shapes[1].body);
 });
