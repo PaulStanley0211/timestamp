@@ -67,6 +67,16 @@ export const ROUTES = Object.freeze([
   { method: 'POST', pattern: '/logout', name: 'logout' },
   { method: 'GET', pattern: '/pricing', name: 'pricingPage' },
 
+  // --- confirming a mailbox with a six-digit code (spec §3, §4.5) ---------
+  // NOT behind a session, and deliberately. Signup mints nobody; the account
+  // does not exist until the code is typed, so a gate here would be a gate on
+  // a session that cannot exist yet. What proves anything on these three
+  // routes is possession of the CODE, which is why `/verify` is safe to
+  // bookmark and safe to reach after the tab that started it was closed.
+  { method: 'GET', pattern: '/verify', name: 'verifyPage' },
+  { method: 'POST', pattern: '/verify', name: 'verifyCode' },
+  { method: 'POST', pattern: '/verify/resend', name: 'verifyResend' },
+
   // --- money (docs/superpowers/specs/2026-08-24-credit-packs-pricing-design.md)
   // The browser posts a PACK ID and nothing else. Everything priced is resolved
   // on the server against config/credits.json; there is no route here that
@@ -114,6 +124,10 @@ export const ROUTES = Object.freeze([
 export const PUBLIC_ROUTES = Object.freeze(new Set([
   'stylesheet', 'font', 'favicon', 'placeImage',
   'loginPage', 'login', 'signupPage', 'signup', 'logout',
+  // The code-entry flow. See the comment beside these rows in ROUTES: the
+  // account they end in does not exist until they succeed, so requiring a
+  // session would make the flow unreachable rather than safe.
+  'verifyPage', 'verifyCode', 'verifyResend',
   'pricingPage',
   // PUBLIC SINCE 2026-08-21, AND IT IS THE ONE ENTRY HERE THAT SERVES TWO
   // DIFFERENT PAGES. `/` used to 303 a signed-out visitor to `/login`, which

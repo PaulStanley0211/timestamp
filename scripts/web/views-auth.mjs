@@ -132,6 +132,98 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
 }
 
 /**
+ * `/verify` -- where a mailbox is proved with a six-digit code.
+ *
+ * WHY THE ADDRESS IS ON THE PAGE. The code went to a mailbox and the person
+ * has to know which one, because the commonest reason this flow strands
+ * somebody is a typo they cannot see. It arrives as a query parameter and is
+ * escaped like everything else; the parameter is not a credential and holding
+ * the URL proves nothing, which is the whole reason this page is reachable
+ * without a session.
+ *
+ * WHY THE FIELD CARRIES `inputmode`, `autocomplete` AND `maxlength`.
+ * `inputmode="numeric"` is a numeric keypad on a phone rather than a full
+ * keyboard; `autocomplete="one-time-code"` is what lets iOS and Android offer
+ * the code straight off the notification, which is the difference between
+ * typing six digits and switching apps to read them; `maxlength="6"` stops a
+ * paste with a trailing space or a stray digit from being sent as a wrong
+ * answer that spends one of five. `pattern` and `required` keep an empty
+ * submit from costing an attempt at all.
+ *
+ * WHY THE RESEND CONTROL STATES THE RULE INSTEAD OF FAILING SILENTLY. Supabase
+ * permits one code request per address per sixty seconds and a code lasts an
+ * hour. A button that quietly does nothing for a minute is indistinguishable
+ * from a broken button, and the person's next move is to click it eight more
+ * times. It also says out loud that the password will be asked for again --
+ * this service does not keep it, which is a property worth stating rather than
+ * apologising for.
+ */
+export function verifyPage({ email = '', error = null, notice = null, csrf = '' } = {}) {
+  const body = `
+<main>
+  <section class="panel">
+    <p class="eyebrow">Check your email</p>
+    <h1 class="headline">Type the six digits</h1>
+    <p class="sub">We sent a six-digit code to <strong>${h(email)}</strong>. It lasts an hour.
+    Nobody is signed in until it is typed.</p>
+
+    ${notice ? `<p class="notice">${h(notice)}</p>` : ''}
+    ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
+
+    <form method="post" action="/verify">
+      ${csrfField(csrf)}
+      <input type="hidden" name="email" value="${h(email)}">
+      <div class="field">
+        <label for="code">Confirmation code</label>
+        <input type="text" id="code" name="code" value=""
+               inputmode="numeric" autocomplete="one-time-code" maxlength="6"
+               pattern="[0-9]{6}" spellcheck="false" required>
+      </div>
+      <button type="submit" class="record">Confirm</button>
+    </form>
+
+    <form method="post" action="/verify/resend">
+      ${csrfField(csrf)}
+      <input type="hidden" name="email" value="${h(email)}">
+      <p class="hint">No code? One can be sent per address every 60 seconds. You will be
+      asked for your password again — this site does not keep it.</p>
+      <button type="submit" class="quiet">Send a new code</button>
+    </form>
+
+    <p class="actions"><a class="quiet" href="/login">Already confirmed? Sign in.</a></p>
+  </section>
+</main>
+`;
+  return layout({ title: 'Timestamp - confirm your email', body, bodyClass: 'page-verify', wrapClass: 'wrap--narrow', chrome: false });
+}
+
+/**
+ * Shown when this build has no Supabase configuration.
+ *
+ * SEPARATE FROM `authUnavailablePage` BECAUSE THE CAUSE IS DIFFERENT AND SO IS
+ * THE FIX. That one means `scripts/auth/` is not on disk; this one means the
+ * three `SUPABASE_*` values are not in the environment, and the app is
+ * otherwise perfectly healthy -- the shelf, the stylesheet and the plans all
+ * still serve. One sentence, and the name of the thing that is missing, so
+ * whoever hits it is not reading server logs for an afternoon.
+ */
+export function identityUnavailablePage() {
+  const body = `
+<main>
+  <section class="panel">
+    <p class="eyebrow">503</p>
+    <h1 class="headline">Sign-in is not available right now</h1>
+    <p class="sub">This build has no identity provider configured, so there is nothing to
+    confirm a code or a password against. An operator sets <code>SUPABASE_URL</code>,
+    <code>SUPABASE_PUBLISHABLE_KEY</code> and <code>SUPABASE_SECRET_KEY</code>; everything
+    else on the site keeps working.</p>
+  </section>
+</main>
+`;
+  return layout({ title: 'Timestamp - 503', body, bodyClass: 'page-error', chrome: false });
+}
+
+/**
  * `/pricing`. Public, so it renders for a signed-out visitor too; `currentPlan`
  * is simply null for them and nothing is marked.
  *

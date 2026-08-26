@@ -89,7 +89,9 @@ import { aspectIds } from '../tapedeck/frame.mjs';
 import {
   homePage, landingPage, statusPage, selectPage, resultPage, errorPage, INLINE_SCRIPT_HASHES,
 } from './views.mjs';
-import { loginPage, signupPage, pricingPage, authUnavailablePage } from './views-auth.mjs';
+import {
+  loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
+} from './views-auth.mjs';
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
 import { createBilling } from '../billing/billing.mjs';
@@ -154,7 +156,7 @@ const NO_SESSION_ROUTES = new Set([
 const AUTH_OPTIONAL_ROUTES = new Set(['pricingPage', 'homePage']);
 
 /**
- * How often one address may knock on the two public credential routes.
+ * How often one address may knock on the public credential routes.
  *
  * Login is bounded per minute: a person mistypes a password three or four
  * times; only a script needs eleven tries in sixty seconds, and every try
@@ -168,7 +170,200 @@ const AUTH_OPTIONAL_ROUTES = new Set(['pricingPage', 'homePage']);
 export const AUTH_RATE_LIMITS = Object.freeze({
   login: Object.freeze({ max: 10, windowMs: 60_000 }),
   signup: Object.freeze({ max: 10, windowMs: 3_600_000 }),
+  // Spec §4.5. Per IP; the per-code and per-address bounds are separate and
+  // stricter, because an IP is cheap and a code must die at five. This one
+  // exists to stop somebody cycling ADDRESSES -- which the per-address bound
+  // cannot see, because each address is on its first attempt.
+  verify: Object.freeze({ max: 20, windowMs: 3_600_000 }),
+  reset: Object.freeze({ max: 5, windowMs: 3_600_000 }),
 });
+
+/**
+ * Wrong answers before a code is dead rather than throttled. Spec §4.5.
+ *
+ * A six-digit code is one million values with an hour to live, and a script
+ * making a few hundred guesses a second walks that space inside the window.
+ * Nothing else about the code flow is a control; this number is the whole of
+ * it, which is why it is a named export the tests read rather than a literal
+ * five somewhere in a handler.
+ */
+export const CODE_MAX_ATTEMPTS = 5;
+
+/**
+ * How long a dead code's address stays dead. Spec §4.5's per-address bound.
+ *
+ * Equal to the code's own life, so a person who exhausts their guesses waits
+ * exactly as long as the code they were guessing at would have lasted, and an
+ * attacker gets five guesses per code rather than five per code plus five more
+ * for every resend they can trigger.
+ */
+export const CODE_COOLOFF_MS = 60 * 60 * 1000;
+
+/** Where the per-address attempt counters live, under the data root. */
+export const VERIFY_ATTEMPTS_DIR = 'out/verify-attempts';
+
+/**
+ * The one sentence a refused code gets, whatever actually happened.
+ *
+ * A CONSTANT, NEVER DERIVED FROM THE ERROR, and that is the entire point.
+ * Supabase distinguishes a wrong code, an expired code and an address that
+ * never signed up; rendering any of those tells a stranger whether the address
+ * they typed is real, on a service that stores photographs of people's faces.
+ * Spec §4.3 and §4.5. `SupabaseAuthError.userMessage` carries the same
+ * guarantee but says "email and password", which is the wrong sentence in
+ * front of a six-digit field -- so this is its sibling for this page and not a
+ * second policy.
+ */
+export const CODE_REFUSED_MESSAGE = 'That code is not right, or it has expired. Ask for a new one below.';
+
+/** What a dead code says. Distinct from the refusal above and free to be,
+ *  because it discloses nothing a caller does not already know: they made the
+ *  attempts themselves, and an address that never signed up reaches this
+ *  message on exactly the same schedule as one that did. */
+export const CODE_EXHAUSTED_MESSAGE = 'Too many attempts on that code. Ask for a new one in an hour.';
+
+/** One shape check for an address, used by every route that takes one, so the
+ *  two cannot drift into disagreeing about what an address is. */
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const isAddressShaped = (email) => EMAIL_SHAPE.test(email) && email.length <= 254;
+
+/**
+ * The attempt counter, keyed on the hash of the address.
+ *
+ * WHY A FILE AND NOT A MAP. The counter must survive the restart an attacker
+ * can provoke, and it is the only thing standing between a six-digit secret
+ * and a script. `rate-limit.mjs` is in memory on purpose -- forgetting its
+ * counters costs one window of patience -- and forgetting these would hand
+ * back the entire guess budget.
+ *
+ * WHY KEYED ON `emailHash` AND NOT THE ADDRESS. The same reason `accounts.mjs`
+ * and `pending-signup.mjs` hash theirs: a directory named after the addresses
+ * currently mid-signup is a list of them, readable by filename alone. It also
+ * closes the casing bypass for free, because `emailHash` normalises before it
+ * hashes, so `A@B.com` and ` a@b.COM ` spend the same five guesses.
+ */
+function attemptFile(root, hash) {
+  // `emailHash` always returns 64 lowercase hex characters. The regex is here
+  // for the same reason `pending-signup.mjs` has one: a filename built from
+  // anything other than a validated shape is a path a future caller could feed
+  // something unexpected into.
+  if (!/^[0-9a-f]{64}$/.test(String(hash ?? ''))) return null;
+  return path.join(root, VERIFY_ATTEMPTS_DIR, `${hash}.json`);
+}
+
+/**
+ * Spend one of the five, and say whether there was one to spend.
+ *
+ * COUNTED BEFORE THE UPSTREAM CALL, NEVER AFTER. Counting on the way back
+ * means a crash, a timeout or a killed process resets the count, and an
+ * attacker who can provoke any of those has an unlimited retry budget. It also
+ * means a dead code costs no upstream request, so this endpoint cannot be used
+ * as a free relay against Supabase's own limiter.
+ *
+ * THE READ-MODIFY-WRITE IS SYNCHRONOUS ON PURPOSE. There is no `await` between
+ * the read and the write, so two concurrent requests in this process cannot
+ * interleave and both see four. Across two processes sharing one root it is
+ * not atomic; that is named in the task report rather than pretended away, and
+ * the per-IP limiter in front bounds what such a race could be worth.
+ *
+ * @returns {{allowed: boolean, attempts: number}}
+ */
+export function chargeCodeAttempt({ root, hash, nowImpl = () => new Date() }) {
+  const file = attemptFile(root, hash);
+  // An unusable key cannot be counted against, so it is refused rather than
+  // waved through: the alternative is an uncounted lane.
+  if (!file) return { allowed: false, attempts: CODE_MAX_ATTEMPTS };
+
+  const nowMs = nowImpl().getTime();
+  let row = null;
+  let corrupt = false;
+  try {
+    row = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (err) {
+    // ENOENT is "nobody has tried yet" and is the ordinary first attempt.
+    // Anything else is a file that exists and cannot be read, and a counter
+    // that cannot be read must FAIL CLOSED -- a torn write that reads back as
+    // zero attempts is five free guesses. It is rewritten as exhausted so the
+    // cool-off applies and the address heals itself in an hour rather than
+    // being locked out of the flow permanently.
+    if (err?.code !== 'ENOENT') corrupt = true;
+    row = null;
+  }
+
+  const firstMs = Date.parse(row?.firstAt ?? '');
+  const live = Number.isFinite(firstMs) && nowMs - firstMs < CODE_COOLOFF_MS;
+  // The window is anchored at the FIRST attempt and is never extended by a
+  // refusal. Extending it would let anybody keep a stranger's address locked
+  // out forever simply by continuing to knock.
+  const firstAt = live ? row.firstAt : new Date(nowMs).toISOString();
+  const attempts = corrupt
+    ? CODE_MAX_ATTEMPTS
+    : (live && Number.isInteger(row.attempts) ? row.attempts : 0);
+
+  if (attempts >= CODE_MAX_ATTEMPTS) {
+    if (corrupt) writeAttempts(file, { attempts: CODE_MAX_ATTEMPTS, firstAt });
+    return { allowed: false, attempts };
+  }
+  writeAttempts(file, { attempts: attempts + 1, firstAt });
+  return { allowed: true, attempts: attempts + 1 };
+}
+
+/** Temp-then-rename, so a process that dies mid-write leaves the old count
+ *  rather than a truncated file. `pending-signup.mjs` writes the same way. */
+function writeAttempts(file, row) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(row), 'utf8');
+  fs.renameSync(tmp, file);
+}
+
+/** Forget the attempts against one address. Called ONLY on a confirmed code:
+ *  a resend must not clear this, or five guesses plus a resend is ten. */
+export function clearCodeAttempts({ root, hash }) {
+  const file = attemptFile(root, hash);
+  if (!file) return;
+  try { fs.unlinkSync(file); } catch { /* nothing to clear */ }
+}
+
+/**
+ * Drop counters whose cool-off has passed.
+ *
+ * A counter is meaningless once its window has expired -- `chargeCodeAttempt`
+ * already ignores it -- so what is left is litter, one small file per address
+ * anybody ever typed here. Written to the same shape as `sweepPending` and
+ * `sweepOAuth`: returns how many it removed, survives a row disappearing
+ * underneath it, and treats an unreadable row as removable rather than as a
+ * reason to stop. Like both of those it is not yet called from anywhere; the
+ * three want wiring together, beside `sweepExpiredSessions`.
+ */
+export function sweepVerifyAttempts({ root, nowImpl = () => new Date() } = {}) {
+  const dir = path.join(root, VERIFY_ATTEMPTS_DIR);
+  let names;
+  try { names = fs.readdirSync(dir); } catch { return 0; }
+  const nowMs = nowImpl().getTime();
+  let removed = 0;
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    const file = path.join(dir, name);
+    let expired = true;
+    try {
+      const row = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const firstMs = Date.parse(row?.firstAt ?? '');
+      expired = !Number.isFinite(firstMs) || nowMs - firstMs >= CODE_COOLOFF_MS;
+    } catch (err) {
+      // A row that cannot be read cannot be trusted to bound anything, and
+      // `chargeCodeAttempt` rewrites it as exhausted on the next attempt, so
+      // removing it here loses nothing a caller was relying on.
+      if (err?.code === 'ENOENT') continue;
+    }
+    if (!expired) continue;
+    try {
+      fs.unlinkSync(file);
+      removed += 1;
+    } catch { /* somebody else's sweep, or a confirmation, got there first */ }
+  }
+  return removed;
+}
 
 /** How many tapes the shelf renders. A shelf is a page, not an archive dump. */
 const SHELF_LIMIT = 60;
@@ -397,6 +592,24 @@ export function createServer({
   auth = null,
   sessions = null,
   /**
+   * The Supabase Auth client -- `createSupabaseAuth` from
+   * `scripts/auth/supabase-auth.mjs`, already holding its transport.
+   *
+   * `null` BY DEFAULT, AND THE APP STILL BOOTS. The three `SUPABASE_*` values
+   * live in `.env`, which `npm test` deliberately does not load, so a server
+   * built by a test has no identity provider and must not need one. When it is
+   * absent the code-entry routes answer 503 with one sentence and every other
+   * route -- the landing page, the stylesheet, the shelf, the plans -- carries
+   * on exactly as before. That is the same shape as the `auth = null`
+   * degradation below and for the same reason: a missing configuration should
+   * cost the feature it configures and nothing else.
+   *
+   * `scripts/web/server-cli.mjs` is the one caller that builds a real one, for
+   * the reason CLAUDE.md's Bug 1 records -- a transport guard only guards if
+   * production actually injects somewhere.
+   */
+  supabase = null,
+  /**
    * Whether `x-forwarded-proto` decides the Secure attribute on cookies.
    *
    * OFF unless the operator says otherwise, because the header is whatever
@@ -440,17 +653,104 @@ export function createServer({
   const auths = sessions ?? createSessions({ root, auth, trustProxy });
 
   /**
+   * Whose request this is.
+   *
+   * THE SOCKET ADDRESS, AND A HEADER ONLY WHERE ONE IS ACTUALLY REWRITTEN.
+   * Exactly the argument `isSecureRequest` in `session.mjs` already makes
+   * about `x-forwarded-proto`: a header is whatever the client typed unless a
+   * proxy this deployment really has overwrote it. The value matters here
+   * because it travels to Supabase as `Sb-Forwarded-For`, which is what
+   * Supabase rate-limits a person on -- so believing the header by default
+   * would let any caller choose which bucket to spend, including somebody
+   * else's. `TIMESTAMP_TRUST_PROXY=1` is the same single switch, set by the
+   * operator on the day a TLS-terminating proxy exists and not before.
+   *
+   * THE LEFTMOST ENTRY IS THE CLIENT. `x-forwarded-for` grows to the right as
+   * each hop appends itself, so the first value is the original caller -- and
+   * behind a trusted proxy it is also the only one that proxy did not write.
+   *
+   * Tasks 8-11 call this for the same header on their own routes; it is one
+   * function so the trust decision cannot be made twice and differently.
+   */
+  function clientIpOf(req) {
+    const socketIp = req?.socket?.remoteAddress ?? null;
+    if (!trustProxy) return socketIp;
+    const header = req?.headers?.['x-forwarded-for'];
+    const first = String(Array.isArray(header) ? header[0] : header ?? '').split(',')[0].trim();
+    return first || socketIp;
+  }
+
+  /**
    * One limiter per credential route, keyed by the SOCKET address and never by
    * a header. `x-forwarded-for` is whatever the client typed, so keying on it
    * hands every script its own unlimited lane. Behind a proxy the socket
    * address collapses every visitor into one key, which throttles everybody
    * together -- the failure direction that costs patience rather than the
    * giveaway budget, until a proxy is actually part of the deployment.
+   *
+   * NOTE THAT THIS DOES NOT USE `clientIpOf` EVEN WHEN A PROXY IS TRUSTED.
+   * The two answer different questions: `clientIpOf` says who to attribute a
+   * request to upstream, and this says which socket is allowed to keep asking.
+   * A limiter keyed on a value the client can influence is a limiter with a
+   * bypass, and "the operator trusts the proxy" is a weaker claim than "this
+   * is the connection the bytes arrived on".
    */
   const limiters = {
     login: createRateLimiter({ ...AUTH_RATE_LIMITS.login, nowImpl }),
     signup: createRateLimiter({ ...AUTH_RATE_LIMITS.signup, nowImpl }),
+    verify: createRateLimiter({ ...AUTH_RATE_LIMITS.verify, nowImpl }),
   };
+
+  /** The Supabase client, or null. Named short because every identity handler
+   *  opens by asking whether it is there. */
+  const sb = supabase;
+
+  /**
+   * The identity modules, imported the same lazy way `scripts/auth/` is.
+   *
+   * A static import here would make the whole server fail to start when those
+   * files are absent, which is precisely the degradation `session-middleware`
+   * was built to avoid: a missing module should cost the routes that need it
+   * and leave the landing page, the stylesheet and the shelf serving.
+   */
+  let identityMods = null;
+  async function identityApi() {
+    if (!identityMods) {
+      const [identity, pending, accounts] = await Promise.all([
+        import('../auth/identity.mjs'),
+        import('../auth/pending-signup.mjs'),
+        import('../auth/accounts.mjs'),
+      ]);
+      identityMods = {
+        resolveIdentity: identity.resolveIdentity,
+        takePending: pending.takePending,
+        putPending: pending.putPending,
+        emailHash: accounts.emailHash,
+      };
+    }
+    return identityMods;
+  }
+
+  /**
+   * The 503 for a build with no identity provider configured.
+   *
+   * LOGGED ONCE, not once per request: an unconfigured deployment would
+   * otherwise fill a log with the same line, which is how the line stops being
+   * read. Same shape as the `scripts/auth/` degradation further down.
+   */
+  let identityGapLogged = false;
+  function identityUnavailable(req, res) {
+    if (!identityGapLogged) {
+      identityGapLogged = true;
+      logImpl('[web] no identity provider is configured (SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY / '
+        + 'SUPABASE_SECRET_KEY); the code-entry routes answer 503 and the rest of the app serves');
+    }
+    const message = 'Sign-in is not available right now.';
+    if (wantsHtml(req)) return sendHtml(req, res, 503, identityUnavailablePage());
+    return sendJson(req, res, 503, {
+      error: { status: 503, message, code: 'IDENTITY_UNAVAILABLE' },
+    });
+  }
 
   /**
    * A post that says where it came from must say here. Browsers put the
@@ -481,13 +781,22 @@ export function createServer({
     const { token, setCookie } = await auths.csrfIssue(req);
     const headers = setCookie ? { 'Set-Cookie': setCookie } : {};
     if (wantsHtml(req)) {
-      const page = which === 'login'
-        ? loginPage({ error: message, csrf: token, ...extras })
-        : signupPage({ error: message, csrf: token, consentText, ...extras });
+      let page;
+      if (which === 'login') page = loginPage({ error: message, csrf: token, ...extras });
+      else if (which === 'verify') page = verifyPage({ error: message, csrf: token, ...extras });
+      else page = signupPage({ error: message, csrf: token, consentText, ...extras });
       return sendHtml(req, res, 403, page, headers);
     }
     return sendJson(req, res, 403, { error: { status: 403, message, code: 'NOT_FROM_THIS_SITE' } }, headers);
   }
+
+  /** One sentence per limited route. A map rather than a chain of ternaries,
+   *  because the next route to join them should be a row and not a branch. */
+  const OVER_LIMIT_MESSAGES = Object.freeze({
+    login: 'Too many sign-in attempts from your connection. Please wait a minute and try again.',
+    signup: 'Too many new accounts from your connection. Please try again later.',
+    verify: 'Too many code attempts from your connection. Please try again later.',
+  });
 
   /** True when the 429 has been sent and the handler must stop. Decided before
    *  the body is read: the refusal must not depend on -- or reveal -- anything
@@ -496,9 +805,7 @@ export function createServer({
     const key = req.socket?.remoteAddress ?? 'unknown';
     const { allowed, retryAfterS } = limiters[which].check(key);
     if (allowed) return false;
-    const message = which === 'login'
-      ? 'Too many sign-in attempts from your connection. Please wait a minute and try again.'
-      : 'Too many new accounts from your connection. Please try again later.';
+    const message = OVER_LIMIT_MESSAGES[which] ?? OVER_LIMIT_MESSAGES.login;
     const headers = { 'Retry-After': String(retryAfterS) };
     if (wantsHtml(req)) sendHtml(req, res, 429, page({ error: message }), headers);
     else sendJson(req, res, 429, { error: { status: 429, message } }, headers);
@@ -1035,8 +1342,199 @@ export function createServer({
     async signupPage(req, res, { query, account }) {
       if (account) return redirect(res, safeNext(query?.get('next')) || '/');
       const { token, setCookie } = await auths.csrfIssue(req);
-      return sendHtml(req, res, 200, signupPage({ next: safeNext(query?.get('next')), consentText, csrf: token }),
+      // `?email=` is a convenience and nothing more -- `/verify/resend` sends
+      // somebody back here to ask for a new code, and retyping the address
+      // they just failed to confirm is how a typo gets made twice. It is a
+      // prefilled field, not a claim about who anybody is.
+      const prefill = String(query?.get('email') ?? '').trim().slice(0, 254);
+      return sendHtml(req, res, 200, signupPage({
+        next: safeNext(query?.get('next')),
+        email: isAddressShaped(prefill) ? prefill : '',
+        consentText,
+        csrf: token,
+      }), setCookie ? { 'Set-Cookie': setCookie } : {});
+    },
+
+    // --- confirming a mailbox with a six-digit code (spec §3, §4.5) --------
+
+    /**
+     * The code-entry page.
+     *
+     * NO SESSION REQUIRED AND NONE POSSIBLE. The account does not exist until
+     * the code is confirmed, so there is nobody to be signed in as. The address
+     * arrives in the query because the page has to say where the code went;
+     * holding this URL proves nothing, and possession of the CODE is the only
+     * thing that does.
+     */
+    async verifyPage(req, res, { query }) {
+      if (!sb) return identityUnavailable(req, res);
+      const email = String(query?.get('email') ?? '').trim().slice(0, 254);
+      const { token, setCookie } = await auths.csrfIssue(req);
+      return sendHtml(req, res, 200, verifyPage({ email, csrf: token }),
         setCookie ? { 'Set-Cookie': setCookie } : {});
+    },
+
+    /**
+     * Confirm the six digits.
+     *
+     * THE ATTEMPT LIMIT IS THE FEATURE, NOT A GARNISH ON IT. Spec §4.5: six
+     * digits is one million values with an hour to live, and a script making a
+     * few hundred guesses a second walks that space inside the window. Three
+     * bounds stand between the two, and all three are ours:
+     *
+     *   - per IP, `AUTH_RATE_LIMITS.verify`, checked first and before the body
+     *     is read, so the refusal cannot depend on what was being attempted;
+     *   - per address, `chargeCodeAttempt`, spent BEFORE the upstream call so
+     *     that a crash cannot hand the budget back;
+     *   - per code, which is the same counter: five wrong answers and the code
+     *     is DEAD rather than throttled. The sixth attempt fails even carrying
+     *     the correct code, and that is the assertion which proves the limit is
+     *     a limit and not a message.
+     *
+     * AND EVERY FAILURE LOOKS THE SAME. A wrong code, an expired code and a
+     * code for an address that never signed up leave here with one status, one
+     * sentence and one set of headers. "That code has expired" tells a stranger
+     * the address is real, which is a disclosure about a person on a service
+     * that stores photographs of faces. Nothing from `SupabaseAuthError` --
+     * not `.code`, not `.status`, not `.message` -- is ever rendered.
+     */
+    async verifyCode(req, res) {
+      if (!sb) return identityUnavailable(req, res);
+      if (refuseOverLimit(req, res, 'verify', verifyPage)) return undefined;
+      if (!sameOriginPost(req)) return refuseForgery(req, res, 'verify');
+      const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
+      const email = String(body.email ?? '').trim();
+      const code = String(body.code ?? '').trim();
+      const csrf = String(body.csrf ?? '');
+
+      // BEFORE the code is looked at, and before an attempt is spent. Same
+      // order and same reason as `login`: a post that cannot prove it came
+      // from this site's own form gets no opinion on whether a code was right,
+      // and cannot burn somebody else's five guesses on their behalf.
+      if (!(await auths.csrfCheck(req, csrf))) return refuseForgery(req, res, 'verify', { email });
+
+      const refuse = (message) => {
+        // The token that just verified rides back out, so the retry the person
+        // is about to make still carries a valid pair.
+        if (wantsHtml(req)) return sendHtml(req, res, 401, verifyPage({ error: message, email, csrf }));
+        return sendJson(req, res, 401, { error: { status: 401, message } });
+      };
+
+      // An address that is not an address has no code and no counter to spend,
+      // so it gets the same answer as a wrong code rather than a different one.
+      //
+      // BOTH CHECKS, AND THEY ARE NOT THE SAME CHECK. `isAddressShaped` is
+      // this file's cheap shape test; `emailHash` runs `normaliseEmail`, which
+      // is STRICTER (`a@b..com` passes the first and fails the second) and
+      // throws when it refuses. Without the catch that throw becomes a 500 --
+      // a different answer for a different input, which is the oracle this
+      // handler exists to close, arriving through a crash instead of a message.
+      if (!isAddressShaped(email)) return refuse(CODE_REFUSED_MESSAGE);
+
+      const ident = await identityApi();
+      let hash;
+      try {
+        hash = ident.emailHash(email);
+      } catch {
+        return refuse(CODE_REFUSED_MESSAGE);
+      }
+      const { allowed } = chargeCodeAttempt({ root, hash, nowImpl });
+      if (!allowed) return refuse(CODE_EXHAUSTED_MESSAGE);
+
+      let identity;
+      try {
+        ({ identity } = await sb.verifyCode({
+          email, token: code, type: 'signup', clientIp: clientIpOf(req),
+        }));
+      } catch (err) {
+        // The upstream words go to the log and the page gets the constant.
+        // `over_request_rate_limit` in particular must be diagnosable without
+        // being visible -- spec §4.3.
+        logImpl(`[web] verify refused: ${err?.message ?? err}`);
+        return refuse(CODE_REFUSED_MESSAGE);
+      }
+
+      // The agreement was given on the signup form, minutes or days ago, and
+      // has been waiting in a file since. `takePending` DELETES as it reads, so
+      // a second confirmation cannot collect a second "yes".
+      const parked = ident.takePending({ root, email, nowImpl });
+      if (!parked) {
+        logImpl('[web] a code confirmed with no parked consent on file; onboarding must ask again');
+      }
+
+      let accountId;
+      try {
+        ({ accountId } = await ident.resolveIdentity({
+          root, identity, consent: parked?.consent ?? null, nowImpl,
+        }));
+      } catch (err) {
+        // FAIL CLOSED. No session, nothing part-created, and the SAME sentence
+        // as a wrong code -- a 500 here would tell an attacker that the code
+        // they just guessed was CORRECT and only the account write failed,
+        // which is the one fact this whole handler exists to withhold.
+        logImpl(`[web] verify could not resolve an identity: ${err?.stack ?? err}`);
+        // And the consent goes back, because `takePending` already removed it
+        // and a retry that succeeds must not open an account with no record of
+        // the agreement. Re-parking extends its TTL, which is the cheaper of
+        // the two mistakes available here.
+        if (parked) {
+          try { ident.putPending({ root, email, consent: parked.consent, nowImpl }); } catch { /* logged above */ }
+        }
+        return refuse(CODE_REFUSED_MESSAGE);
+      }
+
+      // The code was right, so the five are given back. ONLY here: a resend
+      // must never reach this line, or five guesses plus a resend is ten.
+      clearCodeAttempts({ root, hash });
+
+      const cookie = await auths.startSession(req, accountId);
+      // Revoke at the door. After this the only live credential for this
+      // person is ours, which is the whole reason this app mints its own
+      // session instead of carrying Supabase's JWT -- a JWT cannot be revoked
+      // and this service holds their face. `revoke` swallows its own failures
+      // by contract; a logout that fails must not undo a confirmed signup.
+      if (identity?.accessToken) await sb.revoke({ accessToken: identity.accessToken });
+
+      if (wantsHtml(req)) return redirect(res, '/onboarding', 303, { 'Set-Cookie': cookie });
+      return sendJson(req, res, 200, { next: '/onboarding' }, { 'Set-Cookie': cookie });
+    },
+
+    /**
+     * "Send me a new code."
+     *
+     * WHAT THIS DOES NOT DO, AND WHY SAYING SO IS THE POINT. A new code needs
+     * the password, because Supabase issues one by repeating the signup call,
+     * and this service deliberately does not keep the password anywhere --
+     * there is no session yet and nothing on disk holds it. So the honest
+     * answer is to send the person back to the signup form with the address
+     * they were confirming already filled in, rather than to render "a new code
+     * is on its way" over a request nobody made. A button that quietly does
+     * nothing is worse than no button: the next move is to click it eight more
+     * times.
+     *
+     * IT DOES NOT TOUCH THE ATTEMPT COUNTER, and that is the bypass this route
+     * would otherwise be. If asking for a new code returned the five guesses,
+     * the limit would be five per resend rather than five per code, and a
+     * script can resend as easily as it can guess.
+     *
+     * It is a POST and it is gated exactly as the confirm is -- limiter,
+     * same-origin, anti-forgery pair -- so it cannot be aimed at somebody from
+     * another site, and it answers identically whatever address it is given.
+     */
+    async verifyResend(req, res) {
+      if (!sb) return identityUnavailable(req, res);
+      if (refuseOverLimit(req, res, 'verify', verifyPage)) return undefined;
+      if (!sameOriginPost(req)) return refuseForgery(req, res, 'verify');
+      const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
+      const email = String(body.email ?? '').trim();
+      const csrf = String(body.csrf ?? '');
+      if (!(await auths.csrfCheck(req, csrf))) return refuseForgery(req, res, 'verify', { email });
+
+      // Only an address-shaped value is carried onward, so the destination is
+      // always this app's own signup page with at most one tidy query value.
+      const to = isAddressShaped(email) ? `/signup?email=${encodeURIComponent(email)}` : '/signup';
+      if (wantsHtml(req)) return redirect(res, to, 303);
+      return sendJson(req, res, 200, { next: to });
     },
 
     /**
@@ -1109,10 +1607,12 @@ export function createServer({
         return sendJson(req, res, 400, { error: { status: 400, message } });
       };
 
-      // Shape only. A real address is proved by a mail round trip, which this
-      // build does not do; refusing something that is obviously not an address
-      // is still worth the two lines.
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      // Shape only. A real address is proved by a mail round trip, which the
+      // code flow now does; refusing something that is obviously not an address
+      // is still worth the one line. `isAddressShaped` is shared with the
+      // code-entry routes so the two cannot drift into disagreeing about what
+      // an address is.
+      if (!isAddressShaped(email)) {
         return reject('That does not look like an email address.');
       }
       if (password.length < 10) {

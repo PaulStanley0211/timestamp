@@ -40,7 +40,9 @@ import { createStylesheet } from '../scripts/web/static.mjs';
 import {
   creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, errorPage,
 } from '../scripts/web/views.mjs';
-import { loginPage, signupPage, pricingPage, authUnavailablePage } from '../scripts/web/views-auth.mjs';
+import {
+  loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
+} from '../scripts/web/views-auth.mjs';
 
 /** The `.statehook` block, from its selector to its closing brace. */
 function statehookRule(css) {
@@ -250,12 +252,14 @@ function renderedPages() {
     ['home', homePage({ ...FOCUS_MENU, consentText: 'I agree' })],
     ['login', loginPage({})],
     ['signup', signupPage({ consentText: 'I am in this photo.' })],
+    ['verify', verifyPage({ email: 'a@b.com' })],
     ['pricing', pricingPage({ plans, resolutions, currentPlan: null })],
     ['status', statusPage({ view })],
     ['select', selectPage({ view, stills: [] })],
     ['result', resultPage({ view })],
     ['error', errorPage({ status: 404, title: 'Not found' })],
     ['auth-unavailable', authUnavailablePage()],
+    ['identity-unavailable', identityUnavailablePage()],
   ];
 }
 
