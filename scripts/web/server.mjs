@@ -1519,9 +1519,17 @@ export function createServer({
     async loginPage(req, res, { query, account }) {
       if (account) return redirect(res, safeNext(query?.get('next')) || '/');
       const { token, setCookie } = await auths.csrfIssue(req);
-      // `?reset=done` arrives only from this server's own redirect at the end
-      // of `resetComplete`, never from anything a caller typed meaning
-      // something else, so it is safe to render as a plain notice.
+      // `?reset=done` is NOT proof of anything -- anyone can type
+      // `https://…/login?reset=done` directly and see the identical notice.
+      // An earlier version of this comment claimed the query param "arrives
+      // only from this server's own redirect" and that was wrong; nothing
+      // here checks where the request came from. It is harmless only because
+      // `RESET_DONE_NOTICE` is a fixed constant with no caller-supplied
+      // content -- there is nothing to inject -- so a forged link can show a
+      // stranger a "your password was changed" message but cannot carry any
+      // attacker-chosen text or data through it. That is a ready-made
+      // phishing premise, not a proven-safe redirect marker; do not extend
+      // this pattern to a notice whose content or behaviour matters more.
       const notice = query?.get('reset') === 'done' ? RESET_DONE_NOTICE : null;
       return sendHtml(req, res, 200, loginPage({ next: safeNext(query?.get('next')), csrf: token, notice }),
         setCookie ? { 'Set-Cookie': setCookie } : {});
