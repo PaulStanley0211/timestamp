@@ -62,8 +62,19 @@ export function createSupabaseAuth({ url, publishableKey, secretKey, fetchImpl, 
     return {
       supabaseUserId: user.id,
       email: String(user.email ?? '').trim().toLowerCase(),
-      emailVerified: Boolean(user.email_confirmed_at || user.confirmed_at
-        || user.user_metadata?.email_verified),
+      // NEVER read `user_metadata` (or any field derived from it) here.
+      // Whole-branch review finding 3: `user_metadata` is `raw_user_meta_data`
+      // -- populated from the `data` field on signup and from `PUT /user` --
+      // so it is WRITABLE BY THE ACCOUNT ITSELF, and Supabase's own docs say
+      // it must not be used for authorization decisions. `emailVerified ===
+      // true` is the whole of spec §4.1 and the account-takeover guards this
+      // whole slice rests on (`identity.mjs:30` and `:54`); a caller that can
+      // set `user_metadata.email_verified: true` at signup would be able to
+      // talk this app into treating an unconfirmed address as verified. The
+      // two remaining branches already cover every flow this slice has,
+      // Google included -- Supabase sets `email_confirmed_at` on an OAuth
+      // identity too.
+      emailVerified: Boolean(user.email_confirmed_at || user.confirmed_at),
       provider,
       accessToken: payload?.access_token ?? null,
     };

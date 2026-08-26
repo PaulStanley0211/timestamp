@@ -41,6 +41,29 @@ test('a password sign-in returns an identity and never the token to callers who 
   assert.equal(identity.accessToken, 'at1');
 });
 
+test('user_metadata.email_verified alone does not verify an identity -- only Supabase\'s own confirmation timestamps do', async () => {
+  // Whole-branch review finding 3: `user_metadata` is `raw_user_meta_data`,
+  // populated from the `data` field on signup and from `PUT /user` -- it is
+  // WRITABLE BY THE ACCOUNT ITSELF, and `emailVerified === true` is the whole
+  // of spec §4.1 and the account-takeover guards at identity.mjs:30 and :54.
+  // A caller that can set `user_metadata.email_verified: true` on signup, with
+  // no `email_confirmed_at` or `confirmed_at` from Supabase itself, must not
+  // be able to talk this app into treating the address as verified.
+  const fetchImpl = fakeFetch(() => json(200, {
+    access_token: 'at1',
+    user: {
+      id: 'uuid-1',
+      email: 'attacker@b.com',
+      // No email_confirmed_at, no confirmed_at -- ONLY the user-writable field.
+      user_metadata: { email_verified: true },
+    },
+  }));
+  const sb = createSupabaseAuth({ ...CFG, fetchImpl });
+  const { identity } = await sb.signInWithPassword({ email: 'attacker@b.com', password: 'x'.repeat(10) });
+  assert.equal(identity.emailVerified, false,
+    'a user-writable field was enough to fake a verified email');
+});
+
 test('every distinguishable upstream failure collapses to one sentence', async () => {
   for (const upstream of [
     { status: 400, body: { error_code: 'invalid_credentials', msg: 'Invalid login credentials' } },
