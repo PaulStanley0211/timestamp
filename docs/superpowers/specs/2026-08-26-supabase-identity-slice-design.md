@@ -4,7 +4,8 @@
 2026-08-26, not started. **No implementation code before the plan is written.**
 
 **Scope:** the login page grows a "Sign in with Google" button and a "Forgot
-password?" link, and both work. Identity — password verification, Google
+password?" link, and both work, and a new account is confirmed by typing a
+six-digit code rather than clicking a link. Identity — password verification, Google
 sign-in, password reset — moves to Supabase Auth. **Accounts, credits, sessions
 and job ownership stay exactly where they are: files.**
 
@@ -20,7 +21,7 @@ is the parent's design and it survives verbatim in shape.
 
 ## 0. What the owner decided on 2026-08-26
 
-Four decisions, taken in conversation, inputs rather than proposals:
+Five decisions, taken in conversation, inputs rather than proposals:
 
 1. **Identity slice first.** The parent spec's decision 1 was "full migration —
    accounts, credits AND sessions all move to Postgres". That is now **two
@@ -46,6 +47,20 @@ Four decisions, taken in conversation, inputs rather than proposals:
    tape gated behind email verification — and this is the first build that can
    send mail at all. A Google sign-in arrives with `email_verified` already
    true and is never gated by this.
+
+5. **The email is confirmed by a SIX-DIGIT CODE THE PERSON TYPES, not by a link
+   they click.** Added 2026-08-26 at the owner's request and confirmed back to
+   him before writing. Supabase sends a code instead of a magic link when the
+   template carries `{{ .Token }}`; the person enters it on our page, we verify
+   it, and they land on an onboarding page already signed in.
+
+   **This is a simplification, not an extra feature.** The link flow sends a
+   person out of our tab, through Supabase, and back — and that round trip is
+   precisely where the redirect allow-list, the `state` match and the exchange
+   can each fail, and where somebody on a phone finishes in a different browser
+   than they started in. A typed code has no round trip at all. After this
+   decision the redirect allow-list matters **only for Google**, and signup
+   confirmation stops touching §4.2's machinery entirely.
 
 **Also settled here, adopting the parent's recommendations without re-arguing
 them:** a completed reset destroys every session for the account (parent open
@@ -163,10 +178,23 @@ user and **no session** — there is nobody to sign in and nobody to grant credi
 to yet. The local account is **not** created at this moment. See §6 for what is
 kept in the meantime and why.
 
-**First confirmed login.** The confirmation mail's link goes to Supabase, which
-redirects to our callback with a code. We exchange it, `resolveIdentity` creates
-the account, and **the 21-credit free grant is issued here**. This is the
-structural change decision 4 buys: the grant is behind a verified mailbox.
+**Code entry — where the account is actually born.** Signup redirects to
+`GET /verify?email=…`, a page whose only content is a six-digit field and the
+address the code went to. `POST /verify` calls
+`POST /auth/v1/verify` with `{ type: 'signup', email, token }`. On success
+Supabase returns the identity, `resolveIdentity` creates the account, **the
+21-credit free grant is issued here**, our session is minted, and the person is
+redirected to `/onboarding` already signed in. This is the structural change
+decision 4 buys: the grant sits behind a verified mailbox.
+
+The page needs a **resend** control, because a code that never arrives is the
+single most common way this flow strands somebody. Supabase permits one request
+per address per 60 seconds; the button says so rather than failing silently.
+Codes expire after one hour by default.
+
+**A person who closes the tab is not lost.** `GET /verify` is reachable without
+a session — it takes the address as a parameter and is safe to bookmark, because
+possession of the code, not possession of the URL, is what proves anything.
 
 **Email login.** `POST /auth/v1/token?grant_type=password` → `resolveIdentity` →
 our session → revoke Supabase's.
@@ -275,6 +303,34 @@ account and can reset; the stranger probing addresses learns nothing.
 This is the same oracle as §4.3 arriving through a different door, and it is
 worth stating separately because the fix is in a different handler and a test
 that covers login says nothing about signup.
+
+**4.5 A six-digit code with unguarded attempts is not a control, it is
+decoration.** Decision 5 introduces a secret with **one million possible
+values** and a one-hour life. A script making a few hundred guesses a second
+walks the whole space inside that window. Everything that makes this safe is
+the attempt limit, so the limit is part of the feature and not an enhancement
+to it.
+
+Three bounds, all of them ours and none of them delegated upstream:
+
+- **Per code.** A small fixed number of wrong answers — five — and the code is
+  dead. Not throttled, dead: the person requests a new one. An attacker who can
+  keep retrying at any rate has a million-guess budget, and a slow million is
+  still a million.
+- **Per address.** Repeated failures against one address across successive codes
+  are the shape of an attack, not of somebody misreading their phone. The
+  address stops accepting attempts for a cool-off period.
+- **Per IP.** `scripts/web/rate-limit.mjs` already exists and already fronts the
+  auth routes. `/verify` joins them.
+
+**A wrong code and an expired code and a code for an address that never signed
+up must all answer identically**, for §4.3's reason. "That code has expired"
+tells a stranger the address is real.
+
+Supabase applies limits of its own. **They are not the control here.** They are
+upstream defaults that can change without notice and are shared across every
+route in the project; a design that leans on them cannot state what its own
+guarantee is. Ours are testable and ours are asserted.
 
 ---
 
@@ -434,6 +490,16 @@ The cases that carry the design:
 14. **`Sb-Forwarded-For` carries the end user's IP, not the server's** — §5.
     Without this the rate limiter buckets every user together, and the symptom
     is a login page that works for one person at a time.
+15. **The code dies after five wrong answers** — §4.5. Assert the sixth attempt
+    fails even when it carries the CORRECT code. This is the test that proves
+    the limit is a limit and not a message.
+16. **A wrong code, an expired code and a code for an unknown address are
+    indistinguishable** — status, body and headers asserted equal.
+17. **A correct code grants exactly once.** Replaying a consumed code creates no
+    second account, mints no second session and issues no second grant.
+18. **A verified code lands on `/onboarding` with a live session**, not on a
+    page that asks the person to sign in again — the end-to-end assertion for
+    decision 5.
 
 Failure modes inherited from parent §1.3 and re-tested here in file terms: an
 identity resolved but the account write failing must **fail closed** — no
@@ -457,26 +523,37 @@ None of this can be done from here; it needs consoles and an account.
    `http://127.0.0.1:3000/**` to the redirect allow-list. (Localhost is
    permitted; see §0.1.)
 5. Supabase → Authentication → enable **Confirm email**.
-6. **There is no dashboard setting that suppresses "user already registered".**
+6. **Authentication → Email Templates → Confirm signup: put `{{ .Token }}` in
+   the body.** Without this the template sends a magic link and decision 5 does
+   not happen — the person receives a link where the page is asking them for a
+   code, and nothing in the app can detect that the template is wrong. It is one
+   edit in the dashboard and it is the whole of what makes the code flow real.
+   Rewrite the wording around it too: the default copy says "confirm your mail"
+   and points at a button that will no longer be there.
+7. **There is no dashboard setting that suppresses "user already registered".**
    This step said there was, and that was wrong. The obfuscated response needs
    email *and* phone confirmation both on. §4.4 handles it in our own signup
    handler instead, which costs nothing and adopts no SMS provider.
-7. Put `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` in
+8. Put `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` in
    `.env`. See §5 for why the secret key is needed and what it costs.
-8. **Custom SMTP, and sooner than "before real volume".** Supabase's built-in
+9. **Custom SMTP, and sooner than "before real volume".** Supabase's built-in
    mailer sends **2 recovery emails per hour for the whole project**, and
    confirmation mail shares the same constrained sender. With confirmation on,
    that number is the ceiling on signups and on password resets combined. It is
    adequate for one developer testing and it is not adequate for a third
    concurrent user. Treat it as a prerequisite for anyone but the owner using
    this, not as a launch-day nicety.
-9. **Free projects pause after a week of inactivity.** A paused project means
+10. **Free projects pause after a week of inactivity.** A paused project means
    nobody can sign in, sign up or reset. Sessions already minted survive,
    because they are files here — which is decision 3 paying off, and not a
    reason to leave the project paused.
 
-**Steps 1–7 were completed and verified on 2026-08-26.** Project ref
-`wtwldjflvmpwoxblqect`. What the verification could NOT prove is listed in §10.
+**Steps 1–5 and 8 were completed and verified on 2026-08-26.** Project ref
+`wtwldjflvmpwoxblqect`. **Step 6 — the `{{ .Token }}` template edit — is NOT
+done**, and until it is, Supabase mails a link to a person the app is asking for
+a code. It is the one console step decision 5 added and the one step whose
+omission the app cannot detect. What the verification could NOT prove is listed
+in §10.
 
 ---
 
@@ -492,21 +569,37 @@ Deliberately, with the reason:
    round trip is one real round trip. It cannot happen before the code exists,
    and it is the first thing to run once it does. Six causes share the one
    symptom "sign in with Google does not work"; expect to bisect them.
-2. **What `npm run accounts -- create` becomes.** §7. Not needed to ship the
+2. **Does a Google sign-in also get a code? Defaulted to NO, and the owner can
+   flip it.** Google returns `email_verified: true`; a code after Google proves
+   nothing that has not already been proven, so it would be friction sold as
+   verification. It is also built differently — no signup is pending, so it
+   would use `POST /auth/v1/otp` rather than the signup confirmation, and it
+   would double the mail volume that §9.8 already calls the binding constraint.
+   If the owner wants it, it is a genuine second factor and should be described
+   as one.
+
+3. **What the onboarding page IS. Defaulted to a stub.** Decision 5 names
+   `/onboarding` as the destination and this app has no such page. The flow
+   redirects there and the page says something true and minimal. What it should
+   actually do — collect a name, explain the free tape, show the first upload —
+   is a product question nobody has answered, and inventing an answer here would
+   be inventing scope.
+
+4. **What `npm run accounts -- create` becomes.** §7. Not needed to ship the
    login page; needed before the command misleads somebody.
-3. **The login timing asymmetry is now Supabase's.** §4.3. Our own equal-time
+5. **The login timing asymmetry is now Supabase's.** §4.3. Our own equal-time
    refusal was built deliberately and is measured by a test; once Supabase
    answers, the wall clock is outside our control. Named, not fixed, and not
    pretended away.
-4. **Whether a Supabase project-level outage should degrade to anything better
+6. **Whether a Supabase project-level outage should degrade to anything better
    than a 503 on login.** Parent §1.3 notes everybody already signed in stays
    signed in, because sessions are ours. That property holds here for free.
    Whether the signed-out experience deserves more than an error page is a
    product question, not a security one.
-5. **Account deletion.** Deleting a local account now leaves a Supabase user
+7. **Account deletion.** Deleting a local account now leaves a Supabase user
    behind. Out of scope for the slice and it must not be forgotten — it is a
    privacy commitment in the consent text, which promises deletion.
-6. **Everything in the parent's §9 that this slice does not reach:** questions
+8. **Everything in the parent's §9 that this slice does not reach:** questions
    2, 3, 6, 7 and 8 remain the parent's and remain unanswered. Question 11 —
    whether the scrypt import was genuinely impossible — is now **moot for this
    slice**, which never attempts an import.
