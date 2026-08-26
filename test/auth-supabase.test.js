@@ -68,3 +68,41 @@ test('the end user IP rides on Sb-Forwarded-For with the secret key', async () =
   assert.equal(headers['Sb-Forwarded-For'], '203.0.113.7');
   assert.equal(headers.apikey, CFG.secretKey, 'forwarding is only honoured for a secret key');
 });
+
+// sendRecovery is the enumeration defence: a recovery request must answer the
+// identical way whether the address exists or not, and whether upstream is
+// merely slow to admit it (400/429) or does not answer at all (transport
+// rejection). If a later edit rethrows on one of these, this is the test that
+// catches the account-enumeration oracle it would reopen.
+test('sendRecovery resolves the identical { ok: true } across success and every failure shape, and never lets an error escape', async () => {
+  const outcomes = [];
+
+  const okFetch = fakeFetch(() => json(200, {}));
+  outcomes.push(await createSupabaseAuth({ ...CFG, fetchImpl: okFetch }).sendRecovery({ email: 'known@b.com' }));
+
+  const unknownAddressFetch = fakeFetch(() => json(400, { error_code: 'invalid_credentials', msg: 'no such user' }));
+  outcomes.push(await createSupabaseAuth({ ...CFG, fetchImpl: unknownAddressFetch }).sendRecovery({ email: 'unknown@b.com' }));
+
+  const rateLimitedFetch = fakeFetch(() => json(429, { error_code: 'over_request_rate_limit', msg: 'slow down' }));
+  outcomes.push(await createSupabaseAuth({ ...CFG, fetchImpl: rateLimitedFetch }).sendRecovery({ email: 'known@b.com' }));
+
+  const transportFailFetch = async () => { throw new Error('ECONNRESET'); };
+  outcomes.push(await createSupabaseAuth({ ...CFG, fetchImpl: transportFailFetch }).sendRecovery({ email: 'known@b.com' }));
+
+  for (const outcome of outcomes) {
+    assert.deepEqual(outcome, { ok: true });
+  }
+});
+
+// revoke must never turn a successful sign-in into a failure by refusing to
+// log out afterward -- later tasks' exchange -> resolve -> use -> revoke
+// ordering depends on that. But unlike sendRecovery, a failed revoke leaving
+// no trace at all is undiagnosable, so it must still reach the log.
+test('revoke resolves { ok: true } even when the upstream logout fails, and logs the refusal', async () => {
+  const logs = [];
+  const fetchImpl = fakeFetch(() => json(500, { msg: 'internal' }));
+  const sb = createSupabaseAuth({ ...CFG, fetchImpl, logImpl: (line) => logs.push(line) });
+  const result = await sb.revoke({ accessToken: 'at1' });
+  assert.deepEqual(result, { ok: true });
+  assert.ok(logs.some((line) => line.includes('revoke')), 'a failed revoke must leave a trace in the logs');
+});

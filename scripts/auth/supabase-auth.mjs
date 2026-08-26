@@ -121,9 +121,17 @@ export function createSupabaseAuth({ url, publishableKey, secretKey, fetchImpl, 
       return { ok: true };
     },
 
-    /** Revoke at the door: after this, the only live credential is ours. */
+    /** Revoke at the door: after this, the only live credential is ours. A
+     *  failed revoke must never turn a successful sign-in into a failure, so
+     *  it is swallowed the same way `sendRecovery`'s is -- but logged, unlike
+     *  that one, because a logout that fails without leaving any trace is
+     *  undiagnosable. */
     async revoke({ accessToken }) {
-      try { await call('/logout', { accessToken }); } catch { /* best effort */ }
+      try {
+        await call('/logout', { accessToken });
+      } catch (err) {
+        logImpl(`[supabase] revoke refused: ${err.message}`);
+      }
       return { ok: true };
     },
   };
