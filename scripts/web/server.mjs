@@ -726,6 +726,10 @@ export function createServer({
         takePending: pending.takePending,
         putPending: pending.putPending,
         emailHash: accounts.emailHash,
+        // The one sentence `login` (task 9) may render on any failure --
+        // imported here rather than retyped, so the page and the module that
+        // owns the wording cannot drift apart.
+        BAD_CREDENTIALS_MESSAGE: accounts.BAD_CREDENTIALS_MESSAGE,
       };
     }
     return identityMods;
@@ -1540,12 +1544,25 @@ export function createServer({
     /**
      * Sign in.
      *
-     * ONE MESSAGE FOR BOTH FAILURES. "No such account" and "wrong password" are
-     * different facts and the same answer, because the difference between them
-     * is a free account-enumeration oracle on a site that stores photographs of
-     * people's faces.
+     * SUPABASE PROVES THE PASSWORD; THIS SERVER MINTS ITS OWN SESSION. Spec §5's
+     * order is load-bearing and followed exactly: EXCHANGE (`signInWithPassword`)
+     * -> RESOLVE (`resolveIdentity`, turning the Supabase identity into a local
+     * accountId) -> USE (`startSession`, our own cookie) -> REVOKE
+     * (`sb.revoke`, best-effort). After the revoke, the only live credential for
+     * this person is ours -- the whole reason this app does not simply carry
+     * Supabase's JWT: a JWT cannot be revoked and this service holds their face.
+     *
+     * ONE MESSAGE FOR EVERY FAILURE. Supabase answers an unknown email, a wrong
+     * password and a rate limit DISTINGUISHABLY --
+     * `invalid_credentials` / `email_not_confirmed` / `over_request_rate_limit`
+     * -- and none of that, nor anything `resolveIdentity` throws, may reach the
+     * page: `email_not_confirmed` alone would tell a stranger that the address
+     * they typed has an account on a service that stores photographs of
+     * people's faces. So every branch below renders the SAME imported constant
+     * and the upstream detail goes only to the log.
      */
     async login(req, res) {
+      if (!sb) return identityUnavailable(req, res);
       if (refuseOverLimit(req, res, 'login', loginPage)) return undefined;
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'login');
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
@@ -1559,31 +1576,46 @@ export function createServer({
       // right, and no work spent finding out.
       if (!(await auths.csrfCheck(req, csrf))) return refuseForgery(req, res, 'login', { email, next });
 
-      const mod = await auths.api();
-      let account = null;
-      let refusal = null;
-      try {
-        // `authenticate` answers an unknown email and a wrong password with the
-        // same error, the same sentence and the same amount of work. Its message
-        // is rendered unchanged -- an "improvement" that told them apart would
-        // turn this form into an account-enumeration oracle on a site that
-        // stores photographs of people's faces.
-        account = await mod.authenticate({ root, email, password });
-      } catch (err) {
-        account = null;
-        refusal = err?.userMessage ?? null;
-      }
-      if (!account) {
-        const message = refusal ?? 'That email and password do not match an account.';
+      const ident = await identityApi();
+      const refuse = (message) => {
         // The token that just verified is rendered back, so the retry the
         // person is about to make still carries a valid pair.
         if (wantsHtml(req)) return sendHtml(req, res, 401, loginPage({ error: message, email, next, csrf }));
         return sendJson(req, res, 401, { error: { status: 401, message } });
+      };
+
+      // 1. EXCHANGE.
+      let identity;
+      try {
+        ({ identity } = await sb.signInWithPassword({ email, password, clientIp: clientIpOf(req) }));
+      } catch (err) {
+        logImpl(`[web] login refused: ${err?.message ?? err}`);
+        return refuse(ident.BAD_CREDENTIALS_MESSAGE);
       }
 
-      const cookie = await auths.startSession(req, account.accountId);
+      // 2. RESOLVE.
+      let accountId;
+      try {
+        ({ accountId } = await ident.resolveIdentity({ root, identity, consent: null, nowImpl }));
+      } catch (err) {
+        // FAIL CLOSED, same reasoning as `verifyCode`: a 500 here would tell an
+        // attacker that Supabase accepted the password and only the local
+        // resolution failed, which is exactly the fact this handler exists to
+        // withhold.
+        logImpl(`[web] login could not resolve an identity: ${err?.stack ?? err}`);
+        return refuse(ident.BAD_CREDENTIALS_MESSAGE);
+      }
+
+      // 3. USE.
+      const cookie = await auths.startSession(req, accountId);
+
+      // 4. REVOKE, best-effort. `sb.revoke` swallows its own errors by
+      // contract -- a login that already minted a session must not be undone
+      // by a best-effort cleanup that throws, so nothing here re-raises one.
+      if (identity?.accessToken) await sb.revoke({ accessToken: identity.accessToken });
+
       if (wantsHtml(req)) return redirect(res, next || '/', 303, { 'Set-Cookie': cookie });
-      return sendJson(req, res, 200, { accountId: account.accountId, next: next || '/' }, { 'Set-Cookie': cookie });
+      return sendJson(req, res, 200, { accountId, next: next || '/' }, { 'Set-Cookie': cookie });
     },
 
     async signup(req, res) {

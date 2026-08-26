@@ -715,3 +715,67 @@ test('a JSON client is told 202 and the same next, whichever branch Supabase too
   }
   assert.equal(shapes[0].body, shapes[1].body);
 });
+
+// ---------------------------------------------------------------------------
+// task 9 -- login goes to Supabase: exchange -> resolve -> use -> revoke
+// ---------------------------------------------------------------------------
+
+/**
+ * `startWithFakeSupabase`'s default parked consent and `/auth/v1/token`
+ * handling are both already shaped for this: a password grant answers with
+ * the same `identityReply()` a code confirmation does, so the harness needs
+ * no changes for login to reuse it.
+ */
+async function loginThrough(t, { upstream = 'ok', email = TEST_EMAIL, password = 'whatever the person typed' } = {}) {
+  const { base, csrf, cookie, calls } = await startWithFakeSupabase(t, {
+    failWith: upstream === 'ok' ? null : upstream,
+  });
+  const res = await postForm(`${base}/login`, { email, password, csrf }, cookie);
+  return { ...(await shapeOf(res)), calls };
+}
+
+test('every upstream login failure renders one sentence', async (t) => {
+  for (const kind of ['invalid_credentials', 'email_not_confirmed', 'over_request_rate_limit']) {
+    const res = await loginThrough(t, { upstream: kind });
+    assert.equal(res.status, 401);
+    assert.match(res.body, /do not match an account/);
+    assert.ok(!/confirm/i.test(res.body), `leaked confirmation state for ${kind}`);
+  }
+});
+
+test('a good login mints our session and revokes theirs', async (t) => {
+  const res = await loginThrough(t, { upstream: 'ok' });
+  assert.match(res.setCookie ?? '', /timestamp_session=/);
+  assert.ok(res.calls.some((c) => c.url.includes('/logout')), 'revoke at the door');
+});
+
+/**
+ * Nothing `SupabaseAuthError` carries -- `.code`, `.status`, `.message` -- may
+ * reach the page, whatever upstream said. Same shape as the equivalent check
+ * on `/verify` and `/signup`.
+ */
+test('nothing Supabase said about a login failure reaches the page', async (t) => {
+  for (const kind of ['invalid_credentials', 'email_not_confirmed', 'over_request_rate_limit', 'boom']) {
+    const res = await loginThrough(t, { upstream: kind });
+    assert.equal(res.status, 401, `a refused login is a 401, whatever ${kind} was upstream`);
+    for (const leak of ['invalid_credentials', 'email_not_confirmed', 'over_request_rate_limit',
+      'error_code', 'SupabaseAuthError', 'supabase']) {
+      assert.ok(!res.body.toLowerCase().includes(leak.toLowerCase()), `${kind} leaked ${leak} onto the page`);
+    }
+    assert.ok(!/\b(400|403|429|500)\b/.test(res.body), `${kind} leaked an upstream status onto the page`);
+  }
+});
+
+test('a login post that cannot prove it came from this form is refused, and Supabase is never asked', async (t) => {
+  const { base, cookie, calls } = await startWithFakeSupabase(t, {});
+  const res = await postForm(`${base}/login`, { email: TEST_EMAIL, password: 'whatever', csrf: 'not-a-token' }, cookie);
+  assert.equal(res.status, 403);
+  assert.equal(calls.length, 0, 'the credential was looked at before Supabase was');
+});
+
+test('a server with no Supabase 503s /login too, and mints no session', async (t) => {
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, { withSupabase: false });
+  const posted = await postForm(`${base}/login`, { email: TEST_EMAIL, password: 'whatever', csrf }, cookie);
+  assert.equal(posted.status, 503);
+  assert.ok(!posted.headers.get('set-cookie'), 'a 503 must not mint anything');
+});

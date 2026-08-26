@@ -196,8 +196,8 @@ async function withTwoTenants(run) {
   try {
     const A = auth.createAccount({ email: 'alice@example.com', password: 'alice password long', credits: 500 });
     const B = auth.createAccount({ email: 'mallory@example.com', password: 'mallory password long', credits: 500 });
-    const cookieA = await signIn(base, 'alice@example.com', 'alice password long');
-    const cookieB = await signIn(base, 'mallory@example.com', 'mallory password long');
+    const cookieA = signIn(auth, 'alice@example.com', 'alice password long');
+    const cookieB = signIn(auth, 'mallory@example.com', 'mallory password long');
     assert.ok(cookieA && cookieB, 'both tenants must be able to sign in for this file to mean anything');
     await run({ base, root, app, auth, queue, A, B, cookieA, cookieB });
   } finally {
@@ -206,21 +206,24 @@ async function withTwoTenants(run) {
   }
 }
 
-async function signIn(base, email, password) {
-  // The form first, the way a browser does: posting credentials requires the
-  // anti-forgery pair -- the cookie off the GET and the hidden field out of
-  // the HTML.
-  const form = await fetch(`${base}/login`, { headers: { accept: 'text/html' } });
-  const formCookie = form.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
-  const csrf = (await form.text()).match(/name="csrf" value="([^"]+)"/)?.[1] ?? '';
-  const res = await fetch(`${base}/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: formCookie },
-    body: new URLSearchParams({ email, password, csrf }),
-    redirect: 'manual',
-  });
-  if (res.status !== 200) return null;
-  return res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+/**
+ * Mint a session directly against the fake local `scripts/auth/` surface,
+ * rather than posting to `/login`.
+ *
+ * TASK 9 CHANGED WHAT `/login` DOES: it now asks Supabase and resolves the
+ * identity through the REAL `scripts/auth/identity.mjs` + `accounts.mjs`,
+ * regardless of the fake `auth` this file builds for the local surface --
+ * and this file's own `createServer` call passes no `supabase` at all, so
+ * `POST /login` now answers 503. This file's subject is tenant isolation
+ * against a controllable fake, not login mechanics (those are covered in
+ * `test/web-auth-code.test.js` and `test/web-auth.test.js`), so both tenants
+ * get a session the same way `startSession` would have minted one.
+ */
+function signIn(auth, email, password) {
+  const account = auth.findAccountByEmail({ email });
+  if (!account || !auth.verifyPassword(account, password)) return null;
+  const { sessionId } = auth.createSession({ accountId: account.accountId });
+  return `${SESSION_COOKIE}=${auth.signCookie(sessionId, auth.sessionSecret())}`;
 }
 
 /** A finished job belonging to `owner`, with real bytes on disk behind every

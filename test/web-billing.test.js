@@ -125,20 +125,23 @@ async function makeAccount(root, { email = EMAIL, password = PASSWORD } = {}) {
   return mod.createAccount({ root, email, password });
 }
 
-async function signIn(base, { email = EMAIL, password = PASSWORD } = {}) {
-  // The form first: posting credentials requires the anti-forgery pair -- the
-  // cookie off the GET and the hidden field out of the HTML.
-  const form = await fetch(`${base}/login`, { headers: { accept: 'text/html' } });
-  const formCookie = form.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
-  const csrf = (await form.text()).match(/name="csrf" value="([^"]+)"/)?.[1] ?? '';
-  const res = await fetch(`${base}/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: formCookie },
-    body: new URLSearchParams({ email, password, csrf }),
-    redirect: 'manual',
-  });
-  assert.equal(res.status, 200, 'the fixture account could not sign in');
-  return res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+/**
+ * Mint a session for `accountId` through the REAL session surface --
+ * `app.sessions` is exactly the `auths` object `POST /login` itself calls
+ * `startSession` on -- rather than posting to `/login`.
+ *
+ * TASK 9 CHANGED WHAT `/login` DOES: it now asks Supabase first, and this
+ * file's `createServer` call has no `supabase` configured (its subject is
+ * the checkout and webhook routes, against the REAL `scripts/auth/accounts.mjs`
+ * ledger, not identity), so `POST /login` here now answers 503. Calling
+ * `startSession` directly is not a fake standing in for the real mechanism --
+ * it IS the real mechanism, minus the Supabase round trip that would otherwise
+ * have to be faked for no reason this file cares about. Login mechanics
+ * themselves are covered in `test/web-auth-code.test.js` and
+ * `test/web-auth.test.js`.
+ */
+async function signIn(app, accountId) {
+  return app.sessions.startSession({ headers: {}, socket: {} }, accountId);
 }
 
 async function balanceOf(root, accountId) {
@@ -538,9 +541,9 @@ async function buy(base, cookie, body, { accept = 'application/json' } = {}) {
 }
 
 test('checkout refuses a pack the config does not name', async () => {
-  await withApp(async ({ base, root }) => {
-    await makeAccount(root);
-    const cookie = await signIn(base);
+  await withApp(async ({ base, root, app }) => {
+    const account = await makeAccount(root);
+    const cookie = await signIn(app, account.accountId);
     const res = await buy(base, cookie, { pack: 'unlimited-everything' });
     assert.equal(res.status, 400);
     assert.equal((await res.json()).error.code, 'UNKNOWN_PACK');
@@ -556,9 +559,9 @@ test('checkout refuses a pack the config does not name', async () => {
 test('a pack with no Stripe Price cannot be bought, and no request is attempted', async () => {
   const calls = [];
   const fetchImpl = async (...args) => { calls.push(args); throw new Error('this must not run'); };
-  await withApp(async ({ base, root }) => {
-    await makeAccount(root);
-    const cookie = await signIn(base);
+  await withApp(async ({ base, root, app }) => {
+    const account = await makeAccount(root);
+    const cookie = await signIn(app, account.accountId);
     const res = await buy(base, cookie, { pack: PACK_ID });
     assert.equal(res.status, 503);
     assert.equal((await res.json()).error.code, 'CHECKOUT_NOT_OPEN');
@@ -579,9 +582,9 @@ test('a priced pack sends the account id to Stripe and nothing a browser chose',
       status: 200, headers: { 'content-type': 'application/json' },
     });
   };
-  await withApp(async ({ base, root }) => {
+  await withApp(async ({ base, root, app }) => {
     const account = await makeAccount(root);
-    const cookie = await signIn(base);
+    const cookie = await signIn(app, account.accountId);
 
     // The extra fields are what a tampered form would carry. None of them may
     // reach Stripe.
@@ -612,9 +615,9 @@ test('a browser is redirected to the hosted page rather than shown a JSON body',
     JSON.stringify({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' }),
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
-  await withApp(async ({ base, root }) => {
-    await makeAccount(root);
-    const cookie = await signIn(base);
+  await withApp(async ({ base, root, app }) => {
+    const account = await makeAccount(root);
+    const cookie = await signIn(app, account.accountId);
     const res = await buy(base, cookie, { pack: PACK_ID }, { accept: 'text/html' });
     assert.equal(res.status, 303);
     assert.equal(res.headers.get('location'), 'https://checkout.stripe.com/c/pay/cs_1');
@@ -634,9 +637,9 @@ test('a checkout url that is not Stripe is never redirected to', async () => {
     JSON.stringify({ id: 'cs_1', url: 'https://evil.example/c/pay/cs_1' }),
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
-  await withApp(async ({ base, root }) => {
-    await makeAccount(root);
-    const cookie = await signIn(base);
+  await withApp(async ({ base, root, app }) => {
+    const account = await makeAccount(root);
+    const cookie = await signIn(app, account.accountId);
     const res = await buy(base, cookie, { pack: PACK_ID }, { accept: 'text/html' });
     assert.equal(res.status, 502);
     assert.equal(res.headers.get('location'), null);
@@ -653,9 +656,9 @@ test('checkout grants nothing on its own -- only the webhook does', async () => 
     JSON.stringify({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' }),
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
-  await withApp(async ({ base, root }) => {
+  await withApp(async ({ base, root, app }) => {
     const account = await makeAccount(root);
-    const cookie = await signIn(base);
+    const cookie = await signIn(app, account.accountId);
     await buy(base, cookie, { pack: PACK_ID });
     assert.deepEqual(await paymentRows(root, account.accountId), []);
 
@@ -775,8 +778,8 @@ test('a public url with a trailing slash does not become a double slash', async 
   const port = await app.listen();
   try {
     const base = `http://127.0.0.1:${port}`;
-    await makeAccount(root);
-    const cookie = await signIn(base);
+    const account = await makeAccount(root);
+    const cookie = await signIn(app, account.accountId);
     await buy(base, cookie, { pack: PACK_ID });
     assert.equal(sent.get('success_url'), 'https://timestamp.example/pricing?checkout=done');
   } finally {

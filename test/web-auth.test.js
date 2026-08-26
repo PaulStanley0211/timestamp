@@ -24,6 +24,7 @@ import crypto from 'node:crypto';
 
 import { createServer, safeNext, AUTH_RATE_LIMITS } from '../scripts/web/server.mjs';
 import { SupabaseAuthError } from '../scripts/auth/supabase-auth.mjs';
+import { BAD_CREDENTIALS_MESSAGE } from '../scripts/auth/accounts.mjs';
 import { ROUTES, PUBLIC_ROUTES, isPublicRoute } from '../scripts/web/router.mjs';
 import {
   createSessions, parseCookies, serializeCookie, isSecureRequest,
@@ -235,7 +236,22 @@ function fakeAuth() {
  * `taken` names addresses this fake treats as already registered, so a test
  * can reproduce the one upstream shape that matters here -- Supabase refusing
  * a taken address -- without standing up the real HTTPS transport for it.
+ *
+ * TASK 9 ADDS `signInWithPassword` AND `revoke`, for the same reason: `login`
+ * now asks Supabase too. `FAKE_SUPABASE_PASSWORD` is the one password this
+ * fake accepts, which is already the fixed string nearly every test in this
+ * file uses as "the right one" -- so a genuine sign-in through `/login`
+ * succeeds exactly where it always did, and anything else (a typo, an
+ * unregistered address) is refused the same way Supabase refuses both: one
+ * `SupabaseAuthError`, indistinguishable from the caller's side. The identity
+ * it hands back is real enough for `resolveIdentity` (task 5) to resolve
+ * through the REAL `scripts/auth/identity.mjs` + `accounts.mjs` against this
+ * test's own temp root -- deliberately independent of the fake `auth` object
+ * above, which is why `signIn()` below no longer goes through this path for
+ * its own purposes.
  */
+const FAKE_SUPABASE_PASSWORD = 'a long enough password';
+
 function fakeSupabaseIdentity({ taken = new Set() } = {}) {
   const calls = [];
   return {
@@ -246,6 +262,26 @@ function fakeSupabaseIdentity({ taken = new Set() } = {}) {
         throw new SupabaseAuthError('User already registered', { status: 422, code: 'user_already_exists' });
       }
       return { pending: true };
+    },
+    async signInWithPassword({ email, password, clientIp }) {
+      calls.push({ email, password, clientIp, kind: 'signIn' });
+      if (password !== FAKE_SUPABASE_PASSWORD) {
+        throw new SupabaseAuthError('Invalid login credentials', { status: 400, code: 'invalid_credentials' });
+      }
+      const address = String(email).toLowerCase();
+      return {
+        identity: {
+          supabaseUserId: `sb-${address.replace(/[^a-z0-9-]/g, '-')}`,
+          email: address,
+          emailVerified: true,
+          provider: 'email',
+          accessToken: `fake-access-token-${address}`,
+        },
+      };
+    },
+    async revoke({ accessToken }) {
+      calls.push({ accessToken, kind: 'revoke' });
+      return { ok: true };
     },
   };
 }
@@ -287,16 +323,31 @@ async function csrfPair(base, path = '/login') {
   return { cookie, csrf };
 }
 
-async function signIn(base, email, password) {
-  const pair = await csrfPair(base);
-  const res = await fetch(`${base}/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: pair.cookie },
-    body: new URLSearchParams({ email, password, csrf: pair.csrf }),
-    redirect: 'manual',
-  });
-  if (res.status !== 200) return null;
-  return res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+/**
+ * Mint a session directly against the FAKE local `scripts/auth/` surface,
+ * rather than posting to `/login`.
+ *
+ * TASK 9 CHANGED WHAT `/login` DOES. It now asks Supabase and resolves the
+ * identity through the REAL `scripts/auth/identity.mjs` + `accounts.mjs`
+ * (`identityApi()` in `server.mjs` always imports those for real, whatever
+ * `auth` fake this file injects for every other route) -- so a session minted
+ * that way carries a real on-disk account id the fake `auth.loadAccount`
+ * below has never heard of, and every gated route in this file would 500 on
+ * it. This file's own subject is NOT login -- it is job ownership, credits
+ * and session mechanics against a controllable fake -- so the dozens of
+ * tests below that only need "a signed-in account" mint one directly against
+ * the same fake primitives `startSession` would have used, and stay exactly
+ * as they were. The login mechanics themselves -- Supabase exchange, CSRF,
+ * the rate limit, the one-sentence refusal -- are covered on their own terms
+ * further down this file (via the real `/login` route and
+ * `fakeSupabaseIdentity().signInWithPassword`) and end to end, transport and
+ * all, in `test/web-auth-code.test.js`.
+ */
+function signIn(auth, email, password) {
+  const account = auth.findAccountByEmail({ email });
+  if (!account || !auth.verifyPassword(account, password)) return null;
+  const { sessionId } = auth.createSession({ accountId: account.accountId });
+  return `${SESSION_COOKIE}=${auth.signCookie(sessionId, auth.sessionSecret())}`;
 }
 
 async function withApp(run, {
@@ -402,7 +453,7 @@ test('the landing page carries nothing that belongs to an account', async () => 
 test('the same path signed in is the app, not the landing page', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     const html = await (await fetch(`${base}/`, { headers: { cookie, accept: 'text/html' } })).text();
     assert.ok(html.includes('form="tape"'), 'the signed-in page lost the upload form');
     assert.ok(!html.includes('Make a tape'), 'the landing call to action leaked into the app');
@@ -567,11 +618,21 @@ test('an address Supabase already has answers exactly like a fresh one -- no wor
  * ONE MESSAGE FOR BOTH FAILURES. "No such account" and "wrong password" are
  * different facts and must be the same answer, or the login form is a free
  * account-enumeration oracle on a site that stores photographs of faces.
+ *
+ * RE-POINTED FOR TASK 9. `login` no longer asks the fake local `auth` at
+ * all -- there is no `auth.createAccount` call here any more, on purpose, and
+ * its former presence would now be misleading rather than merely unused. Both
+ * requests are refused by `fakeSupabaseIdentity().signInWithPassword`, which
+ * only accepts `FAKE_SUPABASE_PASSWORD`: a wrong password for a real-looking
+ * address and a password for an address Supabase has never heard of collapse
+ * into the identical upstream refusal, exactly the way `invalid_credentials`
+ * does for both cases against the real API. The page also echoes back
+ * whatever address was typed (not a leak -- it is the caller's own input),
+ * so the two responses cannot be byte-identical the way the signup pair
+ * above are; the message is what must match, and does.
  */
 test('a wrong password and an unknown email are the same 401 and the same sentence', async () => {
-  await withApp(async ({ base, auth }) => {
-    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-
+  await withApp(async ({ base }) => {
     const pair = await csrfPair(base);
     const wrong = await fetch(`${base}/login`, {
       method: 'POST',
@@ -588,8 +649,8 @@ test('a wrong password and an unknown email are the same 401 and the same senten
     assert.equal(unknown.status, 401);
     const a = await wrong.text();
     const b = await unknown.text();
-    assert.ok(a.includes('That email and password do not match an account.'));
-    assert.ok(b.includes('That email and password do not match an account.'));
+    assert.ok(a.includes(BAD_CREDENTIALS_MESSAGE));
+    assert.ok(b.includes(BAD_CREDENTIALS_MESSAGE));
     assert.ok(!b.includes('no such account'));
   });
 });
@@ -795,7 +856,7 @@ test('a signup posted without the form is refused and creates nothing', async ()
 test('every signed-in page names the account it belongs to', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     for (const path of ['/', '/pricing']) {
       const html = await (await fetch(`${base}${path}`, { headers: { cookie, accept: 'text/html' } })).text();
       assert.ok(html.includes('a@example.com'), `${path} does not say whose account is signed in`);
@@ -831,7 +892,7 @@ test('the session cookie is HttpOnly, SameSite=Lax and not Secure over plain HTT
 test('signing out destroys the record, so the old cookie stops working', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     assert.equal((await fetch(`${base}/`, { headers: { cookie } })).status, 200);
     assert.equal(auth.sessions.size, 1);
 
@@ -854,7 +915,7 @@ test('signing out destroys the record, so the old cookie stops working', async (
 test('a forged or tampered cookie is rejected before any filesystem lookup', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const real = await signIn(base, 'a@example.com', 'a long enough password');
+    const real = await signIn(auth, 'a@example.com', 'a long enough password');
     const forged = [
       `${SESSION_COOKIE}=sess-1`,
       `${SESSION_COOKIE}=sess-1.deadbeefdeadbeef`,
@@ -880,8 +941,8 @@ test('account B gets a 404 on account A\'s job, on every job route', async () =>
   await withApp(async ({ base, root, app, auth }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
     auth.createAccount({ email: 'b@example.com', password: 'a different password' });
-    const cookieB = await signIn(base, 'b@example.com', 'a different password');
-    const cookieA = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookieB = await signIn(auth, 'b@example.com', 'a different password');
+    const cookieA = await signIn(auth, 'a@example.com', 'a long enough password');
 
     const job = seedJob(app, root, a, { status: 'done' });
     fs.writeFileSync(jobPaths(root, job.jobId).video, Buffer.alloc(64, 3));
@@ -929,7 +990,7 @@ test('account B gets a 404 on account A\'s job, on every job route', async () =>
 test('a job with no owner is nobody\'s job', async () => {
   await withApp(async ({ base, root, app, auth }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     const job = seedJob(app, root, a);
     // Take the ownership entry away: a manifest with no index entry must not be
     // readable by the account that used to own it, let alone by anybody else.
@@ -941,7 +1002,7 @@ test('a job with no owner is nobody\'s job', async () => {
 test('uploading claims the job for the account that uploaded it', async () => {
   await withApp(async ({ base, app, auth }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     const res = await fetch(`${base}/api/jobs`, {
       method: 'POST',
       headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
@@ -967,7 +1028,7 @@ test('credits are spent when the job is enqueued, and the next one is refused', 
   await withApp(async ({ base, root, auth, queue }) => {
     // The free plan grants exactly one 480p tape.
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     assert.equal(auth.balanceOf(a).credits, 51);
     const first = await fetch(`${base}/api/jobs`, {
@@ -1008,7 +1069,7 @@ test('credits are spent when the job is enqueued, and the next one is refused', 
 test('cancelling a job the queue never claimed gives the credits back', async () => {
   await withApp(async ({ base, auth }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     assert.equal(auth.balanceOf(a).credits, 51);
 
     const made = await fetch(`${base}/api/jobs`, {
@@ -1033,7 +1094,7 @@ test('cancelling a job the queue never claimed gives the credits back', async ()
 test('a balance that covers 480p but not 720p refuses only the 720p tape', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 100 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     const dear = await fetch(`${base}/api/jobs`, {
       method: 'POST',
@@ -1061,7 +1122,7 @@ test('a debit refusal at enqueue leaves no directory, no claim and no charge', a
   const auth = fakeAuth();
   await withApp(async ({ base, root, app }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     // Report a balance, then refuse to spend it -- the exact race the
     // enqueue-time debit exists to close.
@@ -1097,7 +1158,7 @@ test('a failure after the debit refunds it, because nothing was ever rendered', 
   };
   await withApp(async ({ base, root, app }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     const res = await fetch(`${base}/api/jobs`, {
       method: 'POST',
@@ -1121,7 +1182,7 @@ test('a failure after the debit refunds it, because nothing was ever rendered', 
 test('the pricing page lists the plans in credits and marks the current one', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password', plan: 'shelf' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     const anon = await fetch(`${base}/pricing`);
     assert.equal(anon.status, 200);
@@ -1158,7 +1219,7 @@ test('the pricing page lists the plans in credits and marks the current one', as
 test('no page in this app contains anything that collects payment details', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     // Asserted against FORM CONTROLS, not against prose. The pricing page says
     // out loud that this application never sees a card number, and a test that

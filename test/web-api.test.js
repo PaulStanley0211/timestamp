@@ -23,6 +23,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import { createServer } from '../scripts/web/server.mjs';
+import { SESSION_COOKIE } from '../scripts/web/session-middleware.mjs';
 import {
   JOB_ID_RE, createJob, loadJob, saveJob, jobPaths,
   setJobStatus, completeJob,
@@ -219,23 +220,23 @@ function fakeAuth() {
   };
 }
 
-/** The `Cookie:` header for a signed-in session, obtained the way a browser
- *  obtains it: by fetching the form for its anti-forgery pair, then posting
- *  the sign-in form and keeping what came back. */
-async function signIn(base, { email, password }) {
-  const form = await fetch(`${base}/login`, { headers: { accept: 'text/html' } });
-  const formCookie = form.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
-  const csrf = (await form.text()).match(/name="csrf" value="([^"]+)"/)?.[1] ?? '';
-  const res = await fetch(`${base}/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: formCookie },
-    body: new URLSearchParams({ email, password, csrf }),
-    redirect: 'manual',
-  });
-  assert.equal(res.status, 200, `sign-in for ${email} failed`);
-  const set = res.headers.getSetCookie();
-  assert.ok(set.length, 'no session cookie was set');
-  return set.map((c) => c.split(';')[0]).join('; ');
+/**
+ * Mint a session directly against the fake local `scripts/auth/` surface,
+ * rather than posting to `/login`.
+ *
+ * TASK 9 CHANGED WHAT `/login` DOES: it now asks Supabase and resolves the
+ * identity through the REAL `scripts/auth/identity.mjs` + `accounts.mjs`,
+ * regardless of the fake `auth` this file builds -- and this file's
+ * `createServer` call passes no `supabase`, so `POST /login` now answers 503.
+ * This file's subject is the job API, not login mechanics (those are covered
+ * in `test/web-auth-code.test.js` and `test/web-auth.test.js`), so a session
+ * is minted the same way `startSession` would have minted one.
+ */
+function signIn(auth, { email, password }) {
+  const account = auth.findAccountByEmail({ email });
+  assert.ok(account && auth.verifyPassword(account, password), `sign-in for ${email} failed`);
+  const { sessionId } = auth.createSession({ accountId: account.accountId });
+  return `${SESSION_COOKIE}=${auth.signCookie(sessionId, auth.sessionSecret())}`;
 }
 
 async function withServer(run, { queue = fakeQueue(), credits = 5_000 } = {}) {
@@ -255,8 +256,8 @@ async function withServer(run, { queue = fakeQueue(), credits = 5_000 } = {}) {
   const port = await app.listen();
   const base = `http://127.0.0.1:${port}`;
   try {
-    const cookieA = await signIn(base, { email: 'a@example.com', password: 'correct horse battery' });
-    const cookieB = await signIn(base, { email: 'b@example.com', password: 'a different password' });
+    const cookieA = signIn(auth, { email: 'a@example.com', password: 'correct horse battery' });
+    const cookieB = signIn(auth, { email: 'b@example.com', password: 'a different password' });
     const accountA = auth.findAccountByEmail({ email: 'a@example.com' });
     const accountB = auth.findAccountByEmail({ email: 'b@example.com' });
     await run({ base, root, queue, app, auth, cookieA, cookieB, accountA, accountB });
