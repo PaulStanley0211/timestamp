@@ -584,26 +584,51 @@ None of this can be done from here; it needs consoles and an account.
    `http://127.0.0.1:3000/**` to the redirect allow-list. (Localhost is
    permitted; see §0.1.)
 5. Supabase → Authentication → enable **Confirm email**.
-6. **Authentication → Email Templates → Confirm signup: put `{{ .Token }}` in
-   the body.** Without this the template sends a magic link and decision 5 does
+6. **Authentication → Emails → Confirm sign up: put `{{ .Token }}` in the
+   body.** Without this the template sends a magic link and decision 5 does
    not happen — the person receives a link where the page is asking them for a
-   code, and nothing in the app can detect that the template is wrong. It is one
-   edit in the dashboard and it is the whole of what makes the code flow real.
+   code, and nothing in the app can detect that the template is wrong.
    Rewrite the wording around it too: the default copy says "confirm your mail"
-   and points at a button that will no longer be there.
+   and points at a button that will no longer be there. **The body to paste is
+   in `docs/supabase-email-templates/confirm-signup.html`**, with the subject
+   line and the one rule in the README beside it.
+
+   ~~It is one edit in the dashboard and it is the whole of what makes the code
+   flow real.~~ **IT IS NOT ONE EDIT, AND THIS LINE WAS WRONG. Checked in the
+   live dashboard on 2026-08-26: the template editor is LOCKED on this
+   project.** The page carries "Set up custom SMTP to edit templates — emails
+   will be sent using the default templates", the Source toggle is inert, and
+   the body renders read-only. The current live template is Supabase's default:
+   *"Follow the link below to confirm this email address and finish signing
+   up"* over a `Confirm email address` link — exactly the magic link this
+   decision cannot survive. The dashboard offers three ways out and no others:
+
+   - **custom SMTP** (step 9) — free plan, unlocks subject and body;
+   - **upgrade to Pro** — "customize templates while using Supabase's email
+     service";
+   - **a Send Email hook** — "send auth emails through your own workflow",
+     which replaces the template rather than editing it.
+
+   **So step 9 is not a later scaling concern; it is a HARD PREREQUISITE of
+   this step.** Nothing about the six-digit flow can be made real in production
+   until one of those three is done, and the cheapest of the three is the one
+   this spec already required anyway.
 7. **There is no dashboard setting that suppresses "user already registered".**
    This step said there was, and that was wrong. The obfuscated response needs
    email *and* phone confirmation both on. §4.4 handles it in our own signup
    handler instead, which costs nothing and adopts no SMS provider.
 8. Put `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` in
    `.env`. See §5 for why the secret key is needed and what it costs.
-9. **Custom SMTP, and sooner than "before real volume".** Supabase's built-in
-   mailer sends **2 recovery emails per hour for the whole project**, and
-   confirmation mail shares the same constrained sender. With confirmation on,
-   that number is the ceiling on signups and on password resets combined. It is
-   adequate for one developer testing and it is not adequate for a third
-   concurrent user. Treat it as a prerequisite for anyone but the owner using
-   this, not as a launch-day nicety.
+9. **Custom SMTP — a PREREQUISITE OF STEP 6, not merely of volume.** Supabase's
+   built-in mailer sends **2 recovery emails per hour for the whole project**,
+   and confirmation mail shares the same constrained sender. With confirmation
+   on, that number is the ceiling on signups and on password resets combined.
+   It is adequate for one developer testing and it is not adequate for a third
+   concurrent user. **And as of the 2026-08-26 dashboard check it is also the
+   gate on the template editor** — see step 6. Doing it buys both: the six
+   digits become possible at all, and the 2/hour ceiling goes away. The toggle
+   lives at Authentication → Emails → SMTP Settings and is available on the
+   free plan; it is currently OFF and unconfigured.
 10. **Free projects pause after a week of inactivity.** A paused project means
    nobody can sign in, sign up or reset. Sessions already minted survive,
    because they are files here — which is decision 3 paying off, and not a
@@ -611,10 +636,12 @@ None of this can be done from here; it needs consoles and an account.
 
 **Steps 1–5 and 8 were completed and verified on 2026-08-26.** Project ref
 `wtwldjflvmpwoxblqect`. **Step 6 — the `{{ .Token }}` template edit — is NOT
-done**, and until it is, Supabase mails a link to a person the app is asking for
-a code. It is the one console step decision 5 added and the one step whose
-omission the app cannot detect. What the verification could NOT prove is listed
-in §10.
+done, and on 2026-08-26 was found to be NOT DOABLE on this project as it
+stands**: the editor is locked behind custom SMTP (step 9), Pro, or a Send
+Email hook. Until one of those lands, Supabase mails a link to a person the app
+is asking for a code. It is the one console step decision 5 added and the one
+step whose omission the app cannot detect. What the verification could NOT
+prove is listed in §10.
 
 ---
 

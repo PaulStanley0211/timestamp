@@ -81,11 +81,9 @@ All seven items, one commit each, test-first, pushed. **Nothing in the fix
 order is left.**
 
 **SO WHAT IS ACTUALLY NEXT, in the order it is worth doing:**
-
-1. **Three things are Paul's and nothing else can proceed on two of them** —
-   items 1-3 in START HERE: fal's actual cost for the 720p run, the blind
-   check, and the UI direction that unblocks rewriting DESIGN.md. **None is
-   blocked on code.**
+1. **Two things are Paul's** — ~~three~~; the 720p cost was already recorded
+   (see below). What is left is **the blind check** and **the UI direction that
+   unblocks rewriting DESIGN.md**. **Neither is blocked on code.**
 2. **The two Linux CI failures (§4), BEFORE a PR is opened** — they are
    assertions about one ffmpeg/ffprobe build's wording, not product defects,
    and they will be the first thing anybody sees on the PR.
@@ -99,12 +97,26 @@ order is left.**
    password reset all exist, are wired into `server.mjs`, and are tested.
    **Two things are still outstanding, and both are the owner's, not
    code's:** the Supabase dashboard's Confirm-signup email template still
-   needs `{{ .Token }}` put into its body (spec §7 step 6 — without it
+   needs `{{ .Token }}` put into its body (spec §9 step 6 — without it
    Supabase mails a magic link to a person this app is asking for a code,
    and nothing here can detect that the template is wrong), and **no real
    Google round trip has ever been run** — the spec's own words are "the
    only evidence that settles the OAuth round trip is one real round trip,"
    and that cannot happen from this machine.
+
+   **THE TEMPLATE EDIT IS BLOCKED, AND THAT IS NEW — 2026-08-26.** The
+   dashboard was opened and the editor is LOCKED on this project: "Set up
+   custom SMTP to edit templates", the Source toggle inert, the body
+   read-only. **The live template today is Supabase's default magic link**
+   — "Follow the link below to confirm this email address" over a `Confirm
+   email address` link — which is precisely the thing the six-digit page
+   cannot survive. Three ways out and no others: **custom SMTP** (free
+   plan, spec step 9, and needed anyway for the 2-emails-per-hour ceiling),
+   **upgrade to Pro**, or **a Send Email hook**. So spec step 9 is a hard
+   prerequisite of step 6, not the later scaling concern it was written as.
+   **The body and subject to paste, once the editor unlocks, are ready in
+   `docs/supabase-email-templates/`.** Which of the three routes to take is
+   Paul's call: two cost money and one costs a provider account.
 
    ~~**A THIRD THING, and it is the one most likely to strand a real person.**
    `POST /verify/resend` does not resend.~~ **CLOSED 2026-08-26 — §29.** It
@@ -116,10 +128,17 @@ order is left.**
    is still untouched by a resend, and the hint that promised a password
    prompt is gone with the route that needed it.
 
-**What is left is Paul's, and only Paul's — items 1-3 in START HERE above.**
-Record fal's actual cost for the 720p run (item 1's remaining number), send
-the blind check (item 2), and settle the UI direction so DESIGN.md can be
-rewritten (item 3). None of it is blocked on code.
+**What is left is Paul's, and only Paul's.** ~~Record fal's actual cost for the
+720p run (item 1's remaining number)~~ — **THAT NUMBER WAS ALREADY RECORDED and
+this line was stale; checked 2026-08-26.** Job `20260824-225641-f34b4f` carries
+`cost.actual = $4.577258` on its video step, and the estimator now quotes
+**$4.5646** for the same order — 0.3% apart, so config and invoice agree and
+§26's price list stands. (`npm run ledger` still prints `+120.2% OVER` on that
+job: that is measured against the estimate FROZEN INTO THE MANIFEST at render
+time, $2.079, which is the pre-fix number the run itself existed to correct.
+It is a historical artefact, not a live pricing gap.) What genuinely remains is
+**the blind check (item 2)** and **the UI direction so DESIGN.md can be
+rewritten (item 3)**. Neither is blocked on code.
 
 **The Stripe checkout and webhook are BUILT — section 25.** `POST
 /api/billing/checkout` creates a hosted Checkout Session and 303s to Stripe;
