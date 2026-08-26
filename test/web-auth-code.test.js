@@ -808,3 +808,140 @@ test('a server with no Supabase 503s /login too, and mints no session', async (t
   assert.equal(posted.status, 503);
   assert.ok(!posted.headers.get('set-cookie'), 'a 503 must not mint anything');
 });
+
+// ---------------------------------------------------------------------------
+// task 12 -- /onboarding: the stub, and the one repair only it can make
+// ---------------------------------------------------------------------------
+
+/**
+ * Sign in for real, through `/verify`, and hand back a cookie carrying BOTH
+ * halves `/onboarding`'s routes check: the signed csrf pair
+ * `startWithFakeSupabase` seeded, and the session `/verify` just minted.
+ *
+ * `consent` controls what is parked before the code is typed. `null`
+ * reproduces exactly the gap task 7's review carried forward to this task: a
+ * code confirmed with nothing parked (the park has a 24-hour TTL, and this is
+ * what a late confirmation looks like) opens an account with `consent: null`
+ * and signs the person in anyway -- `verifyCode` logs it and proceeds rather
+ * than stranding someone who has already proved their mailbox. Nothing but
+ * `/onboarding` ever asks again.
+ *
+ * The returned `csrf` is the same stateless token used to sign in; `/verify`
+ * mints no CSRF cookie of its own, so it is still good for a fresh POST to
+ * `/onboarding` without fetching that page first -- reused rather than
+ * re-derived so the "already agreed" tests below can post with no HTML to
+ * scrape a token out of in the first place, since that state renders no form.
+ */
+async function signedIn(t, { consent = PARKED_CONSENT } = {}) {
+  const { base, csrf, cookie: csrfCookie, root } = await startWithFakeSupabase(t, {
+    correctCode: '123456', pendingConsent: consent,
+  });
+  const res = await postForm(`${base}/verify`, { email: TEST_EMAIL, code: '123456', csrf }, csrfCookie);
+  assert.equal(res.status, 303, 'setup: signing in through /verify failed');
+  const sessionCookie = res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  assert.match(sessionCookie, /timestamp_session=/, 'setup: no session was minted');
+  await res.text();
+  const accountId = listAccounts({ root })[0].accountId;
+  return { base, root, csrf, accountId, cookie: [csrfCookie, sessionCookie].join('; ') };
+}
+
+test('onboarding needs a session and does not ask a signed-in person to sign in', async (t) => {
+  const { base, cookie } = await signedIn(t);
+  // A browser is what gets sent to sign in -- `wantsHtml` is the same switch
+  // every other gated page answers through, and `test/web-auth.test.js`'s
+  // "every gated route" check pins the JSON half of this split (a bare client
+  // with no accept header gets a 401 it can branch on, not a redirect). This
+  // test is about the browser half, so it sends the header a browser sends.
+  const anon = await fetch(`${base}/onboarding`, { headers: { accept: 'text/html' }, redirect: 'manual' });
+  assert.equal(anon.status, 303);
+  assert.equal(anon.headers.get('location'), '/login?next=%2Fonboarding');
+  await anon.text();
+  const mine = await fetch(`${base}/onboarding`, { headers: { accept: 'text/html', cookie }, redirect: 'manual' });
+  assert.equal(mine.status, 200);
+  await mine.text();
+});
+
+test('an account with no consent on file is asked, not waved through', async (t) => {
+  const { base, cookie, root, accountId } = await signedIn(t, { consent: null });
+  assert.equal(loadAccount({ root, accountId }).consent, null, 'setup: consent should start unset');
+
+  const res = await getPage(`${base}/onboarding`, cookie);
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.match(body, /name="consent"/, 'the consent checkbox is missing from the page');
+  assert.match(body, /name="csrf"/, 'the form carries no anti-forgery token');
+  assert.ok(!body.includes('Upload a photo'), 'the ordinary content rendered ahead of consent');
+});
+
+test('an account that already has consent sees the ordinary page, not a prompt', async (t) => {
+  const { base, cookie } = await signedIn(t, { consent: PARKED_CONSENT });
+  const res = await getPage(`${base}/onboarding`, cookie);
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.ok(!body.includes('name="consent"'), 'an already-agreed account was asked again');
+  assert.ok(body.includes('Upload a photo'), 'the ordinary content did not render');
+});
+
+test('agreeing writes consent onto the account record, not merely past a gate', async (t) => {
+  const { base, cookie, csrf, root, accountId } = await signedIn(t, { consent: null });
+  const res = await postForm(`${base}/onboarding`, { consent: 'yes', csrf }, cookie);
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), '/onboarding');
+  await res.text();
+
+  const account = loadAccount({ root, accountId });
+  assert.equal(account.consent?.granted, true, 'the account record was never updated');
+  assert.equal(account.consent?.text, CONSENT_TEXT, 'the wording stored is not what the server actually shows');
+
+  // And asking again does not happen: the ordinary page renders now.
+  const after = await getPage(`${base}/onboarding`, cookie);
+  const afterBody = await after.text();
+  assert.ok(!afterBody.includes('name="consent"'), 'still asking after it was just given');
+});
+
+test('a post with the box left unticked is refused, and nothing is written', async (t) => {
+  const { base, cookie, csrf, root, accountId } = await signedIn(t, { consent: null });
+  // No `consent` field at all -- an unchecked HTML checkbox posts nothing.
+  const res = await postForm(`${base}/onboarding`, { csrf }, cookie);
+  assert.equal(res.status, 400);
+  await res.text();
+  assert.equal(loadAccount({ root, accountId }).consent, null, 'consent was recorded with the box left unticked');
+});
+
+test('a post that cannot prove it came from this form is refused, and nothing is written', async (t) => {
+  const { base, cookie, root, accountId } = await signedIn(t, { consent: null });
+  const res = await postForm(`${base}/onboarding`, { consent: 'yes', csrf: 'not-a-token' }, cookie);
+  assert.equal(res.status, 403);
+  await res.text();
+  assert.equal(loadAccount({ root, accountId }).consent, null);
+});
+
+test('a cross-site post to /onboarding is refused, and nothing is written', async (t) => {
+  const { base, cookie, csrf, root, accountId } = await signedIn(t, { consent: null });
+  const res = await postForm(`${base}/onboarding`, { consent: 'yes', csrf }, cookie,
+    { headers: { origin: 'https://evil.example' } });
+  assert.equal(res.status, 403);
+  await res.text();
+  assert.equal(loadAccount({ root, accountId }).consent, null);
+});
+
+test('reposting once consent is already on file changes nothing and still succeeds', async (t) => {
+  const { base, cookie, csrf, root, accountId } = await signedIn(t, { consent: PARKED_CONSENT });
+  const before = loadAccount({ root, accountId });
+
+  const res = await postForm(`${base}/onboarding`, { consent: 'yes', csrf }, cookie);
+  assert.equal(res.status, 303, 'a repost must not strand someone who already agreed');
+  await res.text();
+
+  const after = loadAccount({ root, accountId });
+  assert.equal(after.consent?.at, before.consent?.at, 'a second post overwrote the first consent record');
+  assert.equal(after.consent?.text, before.consent?.text);
+});
+
+test('a JSON client asking to agree gets its own dialect, not an HTML page', async (t) => {
+  const { base, cookie, csrf } = await signedIn(t, { consent: null });
+  const res = await postForm(`${base}/onboarding`, { consent: 'yes', csrf }, cookie, { accept: 'application/json' });
+  assert.equal(res.status, 200);
+  const payload = await res.json();
+  assert.equal(payload.next, '/onboarding');
+});

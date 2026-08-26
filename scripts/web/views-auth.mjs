@@ -306,6 +306,75 @@ export function resetCompletePage({ email = '', error = null, csrf = '' } = {}) 
 }
 
 /**
+ * `/onboarding` -- where a new account first lands, whichever door it came
+ * through. Deliberately a stub: the design spec's §10 records that what this
+ * page should actually DO -- collect a name, explain the free tape, show the
+ * first upload -- is a product question nobody has answered yet, and
+ * inventing an answer here would be inventing scope. What is here is true and
+ * minimal: the account exists, a free tape is waiting on it, and the way to
+ * the first upload is one link away.
+ *
+ * THE ONE THING THIS PAGE IS NOT ALLOWED TO SKIP. A code confirmed with
+ * nothing parked -- the parked consent has a 24-hour TTL, and a person who
+ * types the six digits after it has expired reaches `resolveIdentity` with
+ * `consent: null` -- opens an account with no record of the agreement, and
+ * the handler that does it logs a warning and proceeds anyway, correctly,
+ * because refusing at that point would strand somebody who has already
+ * proved their mailbox. Nothing else in this codebase ever asks again. So
+ * this page checks `account.consent == null` and, when it is, renders the
+ * same wording the signup page showed instead of the ordinary content --
+ * not a second copy of it, the same `consentText` the server already builds
+ * from `scripts/safety/consent.mjs`. An account that already has a consent
+ * record never sees this branch; re-asking somebody who already agreed would
+ * be asking a person to agree to a photo they have not even uploaded yet.
+ */
+export function onboardingPage({ account = null, consentText = '', csrf = '', error = null } = {}) {
+  const needsConsent = account?.consent == null;
+
+  const body = needsConsent ? `
+<main>
+  <section class="panel">
+    <p class="eyebrow">One more thing</p>
+    <h1 class="headline">Confirm before you continue</h1>
+    <p class="sub">Your account is open, but this service still needs the same agreement
+    everyone gives before their first photo -- and yours was not on file.</p>
+
+    ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
+
+    <form method="post" action="/onboarding">
+      ${csrfField(csrf)}
+      <label class="check">
+        <input type="checkbox" id="consent" name="consent" value="yes" required>
+        <span class="consent-text">${
+  String(consentText).split('\n').map((para) => `<span>${h(para)}</span>`).join('')
+}</span>
+      </label>
+      <button type="submit" class="record">Agree and continue</button>
+    </form>
+  </section>
+</main>
+` : `
+<main>
+  <section class="panel">
+    <p class="eyebrow">You're in</p>
+    <h1 class="headline">Your account is open</h1>
+    <p class="sub">A free tape is waiting on your balance. Upload a photo to start the
+    first one.</p>
+    <p class="actions"><a class="record" href="/">Upload a photo</a></p>
+  </section>
+</main>
+`;
+
+  return layout({
+    title: 'Timestamp - onboarding',
+    body,
+    bodyClass: 'page-onboarding',
+    wrapClass: 'wrap--narrow',
+    account,
+  });
+}
+
+/**
  * Shown when this build has no Supabase configuration.
  *
  * SEPARATE FROM `authUnavailablePage` BECAUSE THE CAUSE IS DIFFERENT AND SO IS

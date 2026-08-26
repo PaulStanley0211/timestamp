@@ -67,6 +67,20 @@ export const ROUTES = Object.freeze([
   { method: 'POST', pattern: '/logout', name: 'logout' },
   { method: 'GET', pattern: '/pricing', name: 'pricingPage' },
 
+  // --- where a new account first lands (spec §10, task 12) ----------------
+  // BEHIND A SESSION, unlike everything else in this block: every route that
+  // opens an account -- the code confirmation, Google -- redirects here once
+  // one exists, so by the time this page is reached there is always somebody
+  // to be. Not in PUBLIC_ROUTES below, which is what makes a signed-out visit
+  // 303 to /login exactly like any other gated page, with no code of its own.
+  { method: 'GET', pattern: '/onboarding', name: 'onboardingPage' },
+  // The one obligation only this page can meet: an account can exist with
+  // `consent: null` (a code confirmed with nothing parked, or a login that
+  // created the account with nothing parked either) and nothing else ever
+  // asks again. This POST is that ask, and it is gated by the same
+  // anti-forgery pair as every other state-changing form on the site.
+  { method: 'POST', pattern: '/onboarding', name: 'onboardingConsent' },
+
   // --- Google, the PKCE round trip (spec §3, §4.2) ------------------------
   // NOT behind a session, for the same reason `/login` and `/signup` are not:
   // both routes exist precisely to let somebody who has no session yet get

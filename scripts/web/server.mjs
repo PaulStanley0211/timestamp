@@ -91,7 +91,7 @@ import {
 } from './views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
-  resetPage, resetCompletePage,
+  resetPage, resetCompletePage, onboardingPage,
 } from './views-auth.mjs';
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
@@ -767,6 +767,11 @@ export function createServer({
         // imported here rather than retyped, so the page and the module that
         // owns the wording cannot drift apart.
         BAD_CREDENTIALS_MESSAGE: accounts.BAD_CREDENTIALS_MESSAGE,
+        // `/onboarding` (task 12) is the one place a `consent: null` account
+        // gets repaired, and this is the only sanctioned way to write a field
+        // onto an account record -- load, mutate, save, under the account's
+        // own lock. See `handlers.onboardingConsent`.
+        updateAccount: accounts.updateAccount,
       };
     }
     return identityMods;
@@ -2216,6 +2221,87 @@ export function createServer({
       const cookie = await auths.endSession(req);
       if (wantsHtml(req)) return redirect(res, '/login', 303, { 'Set-Cookie': cookie });
       return sendJson(req, res, 200, { ok: true }, { 'Set-Cookie': cookie });
+    },
+
+    // --- where a new account first lands (spec §10, task 12) --------------
+
+    /**
+     * `/onboarding`. Gated by the top-level session check exactly like every
+     * other signed-in page -- it is not in `PUBLIC_ROUTES`, so a signed-out
+     * request never reaches this function at all; `handler` above already 303s
+     * it to `/login`. Nothing here re-implements that.
+     *
+     * WHY THIS IS WHERE `consent: null` GETS REPAIRED. A code confirmed after
+     * its parked consent expired, or a login that created the account with
+     * nothing parked, opens an account with no record of the agreement --
+     * `login` and `verifyCode` both log it and proceed rather than stranding
+     * someone who has already proved their mailbox. Every route that can open
+     * an account redirects here, so this is the one place guaranteed to see
+     * every such account before it does anything else. The ordinary content
+     * below is deliberately thin -- see the header of `onboardingPage` in
+     * views-auth.mjs for why more than this would be inventing scope.
+     */
+    async onboardingPage(req, res, { account }) {
+      if (account.consent == null) {
+        const { token, setCookie } = await auths.csrfIssue(req);
+        return sendHtml(req, res, 200, onboardingPage({ account, consentText, csrf: token }),
+          setCookie ? { 'Set-Cookie': setCookie } : {});
+      }
+      return sendHtml(req, res, 200, onboardingPage({ account }));
+    },
+
+    /**
+     * The consent this account was missing, given now.
+     *
+     * SAME GATE AS EVERY OTHER STATE-CHANGING FORM ON THE SITE: same-origin
+     * check first, then the signed anti-forgery pair, both before the tick box
+     * is even looked at. This route is reachable whatever `account.consent`
+     * already holds -- a repost of a stale tab, say -- and the mutator below
+     * only ever writes the field when it is still `null`, so replaying this
+     * post is a no-op rather than a second, different consent record
+     * overwriting the first.
+     *
+     * WRITTEN THROUGH `updateAccount`, THE ONLY SANCTIONED WAY. `accounts.mjs`
+     * loads the account fresh, hands it to the mutator, and saves it back
+     * under that account's own lock -- the same primitive `credits.mjs` uses
+     * to debit a balance, and for the same reason: this process is not the
+     * only writer of this file, and a plain read-mutate-write here could lose
+     * a concurrent update to the same account.
+     */
+    async onboardingConsent(req, res, { account }) {
+      const reject = async (status, message, code) => {
+        const { token, setCookie } = await auths.csrfIssue(req);
+        const headers = setCookie ? { 'Set-Cookie': setCookie } : {};
+        if (wantsHtml(req)) {
+          return sendHtml(req, res, status,
+            onboardingPage({ account, consentText, csrf: token, error: message }), headers);
+        }
+        return sendJson(req, res, status, { error: { status, message, ...(code ? { code } : {}) } }, headers);
+      };
+
+      // Same order as every other credential-adjacent form on this site: proof
+      // of origin before the body is even read.
+      if (!sameOriginPost(req)) {
+        return reject(403, 'We could not confirm that came from this site. Please try again below.', 'NOT_FROM_THIS_SITE');
+      }
+      const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
+      const csrf = String(body.csrf ?? '');
+      if (!(await auths.csrfCheck(req, csrf))) {
+        return reject(403, 'We could not confirm that came from this site. Please try again below.', 'NOT_FROM_THIS_SITE');
+      }
+      if (!CONSENT_YES.has(String(body.consent ?? '').trim().toLowerCase())) {
+        return reject(400, 'Please confirm the statement before continuing.');
+      }
+
+      const ident = await identityApi();
+      ident.updateAccount({ root, accountId: account.accountId, nowImpl }, (record) => {
+        if (record.consent == null) {
+          record.consent = recordConsent({ granted: true, text: consentText, nowImpl });
+        }
+      });
+
+      if (wantsHtml(req)) return redirect(res, '/onboarding', 303);
+      return sendJson(req, res, 200, { next: '/onboarding' });
     },
 
     /**
