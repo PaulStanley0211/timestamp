@@ -822,3 +822,74 @@ test('claimAccount and createAccount both refuse a malformed supabaseUserId rath
   );
   assert.equal(findAccountByEmail({ root, email: 'malformed2@example.com' }), null);
 });
+
+// -- review round 2: the index-before-existence bug, and the silent rebind --
+
+test('a claim against a nonexistent accountId leaves no index entry behind and the id is still usable afterwards', async (t) => {
+  const root = makeRoot(t);
+  const ghost = newAccountId(); // well-formed, but nothing was ever created at it
+  const supabaseUserId = 'uuid-ghost';
+
+  await assert.rejects(
+    () => claimAccount({ root, accountId: ghost, supabaseUserId }),
+    (err) => {
+      assert.equal(err.code, 'NO_ACCOUNT');
+      return true;
+    },
+    'the account must be confirmed to exist before the index is touched at all',
+  );
+
+  const indexFile = `${accountsRoot(root).dir}/${SUPABASE_INDEX_DIR}/${supabaseUserId}`;
+  assert.equal(fs.existsSync(indexFile), false,
+    'a claim against an account that does not exist must not leave an index entry pointing at nothing');
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId }), null);
+
+  // And the id must still be usable by whoever actually owns it -- the whole
+  // point of not writing the orphan in the first place.
+  const real = await signUp(root, { email: 'ghost-recovery@example.com' });
+  const claimed = await claimAccount({ root, accountId: real.accountId, supabaseUserId });
+  assert.equal(claimed.supabaseUserId, supabaseUserId);
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId }).accountId, real.accountId);
+});
+
+test('a second claim with a different id is refused, and the first index entry still resolves correctly', async (t) => {
+  const root = makeRoot(t);
+  const made = await signUp(root, { email: 'rebind@example.com' });
+
+  await claimAccount({ root, accountId: made.accountId, supabaseUserId: 'uuid-first' });
+
+  await assert.rejects(
+    () => claimAccount({ root, accountId: made.accountId, supabaseUserId: 'uuid-second' }),
+    (err) => {
+      assert.equal(err.code, 'SUPABASE_ID_TAKEN');
+      return true;
+    },
+    'a rebind is a decision an operator makes on purpose, never a side effect of a claim',
+  );
+
+  // The account must still say it belongs to the FIRST id, and the first
+  // index entry must not have been disturbed by the refused second claim.
+  assert.equal(loadAccount({ root, accountId: made.accountId }).supabaseUserId, 'uuid-first');
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId: 'uuid-first' }).accountId, made.accountId);
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId: 'uuid-second' }), null,
+    'nothing must have been written for the id the rebind was refused for');
+});
+
+test('a second claim with the same id succeeds and repairs a missing index entry', async (t) => {
+  const root = makeRoot(t);
+  const supabaseUserId = 'uuid-repair';
+  // The exact gap createAccount's own two-index-write ordering can leave
+  // behind a crash in: the account record already carries the id (createAccount
+  // sets it at creation), but its index entry is simulated missing here.
+  const account = await createAccount({
+    root, email: 'repair@example.com', password: null, supabaseUserId, nowImpl: clock(),
+  });
+  fs.rmSync(`${accountsRoot(root).dir}/${SUPABASE_INDEX_DIR}/${supabaseUserId}`, { force: true });
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId }), null, 'precondition: the index is gone');
+
+  const repaired = await claimAccount({ root, accountId: account.accountId, supabaseUserId });
+  assert.equal(repaired.accountId, account.accountId);
+  assert.equal(repaired.supabaseUserId, supabaseUserId);
+  assert.equal(findAccountBySupabaseId({ root, supabaseUserId }).accountId, account.accountId,
+    'a claim with the SAME id the account already carries must repair the missing index rather than refuse');
+});

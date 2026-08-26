@@ -1340,12 +1340,37 @@ export function findAccountBySupabaseId({ root = REPO_ROOT, supabaseUserId, nowI
  * request path calls `verifyPassword`. A hash that gates nothing is a liability
  * with no remaining benefit -- it can only ever be stolen.
  *
- * WHY THE INDEX CLAIM HAPPENS *BEFORE* THE ACCOUNT IS MUTATED. The naive order
- * -- save the account, then write the index -- means a claim that turns out to
- * conflict with an existing one has already thrown this account's real
- * password away for nothing. Checking the index first means a refused claim
- * costs nothing: the account is untouched, including its own password, and can
- * be claimed again by whichever identity actually owns it.
+ * WHY THE ACCOUNT IS LOADED *BEFORE* THE INDEX IS TOUCHED AT ALL. The earlier
+ * shape of this function claimed the index first and loaded the account
+ * second, on the theory that a refused claim should cost the account nothing.
+ * That theory is right for a CONFLICT but wrong for a NONEXISTENT account: a
+ * well-formed but unknown `accountId` would still claim the index slot, THEN
+ * throw `NO_ACCOUNT` from the load, and leave that slot pointing at nothing
+ * forever -- verbatim the "an index entry pointing at an account that does
+ * not exist" failure this second index exists to rule out, and with no
+ * recovery: a later real claim of the same Supabase id sees the slot already
+ * taken and is refused. `loadAccount` is read-only, so loading first costs
+ * nothing extra and it means a claim against an account that does not exist
+ * fails before a single byte of the index is written.
+ *
+ * WHY A REBIND TO A *DIFFERENT* SUPABASE ID IS REFUSED, BUT THE *SAME* ID IS
+ * NOT. If this account already carries a different Supabase identity,
+ * silently re-pointing it would let a second identity walk in and inherit the
+ * first one's ledger the moment a session is minted from the lookup -- a
+ * decision an operator makes on purpose, never a side effect of a claim. But
+ * the account already carrying THIS SAME id must still succeed: it is the
+ * only repair path for the gap between `createAccount`'s two index writes (the
+ * record can say the id before the index does), and Task 5's `resolveIdentity`
+ * depends on it -- its email fallback finds exactly this account and re-claims
+ * the id it already has.
+ *
+ * WHY THE INDEX CLAIM STILL HAPPENS *BEFORE* THE ACCOUNT IS MUTATED, EVEN AFTER
+ * THE ACCOUNT IS KNOWN TO EXIST. The naive order -- save the account, then
+ * write the index -- means a claim that turns out to conflict with an
+ * existing one has already thrown this account's real password away for
+ * nothing. Checking the index first means a refused claim costs nothing: the
+ * account is untouched, including its own password, and can be claimed again
+ * by whichever identity actually owns it.
  *
  * WHY BOTH STEPS SHARE ONE LOCK ACQUISITION rather than going through
  * `updateAccount` and writing the index after it returns. Two separate lock
@@ -1360,13 +1385,30 @@ export function findAccountBySupabaseId({ root = REPO_ROOT, supabaseUserId, nowI
 export async function claimAccount({ root = REPO_ROOT, accountId, supabaseUserId, nowImpl = defaultNow }) {
   const file = supabaseIndexPath(root, supabaseUserId);
   if (!file) throw new TypeError('claimAccount needs a well-formed supabaseUserId');
+  const wanted = String(supabaseUserId);
 
   return withAccountLock({ root, accountId }, () => {
+    // Loaded first, inside the lock, before the index is touched at all: a
+    // well-formed but nonexistent accountId throws NO_ACCOUNT right here and
+    // leaves no index entry behind.
+    const fresh = loadAccount({ root, accountId, nowImpl });
+
+    // A REBIND IS A DECISION, NOT A RETRY. Refuse outright when this account
+    // already belongs to a DIFFERENT Supabase identity. The one case that must
+    // NOT be refused is the account already carrying this SAME id -- see the
+    // repair note above.
+    if (fresh.supabaseUserId !== null && fresh.supabaseUserId !== wanted) {
+      throw new AuthError(`account ${accountId} already claims a different supabase id`, {
+        code: 'SUPABASE_ID_TAKEN',
+        accountId,
+      });
+    }
+
+    // Claim (or confirm) the index slot. `tryExclusiveCreateText` fails when
+    // the file already exists -- either a different account got there first
+    // (a genuine conflict, refused below) or it already names this account (a
+    // retried claim, or the missing-index repair, tolerated as a no-op).
     if (!tryExclusiveCreateText(file, accountId)) {
-      // Already claimed. If it is this same account re-claiming its own
-      // identity -- an OAuth callback retried, say -- that is not a conflict
-      // and must not throw away a password this account no longer has reason
-      // to need twice. Any other owner is a genuine conflict.
       let existing;
       try { existing = fs.readFileSync(file, 'utf8').trim(); } catch { existing = null; }
       if (existing !== accountId) {
@@ -1377,8 +1419,7 @@ export async function claimAccount({ root = REPO_ROOT, accountId, supabaseUserId
       }
     }
 
-    const fresh = loadAccount({ root, accountId, nowImpl });
-    fresh.supabaseUserId = String(supabaseUserId);
+    fresh.supabaseUserId = wanted;
     fresh.password = null;
     saveAccount(fresh);
     return fresh;
