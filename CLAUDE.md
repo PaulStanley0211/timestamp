@@ -9,11 +9,10 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-08-26) — THE SECURITY FIX ORDER IS WORKED, TOP TO BOTTOM
 
-**1284 tests / 1282 pass / 0 fail / 2 skipped.** The skips are the
+**1555 tests / 1553 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
-Branch `ui-redesign-signed-in-page`, **pushed 2026-08-26** (`6efb0e6..2464b35`);
-`origin/main` is still `b6f64a3`, **50 commits behind, nothing merged**.
-Opening a PR is Paul's call, not a prerequisite.
+Branch `supabase-identity-slice`, **not yet pushed**; `origin/main` is still
+`b6f64a3`, nothing merged. Opening a PR is Paul's call, not a prerequisite.
 
 **NO CI HAS RUN ON THIS BRANCH AND NONE WILL.** Both workflows trigger on
 `push: branches: [main]` and `pull_request` only, so a feature-branch push
@@ -93,8 +92,19 @@ order is left.**
 3. **The rest of the review**, which is local only: what the fix order did not
    cover is still open, and **one of it arms on the next `config/models.json`
    edit**. Read the review's §3 before that edit, not after.
-4. **The Supabase plan**, then code — the spec exists, 11 questions are Paul's
-   (item 8).
+4. ~~**The Supabase plan**, then code.~~ **DONE 2026-08-26 — the identity
+   slice is BUILT AND WIRED.** All 14 tasks in
+   `docs/superpowers/plans/2026-08-26-supabase-identity-slice.md` are
+   complete: Google sign-in, the six-digit email confirmation code, and
+   password reset all exist, are wired into `server.mjs`, and are tested.
+   **Two things are still outstanding, and both are the owner's, not
+   code's:** the Supabase dashboard's Confirm-signup email template still
+   needs `{{ .Token }}` put into its body (spec §7 step 6 — without it
+   Supabase mails a magic link to a person this app is asking for a code,
+   and nothing here can detect that the template is wrong), and **no real
+   Google round trip has ever been run** — the spec's own words are "the
+   only evidence that settles the OAuth round trip is one real round trip,"
+   and that cannot happen from this machine.
 
 **What is left is Paul's, and only Paul's — items 1-3 in START HERE above.**
 Record fal's actual cost for the 720p run (item 1's remaining number), send
