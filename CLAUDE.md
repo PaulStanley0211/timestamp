@@ -221,6 +221,29 @@ review's section 3 FIRST, same rule as before.
   forgotten `await` does not throw — it yields a truthy Promise where a boolean
   was expected, which reads as **"every password is correct"**, or an Account
   with no fields. Grep those four names before trusting a call site. §28.
+- **`authenticate` is dead in the web layer and mandatory anyway.** Nothing in
+  `scripts/web/` calls it any more — `/login` asks Supabase
+  (`sb.signInWithPassword`) instead — but `session-middleware.mjs`'s
+  `REQUIRED_AUTH` still lists it, so every test fake handed to the server
+  still has to supply a function that nothing calls, or `missingAuthFunctions`
+  fails the whole thing closed. Not tidied away on purpose; narrowing the
+  contract is a separate decision from shipping the Supabase slice.
+- **The equal-time-refusal guard (§28 item 3) no longer protects `/login`.**
+  It was built deliberately and it still has a passing test, but `/login` asks
+  Supabase for the password check now, not the local `authenticate` the guard
+  times. The wall-clock symmetry of a refusal is Supabase's property today,
+  not one this codebase can measure or fix from here — spec §4.3 and §10 name
+  it and leave it open rather than pretending the old guarantee still reaches
+  the route it was built for. Known, accepted limitation, not a regression to
+  chase.
+- **`npm run accounts -- create` no longer mints a password anyone can sign in
+  with.** Supabase, not the local scrypt hash, decides whether a password is
+  accepted, so a password this command generates or accepts via `--password=`
+  is never checked by anything a browser can reach. Its future — an inspector,
+  an `invite` command, or removal — is an open question (parent spec's open
+  question 5, restated in `2026-08-26-supabase-identity-slice-design.md` §7
+  and §10.4) and stays open; this is only the record that today's behaviour no
+  longer does what its own `--help` text says.
 - **A test that posts `/login` or `/signup` must fetch the form FIRST.** Both
   routes need the anti-forgery pair — the `timestamp_csrf` cookie off the GET
   plus the hidden field out of the HTML — or they answer 403 and set no
@@ -250,9 +273,24 @@ review's section 3 FIRST, same rule as before.
 ```bash
 npm run web                              # terminal 1
 npm run worker -- --provider=fixture     # terminal 2
-# sign in as dev@example.com / timestamp-dev-password
 ```
-`paul@example.com` cannot be signed into — scrypt hash, no reset endpoint.
+**`dev@example.com / timestamp-dev-password` NO LONGER WORKS, and nothing
+replaces it with another fixed credential.** Its domain is not real, so
+Supabase can never mail it a confirmation code and the account can never be
+claimed (spec §7 of
+`docs/superpowers/specs/2026-08-26-supabase-identity-slice-design.md`). **Sign
+in with a real address you control** through `/signup` or `/login` (or
+Google) — `plstnly06@gmail.com` already exists as an account here and claims
+cleanly. A documented credential that does not work is worse than no
+documented credential, so none is offered in its place; the owner was offered
+a gated local bypass and declined it.
+
+`paul@example.com` -- this line's older reasoning, "no reset endpoint," is
+now out of date on its own terms: `/auth/reset` exists as of this slice. This
+report did not verify that specific account's current state (no matching
+account was found under this checkout's local `out/accounts/`, which is
+gitignored and machine-specific), so whether it can now be reached through
+`/auth/reset` is not asserted either way here.
 
 **The repo is PUBLIC: https://github.com/PaulStanley0211/timestamp**
 `out/`, `.env` and `assets/test-photos/` are gitignored. Both security-review
@@ -311,9 +349,22 @@ and ideally a different person is used, because that one is now primed.
   wrong is account takeover -- and it still would not provide password reset.
 
   **Costs accepted deliberately:** 45 tests and the tenant-isolation proof get
-  deleted and rewritten against RLS. **Deployment moves earlier**, because Google
-  OAuth needs registered redirect URLs, so a real domain and TLS -- the sign-in
-  flow cannot be fully tested on localhost. Current position:
+  deleted and rewritten against RLS. ~~**Deployment moves earlier**, because
+  Google OAuth needs registered redirect URLs, so a real domain and TLS -- the
+  sign-in flow cannot be fully tested on localhost.~~ **THAT CLAIM WAS WRONG,
+  TWICE OVER -- corrected 2026-08-26. It does NOT reopen the choice of Supabase;
+  it removes one stated cost of a decision already taken.** See
+  `docs/superpowers/specs/2026-08-26-supabase-identity-slice-design.md` §0.1.
+  First, Google's own documentation exempts localhost from the HTTPS rule:
+  *"Redirect URIs must use the HTTPS scheme, not plain HTTP. Localhost URIs
+  (including localhost IP address URIs) are exempt from this rule."*
+  (`developers.google.com/identity/protocols/oauth2/web-server`). Second, and
+  more decisively, **in this architecture Google never sees our URL at all** --
+  the Authorized redirect URI registered in the Google console is *Supabase's*
+  callback, and Supabase's own redirect allow-list explicitly supports
+  `http://localhost:3000/**` for local development. The full Google round trip
+  is testable against `127.0.0.1:3000`; deployment does not move earlier.
+  Current position:
   - **Supabase Auth REPLACES login entirely** - `accounts.mjs` and `session.mjs`
     get deleted, users live in `auth.users`, sessions become JWTs, isolation
     becomes RLS. **This costs 45 tests and rewrites the tenant-isolation proof.**
