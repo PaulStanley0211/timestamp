@@ -132,6 +132,29 @@ export async function doctor({ cfg, env = process.env, root = REPO_ROOT } = {}) 
     { fatal: false },
   ));
 
+  // --- identity provider ---------------------------------------------------
+  // Not fatal: `scripts/web/server-cli.mjs`'s `supabaseFromEnv` already
+  // degrades a fully-absent configuration to `null`, and the app boots with
+  // the identity routes answering 503. This is reporting, not gating -- and
+  // it reports presence only. NEVER the value: a URL, a publishable key and
+  // especially the secret key are exactly the kind of thing this command
+  // must not put in a terminal's scrollback or a CI log.
+  //
+  // KNOWN GAP, recorded in CLAUDE.md rather than fixed here: this script has
+  // no `--env-file-if-exists`, unlike `render` and `worker`, so it reports
+  // "not set" for a correctly configured `.env` unless run as
+  // `node --env-file-if-exists=.env scripts/preflight/doctor.mjs`. That gap
+  // was offered to the owner once and not taken up; this task does not
+  // silently fix it.
+  for (const key of ['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY']) {
+    checks.push(check(
+      key,
+      Boolean(env[key]),
+      env[key] ? 'present' : 'not set -- identity routes will 503 with one sentence until all three are set',
+      { fatal: false },
+    ));
+  }
+
   return { ok: checks.every((c) => c.ok || !c.fatal), checks, font, version };
 }
 

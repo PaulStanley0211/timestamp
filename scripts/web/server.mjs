@@ -390,6 +390,25 @@ export function sweepVerifyAttempts({ root, nowImpl = () => new Date() } = {}) {
   return removed;
 }
 
+/**
+ * How often the identity litter gets swept -- one file per `POST
+ * /auth/google` (`out/oauth`), one per started signup awaiting its code
+ * (`out/pending-signups`), and one per address that has ever guessed at a
+ * verification code (`out/verify-attempts`). All three write to the SAME
+ * volume that holds job media and rendered tapes, and none of the three sweep
+ * functions -- `sweepOAuth`, `sweepPending`, `sweepVerifyAttempts` -- had ever
+ * been called from anywhere before this.
+ *
+ * SAME CADENCE AS THE WORKER'S OWN RETENTION SWEEP
+ * (`DEFAULT_RETENTION_SWEEP_MS` in `scripts/worker/worker.mjs`), on purpose --
+ * that number is already this codebase's answer to "how often does a
+ * long-lived process re-check its own litter", and picking a second one here
+ * would be a second answer to a question already settled. Exported so a test
+ * can pin the two constants to each other rather than to a duplicated
+ * literal.
+ */
+export const IDENTITY_SWEEP_MS = 3_600_000;
+
 /** How many tapes the shelf renders. A shelf is a page, not an archive dump. */
 const SHELF_LIMIT = 60;
 
@@ -671,6 +690,17 @@ export function createServer({
   assetsRoot = `${REPO_ROOT}/assets`,
   nowImpl = () => new Date(),
   logImpl = (line) => process.stderr.write(`${line}\n`),
+  /**
+   * How often the identity sweeps repeat, and the two functions that schedule
+   * and cancel that repeat. Named and defaulted exactly as
+   * `scripts/worker/worker.mjs` names its own `retentionSweepMs` /
+   * `setIntervalImpl` / `clearIntervalImpl` -- the same shape for the same
+   * reason: a timer a test cannot control is a timer a test cannot prove ran,
+   * and one this codebase already had to solve once.
+   */
+  identitySweepMs = IDENTITY_SWEEP_MS,
+  setIntervalImpl = setInterval,
+  clearIntervalImpl = clearInterval,
 } = {}) {
   if (typeof root !== 'string' || root.length === 0) {
     throw new TypeError('createServer needs a root');
@@ -776,6 +806,9 @@ export function createServer({
         // just resolved needs to be routed through `/onboarding` at all --
         // see the comment at its redirect.
         loadAccount: accounts.loadAccount,
+        // The litter sweep for `out/pending-signups`. Never called before
+        // this file wired it in -- see `sweepIdentityLitter`.
+        sweepPending: pending.sweepPending,
       };
     }
     return identityMods;
@@ -800,9 +833,57 @@ export function createServer({
         putVerifier: store.putVerifier,
         takeVerifier: store.takeVerifier,
         OAUTH_TTL_MS: store.OAUTH_TTL_MS,
+        // The litter sweep for `out/oauth`. Never called before this file
+        // wired it in -- see `sweepIdentityLitter`.
+        sweepOAuth: store.sweepOAuth,
       };
     }
     return oauthMods;
+  }
+
+  /**
+   * Sweep the three identity litter directories once. Called at `listen()`
+   * and then on `identitySweepMs`, same shape as `worker.mjs`'s
+   * `sweepRetention` -- once at startup, then unref'd and hourly, never the
+   * reason a shutdown hangs.
+   *
+   * EACH OF THE THREE IS ITS OWN try/catch, NOT ONE AROUND ALL THREE. A
+   * directory that cannot even be created (a full disk, a `root` that turned
+   * out to be read-only) must not stop the other two from running, and a
+   * failure here of any kind must never reach the caller -- `listen()` awaits
+   * this once and a bug in a sweep must not be a bug in booting the server.
+   * `sweepVerifyAttempts` already swallows its own read failures; the other
+   * two are wrapped here because `oauth-store.mjs` and `pending-signup.mjs`
+   * are out of scope for this task and their own directory-creation step
+   * (`dirFor`) is not guarded internally.
+   */
+  async function sweepIdentityLitter() {
+    let oauthRemoved = null;
+    let pendingRemoved = null;
+    let verifyRemoved = null;
+    try {
+      const oauth = await oauthApi();
+      oauthRemoved = oauth.sweepOAuth({ root, nowImpl });
+    } catch (err) {
+      logImpl(`[web] sweepOAuth failed, out/oauth left unswept this pass: ${err?.message ?? err}`);
+    }
+    try {
+      const identity = await identityApi();
+      pendingRemoved = identity.sweepPending({ root, nowImpl });
+    } catch (err) {
+      logImpl(`[web] sweepPending failed, out/pending-signups left unswept this pass: ${err?.message ?? err}`);
+    }
+    try {
+      verifyRemoved = sweepVerifyAttempts({ root, nowImpl });
+    } catch (err) {
+      logImpl(`[web] sweepVerifyAttempts failed, out/verify-attempts left unswept this pass: ${err?.message ?? err}`);
+    }
+    // Only when something happened -- an hourly "removed nothing" line is
+    // exactly how the worker's own retention sweep decided to stay quiet, and
+    // for the same reason: a line nobody reads stops being read.
+    if (oauthRemoved || pendingRemoved || verifyRemoved) {
+      logImpl(`[web] identity sweep: oauth=${oauthRemoved ?? 0} pending=${pendingRemoved ?? 0} verify=${verifyRemoved ?? 0}`);
+    }
   }
 
   /**
@@ -3186,6 +3267,10 @@ export function createServer({
   server.requestTimeout = 120_000;
   server.headersTimeout = 20_000;
 
+  /** The identity-sweep interval handle, set in `listen()` and cleared in
+   *  `close()`. `null` until the server has actually started. */
+  let sweepTimer = null;
+
   return {
     handler,
     server,
@@ -3201,14 +3286,23 @@ export function createServer({
       const address = server.address();
       return address && typeof address === 'object' ? `http://${host}:${address.port}` : null;
     },
-    listen() {
-      return new Promise((resolve, reject) => {
+    async listen() {
+      const boundPort = await new Promise((resolve, reject) => {
         server.once('error', reject);
         server.listen(port, host, () => resolve(server.address().port));
       });
+      // Once now, so a fresh process starts clean and a test can assert on
+      // the result of `listen()` without waiting an hour. Then unref'd and
+      // hourly -- see `IDENTITY_SWEEP_MS` -- so the timer is never the reason
+      // `close()` hangs or a clean shutdown does not exit.
+      await sweepIdentityLitter();
+      sweepTimer = setIntervalImpl(() => { sweepIdentityLitter(); }, identitySweepMs);
+      if (typeof sweepTimer?.unref === 'function') sweepTimer.unref();
+      return boundPort;
     },
     close() {
       return new Promise((resolve) => {
+        if (sweepTimer) { clearIntervalImpl(sweepTimer); sweepTimer = null; }
         server.closeAllConnections?.();
         server.close(() => resolve());
       });

@@ -22,10 +22,15 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-import { createServer, safeNext, AUTH_RATE_LIMITS } from '../scripts/web/server.mjs';
+import {
+  createServer, safeNext, AUTH_RATE_LIMITS, IDENTITY_SWEEP_MS,
+  VERIFY_ATTEMPTS_DIR, CODE_COOLOFF_MS, chargeCodeAttempt,
+} from '../scripts/web/server.mjs';
 import { SupabaseAuthError } from '../scripts/auth/supabase-auth.mjs';
-import { BAD_CREDENTIALS_MESSAGE } from '../scripts/auth/accounts.mjs';
-import { putPending } from '../scripts/auth/pending-signup.mjs';
+import { BAD_CREDENTIALS_MESSAGE, emailHash } from '../scripts/auth/accounts.mjs';
+import { putPending, PENDING_DIR } from '../scripts/auth/pending-signup.mjs';
+import { putVerifier, OAUTH_DIR } from '../scripts/auth/oauth-store.mjs';
+import { DEFAULT_RETENTION_SWEEP_MS } from '../scripts/worker/worker.mjs';
 import { ROUTES, PUBLIC_ROUTES, isPublicRoute } from '../scripts/web/router.mjs';
 import {
   createSessions, parseCookies, serializeCookie, isSecureRequest,
@@ -1501,6 +1506,120 @@ test('a missing auth module surfaces as AuthUnavailableError, and can recover', 
     present = true;
     assert.equal(await s.currentAccount({ headers: { cookie: 'ts_session=x' } }), null);
   } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Task 13 -- the three identity sweeps are wired into the server's OWN
+// lifecycle. `sweepOAuth`, `sweepPending` and `sweepVerifyAttempts` are each
+// unit-tested on their own terms elsewhere (`test/auth-oauth-store.test.js`,
+// `test/auth-pending-signup.test.js`, `test/web-auth-code.test.js`) -- expiry
+// logic, surviving a row that disappears mid-sweep, and so on. None of that
+// is retested here. What is under test in this section is the wiring itself:
+// whether `createServer` actually CALLS the three, on `listen()` and on a
+// repeat, cancels that repeat on `close()`, and cannot be brought down by a
+// sweep that fails.
+// ---------------------------------------------------------------------------
+
+test('listen() sweeps out/oauth, out/pending-signups and out/verify-attempts once, before anything else happens', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-sweep-'));
+  // Well past every one of the three stores' own TTL (10 min, 24h, 1h), so
+  // whichever `nowImpl` the real sweep uses -- the server's own default,
+  // real wall-clock time -- finds all three already expired.
+  const longAgo = () => new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  const hash = 'a'.repeat(64);
+
+  putVerifier({ root, state: 'expired-state', verifier: 'v', nowImpl: longAgo });
+  putPending({
+    root, email: 'stale@example.com',
+    consent: { granted: true, at: new Date().toISOString(), text: 'x' },
+    nowImpl: longAgo,
+  });
+  chargeCodeAttempt({ root, hash, nowImpl: longAgo });
+
+  const oauthFile = path.join(root, ...OAUTH_DIR.split('/'), 'expired-state.json');
+  const pendingFile = path.join(root, ...PENDING_DIR.split('/'), `${emailHash('stale@example.com')}.json`);
+  const verifyFile = path.join(root, ...VERIFY_ATTEMPTS_DIR.split('/'), `${hash}.json`);
+  // The seed must exist before the sweep can prove anything about removing it.
+  assert.ok(fs.existsSync(oauthFile));
+  assert.ok(fs.existsSync(pendingFile));
+  assert.ok(fs.existsSync(verifyFile));
+
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), supabase: null,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed', logImpl: () => {},
+  });
+  try {
+    await app.listen();
+    assert.ok(!fs.existsSync(oauthFile), 'sweepOAuth was not called from listen()');
+    assert.ok(!fs.existsSync(pendingFile), 'sweepPending was not called from listen()');
+    assert.ok(!fs.existsSync(verifyFile), 'sweepVerifyAttempts was not called from listen()');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the identity sweep repeats on the SAME cadence as the worker retention sweep, and close() cancels the repeat', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-sweep-'));
+  const calls = { set: [], clear: [] };
+  const fakeSetInterval = (fn, ms) => {
+    const token = { fn, ms };
+    calls.set.push(token);
+    return token;
+  };
+  const fakeClearInterval = (token) => { calls.clear.push(token); };
+
+  // Pinned to the worker's own constant rather than to a duplicated literal --
+  // a future edit to either number without the other is exactly the drift
+  // this assertion exists to catch.
+  assert.equal(IDENTITY_SWEEP_MS, DEFAULT_RETENTION_SWEEP_MS,
+    'a second cadence here would be a second answer to a question CLAUDE.md already settled');
+
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), supabase: null,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed', logImpl: () => {},
+    setIntervalImpl: fakeSetInterval, clearIntervalImpl: fakeClearInterval,
+  });
+  try {
+    await app.listen();
+    assert.equal(calls.set.length, 1, 'exactly one repeat is scheduled');
+    assert.equal(calls.set[0].ms, IDENTITY_SWEEP_MS);
+    await app.close();
+    assert.deepEqual(calls.clear, [calls.set[0]],
+      'close() must cancel the exact timer listen() started, or the repeat outlives the server');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a sweep that cannot even create its own directory does not take listen() down with it', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-sweep-'));
+  fs.mkdirSync(path.join(root, 'out'), { recursive: true });
+  // A plain FILE sitting exactly where `oauth-store.mjs` and
+  // `pending-signup.mjs` each want a directory. Both modules' `dirFor()` is
+  // an unconditional `mkdirSync(dir, { recursive: true })` with no try/catch
+  // of its own -- both files are out of scope for this task -- so this is
+  // what makes each of them throw, proving the server's OWN wrapping is what
+  // keeps that throw from reaching `listen()`.
+  fs.writeFileSync(path.join(root, 'out', 'oauth'), 'not a directory');
+  fs.writeFileSync(path.join(root, 'out', 'pending-signups'), 'not a directory');
+
+  const logs = [];
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), supabase: null,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed', logImpl: (line) => logs.push(line),
+  });
+  try {
+    await assert.doesNotReject(
+      () => app.listen(),
+      'a sweep that cannot create its own directory must not crash the server that hosts it',
+    );
+    assert.ok(logs.some((l) => l.includes('sweepOAuth failed')), 'the failure must reach the log, not vanish');
+    assert.ok(logs.some((l) => l.includes('sweepPending failed')), 'the failure must reach the log, not vanish');
+  } finally {
+    await app.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

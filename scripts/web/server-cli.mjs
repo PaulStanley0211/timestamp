@@ -41,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 import { createQueue } from '../queue/queue.mjs';
 import { createServer } from './server.mjs';
 import { createBilling } from '../billing/billing.mjs';
+import { createSupabaseAuth } from '../auth/supabase-auth.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
   .split(path.sep).join('/');
@@ -145,12 +146,82 @@ async function startInProcessWorker({ root, cfg, queue, provider, pollMs, log })
   };
 }
 
+/** The three env values a real Supabase transport needs.
+ *
+ *  `doctor.mjs` reports on the SAME three names, but reads its own literal
+ *  list rather than importing this one -- `doctor.mjs` is meant to stay a
+ *  cheap, standalone preflight check, and pulling in this file's queue,
+ *  billing and Stripe imports just to share three strings would be a heavier
+ *  coupling than the strings are worth. `test/preflight-doctor.test.js`
+ *  cross-checks the two lists against each other instead, so a rename here
+ *  that doctor.mjs does not follow fails a test rather than drifting silently. */
+export const SUPABASE_ENV_KEYS = Object.freeze([
+  'SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY',
+]);
+
+/**
+ * The one place a real Supabase transport is built, for the same reason this
+ * file is the one place Stripe's is: `scripts/auth/supabase-auth.mjs` has no
+ * default `fetchImpl`, so a caller that forgets to inject one gets a
+ * `TypeError` rather than a silently-broken identity provider. That guard
+ * only holds if production actually injects somewhere -- CLAUDE.md's Bug 1 is
+ * the fal transport making exactly this mistake, and this export is what
+ * keeps `createServer({ supabase })` from repeating it.
+ *
+ * `null` WHEN ALL THREE VALUES ARE ABSENT, AND THE APP STILL BOOTS. `.env` is
+ * not loaded by `npm test`, so a test build has no identity provider by
+ * construction; `createServer`'s own default for `supabase` is already
+ * `null`, and the code-entry routes degrade to one 503 sentence rather than
+ * the process refusing to start. This function is what `main()` below calls
+ * to decide which of those two shapes to build.
+ *
+ * A PARTIAL CONFIGURATION THROWS, ON PURPOSE, RATHER THAN DEGRADING. Every
+ * other config gap in this file (`STRIPE_SECRET_KEY`, a missing worker
+ * module) costs only the feature it configures, because "absent" is an
+ * ordinary, expected shape for a dev machine or a fresh checkout. Two out of
+ * three `SUPABASE_*` values present is not that -- it is what a `.env` looks
+ * like when someone pasted the URL and one key and forgot the third, or
+ * renamed a variable and missed a call site. Degrading it to "identity
+ * disabled" would boot a production deployment that LOOKS configured (the
+ * banner would need a fourth state to say otherwise) and quietly serves 503
+ * on every identity route until somebody notices by hand. Refusing to start
+ * is the loud version of the same finding: `main()`'s existing
+ * `.catch((err) => { process.stderr.write(...); process.exit(1); })` prints
+ * this error's message and exits, so the operator sees one sentence naming
+ * which values are set and which are missing -- never a value itself -- on
+ * the first run rather than an incident later.
+ */
+export function supabaseFromEnv(env = process.env) {
+  const present = SUPABASE_ENV_KEYS.filter((key) => typeof env[key] === 'string' && env[key].length > 0);
+  if (present.length === 0) return null;
+  if (present.length < SUPABASE_ENV_KEYS.length) {
+    const missing = SUPABASE_ENV_KEYS.filter((key) => !present.includes(key));
+    throw new Error(
+      `Supabase is partially configured: ${present.join(', ')} ${present.length === 1 ? 'is' : 'are'} set, `
+      + `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not. Set all three of `
+      + `${SUPABASE_ENV_KEYS.join(', ')} together, or none at all to run with identity routes disabled.`,
+    );
+  }
+  return createSupabaseAuth({
+    url: env.SUPABASE_URL,
+    publishableKey: env.SUPABASE_PUBLISHABLE_KEY,
+    secretKey: env.SUPABASE_SECRET_KEY,
+    // THE ONE PLACE A REAL TRANSPORT IS HANDED TO SUPABASE. Bound, for the
+    // same "Illegal invocation" reason the Stripe transport above is bound.
+    fetchImpl: globalThis.fetch.bind(globalThis),
+  });
+}
+
 export async function main(argv = process.argv.slice(2), { log = console.log } = {}) {
   const opts = parseArgs(argv);
   if (opts.help) { log(USAGE); return 0; }
 
   const cfg = JSON.parse(fs.readFileSync(`${REPO_ROOT}/config/render.json`, 'utf8'));
   const queue = createQueue({ root: opts.root });
+  // THE ONE PLACE A REAL TRANSPORT IS HANDED TO SUPABASE, and the one place
+  // this can throw before anything is listening -- see `supabaseFromEnv`'s
+  // own comment on why a partial configuration is loud rather than degraded.
+  const supabase = supabaseFromEnv();
   const app = createServer({
     root: opts.root,
     cfg,
@@ -159,6 +230,7 @@ export async function main(argv = process.argv.slice(2), { log = console.log } =
     host: opts.host,
     provider: opts.provider,
     publicUrl: opts.publicUrl,
+    supabase,
     // THE ONE PLACE A REAL TRANSPORT IS HANDED TO STRIPE. Bound, because a
     // detached `fetch` throws "Illegal invocation" in some runtimes and the
     // symptom would surface inside a checkout rather than here.
@@ -172,6 +244,8 @@ export async function main(argv = process.argv.slice(2), { log = console.log } =
   log(`  provider   ${opts.provider}`);
   // Said out loud at startup, because "the button does nothing" is the symptom
   // of every one of these being absent and none of them is visible from a page.
+  // NEVER a key or url -- present/absent is the whole of what this line says.
+  log(`  supabase   ${supabase ? 'identity configured' : 'NO SUPABASE_* -- /login, /signup and /auth/google will 503'}`);
   log(`  checkout   ${process.env.STRIPE_SECRET_KEY ? 'stripe key set' : 'NO STRIPE_SECRET_KEY -- /pricing will 503 on buy'}`);
   log(`  webhook    ${process.env.STRIPE_WEBHOOK_SECRET ? 'signing secret set' : 'NO STRIPE_WEBHOOK_SECRET -- deliveries will 503'}`);
   if (process.env.STRIPE_WEBHOOK_SECRET) {

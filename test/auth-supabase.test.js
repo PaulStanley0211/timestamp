@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import { createSupabaseAuth } from '../scripts/auth/supabase-auth.mjs';
 import { BAD_CREDENTIALS_MESSAGE } from '../scripts/auth/accounts.mjs';
@@ -105,4 +106,76 @@ test('revoke resolves { ok: true } even when the upstream logout fails, and logs
   const result = await sb.revoke({ accessToken: 'at1' });
   assert.deepEqual(result, { ok: true });
   assert.ok(logs.some((line) => line.includes('revoke')), 'a failed revoke must leave a trace in the logs');
+});
+
+// ---------------------------------------------------------------------------
+// Task 13 -- `server-cli.mjs` is the one place a REAL transport is handed to
+// `createSupabaseAuth`, for the reason CLAUDE.md's Bug 1 exists: a unit test
+// of this module passing is worth nothing if production never wires the
+// result into `createServer`. This is that wiring under test, not the
+// protocol module again -- everything above this line already covers that.
+// ---------------------------------------------------------------------------
+
+test('server-cli builds a Supabase client with a real transport', async () => {
+  const mod = await import('../scripts/web/server-cli.mjs');
+  assert.equal(typeof mod.supabaseFromEnv, 'function');
+  const built = mod.supabaseFromEnv({
+    SUPABASE_URL: 'https://x.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_x',
+    SUPABASE_SECRET_KEY: 'sb_secret_x',
+  });
+  assert.ok(built, 'production must inject, or the guard fires in production');
+  assert.equal(mod.supabaseFromEnv({}), null, 'absent config is null, not a crash');
+});
+
+// `supabaseFromEnv` working correctly, on its own, is not the same claim as
+// `main()` actually handing its result to `createServer` -- CLAUDE.md's Bug 1
+// was precisely a function that worked fine sitting next to a call site that
+// never used it. `provider-contract.test.js`'s `every command that can spend
+// injects the transport` reads source for the same reason: a unit test of the
+// producing function cannot see whether the consuming call site forgot it.
+test('main() actually hands supabaseFromEnv() to createServer, not just builds it and drops it', () => {
+  const file = new URL('../scripts/web/server-cli.mjs', import.meta.url);
+  const source = fs.readFileSync(file, 'utf8');
+
+  const built = source.match(/\bsupabaseFromEnv\(\)/g) ?? [];
+  assert.ok(built.length > 0, 'server-cli.mjs never calls supabaseFromEnv() -- main() cannot build a real client');
+
+  // The real call, not the one-line mention of the shape in this file's own
+  // comment: the real one opens onto a newline before its first field.
+  const callSite = source.match(/createServer\(\{\s*\n[\s\S]*?\n {2}\}\);/);
+  assert.ok(callSite, 'could not find the createServer({...}) call in server-cli.mjs -- did it move or get renamed?');
+  assert.match(callSite[0], /\bsupabase\b\s*[,:]/,
+    'createServer({...}) has no supabase key -- the client is built and never handed to the server that needs it');
+});
+
+// Ambiguity this task resolved deliberately: absent-vs-partial are different
+// shapes and must not collapse to the same behaviour. All three env values
+// missing is an ordinary, expected shape (a test build, a fresh checkout) and
+// degrades. Two out of three present is what a `.env` looks like when
+// somebody pasted a URL and one key and forgot the third -- a misconfigured
+// deployment that would otherwise boot looking healthy and silently 503 every
+// identity route. That must be loud, not degraded.
+test('a partial Supabase configuration throws instead of silently disabling identity', async () => {
+  const mod = await import('../scripts/web/server-cli.mjs');
+  const partials = [
+    { SUPABASE_URL: 'https://x.supabase.co' },
+    { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_x' },
+    { SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_x', SUPABASE_SECRET_KEY: 'sb_secret_x' },
+    { SUPABASE_SECRET_KEY: 'sb_secret_x' },
+  ];
+  for (const env of partials) {
+    assert.throws(
+      () => mod.supabaseFromEnv(env),
+      (err) => {
+        assert.ok(err instanceof Error, `expected an Error for ${JSON.stringify(env)}`);
+        // The values themselves must never appear in the thrown message --
+        // only the NAMES of what is present or missing.
+        assert.ok(!/x\.supabase\.co|sb_publishable_x|sb_secret_x/.test(err.message),
+          'the error must name which env vars are missing, never their values');
+        return true;
+      },
+      `expected a throw for ${JSON.stringify(env)}`,
+    );
+  }
 });
