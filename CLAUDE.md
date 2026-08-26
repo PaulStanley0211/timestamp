@@ -7,7 +7,7 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-26) — THE SECURITY FIX ORDER IS WORKED, TOP TO BOTTOM
+## START HERE (2026-08-26) — THE IDENTITY SLICE IS BUILT, WIRED AND REVIEWED
 
 **1555 tests / 1553 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
@@ -105,6 +105,17 @@ order is left.**
    Google round trip has ever been run** — the spec's own words are "the
    only evidence that settles the OAuth round trip is one real round trip,"
    and that cannot happen from this machine.
+
+   **A THIRD THING, and it is the one most likely to strand a real person.**
+   `POST /verify/resend` does not resend — it 303s back to `/signup?email=`,
+   because `supabase-auth.mjs` has no resend method and a fresh signup code
+   needs the password this service deliberately does not keep. That only
+   works if Supabase re-sends the confirmation when signup is repeated for an
+   unconfirmed user. **That behaviour has never been observed against the
+   live project.** If it does not hold, somebody whose code never arrives
+   loops `/verify` -> `/signup` -> `/verify` forever with no way out. The
+   concrete remedy is Supabase's `POST /auth/v1/resend` — roughly eight
+   lines plus a test. **Verify this before anybody but Paul uses the app.**
 
 **What is left is Paul's, and only Paul's — items 1-3 in START HERE above.**
 Record fal's actual cost for the 720p run (item 1's remaining number), send
