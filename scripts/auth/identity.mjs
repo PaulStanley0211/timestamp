@@ -38,6 +38,24 @@ export async function resolveIdentity({ root, identity, consent = null, nowImpl 
 
   // 3. Genuinely new. `createAccount` issues the free grant; this is the only
   //    branch that reaches it, which is why a claim never grants twice.
+  //
+  // THE SAME RULE, MOVED HERE (coordinator's ruling, beyond the brief and
+  // beyond spec §4.1's literal wording, which only named the claim). An
+  // unverified create permanently squats the address: the genuine owner
+  // arriving later with a verified identity and a different supabaseUserId
+  // hits SUPABASE_ID_TAKEN above, sees a generic message, and has no
+  // self-service way out. Every real caller already produces
+  // emailVerified: true here -- `supabase-auth.mjs`'s identityFrom() derives
+  // it from Supabase's own confirmation fields for all three flows this
+  // slice has, and the email-code flow (the only one that reaches THIS
+  // branch for a fresh signup) confirms the mailbox in the very call that
+  // yields the identity -- so this can only ever fire for a caller that is
+  // not one of this slice's own designed flows.
+  if (emailVerified !== true) {
+    throw new AuthError('an unverified identity may not create an account', {
+      userMessage: 'That email and password do not match an account.',
+    });
+  }
   const made = await createAccount({
     root, email: address, password: null, consent, supabaseUserId, nowImpl,
   });

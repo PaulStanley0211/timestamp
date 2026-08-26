@@ -29,7 +29,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { resolveIdentity } from '../scripts/auth/identity.mjs';
-import { createAccount, loadAccount } from '../scripts/auth/accounts.mjs';
+import {
+  accountsRoot, claimAccount, createAccount, findAccountByEmail, listAccounts, loadAccount,
+  SUPABASE_INDEX_DIR,
+} from '../scripts/auth/accounts.mjs';
 import { balanceOf } from '../scripts/auth/credits.mjs';
 
 const tmpRoot = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ts-ident-'));
@@ -86,4 +89,87 @@ test('a VERIFIED identity claims the existing account and keeps its ledger', asy
   assert.equal(balanceOf(after).credits, before, 'the ledger survives the migration');
   assert.equal(after.supabaseUserId, 'uuid-old');
   assert.equal(after.password, null);
+});
+
+// Review round 2, finding 1: pin the SUPABASE_ID_TAKEN branch at identity.mjs:35.
+// It is correct today because it is unconditional and lets claimAccount's own
+// conflict check fire -- but nothing in this file stops a future edit from
+// wrapping that call in a try/catch that "helpfully" falls through to
+// createAccount on any rejection, which would mint a SECOND account for an
+// address already owned, and every existing test above would still pass.
+test('an email already bound to a DIFFERENT supabase id is refused, not silently reassigned to a new account', async () => {
+  const root = tmpRoot();
+  const made = await createAccount({ root, email: 'claimed@example.com', password: 'correct-horse-battery' });
+  await claimAccount({ root, accountId: made.accountId, supabaseUserId: 'uuid-one' });
+
+  await assert.rejects(
+    () => resolveIdentity({
+      root,
+      identity: identity({ email: 'claimed@example.com', supabaseUserId: 'uuid-two' }),
+      consent: CONSENT,
+    }),
+    (err) => {
+      assert.equal(err.code, 'SUPABASE_ID_TAKEN');
+      assert.ok(
+        !String(err.userMessage).toLowerCase().includes('claimed@example.com'),
+        'the refusal must not name the address -- that is an enumeration oracle',
+      );
+      return true;
+    },
+  );
+
+  // No second account exists anywhere, for the address or for uuid-two.
+  assert.equal(listAccounts({ root }).length, 1, 'the refusal must not have created a second account');
+  assert.equal(findAccountByEmail({ root, email: 'claimed@example.com' }).accountId, made.accountId,
+    'the address still resolves to the one real account');
+});
+
+// Review round 2, finding 2: pin the SAME-id repair path in the actual crash
+// state it exists for -- the account record already carries the incoming id
+// (createAccount writes it at creation) but the supabase index entry is
+// missing (simulating the gap between createAccount's two index writes).
+// Nothing today fails if a future edit adds an early return like
+// `if (existing.supabaseUserId === supabaseUserId) return { accountId, created: false }`
+// at the top of branch 2 -- that would look like a harmless optimisation and
+// would skip the very claimAccount call this repair depends on.
+test('re-resolving the same identity after its supabase index entry goes missing repairs the index rather than skipping the repair', async () => {
+  const root = tmpRoot();
+  const first = await resolveIdentity({ root, identity: identity(), consent: CONSENT });
+
+  // Simulate the crash gap: the record already says 'uuid-a' (createAccount
+  // wrote it), but the index file is gone. Pattern from
+  // test/auth-accounts.test.js:887 ("a second claim with the same id succeeds
+  // and repairs a missing index entry").
+  const indexFile = `${accountsRoot(root).dir}/${SUPABASE_INDEX_DIR}/uuid-a`;
+  fs.rmSync(indexFile, { force: true });
+  assert.equal(fs.existsSync(indexFile), false, 'precondition: the index entry is gone');
+
+  const second = await resolveIdentity({ root, identity: identity(), consent: CONSENT });
+  assert.equal(second.created, false, 'a repair is not a second account');
+  assert.equal(second.accountId, first.accountId);
+  assert.equal(fs.existsSync(indexFile), true, 'the missing index entry must be restored');
+  assert.equal(fs.readFileSync(indexFile, 'utf8').trim(), first.accountId);
+});
+
+// Coordinator's ruling: the create branch must also require
+// emailVerified === true. An unverified create would permanently squat the
+// address -- the genuine owner arriving later with a verified identity and a
+// different supabaseUserId would hit SUPABASE_ID_TAKEN with no self-service
+// way out. Verified against the real callers before this test was written:
+// scripts/auth/supabase-auth.mjs's identityFrom() derives emailVerified from
+// Supabase's own email_confirmed_at/confirmed_at for all three flows this
+// slice has (email-code verification, password sign-in, Google's PKCE
+// exchange), so no designed flow ever reaches this branch unverified.
+test('an UNVERIFIED identity for an address with no existing account creates nothing and grants nothing', async () => {
+  const root = tmpRoot();
+  await assert.rejects(
+    () => resolveIdentity({
+      root,
+      identity: identity({ email: 'nobody@example.com', emailVerified: false, supabaseUserId: 'uuid-nobody' }),
+      consent: CONSENT,
+    }),
+    /verified/i,
+  );
+  assert.equal(listAccounts({ root }).length, 0, 'nothing was created for an unverified identity');
+  assert.equal(findAccountByEmail({ root, email: 'nobody@example.com' }), null);
 });
