@@ -470,22 +470,25 @@ Linux). Fixed in `d15f71c`.
 | `the fixture really does carry EXIF and GPS...` | Asserts `meta.sideData.includes('EXIF metadata')` - a claim about how one **ffprobe build names side_data**, not about the file. **The real strip test passes on Linux, byte-grep and all**, so EXIF stripping genuinely works. Fix: assert the bytes, or accept either spelling. |
 | `a broken filtergraph fails loudly...` | Asserts ffmpeg's error *wording*, which differs between the gyan.dev Windows build and Debian's. Fix: assert the failure and that stderr is non-empty, not the text. |
 
-~~**Plus two pre-existing FLAKY tests**~~ **THE FLAKES ARE FIXED 2026-08-26 -
-THREE of them, one commit each, and not one by widening a margin.** They fired
-only when `node --test` ran files in parallel, and every one turned out to be a
-test measuring the machine rather than the code - which is why passing in
-isolation never cleared them.
+~~**Plus two pre-existing FLAKY tests**~~ **THE FLAKES ARE FIXED - FOUR of
+them, three on 2026-08-26 and the last on 2026-08-27, one commit each, and not
+one by widening a margin.** They fired only when `node --test` ran files in
+parallel, and every one turned out to be a test measuring the machine rather
+than the code - which is why passing in isolation never cleared them.
 
 | Test | What was actually wrong | Fix |
 |---|---|---|
 | `[fal] a 720p request downloads a 960x720 clip...` (`empty_download`, ~3 in 8) | **`provider-contract.test.js` imports `falContractCase`, so node registers and runs the WHOLE fal file in that process too** - two processes at once, both starting `dirSeq` at zero, both walking the same `build/provider-fal/<label>-<n>`, and `mkdirSync` with `recursive` never complains. Logged over one full run: 92 claims from 2 processes, **44 names claimed by both**, `media-44` among them. Two ffmpegs on one path; a read between the truncate and the first byte gets zero bytes. | `c897845` - the pid goes in the directory name, exactly as it already does in `accounts.mjs`. Re-measured the same way after: **0 names shared**, the two now writing `media-30700-44` and `media-32764-44`. |
 | `a concurrent reader never sees a truncated or invalid manifest` (~2 in 8) | Starting the reader thread on a loaded machine ate the writer's 10s budget while the writer spun through `saveJob` competing with the very thread it was waiting for. `parsed > 0` then failed having proved nothing - **the exact trap this test's own comment describes being fixed once already**, one layer down. | `aba30a1` - the reader raises a flag on its first read and the writer `Atomics.wait`s for it, which hands the core over instead of contending for it. The guard is also stronger: it now counts reads taken **while** the manifest was being rewritten (19431 in an isolated run, against the 5 the writer waits for), and stands the run down as *skipped, with its reason*, when that count is zero. The `invalid` assertion is made first and always. |
 | `an oversized password takes the same work as a normal one, on both branches` (~2 in 5 - **this one was never listed here**) | Wall-clock medians of scrypt across four cells. Under load the four burn the same cpu to within a millisecond while their clocks spread 3.8x; in one measured run the cell reading **slowest** on the clock (539ms) was the one that had burned the **least** cpu (62ms). | `1dd8e02` - the comparison is made on `process.cpuUsage()`: work done, not time waited. **The 4x margin is unchanged**, and it was verified still to catch the early return by putting it back on both branches. The wall clock is still asserted - cpu time cannot see an `await` added to one branch only, which is what arrives with Supabase - but only when the run shows the machine was free enough for the number to mean anything. |
+| `the simulated latency goes through ctx.sleepImpl` (1 in 4 under 8 extra cpu hogs, 0 in ~10 unstressed) | The budget was 15000ms, half the nominal latency -- but **the window it timed had a real ffmpeg render inside it**, and on the first run of the file the `reference()` build as well, because `await reference()` sat in the argument list, evaluated AFTER the clock started. ffmpeg took 16.1s under load, so the test failed reading `injected sleepImpl was bypassed` while sleepImpl had in fact been called exactly right. **This assertion had already been widened once** - 1000ms/900ms to 30000ms/15000ms - and its own comment records that widening. The second one was the same mistake as the first. | **this commit** - **the budget went DOWN, 15000ms to 1000ms**, by taking ffmpeg out of the window instead of making room for it. `runFfmpegImpl` is a seam `createFixtureProvider` already exposed and no test had ever used; stubbed, the measured call is one mkdir, one stat and three awaits, and the pixels stay covered by the eight other ffmpeg-backed tests in the file. Both margins measured rather than guessed: 180 samples under eight cpu hogs ran **0.32ms median, 2.15ms worst** (~465x under budget), and a real timer leaked on only the *smallest* phase was caught at **6137ms** (6x over). Verified by breaking the provider three ways on purpose - ignore the injected impl, await a real timer alongside it, await one on the 0.2 phase alone - and all three fail. |
 
 **Two sources of red left, and both are the Linux ones above.** None of the
-three was papered over with a retry, a `continue-on-error` or a wider timeout:
+four was papered over with a retry, a `continue-on-error` or a wider timeout:
 **a test whose timing margin is narrower than machine variance tests the
-machine**, and that ruling is what picked all three fixes.
+machine**, and that ruling is what picked all four fixes. The fourth went
+further and made its budget **15x tighter**, which is what happens once the
+window has nothing in it but the thing being measured.
 
 ### 5. SPECS WRITTEN - one needs rewriting before any code
 

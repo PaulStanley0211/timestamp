@@ -254,41 +254,53 @@ test('latencyMs must be a number, and the factory says so immediately', () => {
 // ---------------------------------------------------------------------------
 
 test('the simulated latency goes through ctx.sleepImpl', { skip }, async () => {
-  // 30 seconds of nominal latency against a budget of 6. The gap is deliberate
-  // and it is the whole design of this assertion.
+  // 30 seconds of nominal latency, and a call that must still return in about
+  // a millisecond. The gap is enormous on purpose, and so is the reason for it.
   //
-  // The first version asked for 1000ms and asserted `elapsed < 900`, reasoning
-  // that with sleep stubbed the only time left is ffmpeg. True, but `npm test`
-  // runs test FILES IN PARALLEL, so ffmpeg here competes with every other
-  // ffmpeg the suite is running -- it took 1008ms under load and failed, while
-  // passing in isolation every time. A timing assertion whose margin is
-  // narrower than the machine's own variance does not test the code, it tests
-  // how busy the laptop is, and it fails on the day someone is doing something
-  // else. Widening the nominal latency instead of loosening the budget keeps
-  // the assertion sharp: a genuine bypass burns THIRTY seconds and cannot hide
-  // inside any amount of scheduling noise.
+  // This assertion has now been wrong twice, both times the same way: it timed
+  // a window with REAL WORK in it and then argued about how big the budget
+  // should be. v1 asked for 1000ms of latency and `elapsed < 900`, reasoning
+  // that with sleep stubbed the only time left is ffmpeg -- true, but `npm
+  // test` runs test FILES IN PARALLEL, so ffmpeg here competes with every
+  // other ffmpeg the suite is running, and it took 1008ms. v2 raised the
+  // latency to 30000ms and the budget to half of it; ffmpeg took 16.1s under
+  // eight extra cpu hogs and it failed again. Both times the provider was
+  // innocent and the message still read "injected sleepImpl was bypassed".
   //
-  // Note also that `slept` below is the real proof. It is asserted first and it
+  // So the fix is not a third, bigger budget. It is a window with no ffmpeg in
+  // it. `runFfmpegImpl` is a seam the provider already exposes, and rendering
+  // pixels has nothing to do with whether the latency was slept for real --
+  // the eight other ffmpeg-backed tests here cover the pixels. With it
+  // stubbed, the call does one mkdir, one stat and three awaits, so the budget
+  // gets TIGHTER than before rather than wider, and both of its margins were
+  // measured rather than guessed. Below: 180 samples under eight extra cpu
+  // hogs on a 12-core box came in at 0.32ms median and 2.15ms WORST, so
+  // 1000ms sits ~465x above the noise. Above: leaking a real timer on only
+  // the 0.2 phase -- the smallest of the three, and the hardest case for the
+  // budget -- was measured at 6137ms, 6x over. Nothing lives in between.
+  //
+  // Note also that `slept` is the primary proof. It is asserted first and it
   // is exact -- a provider reaching for setTimeout directly leaves it empty.
-  // The wall-clock check is the backstop for the subtler bug where the injected
-  // impl is called AND a real timer is awaited as well.
-  const provider = createFixtureProvider({ latencyMs: 30000 });
+  // The wall clock is the backstop for the subtler bug where the injected impl
+  // is called AND a real timer is awaited as well, which `slept` cannot see.
+  const provider = createFixtureProvider({ latencyMs: 30000, runFfmpegImpl: async () => {} });
   const slept = [];
+  // Built before the clock starts. `reference()` shells out to ffmpeg on its
+  // first call and this is the first test in the file to ask for it, so
+  // leaving it inside the argument list put a whole ffmpeg run in the window.
+  const req = stillReq({ refPath: await reference() });
+  const outDir = workdir('sleep');
+
   const started = performance.now();
-  await provider.generateStill(stillReq({ refPath: await reference() }), {
-    outDir: workdir('sleep'),
+  await provider.generateStill(req, {
+    outDir,
     sleepImpl: async (ms) => { slept.push(ms); },
   });
   const elapsed = performance.now() - started;
 
   assert.deepEqual(slept, [9000, 15000, 6000], 'the round trip is split across submit/queued/download');
   assert.equal(slept.reduce((a, b) => a + b, 0), 30000);
-  // Half the nominal latency, as a PROPORTION rather than a fixed number. A
-  // fixed 6000ms budget still failed under a fully loaded suite -- ffmpeg here
-  // took 9.78s while competing with every other ffmpeg the run had going. The
-  // question this asks is "did a real 30-second timer run", and anything below
-  // half of it answers that unambiguously however slow the machine is.
-  assert.ok(elapsed < 15000, `injected sleepImpl was bypassed: ${Math.round(elapsed)}ms elapsed`);
+  assert.ok(elapsed < 1000, `injected sleepImpl was bypassed: ${Math.round(elapsed)}ms elapsed`);
 });
 
 test('the default latency actually takes time', { skip }, async () => {
