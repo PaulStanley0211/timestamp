@@ -1564,7 +1564,15 @@ export function createServer({
      */
     async verifyPage(req, res, { query }) {
       if (!sb) return identityUnavailable(req, res);
-      const email = String(query?.get('email') ?? '').trim().slice(0, 254);
+      // Whole-branch review finding 4: `signupPage` twenty lines above guards
+      // its own `?email=` prefill with `isAddressShaped(prefill) ? prefill :
+      // ''` -- this route did not, so `/verify?email=<anything up to 254
+      // chars>` rendered that text on the page, escaped so it is not markup,
+      // but still attacker-chosen text shown in bold on this app's own
+      // origin, under our own branding, on a page that already says "check
+      // your email". Applying the sibling's guard closes that.
+      const raw = String(query?.get('email') ?? '').trim().slice(0, 254);
+      const email = isAddressShaped(raw) ? raw : '';
       const { token, setCookie } = await auths.csrfIssue(req);
       return sendHtml(req, res, 200, verifyPage({ email, csrf: token }),
         setCookie ? { 'Set-Cookie': setCookie } : {});

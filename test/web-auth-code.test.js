@@ -564,7 +564,28 @@ test('an address in the query cannot write markup into the page', async (t) => {
   assert.equal(res.status, 200, 'the page must exist for this check to mean anything');
   const body = await res.text();
   assert.ok(!body.includes('<script>alert(1)</script>'), 'the address was rendered as markup');
-  assert.ok(body.includes('&lt;script&gt;'), 'the address was dropped rather than escaped');
+  // CORRECTED for whole-branch review finding 4: this used to assert the
+  // garbage was rendered ESCAPED (`&lt;script&gt;`) rather than dropped, which
+  // is not an XSS hole but is still an oracle for rendering arbitrary
+  // attacker-chosen text on this app's own origin. `signupPage`'s own prefill
+  // guards this with `isAddressShaped(prefill) ? prefill : ''`; `verifyPage`
+  // now applies the identical guard, so non-address-shaped text is dropped
+  // rather than escaped and shown.
+  assert.ok(!body.includes('&lt;script&gt;'), 'non-address-shaped text was rendered rather than dropped');
+});
+
+test('a non-address query value is dropped from the page rather than rendered, escaped or not', async (t) => {
+  // Whole-branch review finding 4, the concrete path named in the review:
+  // `/verify?email=Your account is suspended, call 555-0100` used to render
+  // that sentence in bold, under this app's own branding, on a page that
+  // already says "check your email" -- a ready-made phishing premise, and
+  // escaping alone does not fix it because there is no markup to escape.
+  const { base } = await startWithFakeSupabase(t, {});
+  const phishing = 'Your account is suspended, call 555-0100';
+  const res = await getPage(`${base}/verify?email=${encodeURIComponent(phishing)}`);
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.ok(!body.includes(phishing), 'attacker-chosen text reached the page');
 });
 
 // ---------------------------------------------------------------------------
