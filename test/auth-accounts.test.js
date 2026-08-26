@@ -549,6 +549,27 @@ test('an unknown email costs the same work as a wrong password, so the timing is
  * wall-clock budget. The defect this guards against is an early return that
  * skips the derivation entirely -- two orders of magnitude against a 4x
  * margin.
+ *
+ * WHY THIS ONE COUNTS CPU AND THE TEST ABOVE DOES NOT. Under `node --test` the
+ * suite's other files are spending every core, and a derivation that takes
+ * 62ms of CPU was MEASURED here finishing 539ms after it started -- the extra
+ * 477ms is the scheduler, not work. That inflation is bursty enough to sit on
+ * all five samples of one cell and leave the other three alone, which is what
+ * made this test fail two runs in five while passing alone: the cell reading
+ * SLOWEST on the wall clock was, in the same run, the one that burned the
+ * LEAST cpu. So the four-way comparison is made on `process.cpuUsage()`, which
+ * counts work done and not time waited, and is what "the same amount of work"
+ * meant all along. scrypt runs on the libuv threadpool and `cpuUsage` is
+ * process-wide, so that thread's time is included.
+ *
+ * The wall clock is still asserted, because CPU time cannot see the one oracle
+ * that costs no CPU: an `await` on one branch only -- a lock, or the network
+ * round trip this module acquires the moment identity moves to Supabase. But
+ * it is only evidence when the machine was actually free to answer, so it is
+ * asserted only when the run shows no meaningful contention, and says so out
+ * loud when it skips. A wall-clock assertion made on a contended machine
+ * cannot fail for the right reason, and a test that fails for the wrong reason
+ * sends somebody hunting a defect that is not there.
  */
 test('an oversized password takes the same work as a normal one, on both branches', async (t) => {
   const root = makeRoot(t);
@@ -561,23 +582,45 @@ test('an oversized password takes the same work as a normal one, on both branche
     'known-oversized': { email: 'paul@example.com', password: oversized },
     'unknown-oversized': { email: 'nobody@example.com', password: oversized },
   };
-  const samples = Object.fromEntries(Object.keys(cells).map((k) => [k, []]));
+  const cpu = Object.fromEntries(Object.keys(cells).map((k) => [k, []]));
+  const wall = Object.fromEntries(Object.keys(cells).map((k) => [k, []]));
   for (let i = 0; i < 5; i += 1) {
     for (const [name, { email, password }] of Object.entries(cells)) {
+      const spentAt = process.cpuUsage();
       const at = process.hrtime.bigint();
       try { await authenticate({ root, email, password }); } catch { /* expected */ }
-      samples[name].push(Number(process.hrtime.bigint() - at));
+      wall[name].push(Number(process.hrtime.bigint() - at) / 1e6);
+      const spent = process.cpuUsage(spentAt);
+      cpu[name].push((spent.user + spent.system) / 1e3);
     }
   }
   const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
-  const medians = Object.fromEntries(Object.entries(samples).map(([k, xs]) => [k, median(xs) / 1e6]));
-  t.diagnostic(Object.entries(medians).map(([k, ms]) => `${k}: ${ms.toFixed(1)}ms`).join(' · '));
+  const mediansOf = (rows) => Object.fromEntries(Object.entries(rows).map(([k, xs]) => [k, median(xs)]));
+  const cpuMs = mediansOf(cpu);
+  const wallMs = mediansOf(wall);
+  t.diagnostic(Object.keys(cells)
+    .map((k) => `${k}: ${cpuMs[k].toFixed(1)}ms cpu / ${wallMs[k].toFixed(1)}ms wall`).join(' · '));
 
-  const values = Object.values(medians);
-  const fastest = Math.min(...values);
-  const slowest = Math.max(...values);
-  assert.ok(fastest > slowest / 4,
-    `the fastest cell answered in ${fastest.toFixed(1)}ms against ${slowest.toFixed(1)}ms -- that gap is an enumeration oracle`);
+  const spread = (ms) => ({ fastest: Math.min(...Object.values(ms)), slowest: Math.max(...Object.values(ms)) });
+
+  // THE ASSERTION. Work done, not time waited.
+  const work = spread(cpuMs);
+  assert.ok(work.fastest > work.slowest / 4,
+    `the fastest cell burned ${work.fastest.toFixed(1)}ms of cpu against ${work.slowest.toFixed(1)}ms -- that gap is an enumeration oracle`);
+
+  // And the wall clock, when the machine was free enough for it to mean
+  // anything. Every millisecond a cell waited above what it burned came from
+  // somewhere else on the machine; if that overhead is a large multiple of the
+  // work itself, this run measured the suite and not the module.
+  const burned = Object.values(cpu).flat().reduce((a, b) => a + b, 0);
+  const elapsed = Object.values(wall).flat().reduce((a, b) => a + b, 0);
+  if (elapsed <= burned * 1.5) {
+    const clock = spread(wallMs);
+    assert.ok(clock.fastest > clock.slowest / 4,
+      `the fastest cell answered in ${clock.fastest.toFixed(1)}ms against ${clock.slowest.toFixed(1)}ms -- that gap is an enumeration oracle`);
+  } else {
+    t.diagnostic(`wall clock not asserted: ${elapsed.toFixed(0)}ms elapsed against ${burned.toFixed(0)}ms of cpu, so this machine was busy elsewhere`);
+  }
 });
 
 /**
