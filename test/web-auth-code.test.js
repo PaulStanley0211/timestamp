@@ -763,6 +763,10 @@ test('a login that creates the account consumes the parked consent and stores it
   const { base, csrf, cookie, root } = await startWithFakeSupabase(t, {});
   const res = await postForm(`${base}/login`, { email: TEST_EMAIL, password: 'whatever the person typed', csrf }, cookie);
   assert.equal(res.status, 303);
+  // Consent was already on file the moment the account was created, so this
+  // login is not diverted through /onboarding -- see the review-fix section
+  // below for the case where it must be.
+  assert.equal(res.headers.get('location'), '/', 'a login with consent already on file was diverted through onboarding');
   const account = loadAccount({ root, accountId: listAccounts({ root })[0].accountId });
   assert.equal(account.consent?.granted, true, 'the account was created with no record of the agreement');
   assert.equal(account.consent?.text, PARKED_CONSENT.text);
@@ -776,6 +780,75 @@ test('a login that creates an account with nothing parked still succeeds, and re
   assert.equal(res.status, 303, 'a login with nothing parked must still succeed');
   const account = loadAccount({ root, accountId: listAccounts({ root })[0].accountId });
   assert.equal(account.consent, null, 'nothing was parked, so nothing should have been invented');
+});
+
+// ---------------------------------------------------------------------------
+// task 12 review fix -- `login` never routed a `consent: null` account
+// through `/onboarding` at all, which is the one route the whole obligation
+// exists to close. Pinned here, through the real `/login` route, rather than
+// only through `/verify` where it already worked.
+// ---------------------------------------------------------------------------
+
+test('a login that opens an account with no consent parked lands it on /onboarding, not home', async (t) => {
+  const { base, csrf, cookie, root } = await startWithFakeSupabase(t, { pendingConsent: null });
+  const res = await postForm(`${base}/login`, { email: TEST_EMAIL, password: 'whatever the person typed', csrf }, cookie);
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), '/onboarding',
+    'an account opened with consent: null must be routed to the one place that repairs it');
+  const account = loadAccount({ root, accountId: listAccounts({ root })[0].accountId });
+  assert.equal(account.consent, null);
+});
+
+/**
+ * The gating rule is keyed on the account's OWN `consent` field, read back
+ * after `resolveIdentity` returns -- not on its `created` flag. This is the
+ * case that distinguishing them was FOR: by the second login, `resolveIdentity`
+ * takes the "known identity" branch and `created` is false, yet the account
+ * still carries `consent: null` from the first login (nothing was parked
+ * either time). A rule keyed on `created` alone would divert the first login
+ * and wave the second one through home -- an account sitting with no consent
+ * record and no route left that ever asks it. This is a real account this
+ * repository can produce today, not a hypothetical: it is exactly what a
+ * login that creates an account, with nothing parked, looked like before this
+ * fix -- the account above never had anywhere else to go.
+ */
+test('a second login on that same account still lands on /onboarding -- consent is still missing, "created" is not', async (t) => {
+  const { base, csrf, cookie, root } = await startWithFakeSupabase(t, { pendingConsent: null });
+  const first = await postForm(`${base}/login`, { email: TEST_EMAIL, password: 'whatever the person typed', csrf }, cookie);
+  assert.equal(first.status, 303);
+  await first.text();
+  const accountId = listAccounts({ root })[0].accountId;
+  assert.equal(loadAccount({ root, accountId }).consent, null, 'setup: consent should still be unset after the first login');
+
+  const second = await postForm(`${base}/login`, { email: TEST_EMAIL, password: 'whatever the person typed', csrf }, cookie);
+  assert.equal(second.status, 303);
+  assert.equal(second.headers.get('location'), '/onboarding',
+    'a returning login on an account still missing consent must still be routed to /onboarding');
+  await second.text();
+  assert.equal(listAccounts({ root }).length, 1, 'the second login must resolve the SAME account, not create another');
+});
+
+/**
+ * `next` is honoured exactly as before once consent is on file -- a returning
+ * sign-in that was headed somewhere specific still gets there. But while
+ * consent is missing, `next` is NOT honoured: the whole point of this fix is
+ * that the account passes through the one repair point, and a `next` that
+ * skipped it would reopen the gap by a different door.
+ */
+test('next is honoured once consent is on file, and overridden by /onboarding while it is missing', async (t) => {
+  const withConsent = await startWithFakeSupabase(t, {});
+  const ok = await postForm(`${withConsent.base}/login`,
+    { email: TEST_EMAIL, password: 'whatever the person typed', next: '/pricing', csrf: withConsent.csrf }, withConsent.cookie);
+  assert.equal(ok.status, 303);
+  assert.equal(ok.headers.get('location'), '/pricing', 'a returning login with consent on file must still honour next');
+  await ok.text();
+
+  const withoutConsent = await startWithFakeSupabase(t, { pendingConsent: null });
+  const diverted = await postForm(`${withoutConsent.base}/login`,
+    { email: TEST_EMAIL, password: 'whatever the person typed', next: '/pricing', csrf: withoutConsent.csrf }, withoutConsent.cookie);
+  assert.equal(diverted.status, 303);
+  assert.equal(diverted.headers.get('location'), '/onboarding', 'next must not be a way to skip the repair while consent is missing');
+  await diverted.text();
 });
 
 /**

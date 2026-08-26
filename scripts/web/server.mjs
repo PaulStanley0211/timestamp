@@ -772,6 +772,10 @@ export function createServer({
         // onto an account record -- load, mutate, save, under the account's
         // own lock. See `handlers.onboardingConsent`.
         updateAccount: accounts.updateAccount,
+        // `login` (below) reads this back to decide whether the account it
+        // just resolved needs to be routed through `/onboarding` at all --
+        // see the comment at its redirect.
+        loadAccount: accounts.loadAccount,
       };
     }
     return identityMods;
@@ -1726,8 +1730,42 @@ export function createServer({
         }
       }
 
-      if (wantsHtml(req)) return redirect(res, next || '/', 303, { 'Set-Cookie': cookie });
-      return sendJson(req, res, 200, { accountId, next: next || '/' }, { 'Set-Cookie': cookie });
+      // 5. WHERE THIS LANDS -- task 12's obligation, and the one this route
+      // was missing. `verifyCode` and the Google callback always land a
+      // resolved identity on `/onboarding`; this route landed on `next || '/'`
+      // unconditionally instead, which is right for the ORDINARY login --
+      // most logins resolve an EXISTING account with consent already on file,
+      // per the comment at RESOLVE above, and diverting a returning
+      // sign-in through a page it has no reason to see would be a
+      // regression nobody asked for. But `consent: null` can be true of the
+      // account `accountId` now names for TWO reasons, not one: this call's
+      // own RESOLVE step just created it with nothing parked, or an EARLIER
+      // login already did that before `/onboarding` (task 12) existed to
+      // repair it. Keying on `resolveIdentity`'s `created` flag would only
+      // catch the first -- an account already sitting with `consent: null`
+      // from before this fix would carry the gap forever, on exactly the
+      // route the review found it unreachable from. So the account's OWN
+      // record is read back rather than trusted from `created`, and its
+      // `consent` field -- the same field `/onboarding` itself checks -- is
+      // what decides the destination. `next` is deliberately NOT honoured
+      // when consent is missing: the whole point is that this account passes
+      // through the one repair point, and a `next` that skipped it would
+      // reopen the gap this fix exists to close.
+      let needsOnboarding = false;
+      try {
+        needsOnboarding = ident.loadAccount({ root, accountId })?.consent == null;
+      } catch (err) {
+        // Same reasoning as REVOKE above: the session is already live and the
+        // cookie already computed, so a throw here must not turn a completed
+        // sign-in into a 500. Falling back to today's destination is the safe
+        // direction -- this account still reaches `/onboarding` the next time
+        // anything sends it there, or the next time this read succeeds.
+        logImpl(`[web] login: could not re-read the resolved account to check consent, continuing to ${next || '/'}: ${err?.message ?? err}`);
+      }
+      const destination = needsOnboarding ? '/onboarding' : (next || '/');
+
+      if (wantsHtml(req)) return redirect(res, destination, 303, { 'Set-Cookie': cookie });
+      return sendJson(req, res, 200, { accountId, next: destination }, { 'Set-Cookie': cookie });
     },
 
     // --- "forgot password?" (spec §5, task 11) ----------------------------

@@ -25,6 +25,7 @@ import crypto from 'node:crypto';
 import { createServer, safeNext, AUTH_RATE_LIMITS } from '../scripts/web/server.mjs';
 import { SupabaseAuthError } from '../scripts/auth/supabase-auth.mjs';
 import { BAD_CREDENTIALS_MESSAGE } from '../scripts/auth/accounts.mjs';
+import { putPending } from '../scripts/auth/pending-signup.mjs';
 import { ROUTES, PUBLIC_ROUTES, isPublicRoute } from '../scripts/web/router.mjs';
 import {
   createSessions, parseCookies, serializeCookie, isSecureRequest,
@@ -482,9 +483,25 @@ test('every gated route refuses an anonymous request', async () => {
   });
 });
 
+/**
+ * `auth.createAccount` above is the FAKE `scripts/auth/` this file injects for
+ * every gated route -- but `/login` resolves identity through the REAL
+ * `identity.mjs` + `accounts.mjs` against this test's own temp `root`
+ * (see the big comment on `fakeSupabaseIdentity`, above), so it is a
+ * SEPARATE, genuinely new account with no relation to the fake one and,
+ * absent this park, no consent on file. Since task 12, `login` routes such
+ * an account to `/onboarding` rather than `next` -- correctly, that is the
+ * whole point of this test file's own fix -- so a test of the `next`
+ * mechanic itself has to park a consent first, exactly as a real signup
+ * would have, or it is testing the consent redirect by accident. */
+function parkConsentFor(root, email) {
+  putPending({ root, email, consent: { granted: true, text: 'the wording' } });
+}
+
 test('a browser is sent back where it was going after signing in', async () => {
-  await withApp(async ({ base, auth }) => {
+  await withApp(async ({ base, auth, root }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    parkConsentFor(root, 'a@example.com');
     const res = await fetch(`${base}/j/${SHAPED_ID}`, { headers: { accept: 'text/html' }, redirect: 'manual' });
     assert.equal(res.headers.get('location'), `/login?next=${encodeURIComponent(`/j/${SHAPED_ID}`)}`);
 
@@ -510,8 +527,9 @@ test('next is only ever a same-origin absolute path', async () => {
   }
   assert.equal(safeNext('/j/abc'), '/j/abc');
 
-  await withApp(async ({ base, auth }) => {
+  await withApp(async ({ base, auth, root }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    parkConsentFor(root, 'a@example.com');
     const pair = await csrfPair(base);
     const login = await fetch(`${base}/login`, {
       method: 'POST',
