@@ -750,6 +750,35 @@ test('a good login mints our session and revokes theirs', async (t) => {
 });
 
 /**
+ * Spec §6: the consent parked at signup is consumed on FIRST CONFIRMED LOGIN,
+ * not only at `/verify`. This is not hypothetical -- the `{{ .Token }}`
+ * Supabase email-template edit is not done, so today Supabase mails a
+ * confirmation LINK rather than a code, and a person who signs up here
+ * (consent parked), clicks that link, then signs in with their password
+ * reaches exactly this branch: the first time this identity resolves.
+ * `startWithFakeSupabase`'s default parks `PARKED_CONSENT` for `TEST_EMAIL`,
+ * which is precisely that setup.
+ */
+test('a login that creates the account consumes the parked consent and stores it', async (t) => {
+  const { base, csrf, cookie, root } = await startWithFakeSupabase(t, {});
+  const res = await postForm(`${base}/login`, { email: TEST_EMAIL, password: 'whatever the person typed', csrf }, cookie);
+  assert.equal(res.status, 303);
+  const account = loadAccount({ root, accountId: listAccounts({ root })[0].accountId });
+  assert.equal(account.consent?.granted, true, 'the account was created with no record of the agreement');
+  assert.equal(account.consent?.text, PARKED_CONSENT.text);
+});
+
+/** The other half: most logins resolve a RETURNING account with nothing
+ *  parked at all, and that ordinary path must not start failing. */
+test('a login that creates an account with nothing parked still succeeds, and records no consent', async (t) => {
+  const { base, csrf, cookie, root } = await startWithFakeSupabase(t, { pendingConsent: null });
+  const res = await postForm(`${base}/login`, { email: TEST_EMAIL, password: 'whatever the person typed', csrf }, cookie);
+  assert.equal(res.status, 303, 'a login with nothing parked must still succeed');
+  const account = loadAccount({ root, accountId: listAccounts({ root })[0].accountId });
+  assert.equal(account.consent, null, 'nothing was parked, so nothing should have been invented');
+});
+
+/**
  * Nothing `SupabaseAuthError` carries -- `.code`, `.status`, `.message` -- may
  * reach the page, whatever upstream said. Same shape as the equivalent check
  * on `/verify` and `/signup`.

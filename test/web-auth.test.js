@@ -815,6 +815,30 @@ test('the form flow signs in: cookie plus matching field plus credentials', asyn
   });
 });
 
+/**
+ * `login` relies on `sb.revoke` being best-effort, and the real
+ * `createSupabaseAuth` already swallows its own errors -- but that is a
+ * contract asserted only in prose, on a module this task could not modify.
+ * A `sb` whose `revoke` throws must not turn an already-completed sign-in
+ * into a failure: the session is live and the cookie is already computed by
+ * the time revoke is even attempted.
+ */
+test('a revoke that throws still leaves the person signed in, cookie and all', async () => {
+  await withApp(async ({ base, auth, supabase }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    supabase.revoke = async () => { throw new Error('supabase is unreachable'); };
+    const { cookie, csrf } = await loginForm(base);
+    const res = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', csrf }),
+      redirect: 'manual',
+    });
+    assert.equal(res.status, 200, 'a throwing revoke turned a completed sign-in into a failure');
+    assert.ok(res.headers.getSetCookie().some((c) => c.startsWith(SESSION_COOKIE)), 'a throwing revoke ate the cookie too');
+  });
+});
+
 /** The cheap second layer: a browser names where a post came from, and a post
  *  that names somewhere else is refused before anything else is looked at. */
 test('a login or signup posted from another origin is refused whatever it carries', async () => {

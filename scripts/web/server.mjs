@@ -1593,26 +1593,64 @@ export function createServer({
         return refuse(ident.BAD_CREDENTIALS_MESSAGE);
       }
 
-      // 2. RESOLVE.
+      // 2. RESOLVE. Spec §6: the consent parked at signup is consumed on
+      // FIRST CONFIRMED LOGIN, not only at `/verify`. Today that is not a
+      // hypothetical -- the `{{ .Token }}` Supabase email template edit is
+      // not done, so Supabase mails a confirmation LINK rather than a code,
+      // and a person who signs up here (consent parked), clicks that link,
+      // then signs in with their password reaches `resolveIdentity`'s create
+      // branch for the first time right here, not at `/verify`. Passing
+      // `consent: null` unconditionally would create their account with no
+      // record of the agreement while the parked file expires unread --
+      // silently, since `resolveIdentity` only reads what it is given. Same
+      // shape as `verifyCode`'s take-then-resolve, because it is the same
+      // one-time consumption reached through a different door. Unlike
+      // `verifyCode`, no warning is logged when nothing is parked: there
+      // every request is mid-signup and a miss is anomalous, but here a miss
+      // is the ordinary case -- most logins resolve an EXISTING account
+      // (`findAccountBySupabaseId` / `findAccountByEmail`, neither of which
+      // reads `consent` at all), and logging on every one of those would
+      // drown the one case worth seeing.
+      const parked = ident.takePending({ root, email, nowImpl });
+
       let accountId;
       try {
-        ({ accountId } = await ident.resolveIdentity({ root, identity, consent: null, nowImpl }));
+        ({ accountId } = await ident.resolveIdentity({
+          root, identity, consent: parked?.consent ?? null, nowImpl,
+        }));
       } catch (err) {
         // FAIL CLOSED, same reasoning as `verifyCode`: a 500 here would tell an
         // attacker that Supabase accepted the password and only the local
         // resolution failed, which is exactly the fact this handler exists to
-        // withhold.
+        // withhold. And the consent goes back, because `takePending` already
+        // removed it and a retry that succeeds must not open an account with
+        // no record of the agreement.
         logImpl(`[web] login could not resolve an identity: ${err?.stack ?? err}`);
+        if (parked) {
+          try { ident.putPending({ root, email, consent: parked.consent, nowImpl }); } catch { /* logged above */ }
+        }
         return refuse(ident.BAD_CREDENTIALS_MESSAGE);
       }
 
       // 3. USE.
       const cookie = await auths.startSession(req, accountId);
 
-      // 4. REVOKE, best-effort. `sb.revoke` swallows its own errors by
-      // contract -- a login that already minted a session must not be undone
-      // by a best-effort cleanup that throws, so nothing here re-raises one.
-      if (identity?.accessToken) await sb.revoke({ accessToken: identity.accessToken });
+      // 4. REVOKE, best-effort. `sb.revoke` (the real `createSupabaseAuth`)
+      // already swallows its own errors by contract, but `sb` here is
+      // whatever was injected, and this line must not trust every possible
+      // implementation of that contract to hold. The person already has a
+      // live session and a cookie is already computed; a throw from here
+      // reaching the caller would turn a completed sign-in into a 500 with
+      // the session live on disk and the cookie never delivered -- strictly
+      // worse than a revoke that silently did nothing. So it is caught here
+      // too, and only logged.
+      if (identity?.accessToken) {
+        try {
+          await sb.revoke({ accessToken: identity.accessToken });
+        } catch (err) {
+          logImpl(`[web] login: revoke at the door failed, continuing signed in: ${err?.message ?? err}`);
+        }
+      }
 
       if (wantsHtml(req)) return redirect(res, next || '/', 303, { 'Set-Cookie': cookie });
       return sendJson(req, res, 200, { accountId, next: next || '/' }, { 'Set-Cookie': cookie });
