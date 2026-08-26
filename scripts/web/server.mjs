@@ -1845,9 +1845,13 @@ export function createServer({
       }
 
       // 5. WHERE THIS LANDS -- task 12's obligation, and the one this route
-      // was missing. `verifyCode` and the Google callback always land a
-      // resolved identity on `/onboarding`; this route landed on `next || '/'`
-      // unconditionally instead, which is right for the ORDINARY login --
+      // was missing. `verifyCode` always lands a resolved identity on
+      // `/onboarding` unconditionally -- every call it handles is a brand-new
+      // signup, so there is no returning-user case to protect. The Google
+      // callback (whole-branch review finding 1) now follows THIS route's own
+      // rule below rather than `verifyCode`'s, because it resolves both cases:
+      // this route landed on `next || '/'` unconditionally instead, which is
+      // right for the ORDINARY login --
       // most logins resolve an EXISTING account with consent already on file,
       // per the comment at RESOLVE above, and diverting a returning
       // sign-in through a page it has no reason to see would be a
@@ -2289,7 +2293,34 @@ export function createServer({
         }
       }
 
-      return redirect(res, safeNext(taken.next) || '/onboarding', 303, {
+      // 5. WHERE THIS LANDS -- whole-branch review finding 1: this handler
+      // used to honour `taken.next` unconditionally, which is the opposite of
+      // `login`'s own rule a few hundred lines above (see the comment at
+      // `login`'s REVOKE-adjacent redirect). `authCallback` is the OTHER route
+      // that can open an account with no consent on file -- a signed-out
+      // visitor hitting a gated page is sent to `/login?next=...`, and a
+      // brand-new Google account with nothing parked must pass through the
+      // one repair point exactly as a brand-new password account does, or
+      // `next` reopens the gap `/onboarding` (task 12) exists to close.
+      // Copied from `login`'s shape rather than reinvented: the account's OWN
+      // record is read back rather than trusted from `resolveIdentity`'s
+      // `created` flag, for the identical reason -- an account already
+      // sitting with `consent: null` from before either fix existed must
+      // still be caught, not only one this exact call just created.
+      let needsOnboarding = false;
+      try {
+        needsOnboarding = ident.loadAccount({ root, accountId })?.consent == null;
+      } catch (err) {
+        // Same reasoning as REVOKE above: the session is already live and the
+        // cookie already computed, so a throw here must not turn a completed
+        // sign-in into a 500. Falling back to today's destination is the safe
+        // direction -- this account still reaches `/onboarding` the next time
+        // anything sends it there, or the next time this read succeeds.
+        logImpl(`[web] google callback: could not re-read the resolved account to check consent, continuing to ${safeNext(taken.next) || '/'}: ${err?.message ?? err}`);
+      }
+      const destination = needsOnboarding ? '/onboarding' : (safeNext(taken.next) || '/');
+
+      return redirect(res, destination, 303, {
         'Set-Cookie': [cookie, clearStateCookie],
       });
     },

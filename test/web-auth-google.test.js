@@ -256,7 +256,15 @@ test('a completed round trip signs somebody in, revokes Supabase\'s own session,
     headers: { cookie: oauthCookie }, redirect: 'manual',
   });
   assert.equal(res.status, 303);
-  assert.equal(res.headers.get('location'), '/onboarding');
+  // CORRECTED for finding 1 of the whole-branch review: this assertion used
+  // to read '/onboarding' unconditionally, which was true only by accident --
+  // the old code fell back to '/onboarding' whenever `next` was absent,
+  // whatever the account's consent looked like. `startWithFakeSupabase`
+  // defaults to a consent already PARKED for this address, so the account
+  // this round trip resolves does not need the repair `/onboarding` exists
+  // for, and with no `next` supplied the correct landing -- `login`'s own
+  // rule, now applied here too -- is home.
+  assert.equal(res.headers.get('location'), '/');
   const setCookies = res.headers.getSetCookie();
   assert.ok(setCookies.some((c) => /timestamp_session=/.test(c)), 'no session cookie was minted');
   const clearedState = setCookies.find((c) => c.startsWith(`${OAUTH_STATE_COOKIE}=`));
@@ -287,6 +295,26 @@ test('a round trip honours next, the same way login does', async (t) => {
   });
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), '/pricing');
+});
+
+test('a round trip that opens an account with no consent parked honours the consent repair over next, like login', async (t) => {
+  // Finding 1 of the whole-branch review: `login` was deliberately fixed NOT
+  // to honour `next` when consent is missing, because the whole point of the
+  // repair is that every such account passes through `/onboarding` -- a
+  // `next` that skipped it would reopen the gap that fix closed. This is the
+  // concrete path the review named: a signed-out visitor hits a gated page,
+  // is sent to `/login?next=...`, and completes a BRAND NEW Google account
+  // with nothing parked (`pendingConsent: null`) -- exactly `login`'s repair
+  // case, reached through the other route that can open an account.
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, { pendingConsent: null });
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie, { next: '/pricing' });
+  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), '/onboarding',
+    'a next that skipped the consent repair reopened the gap login was fixed to close');
+  await res.text();
 });
 
 test('a round trip that creates an account consumes the parked consent, like login', async (t) => {
