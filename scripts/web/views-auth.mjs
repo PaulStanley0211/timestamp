@@ -75,6 +75,14 @@ export function loginPage({ error = null, email = '', next = '', notice = null, 
     ${notice ? `<p class="notice">${h(notice)}</p>` : ''}
     ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
 
+    <form method="post" action="/auth/google">
+      ${nextField(next)}
+      ${csrfField(csrf)}
+      <button type="submit" class="record">Sign in with Google</button>
+    </form>
+
+    <p class="hint">or sign in with a password</p>
+
     <form method="post" action="/login">
       ${nextField(next)}
       ${csrfField(csrf)}
@@ -100,6 +108,14 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
     site to type one.</p>
 
     ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
+
+    <form method="post" action="/auth/google">
+      ${nextField(next)}
+      ${csrfField(csrf)}
+      <button type="submit" class="record">Sign in with Google</button>
+    </form>
+
+    <p class="hint">or create an account with a password</p>
 
     <form method="post" action="/signup">
       ${nextField(next)}

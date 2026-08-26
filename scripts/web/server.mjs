@@ -222,6 +222,17 @@ export const CODE_REFUSED_MESSAGE = 'That code is not right, or it has expired. 
  *  message on exactly the same schedule as one that did. */
 export const CODE_EXHAUSTED_MESSAGE = 'Too many attempts on that code. Ask for a new one in an hour.';
 
+/**
+ * The one sentence every failure of the Google round trip gets, whatever
+ * actually happened -- a `state` this server never issued, one already
+ * spent, an exchange Supabase refused, or a resolution that could not
+ * complete. A FIXED CONSTANT, never derived from the error, for the same
+ * reason `CODE_REFUSED_MESSAGE` is: `SupabaseAuthError` carries `.code`,
+ * `.status` and `.message`, and account errors can carry `.accountId` --
+ * none of it may reach a response or a page.
+ */
+export const OAUTH_FAILED_MESSAGE = 'That sign-in did not complete. Please try signing in with Google again.';
+
 /** One shape check for an address, used by every route that takes one, so the
  *  two cannot drift into disagreeing about what an address is. */
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -447,14 +458,18 @@ function sendHtml(req, res, status, html, headers = {}) {
     'Content-Security-Policy':
       "default-src 'self'; img-src 'self' data:; media-src 'self'; "
       + `style-src 'self'; font-src 'self'; script-src ${SCRIPT_SRC}; `
-      // `form-action` LISTS STRIPE BECAUSE OF A REDIRECT, NOT A FORM. The buy
-      // button posts to this origin; the handler answers 303 to the hosted
-      // checkout page, and Chrome checks the redirect target of a form
-      // submission against this directive. Without the origin below the browser
-      // blocks the navigation and the button silently does nothing. It is one
-      // https origin, it is Stripe's own checkout host, and no page here posts
-      // to it directly.
-      + "form-action 'self' https://checkout.stripe.com; base-uri 'none'; frame-ancestors 'none'",
+      // `form-action` LISTS STRIPE AND SUPABASE BECAUSE OF A REDIRECT, NOT A
+      // FORM. The buy button posts to this origin; the handler answers 303 to
+      // the hosted checkout page, and Chrome checks the redirect target of a
+      // form submission against this directive. Without the origin below the
+      // browser blocks the navigation and the button silently does nothing.
+      // `POST /auth/google` is the same shape: it posts here and 303s to
+      // Supabase's own `/auth/v1/authorize`, on whatever project this
+      // deployment is configured against -- `https://*.supabase.co` covers
+      // that without this file needing to know the project ref. Neither
+      // origin is ever posted to directly.
+      + "form-action 'self' https://checkout.stripe.com https://*.supabase.co; "
+      + "base-uri 'none'; frame-ancestors 'none'",
     ...headers,
   });
   res.end(req.method === 'HEAD' ? undefined : html);
@@ -733,6 +748,29 @@ export function createServer({
       };
     }
     return identityMods;
+  }
+
+  /**
+   * PKCE and the verifier store, imported the same lazy way `identityApi` is
+   * and for the same reason: a missing `scripts/auth/` must only cost the
+   * routes that need it.
+   */
+  let oauthMods = null;
+  async function oauthApi() {
+    if (!oauthMods) {
+      const [pkce, store] = await Promise.all([
+        import('../auth/pkce.mjs'),
+        import('../auth/oauth-store.mjs'),
+      ]);
+      oauthMods = {
+        newVerifier: pkce.newVerifier,
+        challengeFor: pkce.challengeFor,
+        newState: pkce.newState,
+        putVerifier: store.putVerifier,
+        takeVerifier: store.takeVerifier,
+      };
+    }
+    return oauthMods;
   }
 
   /**
@@ -1654,6 +1692,151 @@ export function createServer({
 
       if (wantsHtml(req)) return redirect(res, next || '/', 303, { 'Set-Cookie': cookie });
       return sendJson(req, res, 200, { accountId, next: next || '/' }, { 'Set-Cookie': cookie });
+    },
+
+    /**
+     * "Sign in with Google" -- the first hop. A plain form, not a link: this
+     * app ships no client JavaScript, and the button changes state -- it
+     * writes a verifier to disk -- so it is a POST like every other
+     * state-changing action here, carrying the same CSRF pair `loginPage` and
+     * `signupPage` already render.
+     *
+     * ONLY THE CHALLENGE EVER LEAVES THIS MACHINE. `newVerifier` is 32 random
+     * bytes that never appear in a URL, a header Google sees, or a log line.
+     * `challengeFor` -- its SHA-256 -- is what travels to Supabase's
+     * `/authorize`. `putVerifier` writes the verifier to a file keyed by
+     * `state`, never a cookie: a cookie cannot be made single-use, and
+     * `takeVerifier` deletes the row the moment `/auth/callback` reads it,
+     * whatever the outcome.
+     *
+     * WHY `state` RIDES INSIDE `redirectTo`. `authorizeUrl` takes no `state`
+     * parameter of its own -- Supabase's authorize endpoint has nothing to
+     * pass one back through. So this server's `state` is embedded in the
+     * query string of the `redirect_to` URL it hands Supabase; Supabase
+     * appends its own `code` to that same URL when it sends the browser back,
+     * which is what `GET /auth/callback?code=&state=` arrives holding.
+     */
+    async authGoogle(req, res) {
+      if (!sb) return identityUnavailable(req, res);
+      if (!sameOriginPost(req)) return refuseForgery(req, res, 'login');
+      const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
+      const next = safeNext(body.next);
+      const csrf = String(body.csrf ?? '');
+
+      // BEFORE anything is written to disk. Same order, same reason, as every
+      // other credential-bearing post in this file.
+      if (!(await auths.csrfCheck(req, csrf))) return refuseForgery(req, res, 'login', { next });
+
+      const oauth = await oauthApi();
+      const verifier = oauth.newVerifier();
+      const codeChallenge = oauth.challengeFor(verifier);
+      const state = oauth.newState();
+      oauth.putVerifier({ root, state, verifier, next, nowImpl });
+
+      const redirectTo = `${publicBase()}/auth/callback?state=${encodeURIComponent(state)}`;
+      return redirect(res, sb.authorizeUrl({ codeChallenge, redirectTo }));
+    },
+
+    /**
+     * The second hop. Supabase -- having already talked to Google -- sends
+     * the browser here holding a `code` and the `state` this server minted.
+     *
+     * `state` IS NOT DECORATIVE. Spec §4.2: a `code` arriving with no `state`
+     * this server issued -- or with one already spent -- is refused before
+     * Supabase is ever asked about it. Skipping that check means an attacker
+     * who obtained a `code` some other way signs the VICTIM into the
+     * ATTACKER'S account, because nothing downstream can tell a legitimately
+     * arrived identity from a planted one. `takeVerifier` deletes the row on
+     * read on every exit path -- including the expired one -- which is what
+     * makes the verifier single-use BY CONSTRUCTION rather than by this
+     * handler remembering to enforce it.
+     *
+     * EXCHANGE -> RESOLVE -> USE -> REVOKE, the same order and the same
+     * reasoning as `login`: this server mints its own session rather than
+     * carrying Supabase's token, so the revoke happens only after our cookie
+     * is live, and its failure is swallowed rather than allowed to undo a
+     * completed sign-in.
+     *
+     * GOOGLE GETS NO CODE. `identityFrom` in `supabase-auth.mjs` reads
+     * `email_confirmed_at` off Google's own reply, which arrives already
+     * true, so routing this identity through the six-digit flow would ask
+     * somebody to re-prove a mailbox Google already vouched for. This handler
+     * goes straight from a resolved identity to a session.
+     *
+     * ONE SENTENCE FOR EVERY FAILURE, whatever actually happened -- an
+     * unissued or spent `state`, an exchange Supabase refused, or a
+     * resolution that could not complete. `SupabaseAuthError`'s `.code`,
+     * `.status` and `.message`, and an account error's `.accountId`, are
+     * logged and never rendered.
+     */
+    async authCallback(req, res, { query }) {
+      if (!sb) return identityUnavailable(req, res);
+      const state = String(query?.get('state') ?? '');
+      const code = String(query?.get('code') ?? '');
+
+      const oauth = await oauthApi();
+      const taken = oauth.takeVerifier({ root, state, nowImpl });
+      if (!taken) {
+        throw new HttpError(400, OAUTH_FAILED_MESSAGE, { code: 'OAUTH_FAILED' });
+      }
+
+      // 1. EXCHANGE.
+      let identity;
+      try {
+        ({ identity } = await sb.exchangeCode({
+          authCode: code, codeVerifier: taken.verifier, clientIp: clientIpOf(req),
+        }));
+      } catch (err) {
+        logImpl(`[web] google callback exchange refused: ${err?.message ?? err}`);
+        throw new HttpError(400, OAUTH_FAILED_MESSAGE, { code: 'OAUTH_FAILED' });
+      }
+
+      // 2. RESOLVE. Spec §6, the same obligation `login` carries: a person
+      // who started an email/password signup (parking consent under this
+      // address) and then finished with Google before ever typing a code
+      // must not open an account with no record of the agreement. Keyed on
+      // the identity's OWN email -- already lower-cased and trimmed by
+      // `identityFrom` -- rather than anything from the query string, which
+      // carries no email at all.
+      const ident = await identityApi();
+      const parked = ident.takePending({ root, email: identity.email, nowImpl });
+
+      let accountId;
+      try {
+        ({ accountId } = await ident.resolveIdentity({
+          root, identity, consent: parked?.consent ?? null, nowImpl,
+        }));
+      } catch (err) {
+        // FAIL CLOSED, same reasoning as `login` and `verifyCode`: a 500 here
+        // would tell an attacker that the exchange succeeded and only local
+        // resolution failed, which is exactly the fact this handler exists to
+        // withhold. And the consent goes back, because `takePending` already
+        // removed it and a retry that succeeds must not open an account with
+        // no record of the agreement.
+        logImpl(`[web] google callback could not resolve an identity: ${err?.stack ?? err}`);
+        if (parked) {
+          try { ident.putPending({ root, email: identity.email, consent: parked.consent, nowImpl }); } catch { /* logged above */ }
+        }
+        throw new HttpError(400, OAUTH_FAILED_MESSAGE, { code: 'OAUTH_FAILED' });
+      }
+
+      // 3. USE.
+      const cookie = await auths.startSession(req, accountId);
+
+      // 4. REVOKE, best-effort -- same reasoning as `login`: the person
+      // already has a live session and a cookie is already computed, so a
+      // throw from here reaching the caller would turn a completed sign-in
+      // into a 500 with the session live on disk and the cookie never
+      // delivered. Caught here too, and only logged.
+      if (identity?.accessToken) {
+        try {
+          await sb.revoke({ accessToken: identity.accessToken });
+        } catch (err) {
+          logImpl(`[web] google callback: revoke at the door failed, continuing signed in: ${err?.message ?? err}`);
+        }
+      }
+
+      return redirect(res, safeNext(taken.next) || '/onboarding', 303, { 'Set-Cookie': cookie });
     },
 
     async signup(req, res) {

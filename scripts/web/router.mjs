@@ -67,6 +67,15 @@ export const ROUTES = Object.freeze([
   { method: 'POST', pattern: '/logout', name: 'logout' },
   { method: 'GET', pattern: '/pricing', name: 'pricingPage' },
 
+  // --- Google, the PKCE round trip (spec §3, §4.2) ------------------------
+  // NOT behind a session, for the same reason `/login` and `/signup` are not:
+  // both routes exist precisely to let somebody who has no session yet get
+  // one. `authGoogle` is a POST because it is state-changing -- it writes a
+  // verifier to disk before anything else happens -- and this repo has no
+  // client JavaScript, so the button is a form with a submit, never a link.
+  { method: 'POST', pattern: '/auth/google', name: 'authGoogle' },
+  { method: 'GET', pattern: '/auth/callback', name: 'authCallback' },
+
   // --- confirming a mailbox with a six-digit code (spec §3, §4.5) ---------
   // NOT behind a session, and deliberately. Signup mints nobody; the account
   // does not exist until the code is typed, so a gate here would be a gate on
@@ -124,6 +133,11 @@ export const ROUTES = Object.freeze([
 export const PUBLIC_ROUTES = Object.freeze(new Set([
   'stylesheet', 'font', 'favicon', 'placeImage',
   'loginPage', 'login', 'signupPage', 'signup', 'logout',
+  // Google. Whoever lands on `/auth/callback` is, by definition, not signed
+  // in yet -- the session this app trusts does not exist until this route
+  // mints it -- so gating either of these behind a session that cannot exist
+  // yet would make the flow unreachable rather than safe.
+  'authGoogle', 'authCallback',
   // The code-entry flow. See the comment beside these rows in ROUTES: the
   // account they end in does not exist until they succeed, so requiring a
   // session would make the flow unreachable rather than safe.
