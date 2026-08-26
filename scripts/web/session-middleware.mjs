@@ -71,6 +71,28 @@ export const ACCOUNT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
  */
 export const CSRF_COOKIE = 'timestamp_csrf';
 
+/**
+ * The cookie that ties `/auth/callback`'s `state` to the browser
+ * `/auth/google` sent to Supabase.
+ *
+ * SPEC §4.2'S OWN FILE-BASED STORE ANSWERS "WAS THIS STATE EVER ISSUED, AND
+ * HAS IT ALREADY BEEN SPENT" -- AND NOTHING ELSE. It says nothing about WHO is
+ * presenting it. Without this cookie: an attacker starts their own round trip,
+ * captures Supabase's redirect to `/auth/callback?state=&code=` instead of
+ * following it, and hands that URL to a victim as an ordinary link. The
+ * victim's browser redeems a `state` this server genuinely issued -- to the
+ * attacker -- and the victim is signed into the attacker's account, exactly
+ * the harm spec §4.2 names, just with one extra step the file-only store
+ * cannot see. This is a spec gap, not an implementation one; see the ruling
+ * beside `oauthStateCheck` below.
+ *
+ * `HttpOnly` because a script has no business reading it. `SameSite=Lax`, NOT
+ * `Strict` -- the callback arrives as a cross-site TOP-LEVEL GET navigation
+ * from Supabase, and `Strict` would suppress the cookie on exactly the
+ * request it exists to protect, breaking every legitimate sign-in.
+ */
+export const OAUTH_STATE_COOKIE = 'timestamp_oauth_state';
+
 export class AuthUnavailableError extends Error {
   constructor(cause) {
     super('the accounts module is not available');
@@ -437,6 +459,62 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
   }
 
   // -------------------------------------------------------------------------
+  // binding a Google round trip's state to the browser that started it
+  // -------------------------------------------------------------------------
+
+  /**
+   * Plant the binding cookie alongside the file `putVerifier` writes.
+   *
+   * `maxAgeS` is the caller's oauth-store TTL (spec §4.2's own ten minutes),
+   * passed in rather than duplicated here -- this file has no business
+   * knowing that number, only how long to keep a cookie alive for it.
+   */
+  async function oauthStateIssue(req, state, { maxAgeS = null } = {}) {
+    const mod = await api();
+    const sec = await secret();
+    return serializeCookie(OAUTH_STATE_COOKIE, mod.signCookie(state, sec), {
+      secure: isSecureRequest(req, { trustProxy }),
+      ...(maxAgeS !== null ? { maxAge: maxAgeS } : {}),
+    });
+  }
+
+  /**
+   * True only when THIS request's cookie is a value this server signed AND
+   * that value is the exact `state` being redeemed right now.
+   *
+   * TWO SEPARATE CONSTANT-TIME CHECKS, NOT ONE. `verifyCookie`'s own
+   * `timingSafeEqual` proves the cookie was not tampered with; it says
+   * nothing about whether the state INSIDE it is the one this request is
+   * trying to spend. A valid signature over a DIFFERENT state proves only
+   * that this browser started *some* round trip, which is exactly the gap
+   * the module doc above names -- so the plaintext is compared again, in
+   * constant time, against the query's own `state`.
+   *
+   * CALLED BEFORE `takeVerifier`, BY THE CALLER'S CONTRACT. A mismatch here
+   * must never consume the single-use row a legitimate request is still
+   * entitled to.
+   */
+  async function oauthStateCheck(req, state) {
+    if (typeof state !== 'string' || state.length === 0) return false;
+    const mod = await api();
+    const raw = parseCookies(req?.headers?.cookie)[OAUTH_STATE_COOKIE];
+    if (typeof raw !== 'string' || raw.length === 0) return false;
+    const bound = mod.verifyCookie(raw, await secret());
+    if (typeof bound !== 'string' || bound.length === 0) return false;
+    const ours = Buffer.from(bound, 'utf8');
+    const theirs = Buffer.from(state, 'utf8');
+    if (ours.length !== theirs.length) return false;
+    return crypto.timingSafeEqual(ours, theirs);
+  }
+
+  /** Unconditional, on every exit `/auth/callback` takes -- the round trip
+   *  this cookie was minted for is over, whichever way it ended, and nothing
+   *  about clearing it depends on whether it turns out to have been valid. */
+  function oauthStateClear(req) {
+    return serializeCookie(OAUTH_STATE_COOKIE, '', { maxAge: 0, secure: isSecureRequest(req, { trustProxy }) });
+  }
+
+  // -------------------------------------------------------------------------
   // credits
   // -------------------------------------------------------------------------
 
@@ -639,6 +717,9 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
     endSession,
     csrfIssue,
     csrfCheck,
+    oauthStateIssue,
+    oauthStateCheck,
+    oauthStateClear,
     balance,
     cost,
     resolutions,

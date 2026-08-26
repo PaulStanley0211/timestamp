@@ -1,11 +1,13 @@
 /**
- * The Google round trip. Task 10, spec §3 and §4.2.
+ * The Google round trip. Task 10, spec §3 and §4.2 -- and a fix round,
+ * 2026-08-26, after review found the spec itself was narrower than its own
+ * threat model.
  *
  * WHY THIS FILE HAS NO HARNESS OF ITS OWN. `test/web-auth-code.test.js` builds
  * a real server against a real `createSupabaseAuth` over a faked HTTPS
  * transport, and everything below reuses that harness verbatim rather than
- * inventing a second one -- `startWithFakeSupabase`, `postForm`, `getPage`,
- * `shapeOf` and `TEST_EMAIL` are all imported from there.
+ * inventing a second one -- `startWithFakeSupabase`, `postForm`, `getPage`
+ * and `TEST_EMAIL` are all imported from there.
  *
  * ONE DELIBERATE DIFFERENCE FROM THE TASK BRIEF'S SNIPPET, BEYOND THE ONE
  * `web-auth-code.test.js` ALREADY DOCUMENTS. The brief's own example writes
@@ -14,16 +16,29 @@
  * would mean editing a file this task's brief does not list for modification,
  * and outside a temporary root nothing in that harness needs to know Google
  * exists. `startGoogle` is a small LOCAL helper below: it POSTs to
- * `/auth/google` with the harness's own csrf pair and pulls the `state` back
- * out of the `redirect_to` query string embedded in the `Location` header --
- * exactly what a browser would do, just without a body to click.
+ * `/auth/google` with the harness's own csrf pair and pulls the `state`, the
+ * `code_challenge`, and the new binding cookie back out of the response --
+ * exactly what a browser would carry forward, just without a body to click.
+ *
+ * THE BINDING COOKIE IS NOT OPTIONAL IN THESE TESTS AND THAT IS THE POINT.
+ * Review finding (2026-08-26): the brief's own three tests hit
+ * `/auth/callback` with a bare `fetch()` carrying no cookie at all, which is
+ * exactly the shape that let a `state`-only store look sufficient when it was
+ * not -- an attacker who completes their OWN round trip can hand a victim the
+ * resulting `/auth/callback?state=&code=` URL, and a check that only asks
+ * "was this state ever issued" says yes. Every test below that expects a
+ * SUCCESSFUL round trip now carries the `Set-Cookie` `/auth/google` actually
+ * set, via `startGoogle`'s returned `oauthCookie`; the tests that expect a
+ * refusal deliberately withhold it, tamper with it, or bind it to a different
+ * state, and are the section that proves the fix rather than assuming it.
  *
  * WHAT IS FAKE AND WHAT IS NOT. Same as the parent file: only the Supabase
  * HTTPS transport is faked. `resolveIdentity`, `accounts.mjs`, `session.mjs`,
  * `oauth-store.mjs` and `pkce.mjs` are the real modules running against a
  * temporary root, because this task's whole subject is whether a `state` this
- * server did not issue can ever produce a session, and a faked verifier store
- * would only prove the fake refuses correctly.
+ * server did not issue -- or one presented by the wrong browser -- can ever
+ * produce a session, and a faked verifier store would only prove the fake
+ * refuses correctly.
  */
 
 import test from 'node:test';
@@ -31,12 +46,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { OAUTH_FAILED_MESSAGE } from '../scripts/web/server.mjs';
+import { OAUTH_FAILED_MESSAGE, AUTH_RATE_LIMITS } from '../scripts/web/server.mjs';
+import { OAUTH_STATE_COOKIE } from '../scripts/web/session-middleware.mjs';
 import {
-  startWithFakeSupabase, postForm, getPage, shapeOf, TEST_EMAIL,
+  startWithFakeSupabase, postForm, getPage, TEST_EMAIL,
 } from './web-auth-code.test.js';
 import { putPending, takePending } from '../scripts/auth/pending-signup.mjs';
-import { putVerifier, OAUTH_DIR } from '../scripts/auth/oauth-store.mjs';
+import { OAUTH_DIR } from '../scripts/auth/oauth-store.mjs';
+import { challengeFor } from '../scripts/auth/pkce.mjs';
 import { listAccounts, loadAccount } from '../scripts/auth/accounts.mjs';
 
 /** Consent as `pending-signup.mjs` parks it -- same shape the parent file's
@@ -47,53 +64,80 @@ const PARKED_CONSENT = Object.freeze({
 });
 
 /**
- * A browser clicking "Sign in with Google": POST the form, and hand back the
- * `state` this server minted, read out of the `redirect_to` Supabase was
- * asked to bounce the browser back to.
+ * A browser clicking "Sign in with Google": POST the form, and hand back
+ * everything a browser would carry forward -- the `state` this server
+ * minted, the `code_challenge` it sent Supabase, and the `Set-Cookie` that
+ * binds this browser to that state.
  *
  * NOT PART OF THE SHARED HARNESS -- see the file header.
  */
 async function startGoogle(base, csrf, cookie, extra = {}) {
   const res = await postForm(`${base}/auth/google`, { csrf, ...extra }, cookie);
   assert.equal(res.status, 303, 'POST /auth/google did not redirect to Supabase');
+  const setCookies = res.headers.getSetCookie();
   await res.text();
   const location = res.headers.get('location');
-  const redirectTo = new URL(location).searchParams.get('redirect_to');
+  const loc = new URL(location);
+  const codeChallenge = loc.searchParams.get('code_challenge');
+  const redirectTo = loc.searchParams.get('redirect_to');
   assert.ok(redirectTo, 'the authorize url carries no redirect_to');
   const state = new URL(redirectTo).searchParams.get('state');
   assert.ok(state, 'no state was embedded in redirect_to');
-  return state;
+  const oauthLine = setCookies.find((c) => c.startsWith(`${OAUTH_STATE_COOKIE}=`));
+  assert.ok(oauthLine, 'POST /auth/google set no oauth-state cookie');
+  return { state, codeChallenge, oauthCookie: oauthLine.split(';')[0] };
 }
 
 // ---------------------------------------------------------------------------
-// the brief's own three tests, reproduced
+// the brief's own three tests, reproduced (the first's assertion narrowed --
+// see the note beside it)
 // ---------------------------------------------------------------------------
 
 test('a callback carrying a state we never issued is refused', async (t) => {
   const { base } = await startWithFakeSupabase(t, {});
   const res = await fetch(`${base}/auth/callback?code=abc&state=never-issued`, { redirect: 'manual' });
   assert.equal(res.status, 400);
-  assert.ok(!res.headers.get('set-cookie'), 'no session from an unissued state');
+  // NARROWED FROM THE BRIEF'S OWN `!res.headers.get('set-cookie')`, and said
+  // so rather than done quietly: this response now ALWAYS clears the binding
+  // cookie on every exit, so a Set-Cookie header is present here on purpose
+  // (see "the binding cookie is cleared on every exit" below). What must
+  // still be absent is a SESSION.
+  assert.ok(!(res.headers.get('set-cookie') ?? '').includes('timestamp_session='),
+    'no session from an unissued state');
 });
 
 test('a state cannot be spent twice', async (t) => {
   const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
-  const state = await startGoogle(base, csrf, cookie);
-  const first = await fetch(`${base}/auth/callback?code=abc&state=${state}`, { redirect: 'manual' });
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie);
+  const first = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
   assert.equal(first.status, 303);
   await first.text();
-  const second = await fetch(`${base}/auth/callback?code=abc&state=${state}`, { redirect: 'manual' });
+  const second = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
   assert.equal(second.status, 400, 'the verifier was single use');
 });
 
-test('the authorize redirect carries S256 and never the verifier', async (t) => {
+test('the authorize redirect carries S256 and never the verifier, and plants an HttpOnly, SameSite=Lax binding cookie', async (t) => {
   const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
   const res = await postForm(`${base}/auth/google`, { csrf }, cookie);
   assert.equal(res.status, 303);
+  const setCookies = res.headers.getSetCookie();
   await res.text();
   const location = res.headers.get('location');
   assert.match(location, /code_challenge_method=S256/);
   assert.ok(!/code_verifier/.test(location), 'the verifier never leaves this machine');
+
+  const stateCookie = setCookies.find((c) => c.startsWith(`${OAUTH_STATE_COOKIE}=`));
+  assert.ok(stateCookie, 'no oauth-state cookie was set');
+  assert.match(stateCookie, /HttpOnly/, 'a script could read the binding cookie');
+  // `Lax`, NOT `Strict`: the callback arrives as a cross-site top-level GET
+  // from Supabase, and Strict would suppress the cookie on exactly the
+  // request it exists to protect.
+  assert.match(stateCookie, /SameSite=Lax/);
+  assert.ok(!/SameSite=Strict/i.test(stateCookie), 'Strict would break every legitimate sign-in');
 });
 
 // ---------------------------------------------------------------------------
@@ -101,27 +145,30 @@ test('the authorize redirect carries S256 and never the verifier', async (t) => 
 // ---------------------------------------------------------------------------
 
 test('an expired state is refused, and the verifier is gone from disk either way', async (t) => {
-  const { base, root } = await startWithFakeSupabase(t, {});
-  // Simulated rather than waited for: `putVerifier` with a negative TTL
-  // freezes an `expiresAt` already in the past, exactly what a real ten
-  // minutes would eventually produce.
-  putVerifier({
-    root, state: 'already-stale', verifier: 'whatever-verifier', next: '', ttlMs: -1,
-  });
-  const file = path.join(root, ...OAUTH_DIR.split('/'), 'already-stale.json');
-  assert.ok(fs.existsSync(file), 'the test did not actually seed a row');
+  const { base, csrf, cookie, root } = await startWithFakeSupabase(t, {});
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie);
+  // A REAL state and a REAL binding cookie from a REAL /auth/google POST --
+  // only the file's own expiry is pushed into the past, exactly what a real
+  // ten minutes would eventually produce. Seeding a fabricated state here
+  // instead would test the file store in isolation and say nothing about the
+  // cookie check that now runs in front of it.
+  const file = path.join(root, ...OAUTH_DIR.split('/'), `${state}.json`);
+  const row = JSON.parse(fs.readFileSync(file, 'utf8'));
+  fs.writeFileSync(file, JSON.stringify({ ...row, expiresAt: new Date(0).toISOString() }));
 
-  const res = await fetch(`${base}/auth/callback?code=abc&state=already-stale`, { redirect: 'manual' });
+  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
   assert.equal(res.status, 400);
-  assert.ok(!res.headers.get('set-cookie'), 'no session from an expired state');
+  assert.ok(!(res.headers.get('set-cookie') ?? '').includes('timestamp_session='), 'no session from an expired state');
   assert.ok(!fs.existsSync(file), '`takeVerifier` must delete on the expired exit path too');
 });
 
-test('a google post that cannot prove it came from this form writes nothing to disk', async (t) => {
+test('a google post that cannot prove it came from this form writes nothing to disk and sets no oauth-state cookie', async (t) => {
   const { base, root, cookie } = await startWithFakeSupabase(t, {});
   const res = await postForm(`${base}/auth/google`, { csrf: 'not-a-token' }, cookie);
   assert.equal(res.status, 403);
-  assert.ok(!res.headers.get('set-cookie'));
+  assert.ok(!(res.headers.get('set-cookie') ?? '').includes(`${OAUTH_STATE_COOKIE}=`));
   const dir = path.join(root, ...OAUTH_DIR.split('/'));
   const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
   assert.deepEqual(files, [], 'a forged post still minted a verifier');
@@ -133,22 +180,88 @@ test('a cross-site post to /auth/google is refused before anything is written', 
     headers: { origin: 'https://evil.example' },
   });
   assert.equal(res.status, 403);
+  assert.ok(!(res.headers.get('set-cookie') ?? '').includes(`${OAUTH_STATE_COOKIE}=`));
   const dir = path.join(root, ...OAUTH_DIR.split('/'));
   const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
   assert.deepEqual(files, [], 'a cross-site post still minted a verifier');
 });
 
 // ---------------------------------------------------------------------------
-// the happy path, and what it must and must not do
+// THE FIX ROUND -- state IS bound to the browser that requested it
 // ---------------------------------------------------------------------------
 
-test('a completed round trip signs somebody in and revokes Supabase\'s own session', async (t) => {
+test('redeeming a valid state with no cookie fails, and the row survives for whoever actually holds it', async (t) => {
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie);
+
+  // This is the attack, reproduced: a request holding a genuinely-issued
+  // `state` and no relationship to the browser that requested it.
+  const bare = await fetch(`${base}/auth/callback?code=abc&state=${state}`, { redirect: 'manual' });
+  assert.equal(bare.status, 400);
+  assert.ok(!(bare.headers.get('set-cookie') ?? '').includes('timestamp_session='),
+    'a request carrying no cookie at all minted a session');
+  await bare.text();
+
+  // AND THE ROW MUST STILL BE THERE. The cookie check runs BEFORE
+  // takeVerifier precisely so a decoy request cannot burn the legitimate
+  // browser's one shot at its own state.
+  const legit = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
+  assert.equal(legit.status, 303, 'a cookie-less request consumed the row a legitimate browser still needed');
+});
+
+test('redeeming with a cookie bound to a DIFFERENT state fails', async (t) => {
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  const mine = await startGoogle(base, csrf, cookie);
+  const someoneElses = await startGoogle(base, csrf, cookie);
+
+  // A genuine, correctly-signed cookie -- just not for THIS state.
+  const res = await fetch(`${base}/auth/callback?code=abc&state=${someoneElses.state}`, {
+    headers: { cookie: mine.oauthCookie }, redirect: 'manual',
+  });
+  assert.equal(res.status, 400);
+  assert.ok(!(res.headers.get('set-cookie') ?? '').includes('timestamp_session='));
+});
+
+test('a tampered oauth-state cookie fails', async (t) => {
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie);
+  const tampered = `${oauthCookie}x`; // flips the signed value, so the MAC no longer matches
+  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: tampered }, redirect: 'manual',
+  });
+  assert.equal(res.status, 400);
+  assert.ok(!(res.headers.get('set-cookie') ?? '').includes('timestamp_session='));
+});
+
+test('an unsigned oauth-state cookie -- the bare state, no signature at all -- fails', async (t) => {
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  const { state } = await startGoogle(base, csrf, cookie);
+  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: `${OAUTH_STATE_COOKIE}=${state}` }, redirect: 'manual',
+  });
+  assert.equal(res.status, 400);
+  assert.ok(!(res.headers.get('set-cookie') ?? '').includes('timestamp_session='));
+});
+
+// ---------------------------------------------------------------------------
+// the happy path, WITH the cookie, and what it must and must not do
+// ---------------------------------------------------------------------------
+
+test('a completed round trip signs somebody in, revokes Supabase\'s own session, and clears the binding cookie', async (t) => {
   const { base, csrf, cookie, calls } = await startWithFakeSupabase(t, {});
-  const state = await startGoogle(base, csrf, cookie);
-  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, { redirect: 'manual' });
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie);
+  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), '/onboarding');
-  assert.match(res.headers.get('set-cookie') ?? '', /timestamp_session=/);
+  const setCookies = res.headers.getSetCookie();
+  assert.ok(setCookies.some((c) => /timestamp_session=/.test(c)), 'no session cookie was minted');
+  const clearedState = setCookies.find((c) => c.startsWith(`${OAUTH_STATE_COOKIE}=`));
+  assert.ok(clearedState, 'the binding cookie was not cleared on a successful round trip');
+  assert.match(clearedState, /Max-Age=0/, 'the binding cookie was not actually cleared');
   await res.text();
   assert.ok(calls.some((c) => c.url.includes('/logout')), 'revoke at the door never happened');
 });
@@ -159,23 +272,29 @@ test('a Google sign-in never reaches the six-digit code flow', async (t) => {
   // test so a future change routing Google through /verify fails a NAMED
   // test rather than merely this file's other assertions.
   const { base, csrf, cookie, calls } = await startWithFakeSupabase(t, {});
-  const state = await startGoogle(base, csrf, cookie);
-  await (await fetch(`${base}/auth/callback?code=abc&state=${state}`, { redirect: 'manual' })).text();
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie);
+  await (await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  })).text();
   assert.ok(!calls.some((c) => c.pathname.endsWith('/auth/v1/verify')), 'a code was requested for a Google identity');
 });
 
 test('a round trip honours next, the same way login does', async (t) => {
   const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
-  const state = await startGoogle(base, csrf, cookie, { next: '/pricing' });
-  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, { redirect: 'manual' });
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie, { next: '/pricing' });
+  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), '/pricing');
 });
 
 test('a round trip that creates an account consumes the parked consent, like login', async (t) => {
   const { base, csrf, cookie, root } = await startWithFakeSupabase(t, {});
-  const state = await startGoogle(base, csrf, cookie);
-  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, { redirect: 'manual' });
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie);
+  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
   assert.equal(res.status, 303);
   await res.text();
   const account = loadAccount({ root, accountId: listAccounts({ root })[0].accountId });
@@ -185,12 +304,38 @@ test('a round trip that creates an account consumes the parked consent, like log
 
 test('a round trip with nothing parked still succeeds, and records no consent', async (t) => {
   const { base, csrf, cookie, root } = await startWithFakeSupabase(t, { pendingConsent: null });
-  const state = await startGoogle(base, csrf, cookie);
-  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, { redirect: 'manual' });
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie);
+  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
   assert.equal(res.status, 303);
   await res.text();
   const account = loadAccount({ root, accountId: listAccounts({ root })[0].accountId });
   assert.equal(account.consent, null, 'nothing was parked, so nothing should have been invented');
+});
+
+// ---------------------------------------------------------------------------
+// closing the PKCE loop end to end -- not just "an exchange happened"
+// ---------------------------------------------------------------------------
+
+test('the token exchange sends exactly the code the callback received, and a verifier that hashes to the challenge that was sent', async (t) => {
+  const { base, csrf, cookie, calls } = await startWithFakeSupabase(t, {});
+  const { state, oauthCookie, codeChallenge } = await startGoogle(base, csrf, cookie);
+  const res = await fetch(`${base}/auth/callback?code=THE-REAL-AUTH-CODE&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
+  assert.equal(res.status, 303);
+  await res.text();
+
+  const tokenCall = calls.find((c) => c.pathname.endsWith('/auth/v1/token') && c.search.includes('grant_type=pkce'));
+  assert.ok(tokenCall, 'no pkce token exchange was recorded');
+  // A wiring bug that swapped or dropped either value would still pass every
+  // OTHER test in this file, because the fake transport accepts any body at
+  // `/auth/v1/token`. This is the assertion that actually reads what was sent.
+  assert.equal(tokenCall.body.auth_code, 'THE-REAL-AUTH-CODE',
+    'the exchange sent a different code than the one the callback received');
+  assert.equal(challengeFor(tokenCall.body.code_verifier), codeChallenge,
+    'the verifier sent to Supabase does not hash to the challenge that was sent to it earlier');
 });
 
 // ---------------------------------------------------------------------------
@@ -201,11 +346,14 @@ test('nothing Supabase said about a failed exchange reaches the callback page', 
   for (const kind of ['invalid_credentials', 'over_request_rate_limit', 'boom']) {
     // `failWith` makes EVERY upstream call fail that way, including the
     // `/auth/v1/token?grant_type=pkce` exchange -- but not `/auth/google`
-    // itself, which never talks to Supabase at all, so a state can still be
-    // minted normally before the exchange refuses it.
+    // itself, which never talks to Supabase at all, so a state (and a
+    // binding cookie) can still be minted normally before the exchange
+    // refuses it.
     const { base, csrf, cookie } = await startWithFakeSupabase(t, { failWith: kind });
-    const state = await startGoogle(base, csrf, cookie);
-    const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, { redirect: 'manual' });
+    const { state, oauthCookie } = await startGoogle(base, csrf, cookie);
+    const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+      headers: { cookie: oauthCookie }, redirect: 'manual',
+    });
     assert.equal(res.status, 400, `a refused exchange is a 400, whatever ${kind} was upstream`);
     const body = await res.text();
     assert.ok(body.includes(OAUTH_FAILED_MESSAGE), `${kind} did not render the fixed sentence`);
@@ -236,10 +384,12 @@ test('an unverified Google identity refuses and re-parks the consent it took', a
   });
   putPending({ root, email: TEST_EMAIL, consent: PARKED_CONSENT });
 
-  const state = await startGoogle(base, csrf, cookie);
-  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, { redirect: 'manual' });
+  const { state, oauthCookie } = await startGoogle(base, csrf, cookie);
+  const res = await fetch(`${base}/auth/callback?code=abc&state=${state}`, {
+    headers: { cookie: oauthCookie }, redirect: 'manual',
+  });
   assert.equal(res.status, 400);
-  assert.ok(!res.headers.get('set-cookie'), 'no session from an unverified identity');
+  assert.ok(!(res.headers.get('set-cookie') ?? '').includes('timestamp_session='), 'no session from an unverified identity');
   await res.text();
 
   assert.equal(listAccounts({ root }).length, 0, 'an unverified identity must not create an account');
@@ -266,6 +416,31 @@ test('a server with no Supabase 503s both routes, and mints no session', async (
   assert.equal(called.status, 503);
   assert.ok(!called.headers.get('set-cookie'));
   await called.text();
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/google is rate-limited, like every other credential route here
+// ---------------------------------------------------------------------------
+
+test('one connection cannot open unlimited Google round trips', async (t) => {
+  // Review finding: the CSRF pair that gates this route is a stateless,
+  // unexpiring double-submit value, so one GET /login buys an unbounded
+  // number of these posts without a limiter -- and each one writes a file
+  // under out/oauth/ that nothing sweeps yet.
+  const { base, csrf, cookie } = await startWithFakeSupabase(t, {});
+  let sawLimit = false;
+  for (let i = 0; i < AUTH_RATE_LIMITS.google.max + 3; i += 1) {
+    const res = await postForm(`${base}/auth/google`, { csrf }, cookie);
+    if (res.status === 429) {
+      sawLimit = true;
+      assert.ok(res.headers.get('retry-after'), 'a 429 with no Retry-After');
+      await res.text();
+      break;
+    }
+    assert.equal(res.status, 303, `attempt ${i + 1} should still be allowed`);
+    await res.text();
+  }
+  assert.ok(sawLimit, 'the per-connection limiter never fired on /auth/google');
 });
 
 // ---------------------------------------------------------------------------

@@ -170,6 +170,14 @@ const AUTH_OPTIONAL_ROUTES = new Set(['pricingPage', 'homePage']);
 export const AUTH_RATE_LIMITS = Object.freeze({
   login: Object.freeze({ max: 10, windowMs: 60_000 }),
   signup: Object.freeze({ max: 10, windowMs: 3_600_000 }),
+  // `/auth/google` is the one unauthenticated route in this file that writes
+  // to disk on every hit -- a verifier and a state, under `out/oauth/`, which
+  // nothing sweeps yet (task 2's `sweepOAuth` is wired later). The CSRF pair
+  // that gates it is a stateless, unexpiring double-submit value, so one
+  // `GET /login` buys an unbounded number of these posts without it. Same
+  // shape and same number as `login`: both are per-connection, credential-
+  // adjacent routes.
+  google: Object.freeze({ max: 10, windowMs: 60_000 }),
   // Spec §4.5. Per IP; the per-code and per-address bounds are separate and
   // stricter, because an IP is cheap and a code must die at five. This one
   // exists to stop somebody cycling ADDRESSES -- which the per-address bound
@@ -714,6 +722,7 @@ export function createServer({
     login: createRateLimiter({ ...AUTH_RATE_LIMITS.login, nowImpl }),
     signup: createRateLimiter({ ...AUTH_RATE_LIMITS.signup, nowImpl }),
     verify: createRateLimiter({ ...AUTH_RATE_LIMITS.verify, nowImpl }),
+    google: createRateLimiter({ ...AUTH_RATE_LIMITS.google, nowImpl }),
   };
 
   /** The Supabase client, or null. Named short because every identity handler
@@ -768,6 +777,7 @@ export function createServer({
         newState: pkce.newState,
         putVerifier: store.putVerifier,
         takeVerifier: store.takeVerifier,
+        OAUTH_TTL_MS: store.OAUTH_TTL_MS,
       };
     }
     return oauthMods;
@@ -838,6 +848,7 @@ export function createServer({
     login: 'Too many sign-in attempts from your connection. Please wait a minute and try again.',
     signup: 'Too many new accounts from your connection. Please try again later.',
     verify: 'Too many code attempts from your connection. Please try again later.',
+    google: 'Too many attempts to sign in with Google from your connection. Please wait a minute and try again.',
   });
 
   /** True when the 429 has been sent and the handler must stop. Decided before
@@ -1705,9 +1716,8 @@ export function createServer({
      * bytes that never appear in a URL, a header Google sees, or a log line.
      * `challengeFor` -- its SHA-256 -- is what travels to Supabase's
      * `/authorize`. `putVerifier` writes the verifier to a file keyed by
-     * `state`, never a cookie: a cookie cannot be made single-use, and
-     * `takeVerifier` deletes the row the moment `/auth/callback` reads it,
-     * whatever the outcome.
+     * `state`; `takeVerifier` deletes that row the moment `/auth/callback`
+     * reads it, whatever the outcome.
      *
      * WHY `state` RIDES INSIDE `redirectTo`. `authorizeUrl` takes no `state`
      * parameter of its own -- Supabase's authorize endpoint has nothing to
@@ -1715,9 +1725,20 @@ export function createServer({
      * query string of the `redirect_to` URL it hands Supabase; Supabase
      * appends its own `code` to that same URL when it sends the browser back,
      * which is what `GET /auth/callback?code=&state=` arrives holding.
+     *
+     * A SECOND, BROWSER-BOUND COOKIE RIDES ALONGSIDE THE FILE. The file alone
+     * answers "was this state ever issued, and has it been spent" -- it says
+     * nothing about WHO is presenting it. Review finding, 2026-08-26: without
+     * this cookie, an attacker completes their own round trip, captures
+     * Supabase's redirect instead of following it, and hands that
+     * `/auth/callback?state=&code=` URL to a victim as an ordinary link --
+     * the victim's browser redeems a state the attacker minted and is signed
+     * into the ATTACKER'S account. See `OAUTH_STATE_COOKIE` in
+     * `session-middleware.mjs` for the full ruling.
      */
     async authGoogle(req, res) {
       if (!sb) return identityUnavailable(req, res);
+      if (refuseOverLimit(req, res, 'google', loginPage)) return undefined;
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'login');
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const next = safeNext(body.next);
@@ -1732,24 +1753,30 @@ export function createServer({
       const codeChallenge = oauth.challengeFor(verifier);
       const state = oauth.newState();
       oauth.putVerifier({ root, state, verifier, next, nowImpl });
+      const stateCookie = await auths.oauthStateIssue(req, state, {
+        maxAgeS: Math.floor(oauth.OAUTH_TTL_MS / 1000),
+      });
 
       const redirectTo = `${publicBase()}/auth/callback?state=${encodeURIComponent(state)}`;
-      return redirect(res, sb.authorizeUrl({ codeChallenge, redirectTo }));
+      return redirect(res, sb.authorizeUrl({ codeChallenge, redirectTo }), 303, { 'Set-Cookie': stateCookie });
     },
 
     /**
      * The second hop. Supabase -- having already talked to Google -- sends
      * the browser here holding a `code` and the `state` this server minted.
      *
-     * `state` IS NOT DECORATIVE. Spec §4.2: a `code` arriving with no `state`
-     * this server issued -- or with one already spent -- is refused before
-     * Supabase is ever asked about it. Skipping that check means an attacker
-     * who obtained a `code` some other way signs the VICTIM into the
-     * ATTACKER'S account, because nothing downstream can tell a legitimately
-     * arrived identity from a planted one. `takeVerifier` deletes the row on
-     * read on every exit path -- including the expired one -- which is what
-     * makes the verifier single-use BY CONSTRUCTION rather than by this
-     * handler remembering to enforce it.
+     * `state` IS NOT DECORATIVE, AND NEITHER IS THE COOKIE. Spec §4.2: a
+     * `code` arriving with no `state` this server issued -- or with one
+     * already spent -- is refused before Supabase is ever asked about it.
+     * That alone is not enough -- see `authGoogle`'s comment and
+     * `OAUTH_STATE_COOKIE` -- so this handler ALSO demands that the request
+     * carry a cookie this server signed, binding it to the exact `state`
+     * being redeemed, checked in constant time and BEFORE `takeVerifier`: a
+     * mismatch must never consume a legitimate pending row on somebody
+     * else's behalf. `takeVerifier` deletes the row on read on every exit
+     * path -- including the expired one -- which is what makes the verifier
+     * single-use BY CONSTRUCTION rather than by this handler remembering to
+     * enforce it.
      *
      * EXCHANGE -> RESOLVE -> USE -> REVOKE, the same order and the same
      * reasoning as `login`: this server mints its own session rather than
@@ -1763,22 +1790,38 @@ export function createServer({
      * somebody to re-prove a mailbox Google already vouched for. This handler
      * goes straight from a resolved identity to a session.
      *
-     * ONE SENTENCE FOR EVERY FAILURE, whatever actually happened -- an
-     * unissued or spent `state`, an exchange Supabase refused, or a
-     * resolution that could not complete. `SupabaseAuthError`'s `.code`,
-     * `.status` and `.message`, and an account error's `.accountId`, are
-     * logged and never rendered.
+     * ONE SENTENCE FOR EVERY FAILURE, whatever actually happened -- a state
+     * this browser was never bound to, one already spent, an exchange
+     * Supabase refused, or a resolution that could not complete.
+     * `SupabaseAuthError`'s `.code`, `.status` and `.message`, and an account
+     * error's `.accountId`, are logged and never rendered. Rendered directly
+     * (not thrown as an `HttpError`) so every exit -- success or failure --
+     * can carry the `Set-Cookie` that clears the binding cookie; the shared
+     * `fail()` path has no seam for extra headers.
      */
     async authCallback(req, res, { query }) {
       if (!sb) return identityUnavailable(req, res);
       const state = String(query?.get('state') ?? '');
       const code = String(query?.get('code') ?? '');
+      const clearStateCookie = auths.oauthStateClear(req);
+
+      const refuseOAuth = () => {
+        if (wantsHtml(req)) {
+          return sendHtml(req, res, 400, errorPage({ status: 400, title: OAUTH_FAILED_MESSAGE, detail: null }),
+            { 'Set-Cookie': clearStateCookie });
+        }
+        return sendJson(req, res, 400,
+          { error: { status: 400, message: OAUTH_FAILED_MESSAGE, code: 'OAUTH_FAILED' } },
+          { 'Set-Cookie': clearStateCookie });
+      };
+
+      // BEFORE `takeVerifier`. A state this browser was not bound to must
+      // never consume a legitimate pending row -- see the ruling above.
+      if (!(await auths.oauthStateCheck(req, state))) return refuseOAuth();
 
       const oauth = await oauthApi();
       const taken = oauth.takeVerifier({ root, state, nowImpl });
-      if (!taken) {
-        throw new HttpError(400, OAUTH_FAILED_MESSAGE, { code: 'OAUTH_FAILED' });
-      }
+      if (!taken) return refuseOAuth();
 
       // 1. EXCHANGE.
       let identity;
@@ -1788,7 +1831,7 @@ export function createServer({
         }));
       } catch (err) {
         logImpl(`[web] google callback exchange refused: ${err?.message ?? err}`);
-        throw new HttpError(400, OAUTH_FAILED_MESSAGE, { code: 'OAUTH_FAILED' });
+        return refuseOAuth();
       }
 
       // 2. RESOLVE. Spec §6, the same obligation `login` carries: a person
@@ -1817,7 +1860,7 @@ export function createServer({
         if (parked) {
           try { ident.putPending({ root, email: identity.email, consent: parked.consent, nowImpl }); } catch { /* logged above */ }
         }
-        throw new HttpError(400, OAUTH_FAILED_MESSAGE, { code: 'OAUTH_FAILED' });
+        return refuseOAuth();
       }
 
       // 3. USE.
@@ -1836,7 +1879,9 @@ export function createServer({
         }
       }
 
-      return redirect(res, safeNext(taken.next) || '/onboarding', 303, { 'Set-Cookie': cookie });
+      return redirect(res, safeNext(taken.next) || '/onboarding', 303, {
+        'Set-Cookie': [cookie, clearStateCookie],
+      });
     },
 
     async signup(req, res) {
