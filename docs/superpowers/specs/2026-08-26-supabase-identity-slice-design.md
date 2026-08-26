@@ -255,11 +255,72 @@ yet consumed. Without it the callback accepts a code an attacker obtained
 elsewhere, and the victim is signed into the **attacker's** account — which
 means the victim's next upload lands in an account the attacker can read.
 
-The verifier and state live in a short-lived, **single-use** server-side file
+~~The verifier and state live in a short-lived, **single-use** server-side file
 (`out/oauth/<state>.json`, deleted on use, TTL measured in minutes), for the
 same reason sessions are files rather than self-contained cookies: a file can be
 deleted after one use and a cookie cannot be made single-use. A sweeper runs
-alongside the existing `sweepExpiredSessions`.
+alongside the existing `sweepExpiredSessions`.~~
+
+**THIS PARAGRAPH WAS WRONG, AND IT SHIPPED WRONG BEFORE A REVIEW CAUGHT IT.**
+Recorded here rather than quietly rewritten, because the point of this
+document is to show what was believed and when: as first written, §4.2
+described a server-side, single-use file keyed by `state` and nothing else,
+and asserted that this shape defends against a `code` an attacker obtained
+elsewhere. **It does not.** A file keyed by `state` answers exactly one
+question — "was this state ever issued, and has it already been spent" — and
+nothing about *who* is presenting it. The attack the original prose claimed to
+defend against does not need a stolen `code` at all: the attacker runs their
+own Google round trip, signing in as themselves, and simply **does not follow**
+Supabase's redirect back to `/auth/callback` — they capture that URL instead
+and hand it to the victim as an ordinary link (email, chat, a QR code). The
+`state` in that URL is completely genuine; this server issued it, to the
+attacker, and it has not been spent. The victim's browser opens the link, the
+file-based store says "yes, this state is valid and unspent," and the
+callback signs the victim into the **attacker's own account** — the same harm
+this section's opening paragraph names, arrived at by a route the original
+§4.2 never considered. A single-use file cannot distinguish the browser that
+started the round trip from any other browser that later presents the same
+`state`, because a file has no notion of "browser" at all.
+
+Found in review and fixed in code 2026-08-26, commit `d1f57a2`. The file store
+above still exists exactly as first written — `out/oauth/<state>.json`,
+single-use, deleted on read, swept on the same timer as expired sessions — and
+it still matters: it is what makes the verifier itself unreplayable. What was
+missing is a second, independent binding between the `state` and the browser
+`/auth/google` sent to Supabase in the first place, and that binding is now a
+cookie:
+
+- **`/auth/google` sets a signed, `HttpOnly` cookie** (`timestamp_oauth_state`
+  in `scripts/web/session-middleware.mjs`, `OAUTH_STATE_COOKIE`) holding the
+  same `state` written to the file, at the same moment the file is written.
+- **`SameSite=Lax`, deliberately NOT `Strict`.** The callback arrives as a
+  cross-site, top-level `GET` navigation from Supabase — the browser is
+  following a redirect that originated at `accounts.google.com` and bounced
+  through Supabase's own domain. `SameSite=Strict` would suppress the cookie
+  on exactly that request, which would refuse every legitimate sign-in and not
+  only the attack. `Lax` still withholds the cookie from the cross-site
+  `<img>`/`fetch`/iframe requests that would matter for CSRF; a top-level GET
+  is the one case `Lax` allows, and it is also the only case this flow needs.
+- **The check runs in `oauthStateCheck` (`session-middleware.mjs`) and happens
+  BEFORE `takeVerifier` is called**, not after. Two separate constant-time
+  comparisons: `verifyCookie`'s own signature check (proving the cookie was
+  not tampered with), and then a `crypto.timingSafeEqual` of the state
+  *inside* the cookie against the state in the query string (proving this
+  browser's earlier round trip is *this* round trip, not merely *some* round
+  trip this server once issued a valid signature for). Ordering it before
+  `takeVerifier` matters: a mismatch must never be allowed to consume the
+  single-use row a legitimate, still-pending request is entitled to.
+- **The cookie is cleared on every exit from `/auth/callback`** — success,
+  a state mismatch, an expired or already-spent verifier, or an exchange
+  Supabase refused — because the round trip it was minted for is over either
+  way, and letting it linger buys nothing.
+
+The attacker's own browser never receives this cookie for the victim's
+attempt — cookies are scoped per browser, not embedded in the URL the
+attacker hands over — so the captured-redirect attack now fails at
+`oauthStateCheck`, before the single-use file is ever touched. **This is a
+spec-level gap that a code review closed, not an implementation slip against
+a spec that already said the right thing.**
 
 **4.3 The enumeration oracle comes back through a helpful upstream.**
 
