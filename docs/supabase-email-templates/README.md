@@ -68,3 +68,34 @@ Resend's `onboarding@resend.dev` sends to the address the account was opened
 with and nowhere else. That is enough to unlock the editor, apply this
 template, and confirm six digits arrive — by signing up as yourself. Mailing
 anybody else needs a verified domain, which this project will need anyway.
+
+## Applied and proved — 2026-08-27
+
+Custom SMTP went on first (Resend), the editor unlocked, and this body and
+subject were pasted and saved: *"Successfully updated email template"*, with a
+**Reset template** button appearing, which the dashboard only offers once a
+template differs from its default.
+
+**Proved end to end the same night.** A real signup produced a real mail: from
+"Timestamp", subject *Your Timestamp confirmation code*, sent → delivered →
+opened, rendering six digits in the code box and no link anywhere.
+
+### One more console field, which this file did not know about
+
+**Authentication → Sign In / Providers → Email → `Email OTP length` was 8.**
+This app is six digits everywhere, so the form truncated the code and Supabase
+rejected the fragment — reported as `otp_expired`, which is also what it returns
+for a genuinely expired code, so the page blamed the clock. Set to 6.
+
+Nothing in the app can detect a mismatch between that field and the six-digit
+form, exactly as nothing can detect a template that mails a link. **Both are
+console state the code cannot see. If confirmation ever breaks with no error
+anywhere, check these two first.**
+
+### Deliverability, while the sender is the sandbox
+
+`onboarding@resend.dev` is shared, so Gmail files it under Spam or Promotions
+far more often than the inbox. Search `in:anywhere from:onboarding@resend.dev`
+rather than concluding nothing was sent — twice, mail that had already arrived
+and been opened was believed missing. A verified domain fixes this and is owed
+anyway; see the sandbox note above.

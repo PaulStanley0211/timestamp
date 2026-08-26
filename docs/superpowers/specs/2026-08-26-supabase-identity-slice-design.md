@@ -634,14 +634,33 @@ None of this can be done from here; it needs consoles and an account.
    because they are files here — which is decision 3 paying off, and not a
    reason to leave the project paused.
 
-**Steps 1–5 and 8 were completed and verified on 2026-08-26.** Project ref
-`wtwldjflvmpwoxblqect`. **Step 6 — the `{{ .Token }}` template edit — is NOT
-done, and on 2026-08-26 was found to be NOT DOABLE on this project as it
-stands**: the editor is locked behind custom SMTP (step 9), Pro, or a Send
-Email hook. Until one of those lands, Supabase mails a link to a person the app
-is asking for a code. It is the one console step decision 5 added and the one
-step whose omission the app cannot detect. What the verification could NOT
-prove is listed in §10.
+**Steps 1–5 and 8 were completed and verified on 2026-08-26. STEPS 6 AND 9 WERE
+COMPLETED 2026-08-27, and step 6 is now PROVED END TO END** — a real signup sent
+a real mail that arrived, opened, and carried six digits and no link. Project
+ref `wtwldjflvmpwoxblqect`.
+
+~~Step 6 is NOT done, and was found NOT DOABLE on this project as it stands~~ —
+the template editor was locked behind custom SMTP, Pro, or a Send Email hook, so
+**step 9 turned out to be a hard prerequisite of step 6 rather than a later
+scaling concern.** Custom SMTP went on first, via Resend; the editor unlocked;
+the body from `docs/supabase-email-templates/confirm-signup.html` was pasted and
+saved. Enabling custom SMTP also lifted the mailer cap from 2 to 30 per hour.
+
+**AN ELEVENTH STEP THIS LIST NEVER HAD, and it cost an evening.**
+**Authentication → Sign In / Providers → Email → `Email OTP length` was 8.**
+This design is six digits everywhere — §4.5's attempt maths, both pages' copy,
+`maxlength="6"` and the `[0-9]{6}` pattern — so the form truncated an 8-digit
+code and Supabase rejected the fragment. **Supabase answers an invalid token
+with `otp_expired`, the same code it uses for a genuinely expired one**, so the
+page said "or it has expired" and pointed the reader at the clock instead of the
+length. Set to 6 on 2026-08-27. **Nothing in the app can detect a mismatch**, so
+this returns silently if that field is ever changed again — it belongs with step
+6 as a thing only the console can get wrong.
+
+What the verification could NOT prove is listed in §10 — and one item there is
+now sharper rather than closed: **the Google round trip still fails, with
+Supabase returning 503 to the browser and 302 to everything else.** See
+`docs/2026-08-27-first-real-round-trip.md` for what has been ruled out.
 
 ---
 
