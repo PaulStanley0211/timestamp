@@ -1540,10 +1540,20 @@ export function createServer({
      * answer and a bad one: it is the most-requested url this server has, and
      * an empty answer means every tab carries the browser's blank-page glyph.
      *
-     * A year is the right `maxAge` because these bytes never change under a
-     * fixed name -- and when they do, the ETag `sendFile` derives from size and
-     * mtime revalidates them anyway, so a stale icon survives at most until the
-     * next conditional request rather than for a year.
+     * A DAY, NOT A YEAR, AND THE REASON IS THE URL. A year is the standard
+     * advice for static assets and it is correct only when the filename carries
+     * a content hash, so a new file means a new url. These are fixed names.
+     * Cached for a year, a browser that has seen the old mark does not ask
+     * again for a year -- the change never reaches a returning visitor, and no
+     * amount of reloading fixes it, because the request is never made.
+     *
+     * Measured the hard way: a year was set here first, the icon was replaced,
+     * and it did not appear in the tab. The bytes were correct on the wire the
+     * whole time.
+     *
+     * A day, with the ETag `sendFile` derives from size and mtime, means the
+     * revalidation costs one 304 and a change is visible tomorrow at worst.
+     * Same number the font uses, for the same reason.
      */
     ...Object.fromEntries(Object.entries({
       favicon: 'favicon.ico',
@@ -1552,7 +1562,7 @@ export function createServer({
       icon192: 'icon-192.png',
       icon512: 'icon-512.png',
     }).map(([name, file]) => [name, (req, res) => {
-      if (!sendFile(req, res, { file: `${assetsRoot}/brand/${file}`, maxAge: 31_536_000 })) {
+      if (!sendFile(req, res, { file: `${assetsRoot}/brand/${file}`, maxAge: 86_400 })) {
         throw new HttpError(404, 'Not found.', { code: 'NO_BRAND_ASSET' });
       }
     }])),
