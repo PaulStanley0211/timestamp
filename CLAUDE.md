@@ -7,10 +7,120 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-26) — THE IDENTITY SLICE IS BUILT, WIRED AND REVIEWED
+## START HERE (2026-08-27, evening) — GOOGLE SIGN-IN WORKS. EMAIL STILL CANNOT REACH ANYBODY.
 
-**1570 tests / 1568 pass / 0 fail / 2 skipped.** The skips are the
+**1661 tests / 1659 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
+
+### The two sentences that matter
+
+**GOOGLE SIGN-IN IS FIXED AND PROVED — a real person signed in through it
+today.** It took three separate causes, none of them in the OAuth code, and the
+day before had been spent blaming a 503 that Supabase never sent. Section A
+below.
+
+**NOBODY CAN RECEIVE A SIX-DIGIT CODE, AND THAT IS NOT A BUG WE CAN FIX IN
+CODE.** There is currently NO address that can both receive our mail and sign
+up. Section B below. **This is the top of the list and it needs a domain.**
+
+### A — Google sign-in, three causes, all closed
+
+Each was invisible to the suite and to the server log, and each hid the next.
+
+1. **`form-action` listed one hop of a two-hop redirect** (`99a68e4`). Chrome
+   checks that directive against EVERY target in a form submission's chain.
+   `POST /auth/google` goes here, 303s to Supabase, and Supabase 302s to
+   Google's consent screen -- so with `accounts.google.com` absent the whole
+   navigation was cancelled before a byte left the browser. No network entry,
+   no log line, a button that appeared dead.
+   **WHY IT COST A DAY: node enforces no CSP.** Every probe was run from node,
+   saw a healthy `302 -> accounts.google.com`, and the blame went to Supabase.
+   Re-measured from a real browser: hop 1 is 303, hop 2 is 302, and Chrome
+   names `form-action` in the console. **Supabase never sent a 503.**
+2. **The Supabase callback URI was not registered on the Google OAuth client** —
+   Google answered `redirect_uri_mismatch`. Paul added
+   `https://wtwldjflvmpwoxblqect.supabase.co/auth/v1/callback` to the client
+   (`108140308419-...`) in Google Cloud Console. Dashboard state, not code.
+3. **Supabase's Redirect URLs allowed `127.0.0.1` and the app sends
+   `localhost`.** Supabase matches those as text, not by resolving them, so it
+   silently fell back to the Site URL -- the landing page -- and OUR CALLBACK
+   NEVER RAN, which is why nothing was ever logged. Proved before touching
+   anything: every attempt had left an unconsumed verifier row in `out/oauth/`,
+   and a callback that runs deletes it. Paul added `http://localhost:3000/**`.
+
+**All three are dashboard-or-CSP shaped. None is testable from `node --test`.**
+
+### B — Email: the exact reason nobody can sign up
+
+Measured today against the live project, not reasoned about:
+
+- `paulstanleyganganapalli@gmail.com` → **200**. Every other address → **500,
+  `unexpected_failure`, "Error sending confirmation email"**. Resend's free
+  sandbox delivers only to the address that owns the Resend account.
+- **Plus-addressing does not dodge it**: `...+ts1@gmail.com` also 500s. The
+  sandbox matches the exact address.
+- **And the one address that DOES receive mail already has a confirmed Supabase
+  user**, so signup returns Supabase's masked "already exists" 200 and sends
+  nothing at all.
+
+**Therefore no address exists that can both receive mail and sign up, and the
+six-digit flow cannot be exercised end to end by anybody today.**
+
+**DO NOT DELETE THAT SUPABASE USER TO FREE THE ADDRESS.** Local account
+`45dbeb2e` holds its `supabaseUserId`; a fresh signup gets a new id and
+`claimAccount` refuses the rebind. That is the same failure shape as `4f53dc6`
+and it would break the Google sign-in that now works.
+
+**The fix is a verified sending domain in Resend** — which is also
+`TIMESTAMP_PUBLIC_URL`, the blind check, and deployment. One purchase clears
+four blockers. A Gmail App Password or a Brevo account would unblock local
+testing sooner and gets thrown away later; Paul was shown both and has not
+chosen.
+
+`plstnly06@gmail.com` **was removed today at Paul's request** — it was a stale
+LOCAL record only; Supabase never held a user for it, because every
+confirmation mail failed and the signup rolled back each time.
+
+### C — What was built today, beyond the fixes
+
+- **The app stops claiming it sent a code it knows it did not** (`c4713d9`).
+  Both doors: signup, and the resend button a person presses BECAUSE no code
+  arrived. `/verify` now says so instead of "It lasts an hour". The signal is
+  service-wide and never per-address, and there is a test proving the signup
+  response is unchanged either way.
+- **`/onboarding` stopped answering an already-agreed account with a page whose
+  only content was a link away from it** (`30b4f1e`). Sign in now lands on `/`.
+- **Timestamp has a mark, and the tab is no longer blank** (`bcb009c`,
+  `5716cab`). Cormorant Garamond Italic 600, outlined -- the font does not
+  ship. One head-switch tear. The icon is `Ts`, capital and lowercase locked
+  into one path, in an oxide rounded square. `DESIGN.md` carries the palette
+  with every contrast ratio measured and the reasoning. `assets/brand/README.md`
+  is how to regenerate any of it.
+- **Two test bugs that were nobody's feature** (`a51ed39`, `d9ad2ef`): two files
+  sharing `build/test` across concurrent runs, and the purge CLI tests freezing
+  a clock the spawned CLI cannot read -- the second had a six-day fuse and went
+  off this morning.
+
+### D — Three things that will bite the next reader
+
+- **A cache header can hide a correct file.** `maxAge` on the brand assets was
+  set to a year; a year is only right for a content-hashed url and these are
+  fixed names, so a replaced icon never arrived and no request was ever made to
+  show it. Now a day (`aeb4a3a`). Anyone who loaded the page during that hour
+  keeps the old icon until the year elapses. **This is the shape of the whole
+  day: correct bytes, invisible failure.**
+- **Backticks inside a template literal.** `views.mjs` and `static.mjs` build
+  HTML and CSS as template literals; a comment containing a backtick ends the
+  string. It happened twice and the second one only surfaced as a server that
+  would not boot.
+- **`style-src 'self'` drops an inline `<style>` wherever it appears**,
+  including inside an inlined SVG. A generated mark that styles itself renders
+  in every markup test and loses its animation in every real browser, silently.
+
+### E — Where this leaves the branch
+
+Branch `supabase-identity-slice`, **still not pushed**; `origin/main` is still
+`b6f64a3`, nothing merged. Eight commits today, `a51ed39..aeb4a3a`.
 Branch `supabase-identity-slice`, **not yet pushed**; `origin/main` is still
 `b6f64a3`, nothing merged. Opening a PR is Paul's call, not a prerequisite.
 
@@ -80,10 +190,26 @@ now, on purpose.
 All seven items, one commit each, test-first, pushed. **Nothing in the fix
 order is left.**
 
-**SO WHAT IS ACTUALLY NEXT, in the order it is worth doing:**
-1. **Two things are Paul's** — ~~three~~; the 720p cost was already recorded
-   (see below). What is left is **the blind check** and **the UI direction that
-   unblocks rewriting DESIGN.md**. **Neither is blocked on code.**
+**SO WHAT IS ACTUALLY NEXT (rewritten 2026-08-27), in the order it is worth
+doing:**
+
+0. **BUY A DOMAIN. It is the only thing blocking four separate items** and it
+   is the whole reason nobody but Paul can sign up. It unblocks: mail to any
+   address (verify it in Resend), `TIMESTAMP_PUBLIC_URL`, deployment, and the
+   blind check packet. Everything else on this list is smaller. **Nothing in
+   the codebase is waiting on code for this.**
+   *If the domain is weeks away*: a Gmail App Password or a Brevo account makes
+   the six-digit flow testable within ten minutes and is thrown away later.
+   Paul has seen both routes and has not picked one.
+1. ~~**The UI direction that unblocks rewriting DESIGN.md.**~~ **SETTLED
+   2026-08-27.** The identity exists and `DESIGN.md` carries the palette,
+   measured: cream `#FAF7F2`, sepia `#2A211B`, oxide `#A8342A`, and
+   `#D98B7A` for dark grounds. **The pages still implement Struck and have not
+   followed yet** — that rewrite is now a mechanical job with the decisions
+   already made, not a design question. **The cathode orange cannot come with
+   it**: it measures 1.95–2.21:1 on every light ground.
+   **The blind check is still Paul's and still not done** — packet unsent at
+   `out/blind-check/`.
 2. **The two Linux CI failures (§4), BEFORE a PR is opened** — they are
    assertions about one ffmpeg/ffprobe build's wording, not product defects,
    and they will be the first thing anybody sees on the PR. ~~Plus the flaky
