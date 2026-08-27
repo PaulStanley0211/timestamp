@@ -358,6 +358,15 @@ export const BASE_CSS = `
   --faint: var(--l-dim);
   --alarm: ${PALETTE.alarm};
 
+  /* THE RECORD LIGHT, and the reason it is a token rather than a literal in
+     the mark. The brand accent is oxide red #A8342A, measured 6.16:1 on the
+     cream ground the identity is built for. On THIS ground it measures 2.86:1,
+     which is not a colour anyone can see. So the ground names the value and
+     the wordmark takes it: the lifted #D98B7A is the same hue raised until it
+     clears the floor here (7.10:1). When the pages follow the identity onto
+     cream this becomes #A8342A and nothing else has to change. */
+  --rec: #D98B7A;
+
   /* THE BOXES ARE GONE. This world forbids borders, rules and dividers; these
      four tokens existed only to draw them. --frost-lit survives as DEPTH -- the
      plane sitting nearer -- which is how grouping is carried now. */
@@ -488,25 +497,33 @@ body {
   padding: 2rem 0 2.25rem;
 }
 
+/* Drawn letterforms now, not type -- so this sizes a picture rather than a
+   font. The height is what is fixed; the SVG's own viewBox keeps the width. */
 .wordmark {
-  display: inline-flex; align-items: baseline; gap: 0.5rem;
-  font-family: var(--osd);
-  font-size: 26px;
-  letter-spacing: 0.3em;
+  display: inline-block;
   color: var(--ink);
   text-decoration: none;
 }
+.wordmark svg { display: block; height: 30px; width: auto; }
 
-/* The way a camcorder tells you it is recording. It is the product's own
-   typeface and its own idiom, which is a better logo than anything drawn. */
-.rec {
-  font-size: 0.62em;
-  color: var(--alarm);
-  animation: blink 1.6s steps(1, end) infinite;
-  transform: translateY(-0.12em);
+/* The record light: the dot of the i, and the one piece of the tape's idiom
+   allowed into the chrome. Animated from here rather than from a <style>
+   inside the SVG, because style-src 'self' blocks an inline <style> wherever
+   it appears -- an inlined SVG included, which is silent and total. */
+.rec { animation: blink 1.6s steps(1, end) infinite; }
+
+/* IT PULSES, IT DOES NOT VANISH. The standalone dot this replaces bottomed out
+   at .12, which is right for a record light: going fully dark IS the idiom.
+   This one is also the tittle of a letter, and at .12 the word reads as a
+   rendering fault for half of every cycle. .45 keeps the rhythm and the word. */
+@keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.45; } }
+
+/* The wordmark is a picture, so its name lives in a span no one sees. Not
+   display:none, which takes it from screen readers too. */
+.vh {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
 }
-
-@keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.12; } }
 
 .nav { display: flex; align-items: center; gap: 1.1rem; }
 .nav a, .nav button {
@@ -1462,6 +1479,11 @@ export const CONTENT_TYPES = Object.freeze({
   '.webp': 'image/webp',
   '.mp4': 'video/mp4',
   '.ttf': 'font/ttf',
+  '.svg': 'image/svg+xml',
+  // `image/x-icon` rather than the registered `image/vnd.microsoft.icon`: it is
+  // what every browser has always sent and accepted for this file, and the
+  // registered name is the one some of them do not paint.
+  '.ico': 'image/x-icon',
 });
 
 export function contentTypeFor(file) {

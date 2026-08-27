@@ -24,7 +24,7 @@ import {
   CODE_MAX_ATTEMPTS, CODE_REFUSED_MESSAGE, CODE_EXHAUSTED_MESSAGE, AUTH_RATE_LIMITS, RESET_DONE_NOTICE,
 } from '../scripts/web/server.mjs';
 import {
-  startWithFakeSupabase, postForm, getPage, shapeOf, TEST_EMAIL,
+  startWithFakeSupabase, postForm, getPage, shapeOf, TEST_EMAIL, withoutMarks,
 } from './web-auth-code.test.js';
 import { findAccountByEmail, createAccount } from '../scripts/auth/accounts.mjs';
 import { listSessions } from '../scripts/auth/session.mjs';
@@ -235,7 +235,7 @@ test('nothing Supabase said about a failed reset reaches the page', async (t) =>
       'error_code', 'SupabaseAuthError', 'supabase']) {
       assert.ok(!body.toLowerCase().includes(leak.toLowerCase()), `${kind} leaked ${leak} onto the page`);
     }
-    assert.ok(!/\b(403|422|429|500)\b/.test(body), `${kind} leaked an upstream status onto the page`);
+    assert.ok(!/\b(403|422|429|500)\b/.test(withoutMarks(body)), `${kind} leaked an upstream status onto the page`);
   }
 });
 

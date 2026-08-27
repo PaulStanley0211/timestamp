@@ -566,31 +566,38 @@ test('the shelf is empty until there is something on it, and then it is not', as
   });
 });
 
-test('the wordmark is the OSD face with the recording dot, and not an illustration', async () => {
+test('the wordmark is the drawn mark, named, and carries no style of its own', async () => {
   await withServer(async ({ base, cookieA }) => {
     const html = await (await get(base, '/', cookieA)).text();
     assert.ok(html.includes('class="wordmark"'));
-    assert.ok(html.includes('class="rec"'), 'the blinking dot');
-    assert.ok(html.includes('TIMESTAMP'));
 
-    // SCOPED TO THE WORDMARK, 2026-08-21. This used to assert `!html.includes(
-    // '<svg')` across the entire page, which said "the wordmark is type rather
-    // than a drawn logo" by banning vector graphics everywhere. That over-reached
-    // the moment the credit meter arrived: a ring showing how much of a plan is
-    // left is a DATA display, not an illustration, and drawing it with an <svg>
-    // is what lets the fraction ride on a `stroke-dasharray` attribute instead
-    // of an inline style the CSP would have to be loosened to allow.
-    //
-    // So the assertion now says what it always meant: nothing is drawn inside
-    // the wordmark. It stays a real one, because the wordmark being lettering
-    // rather than a picture is a deliberate choice and a page-wide grep is not
-    // the way to defend it.
-    // The wordmark is an <a>, so the element ends at the first </a> after it.
+    // THE OLD RULE HERE WAS THE OPPOSITE, AND IT WAS DELIBERATELY REVERSED
+    // (2026-08-27). This asserted `!wordmark.includes('<svg')` -- "the wordmark
+    // itself must be lettering, not a drawn logo" -- which was the right rule
+    // while the mark was the word TIMESTAMP set in the tape's own OSD face.
+    // The identity now uses Cormorant Garamond Italic with a head-switch tear
+    // through it, and neither the face nor the tear can be expressed as live
+    // text: the face is not shipped, and the tear is a clipped displacement.
+    // See DESIGN.md, "The brand identity". The rule below is what replaces it.
     const from = html.indexOf('class="wordmark"');
     const wordmark = html.slice(from, html.indexOf('</a>', from));
-    assert.ok(wordmark.includes('TIMESTAMP'), 'sliced the wrong element');
-    assert.ok(!wordmark.includes('<svg'),
-      'the wordmark itself must be lettering, not a drawn logo');
+    assert.ok(wordmark.includes('<svg'), 'sliced the wrong element, or the mark is gone');
+
+    // A PICTURE HAS NO TEXT, so something must say what it is. It used to be
+    // the literal word; a screen reader now finds nothing without this.
+    assert.ok(/<span class="vh">Timestamp<\/span>/.test(wordmark)
+      || /aria-label="Timestamp"/.test(wordmark),
+      'the wordmark is a picture with no accessible name');
+
+    // AND THE ONE THAT FAILS SILENTLY IN PRODUCTION AND NOWHERE ELSE. This
+    // server sends `style-src 'self'`, which blocks an inline <style> wherever
+    // it appears -- inside an inlined SVG included. A generated mark that
+    // carries its own <style> renders fine in every test that reads the markup
+    // and loses its animation in every real browser, with no error anywhere.
+    // The record light is animated from the stylesheet by its class instead.
+    assert.ok(!wordmark.includes('<style'),
+      'the inlined mark carries a <style> the CSP will silently drop');
+    assert.ok(wordmark.includes('class="rec"'), 'the record light lost the class the stylesheet animates');
   });
 });
 

@@ -49,7 +49,7 @@ import path from 'node:path';
 import { OAUTH_FAILED_MESSAGE, AUTH_RATE_LIMITS } from '../scripts/web/server.mjs';
 import { OAUTH_STATE_COOKIE } from '../scripts/web/session-middleware.mjs';
 import {
-  startWithFakeSupabase, postForm, getPage, TEST_EMAIL,
+  startWithFakeSupabase, postForm, getPage, TEST_EMAIL, withoutMarks,
 } from './web-auth-code.test.js';
 import { putPending, takePending } from '../scripts/auth/pending-signup.mjs';
 import { OAUTH_DIR } from '../scripts/auth/oauth-store.mjs';
@@ -389,7 +389,7 @@ test('nothing Supabase said about a failed exchange reaches the callback page', 
       'SupabaseAuthError', 'supabase', 'internal error']) {
       assert.ok(!body.toLowerCase().includes(leak.toLowerCase()), `${kind} leaked ${leak} onto the page`);
     }
-    assert.ok(!/\b(401|403|422|429|500)\b/.test(body), `${kind} leaked an upstream status onto the page`);
+    assert.ok(!/\b(401|403|422|429|500)\b/.test(withoutMarks(body)), `${kind} leaked an upstream status onto the page`);
   }
 });
 

@@ -1533,7 +1533,29 @@ export function createServer({
       }
     },
 
-    favicon(req, res) { res.writeHead(204); res.end(); },
+    /**
+     * The brand marks.
+     *
+     * `/favicon.ico` answered `204 No Content` until now, which is a legal
+     * answer and a bad one: it is the most-requested url this server has, and
+     * an empty answer means every tab carries the browser's blank-page glyph.
+     *
+     * A year is the right `maxAge` because these bytes never change under a
+     * fixed name -- and when they do, the ETag `sendFile` derives from size and
+     * mtime revalidates them anyway, so a stale icon survives at most until the
+     * next conditional request rather than for a year.
+     */
+    ...Object.fromEntries(Object.entries({
+      favicon: 'favicon.ico',
+      iconSvg: 'icon.svg',
+      icon180: 'icon-180.png',
+      icon192: 'icon-192.png',
+      icon512: 'icon-512.png',
+    }).map(([name, file]) => [name, (req, res) => {
+      if (!sendFile(req, res, { file: `${assetsRoot}/brand/${file}`, maxAge: 31_536_000 })) {
+        throw new HttpError(404, 'Not found.', { code: 'NO_BRAND_ASSET' });
+      }
+    }])),
 
     /**
      * The place photographs, when they exist.

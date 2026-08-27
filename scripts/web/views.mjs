@@ -36,8 +36,23 @@
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 
 import { STEPS } from '../render/job.mjs';
+
+/**
+ * The wordmark, read once at module load rather than on every render.
+ *
+ * It lives in `assets/brand/` and not in this file because the same paths are
+ * rasterised into the favicon and the social card -- one source, or the tab
+ * icon and the header drift apart the first time either is touched. Read
+ * eagerly and deliberately unguarded: a missing wordmark is a broken build, and
+ * a build that boots and serves a header with a hole in it is worse than one
+ * that refuses to start.
+ */
+const WORDMARK_SVG = fs
+  .readFileSync(new URL('../../assets/brand/wordmark-inline.svg', import.meta.url), 'utf8')
+  .trim();
 import { placeSlug, outfitSlug, qualitySlug, aspectSlug } from './static.mjs';
 
 // ---------------------------------------------------------------------------
@@ -296,7 +311,16 @@ export function stampDate(jobId) {
 /** The wordmark: the product's own typeface, with the dot a camcorder blinks
  *  while it is recording. Not an illustration, and not an icon pack. */
 function wordmark() {
-  return `<a class="wordmark" href="/"><span class="rec" aria-hidden="true">&#9679;</span>TIMESTAMP</a>`;
+  // INLINE, NOT AN <img>. The letterforms are `currentColor`, so the mark
+  // takes the ground it is placed on without a second file per theme -- and
+  // the record light keeps blinking, which it could not do inside an <img>
+  // that the CSP would also have to allow.
+  //
+  // The drawn letters carry no text, so the accessible name is the `<span>`:
+  // `aria-label` on the link would work too, but a visually-hidden span
+  // survives a stylesheet that fails to load, which is when a person most
+  // needs to know what they are looking at.
+  return `<a class="wordmark" href="/">${WORDMARK_SVG}<span class="vh">Timestamp</span></a>`;
 }
 
 /**
@@ -388,6 +412,14 @@ function nav({ account = null, balance = null } = {}) {
  * go -- outside `.wrap`, because the CSS that fades one background into another
  * needs them to be siblings. Everything else on the page is inside `.wrap`.
  */
+/**
+ * WHY THREE ICON LINKS AND NOT ONE. The SVG is what a current browser paints
+ * and the only one that stays sharp at every size. `/favicon.ico` is what the
+ * rest request without being told -- it is served whether it is linked or not,
+ * and the link only pins the size. The apple-touch-icon is the one an iOS home
+ * screen uses and it is the one with NO fallback: left unlinked, iOS
+ * screenshots the page and uses that instead.
+ */
 export function layout({
   title,
   body,
@@ -407,6 +439,9 @@ export function layout({
 <meta name="color-scheme" content="dark">
 <title>${h(title)}</title>
 <link rel="stylesheet" href="/styles.css">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/icon-180.png">
 ${refreshSeconds ? `<noscript><meta http-equiv="refresh" content="${Number(refreshSeconds)}"></noscript>` : ''}
 </head>
 <body class="${h(bodyClass)}">

@@ -53,6 +53,13 @@ export const ROUTES = Object.freeze([
   { method: 'GET', pattern: '/styles.css', name: 'stylesheet' },
   { method: 'GET', pattern: '/tape-osd.ttf', name: 'font' },
   { method: 'GET', pattern: '/favicon.ico', name: 'favicon' },
+  // The brand marks. Listed one per row rather than served from a `/brand/:file`
+  // pattern on purpose: an explicit row cannot be talked into reading a path
+  // its author did not intend, and there are only ever going to be four.
+  { method: 'GET', pattern: '/icon.svg', name: 'iconSvg' },
+  { method: 'GET', pattern: '/icon-180.png', name: 'icon180' },
+  { method: 'GET', pattern: '/icon-192.png', name: 'icon192' },
+  { method: 'GET', pattern: '/icon-512.png', name: 'icon512' },
 
   // --- accounts (docs/interfaces-app.md B) --------------------------------
   // The GET and the POST of each form are separate rows rather than one row
@@ -158,6 +165,7 @@ export const ROUTES = Object.freeze([
  */
 export const PUBLIC_ROUTES = Object.freeze(new Set([
   'stylesheet', 'font', 'favicon', 'placeImage',
+  'iconSvg', 'icon180', 'icon192', 'icon512',
   'loginPage', 'login', 'signupPage', 'signup', 'logout',
   // Google. Whoever lands on `/auth/callback` is, by definition, not signed
   // in yet -- the session this app trusts does not exist until this route

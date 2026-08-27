@@ -105,6 +105,88 @@ to do it.
 - The 4px spacing scale.
 - Zero npm dependencies, no inline styles, server-rendered HTML.
 
+## The brand identity (2026-08-27)
+
+The chrome and the mark are not the same problem, and this section is the mark.
+
+**The brand is a keepsake; the artifact is a tape.** The identity is quiet,
+warm and elegant precisely so the grainy 2003 thing inside it reads as precious
+rather than as a filter. That is this file's own rule about texture, followed
+one step further: if the chrome may not wear the tape, neither may the logo.
+
+### The wordmark
+
+**Cormorant Garamond Italic 600, outlined to paths.** Calligraphic by descent --
+Garamond derives from chancery hands -- so it reads as calligraphy without
+becoming wedding stationery on a word as technical as "Timestamp". Weight 600
+because this face runs very light and disappears below about 24px.
+
+**The font does not ship.** Nine letters are not worth a font request, and
+outlines render identically everywhere with no CSP question. The paths live in
+`assets/brand/`; `assets/brand/README.md` records exactly how to regenerate
+them.
+
+**One head-switch tear, and only one.** The bottom of the letterforms is
+displaced sideways below a seam at 0.72 of the ink height -- the band at the
+bottom of a VHS frame where the tape head changes, which is stage 5 of
+`docs/the-look.md`. It is DRAWN, as a clipped displacement, not filtered: it
+therefore survives at 16px and at any resolution, which a texture would not.
+
+The tear is the whole distinctiveness argument. Cormorant Italic on its own is
+one of the most-used faces on the internet and the wordmark without it is
+elegant and anonymous. The VHS cliche is chroma bleed AND scanlines AND noise;
+doing exactly one thing, precisely, is what separates this from a filter.
+
+**The record light is the dot of the i.** In the accent, keeping the 1.6s
+`steps(1, end)` rhythm the standalone dot had. It is the one piece of the
+tape's idiom allowed into the chrome, because at that size it reads as
+punctuation rather than pastiche. **It pulses to .45 and does not vanish**: the
+standalone dot bottomed out at .12, which is right for a record light, but this
+one is also a letter, and at .12 the word reads as a rendering fault for half
+of every cycle.
+
+### The palette
+
+Measured, not asserted. The identity is built for a light ground; the pages
+still implement Struck and follow later.
+
+| Token | Value | Role | Contrast |
+|---|---|---|---|
+| `--paper` | `#FAF7F2` | ground -- warm white, an album page | -- |
+| `--ink` | `#2A211B` | body, wordmark | 14.76:1 |
+| `--ink-soft` | `#7A6A5E` | labels, hints | 4.85:1 |
+| `--oxide` | `#A8342A` | the single accent | 6.16:1 |
+
+**The accent needs two values, and this is the finding worth keeping.**
+`#A8342A` measures 2.86:1 on a dark ground -- an accent that is one hex across
+both grounds is a wish, not a colour. On dark it lifts to `#D98B7A`, the same
+hue raised until it clears the floor (measured 7.47:1 against today's
+`--ground`). The mark therefore takes its record light from a `--rec` token
+rather than a literal, and the ground names the value.
+
+**The cathode orange does not come to the light world.** `#FF8A1E` measures
+1.95-2.21:1 on every candidate light ground and fails at every size. It was
+chosen to glow on ink-blue and it does that well. It is not deleted, it is
+relocated: it keeps the burnt-in date stamp inside the tape, where it was
+always right, and it leaves the chrome.
+
+### The icon
+
+The `T` from the wordmark's own face, torn the same way, knocked out of an
+oxide tile. Bare it is elegant and, at 16px, too thin -- Cormorant's fine
+strokes are where it is beautiful and where it is fragile -- so the favicon is
+the tile, and contrast does the work detail cannot at that size.
+
+### Rules
+
+- **Clearspace:** the cap-height of the `T` on all four sides.
+- **Minimum sizes:** wordmark 96px wide, icon 16px. Below 96px the wordmark is
+  replaced by the icon, never shrunk.
+- **Greyscale:** every mark must survive with no colour at all. Checked.
+- **Never re-colour the letterforms.** They are `currentColor` so one file
+  serves every ground; the record light is the only part with a colour of its
+  own.
+
 ## Superseded
 
 The frost-and-amber world (`--frost`, `--frost-lit`, `--hairline`, `#FFB700`,

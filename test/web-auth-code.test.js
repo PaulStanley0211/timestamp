@@ -246,6 +246,21 @@ export async function startWithFakeSupabase(t, {
   };
 }
 
+/**
+ * The page with every drawn mark removed.
+ *
+ * The leak checks below scan the WHOLE body for a bare upstream status code,
+ * which was exactly right while the wordmark was the literal text "TIMESTAMP".
+ * It is now drawn letterforms -- thousands of path coordinates -- so a token
+ * like 500 turning up somewhere among them is certain, constant, and means
+ * nothing at all.
+ *
+ * Stripping only <svg> keeps the check as strict as it ever was for every part
+ * of the page that can actually carry a sentence to a person, rather than
+ * relaxing the pattern and losing the guarantee to save a line.
+ */
+export const withoutMarks = (html) => String(html).replace(/<svg[\s\S]*?<\/svg>/gi, '');
+
 /** A browser's form POST: url-encoded, cookie attached, redirects not followed. */
 export function postForm(url, fields, cookie = '', { accept = 'text/html', headers = {} } = {}) {
   return fetch(url, {
@@ -421,7 +436,7 @@ test('nothing Supabase said about the failure reaches the page', async (t) => {
       assert.ok(!body.toLowerCase().includes(leak.toLowerCase()),
         `${kind} leaked ${leak} onto the page`);
     }
-    assert.ok(!/\b(403|422|429|500)\b/.test(body), `${kind} leaked an upstream status onto the page`);
+    assert.ok(!/\b(403|422|429|500)\b/.test(withoutMarks(body)), `${kind} leaked an upstream status onto the page`);
   }
 });
 
@@ -877,7 +892,7 @@ test('nothing SupabaseAuthError carries reaches the signup response, upstream fa
     for (const leak of ['user_already_exists', 'over_request_rate_limit', 'error_code', 'SupabaseAuthError', 'supabase']) {
       assert.ok(!json.body.toLowerCase().includes(leak.toLowerCase()), `${kind} leaked ${leak} onto the page`);
     }
-    assert.ok(!/\b(422|429|500)\b/.test(json.body), `${kind} leaked an upstream status onto the page`);
+    assert.ok(!/\b(422|429|500)\b/.test(withoutMarks(json.body)), `${kind} leaked an upstream status onto the page`);
   }
 });
 
@@ -1075,7 +1090,7 @@ test('nothing Supabase said about a login failure reaches the page', async (t) =
       'error_code', 'SupabaseAuthError', 'supabase']) {
       assert.ok(!res.body.toLowerCase().includes(leak.toLowerCase()), `${kind} leaked ${leak} onto the page`);
     }
-    assert.ok(!/\b(400|403|429|500)\b/.test(res.body), `${kind} leaked an upstream status onto the page`);
+    assert.ok(!/\b(400|403|429|500)\b/.test(withoutMarks(res.body)), `${kind} leaked an upstream status onto the page`);
   }
 });
 
