@@ -470,3 +470,47 @@ test('sweepRetention honours dryRun, so the CLI and the worker share one destruc
   assert.equal(result.jobsDeleted, 1, 'but it still reports what would go');
   assert.equal(result.dryRun, true);
 });
+
+test('an unknown flag stops the sweep instead of being ignored', () => {
+  const root = tmpRoot();
+  const { paths } = seedJob(root, { ageDays: 400, from: Date.now() });
+
+  // `--job=<id>` DOES NOT EXIST, and on 2026-08-27 it was typed on a real
+  // machine alongside --apply. It was accepted in silence and the full
+  // retention sweep ran: the operator believed they were deleting one job and
+  // deleted every photograph past its window across twenty-six of them.
+  //
+  // Nothing was lost that was not already due -- which is exactly why this is
+  // worth a test rather than a shrug. The window is the only thing standing
+  // between "correct" and "deleted somebody's face six days early", and this is
+  // the one command in the product whose entire purpose is destroying data. An
+  // argument it does not understand is not a request it may reinterpret.
+  const run = runCli(root, ['--job=20260827-154509-4c79c6', '--apply']);
+
+  assert.notEqual(run.status, 0, 'an unknown flag was accepted');
+  assert.match(run.stderr, /--job/, 'the refusal does not say WHICH argument was wrong');
+  assert.ok(fs.existsSync(paths.dir), 'the sweep ran anyway');
+  assert.ok(fs.existsSync(`${paths.input}/photo.jpg`), 'a photograph was deleted by a refused command');
+});
+
+test('a typo in a real flag is refused rather than silently defaulted', () => {
+  const root = tmpRoot();
+  const { paths } = seedJob(root, { ageDays: 400, from: Date.now() });
+
+  // The dangerous shape is not an invented flag, it is a NEAR MISS: --photodays
+  // reads as --photo-days and is not, so the sweep would fall back to the
+  // configured window while the operator believed they had widened it.
+  const run = runCli(root, ['--photodays=999', '--apply']);
+
+  assert.notEqual(run.status, 0, 'a near-miss flag was accepted');
+  assert.ok(fs.existsSync(paths.dir), 'the sweep ran on the configured window, not the asked-for one');
+});
+
+test('the flags the command really has are all still accepted', () => {
+  const root = tmpRoot();
+  seedJob(root, { ageDays: 400, from: Date.now() });
+
+  // The guard must not become a second place the flag list can drift from.
+  const run = runCli(root, ['--photo-days=7', '--job-days=30', '--json', '--apply']);
+  assert.equal(run.status, 0, run.stderr);
+});
