@@ -513,7 +513,17 @@ function sendHtml(req, res, status, html, headers = {}) {
       // deployment is configured against -- `https://*.supabase.co` covers
       // that without this file needing to know the project ref. Neither
       // origin is ever posted to directly.
-      + "form-action 'self' https://checkout.stripe.com https://*.supabase.co; "
+      // AND THE CHAIN DOES NOT STOP AT SUPABASE -- THIS IS THE HOP THAT WAS
+      // MISSING, AND IT COST A DAY. Supabase's `/auth/v1/authorize` does not
+      // render the consent screen itself; it answers 302 to Google's. Chrome
+      // checks EVERY target in the chain, so leaving `accounts.google.com` out
+      // blocked the submission before any request left the browser -- the
+      // button did nothing at all, no entry in the network panel, nothing in
+      // the server log. Node enforces no CSP, so every probe from Node saw a
+      // healthy `302 -> accounts.google.com` and the failure was attributed to
+      // a 503 from Supabase that this endpoint never sent. Verified from a
+      // real browser on 2026-08-27, which is the only place this is visible.
+      + "form-action 'self' https://checkout.stripe.com https://*.supabase.co https://accounts.google.com; "
       + "base-uri 'none'; frame-ancestors 'none'",
     ...headers,
   });

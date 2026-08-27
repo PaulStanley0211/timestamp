@@ -495,4 +495,21 @@ test('the CSP lets the Google redirect through, or the button would silently do 
   const csp = res.headers.get('content-security-policy') ?? '';
   assert.match(csp, /form-action[^;]*https:\/\/\*\.supabase\.co/,
     'form-action has no Supabase origin -- POST /auth/google\'s 303 would be blocked silently');
+  // THE CHAIN IS TWO HOPS, NOT ONE, AND THE SECOND IS THE ONE THAT WAS MISSING.
+  // Chrome checks `form-action` against EVERY target in a form submission's
+  // redirect chain, not just the first. This POST goes to this origin, 303s to
+  // Supabase's `/auth/v1/authorize`, and Supabase then 302s to Google's own
+  // consent screen -- so `accounts.google.com` is as load-bearing as the
+  // Supabase origin above, and its absence has exactly the same symptom the
+  // comment above predicts: the navigation is cancelled before any request
+  // leaves and the button appears dead.
+  //
+  // MEASURED 2026-08-27 against the real project, because this was misread for
+  // a day: hop 1 answered 303, hop 2 answered `302 -> accounts.google.com`, and
+  // Chrome refused the submission naming `form-action` in the console. Node
+  // enforces no CSP at all, which is why every earlier probe from Node saw a
+  // healthy 302 and the failure was attributed to a 503 from Supabase that
+  // this endpoint never sent.
+  assert.match(csp, /form-action[^;]*https:\/\/accounts\.google\.com/,
+    'form-action has no Google origin -- Supabase\'s 302 to the consent screen would be blocked silently');
 });
