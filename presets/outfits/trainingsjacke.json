@@ -1,12 +1,17 @@
 {
-  "_comment": "The most period-legible garment in the menu. Two stripes down a sleeve and an elasticated cuff date a frame on their own, without a single word about how the picture looks. Note what is NOT here: no weather, no place, no time of day. climate below is the machine-readable channel for all of that, and checkCompatibility reads it -- the prose must not. REWRITTEN 2026-08-27 to read as sportswear rather than leisurewear, WITHOUT touching the period: it is zipped rather than hanging open, it has its matching pants, and the chest crest is gone. That crest was the single most leisure-coded thing in the line and the model drew it far larger than 'small' -- job 20260824-114051-4209a6 came back with a gold heraldic badge that reads country club, which is the opposite of trackside. Every negative is unchanged except one added for the same reason.",
+  "_comment": "The most period-legible garment in the menu. Two stripes down a sleeve and an elasticated cuff date a frame on their own, without a single word about how the picture looks. Note what is NOT here: no weather, no place, no time of day. climate below is the machine-readable channel for all of that, and checkCompatibility reads it -- the prose must not. REWRITTEN 2026-08-27 to read as sportswear rather than leisurewear, WITHOUT touching the period: it is zipped rather than hanging open, it has its matching pants, and the chest crest is gone. That crest was the single most leisure-coded thing in the line and the model drew it far larger than 'small' -- job 20260824-114051-4209a6 came back with a gold heraldic badge that reads country club, which is the opposite of trackside. Every negative is unchanged except one added for the same reason. STRIPES, 2026-08-27: the line asked for two and seedream drew three on both paid renders (20260824-114051-4209a6 and 20260827-154405-73ca3d). Three stripes on a navy tracksuit is adidas's registered trade dress, not a generic sportswear cue, and 'large brand logo' does not catch it because it is not a logo applied to the garment -- it IS the garment. So the count is now stated as 'exactly two', the pair is named again on the leg rather than referred back to, and two negatives push against three specifically. test/catalog.test.js pins all of it.",
   "id": "trainingsjacke",
   "label": "Tracksuit jacket",
-  "climate": ["cool", "mild"],
-  "wardrobe": "a full-zip tracksuit jacket in navy with two white stripes running down the outside of each sleeve, a stand collar zipped to the throat, elasticated cuffs and hem, and matching navy track pants carrying the same two stripes down the outside leg, worn over a plain white t-shirt",
+  "climate": [
+    "cool",
+    "mild"
+  ],
+  "wardrobe": "a full-zip tracksuit jacket in navy with exactly two white stripes running down the outside of each sleeve, a stand collar zipped to the throat, elasticated cuffs and hem, and matching navy track pants carrying the same pair of stripes down the outside leg, worn over a plain white t-shirt",
   "negatives": [
     "modern performance wear",
     "large brand logo",
+    "three-stripe sleeve",
+    "three stripes down the arm or leg",
     "embroidered crest or club badge",
     "technical fabric",
     "sharply tailored cut"
