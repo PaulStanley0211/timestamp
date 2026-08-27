@@ -776,6 +776,28 @@ export function createServer({
    * bypass, and "the operator trusts the proxy" is a weaker claim than "this
    * is the connection the bytes arrived on".
    */
+  /**
+   * WHEN THIS SERVER LAST FAILED TO GET A MAIL OUT, or null if it never has.
+   *
+   * Set only from a 5xx -- the shape Supabase uses when its SMTP relay refuses
+   * (`unexpected_failure` / "Error sending confirmation email"), not the 4xx
+   * shapes that describe the ADDRESS (`user_already_exists`, a rate limit).
+   * That split is the whole safety argument: a 5xx is a fact about our
+   * delivery and a 4xx is a fact about the person, and only the first may ever
+   * be shown. `test/web-auth-mailer-down.test.js` carries the full reasoning.
+   *
+   * Per-server and in memory on purpose. It is a "recently broken" hint for a
+   * page, not an audit record, and a restart clearing it is correct: the next
+   * failure re-arms it within one signup.
+   */
+  let mailerFailedAt = null;
+  const MAILER_DOWN_WINDOW_MS = 10 * 60_000;
+  const noteMailFailure = (err) => {
+    if (Number(err?.status) >= 500) mailerFailedAt = nowImpl().getTime();
+  };
+  const mailerLooksDown = () => mailerFailedAt !== null
+    && nowImpl().getTime() - mailerFailedAt < MAILER_DOWN_WINDOW_MS;
+
   const limiters = {
     login: createRateLimiter({ ...AUTH_RATE_LIMITS.login, nowImpl }),
     signup: createRateLimiter({ ...AUTH_RATE_LIMITS.signup, nowImpl }),
@@ -1621,7 +1643,7 @@ export function createServer({
       const raw = String(query?.get('email') ?? '').trim().slice(0, 254);
       const email = isAddressShaped(raw) ? raw : '';
       const { token, setCookie } = await auths.csrfIssue(req);
-      return sendHtml(req, res, 200, verifyPage({ email, csrf: token }),
+      return sendHtml(req, res, 200, verifyPage({ email, csrf: token, mailerDown: mailerLooksDown() }),
         setCookie ? { 'Set-Cookie': setCookie } : {});
     },
 
@@ -1794,12 +1816,22 @@ export function createServer({
       // the same guard `verifyPage` applies to `?email=`, for the same reason.
       // Anything else is answered identically without a pointless round trip.
       const shaped = isAddressShaped(email) ? email : '';
-      if (shaped) await sb.resendSignupCode({ email: shaped, clientIp: clientIpOf(req) });
+      if (shaped) {
+        const sent = await sb.resendSignupCode({ email: shaped, clientIp: clientIpOf(req) });
+        if (sent?.mailerBroken) mailerFailedAt = nowImpl().getTime();
+      }
 
       // The token that just verified rides back out, so the person still holds
       // a valid pair for the code they are now waiting for.
       if (wantsHtml(req)) {
-        return sendHtml(req, res, 200, verifyPage({ email: shaped, notice: RESEND_SENT_MESSAGE, csrf }));
+        // A promise of a code is withheld when this server's own mail is
+        // failing -- "on its way" is the sentence that sent the reader to a
+        // spam folder last time. Withheld for EVERY address, never only the
+        // one that failed, so the answer stays uniform.
+        const down = mailerLooksDown();
+        return sendHtml(req, res, 200, verifyPage({
+          email: shaped, notice: down ? null : RESEND_SENT_MESSAGE, csrf, mailerDown: down,
+        }));
       }
       return sendJson(req, res, 200, { ok: true });
     },
@@ -2469,6 +2501,9 @@ export function createServer({
         // "same page either way" guarantee above is just a comment. The log
         // is the only place any of it goes.
         logImpl(`[web] signup upstream: ${err?.message ?? err}`);
+        // The answer is still thrown away for the RESPONSE -- Â§4.4 is
+        // untouched. All that is kept is whether OUR mailer worked.
+        noteMailFailure(err);
       }
 
       // Parked BEFORE the redirect, so a code typed a moment later finds it:

@@ -152,7 +152,7 @@ test('resendSignupCode asks Supabase for a new signup code and carries the end u
 
   const result = await sb.resendSignupCode({ email: 'a@b.com', clientIp: '203.0.113.7' });
 
-  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(result, { ok: true, mailerBroken: false });
   assert.equal(fetchImpl.calls.length, 1, 'exactly one upstream call');
   const [call] = fetchImpl.calls;
   assert.equal(call.url, 'https://example.supabase.co/auth/v1/resend');
@@ -188,8 +188,30 @@ test('resendSignupCode resolves the identical { ok: true } across success and ev
   outcomes.push(await createSupabaseAuth({ ...CFG, fetchImpl: transportFailFetch }).resendSignupCode({ email: 'known@b.com' }));
 
   for (const outcome of outcomes) {
-    assert.deepEqual(outcome, { ok: true });
+    assert.deepEqual(outcome, { ok: true, mailerBroken: false });
   }
+
+  // EVERY SHAPE ABOVE IS A FACT ABOUT THE ADDRESS -- unknown, already
+  // confirmed, asking too often -- so every one stays indistinguishable from
+  // success, `mailerBroken: false` included. The transport failure counts as
+  // one too: "Supabase unreachable" is a different claim from "the relay
+  // refused this message", and only the second is worth showing a reader.
+  //
+  // AND THE ONE SHAPE THAT MAY DIFFER, because it is not about the address at
+  // all. `500 unexpected_failure` is what Supabase answers when its SMTP relay
+  // refuses, and it is true of every address at once, so it cannot answer "does
+  // this address have an account?". Returning the raw STATUS here was tried
+  // first and was wrong -- 400 and 422 would then have been distinguishable,
+  // reopening the oracle this test exists to close. Hence one bit.
+  // `test/web-auth-mailer-down.test.js` is what reads it.
+  const relayDownFetch = fakeFetch(() => json(500, {
+    error_code: 'unexpected_failure', msg: 'Error sending confirmation email',
+  }));
+  assert.deepEqual(
+    await createSupabaseAuth({ ...CFG, fetchImpl: relayDownFetch }).resendSignupCode({ email: 'known@b.com' }),
+    { ok: true, mailerBroken: true },
+    'a refused relay reads as a delivered message, so nothing can ever tell a reader the mail is down',
+  );
 });
 
 test('a refused resend leaves a trace in the log, since nothing else can tell anyone it failed', async () => {

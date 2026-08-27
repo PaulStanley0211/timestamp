@@ -105,12 +105,26 @@ export function createSupabaseAuth({ url, publishableKey, secretKey, fetchImpl, 
      * other trace anywhere, because the page cannot say so either.
      */
     async resendSignupCode({ email, clientIp = null }) {
+      // STILL NEVER THROWS -- the contract the caller relies on is unchanged,
+      // and `ok` is still unconditionally true so no branch upstream can start
+      // treating one address differently from another.
+      //
+      // `mailerBroken` is the one thing added, and it is ONE BIT ON PURPOSE.
+      // Returning the raw status was tried first and is wrong: `user_not_found`
+      // (400) and `user_already_exists` (422) would then come back as different
+      // values, which is precisely the oracle the test above this one exists to
+      // prevent -- a caller could ask "does this address have an account?" and
+      // read the answer off the return. Every 4xx is a fact ABOUT THE ADDRESS
+      // and collapses to `false`, identical to success. Only a 5xx flips it,
+      // because that is a fact about OUR relay and true of every address at
+      // once.
       try {
         await call('/resend', { body: { type: 'signup', email }, clientIp });
       } catch (err) {
         logImpl(`[supabase] resend refused: ${err.message}`);
+        return { ok: true, mailerBroken: Number(err?.status) >= 500 };
       }
-      return { ok: true };
+      return { ok: true, mailerBroken: false };
     },
 
     /** The six-digit code. `type: 'signup'` is the confirmation flow. */

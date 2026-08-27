@@ -178,15 +178,32 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
  * Supabase directly and returns to this page, and somebody already waiting on
  * a code needs to know the button does not mean starting over.
  */
-export function verifyPage({ email = '', error = null, notice = null, csrf = '' } = {}) {
+/**
+ * Shown on `/verify` when this server's own mail delivery has failed recently,
+ * FOR EVERY VISITOR AND EVERY ADDRESS -- see `test/web-auth-mailer-down.test.js`
+ * for why it cannot be scoped to the address that caused it without turning the
+ * signup form into the membership oracle spec Â§4.4 exists to prevent.
+ *
+ * It names no address and admits no fact about one. It says our mailer is
+ * broken, which is ours to own, and it replaces a sentence that would otherwise
+ * send the reader to search a spam folder for a message that was never sent.
+ */
+export const MAILER_DOWN_MESSAGE = 'Email is not being delivered right now. '
+  + 'That is a fault on our side, not a problem with your address. '
+  + 'Please try again in a few minutes.';
+
+export function verifyPage({ email = '', error = null, notice = null, csrf = '', mailerDown = false } = {}) {
   const body = `
 <main>
   <section class="panel">
     <p class="eyebrow">Check your email</p>
     <h1 class="headline">Type the six digits</h1>
-    <p class="sub">We sent a six-digit code to <strong>${h(email)}</strong>. It lasts an hour.
+    <p class="sub">${mailerDown
+      ? `We could not send a code to <strong>${h(email)}</strong> just now.`
+      : `We sent a six-digit code to <strong>${h(email)}</strong>. It lasts an hour.`}
     Nobody is signed in until it is typed.</p>
 
+    ${mailerDown ? `<p class="alert" role="alert">${h(MAILER_DOWN_MESSAGE)}</p>` : ''}
     ${notice ? `<p class="notice">${h(notice)}</p>` : ''}
     ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
 
