@@ -114,7 +114,7 @@ export function modelEntry(models, id, { requireVerified = true } = {}) {
   if (requireVerified && entry.verified !== true) {
     throw bad(
       'unverified_model',
-      `model ${id} is marked UNVERIFIED in ${MODELS_FILE}. Nobody has opened its schema page and confirmed the endpoint id, the parameter names, or the clip length. Verify it, edit the entry, then use it.`,
+      `model ${id} is marked UNVERIFIED in ${MODELS_FILE}. Nobody has opened its schema page and confirmed the endpoint id, the parameter names, or the clip length. Either verify it and edit the entry, or pass --allow-unverified-model to run against it anyway -- which is what the run that chose this model did, and what a --resume does NOT carry over.`,
       { id },
     );
   }

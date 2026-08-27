@@ -1046,3 +1046,30 @@ test('a frozen line names the unit its quantity is counted in', () => {
 
   assert.equal(est.lines.find((l) => l.step === 'animate').unit, 'token');
 });
+
+test('the unverified refusal names the flag that gets through it legitimately', () => {
+  // MEASURED, 2026-08-27. A job parked at compose with an unverified still
+  // model frozen into its manifest was resumed with
+  // `--resume=<id> --stop-after=select`. The resume restored the provider, the
+  // video model and the still model -- and not `--allow-unverified-model`,
+  // which is arguably right: that flag is a SECOND, deliberate opt-in, and a
+  // per-invocation gate that survives into a resume is not much of a gate.
+  //
+  // What was wrong is what the operator was then told. "Verify it, edit the
+  // entry, then use it" sends somebody to config/models.json to change a
+  // `verified` field to a value nobody has earned -- which is precisely the
+  // poisoning of that signal the gate exists to prevent -- when the real answer
+  // is a flag they typed five minutes earlier on the run that created the job.
+  // A refusal that hides its own escape hatch pushes people through the wall
+  // instead.
+  const models = loadModels();
+  assert.throws(() => modelEntry(models, 'fal/UNVERIFIED-identity-still'), (err) => {
+    assert.equal(err.code, 'unverified_model');
+    assert.match(err.message, /--allow-unverified-model/,
+      'the refusal does not name the supported way through it');
+    // And it must still say what verifying MEANS, or the flag reads as the
+    // ordinary way to use an unverified endpoint rather than the deliberate one.
+    assert.match(err.message, /schema page/, 'the refusal stopped explaining what verified means');
+    return true;
+  });
+});
