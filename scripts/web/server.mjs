@@ -2501,7 +2501,7 @@ export function createServer({
         // "same page either way" guarantee above is just a comment. The log
         // is the only place any of it goes.
         logImpl(`[web] signup upstream: ${err?.message ?? err}`);
-        // The answer is still thrown away for the RESPONSE -- Â§4.4 is
+        // The answer is still thrown away for the RESPONSE -- §4.4 is
         // untouched. All that is kept is whether OUR mailer worked.
         noteMailFailure(err);
       }
@@ -2555,7 +2555,14 @@ export function createServer({
         return sendHtml(req, res, 200, onboardingPage({ account, consentText, csrf: token }),
           setCookie ? { 'Set-Cookie': setCookie } : {});
       }
-      return sendHtml(req, res, 200, onboardingPage({ account }));
+      // NOTHING TO ASK MEANS NOTHING TO RENDER. This used to answer with a
+      // headline, one sentence and a link to `/` -- no form and no decision --
+      // which put a click between a person and the shelf on the one route
+      // every newly-opened account is deliberately funnelled through. The
+      // repair above is this page's entire reason to exist; once it is done
+      // there is no page, only a destination.
+      if (wantsHtml(req)) return redirect(res, '/', 303);
+      return sendJson(req, res, 200, { next: '/' });
     },
 
     /**
@@ -2608,8 +2615,11 @@ export function createServer({
         }
       });
 
-      if (wantsHtml(req)) return redirect(res, '/onboarding', 303);
-      return sendJson(req, res, 200, { next: '/onboarding' });
+      // The shelf, not back here. Post/Redirect/Get is what makes the reload
+      // safe, and `/` satisfies it exactly as well as `/onboarding` did -- the
+      // difference is that this one is where the person was going.
+      if (wantsHtml(req)) return redirect(res, '/', 303);
+      return sendJson(req, res, 200, { next: '/' });
     },
 
     /**

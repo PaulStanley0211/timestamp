@@ -1141,7 +1141,12 @@ test('onboarding needs a session and does not ask a signed-in person to sign in'
   assert.equal(anon.headers.get('location'), '/login?next=%2Fonboarding');
   await anon.text();
   const mine = await fetch(`${base}/onboarding`, { headers: { accept: 'text/html', cookie }, redirect: 'manual' });
-  assert.equal(mine.status, 200);
+  // 303 TO THE SHELF, NOT 200. `signedIn` parks consent, so this account has
+  // nothing left to be asked. What this test is about is that a signed-in
+  // visitor is not sent to `/login`; where an already-agreed one lands is the
+  // next test's business.
+  assert.equal(mine.status, 303);
+  assert.equal(mine.headers.get('location'), '/', 'a signed-in visitor was sent somewhere other than the shelf');
   await mine.text();
 });
 
@@ -1157,20 +1162,28 @@ test('an account with no consent on file is asked, not waved through', async (t)
   assert.ok(!body.includes('Upload a photo'), 'the ordinary content rendered ahead of consent');
 });
 
-test('an account that already has consent sees the ordinary page, not a prompt', async (t) => {
+test('an account that already has consent is sent to the shelf, not shown a dead end', async (t) => {
+  // THIS ROUTE HAS ONE JOB AND IT IS THE CONSENT REPAIR. It used to answer an
+  // already-agreed account with a page whose entire content was a headline and
+  // a link to `/` -- no form, no decision, nothing to read twice -- so the
+  // person who had just ticked the box was bounced here and made to click once
+  // more to reach the thing they came for. There is nothing to render when
+  // there is nothing to ask, so it redirects.
   const { base, cookie } = await signedIn(t, { consent: PARKED_CONSENT });
   const res = await getPage(`${base}/onboarding`, cookie);
-  assert.equal(res.status, 200);
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), '/');
   const body = await res.text();
   assert.ok(!body.includes('name="consent"'), 'an already-agreed account was asked again');
-  assert.ok(body.includes('Upload a photo'), 'the ordinary content did not render');
 });
 
 test('agreeing writes consent onto the account record, not merely past a gate', async (t) => {
   const { base, cookie, csrf, root, accountId } = await signedIn(t, { consent: null });
   const res = await postForm(`${base}/onboarding`, { consent: 'yes', csrf }, cookie);
   assert.equal(res.status, 303);
-  assert.equal(res.headers.get('location'), '/onboarding');
+  // STRAIGHT TO THE SHELF. Redirecting back here was Post/Redirect/Get done
+  // literally, and it cost a bounce through a page that had nothing to say.
+  assert.equal(res.headers.get('location'), '/', 'agreeing bounces through /onboarding instead of landing');
   await res.text();
 
   const account = loadAccount({ root, accountId });
@@ -1227,5 +1240,7 @@ test('a JSON client asking to agree gets its own dialect, not an HTML page', asy
   const res = await postForm(`${base}/onboarding`, { consent: 'yes', csrf }, cookie, { accept: 'application/json' });
   assert.equal(res.status, 200);
   const payload = await res.json();
-  assert.equal(payload.next, '/onboarding');
+  // The same destination the browser now gets, in the JSON dialect: a client
+  // that agreed has no more business here either.
+  assert.equal(payload.next, '/');
 });

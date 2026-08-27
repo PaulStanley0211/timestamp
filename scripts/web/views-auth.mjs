@@ -182,7 +182,7 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
  * Shown on `/verify` when this server's own mail delivery has failed recently,
  * FOR EVERY VISITOR AND EVERY ADDRESS -- see `test/web-auth-mailer-down.test.js`
  * for why it cannot be scoped to the address that caused it without turning the
- * signup form into the membership oracle spec Â§4.4 exists to prevent.
+ * signup form into the membership oracle spec §4.4 exists to prevent.
  *
  * It names no address and admits no fact about one. It says our mailer is
  * broken, which is ours to own, and it replaces a sentence that would otherwise
@@ -347,9 +347,7 @@ export function resetCompletePage({ email = '', error = null, csrf = '' } = {}) 
  * be asking a person to agree to a photo they have not even uploaded yet.
  */
 export function onboardingPage({ account = null, consentText = '', csrf = '', error = null } = {}) {
-  const needsConsent = account?.consent == null;
-
-  const body = needsConsent ? `
+  const body = `
 <main>
   <section class="panel">
     <p class="eyebrow">One more thing</p>
@@ -369,16 +367,6 @@ export function onboardingPage({ account = null, consentText = '', csrf = '', er
       </label>
       <button type="submit" class="record">Agree and continue</button>
     </form>
-  </section>
-</main>
-` : `
-<main>
-  <section class="panel">
-    <p class="eyebrow">You're in</p>
-    <h1 class="headline">Your account is open</h1>
-    <p class="sub">A free tape is waiting on your balance. Upload a photo to start the
-    first one.</p>
-    <p class="actions"><a class="record" href="/">Upload a photo</a></p>
   </section>
 </main>
 `;
