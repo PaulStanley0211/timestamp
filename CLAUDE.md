@@ -7,12 +7,12 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-27, evening) — GOOGLE SIGN-IN WORKS. EMAIL STILL CANNOT REACH ANYBODY.
+## START HERE (2026-08-27, night) — THE UI IS SETTLED AND FROZEN. EMAIL STILL CANNOT REACH ANYBODY.
 
-**1661 tests / 1659 pass / 0 fail / 2 skipped.** The skips are the
+**1671 tests / 1669 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 
-### The two sentences that matter
+### The three sentences that matter
 
 **GOOGLE SIGN-IN IS FIXED AND PROVED — a real person signed in through it
 today.** It took three separate causes, none of them in the OAuth code, and the
@@ -22,6 +22,14 @@ below.
 **NOBODY CAN RECEIVE A SIX-DIGIT CODE, AND THAT IS NOT A BUG WE CAN FIX IN
 CODE.** There is currently NO address that can both receive our mail and sign
 up. Section B below. **This is the top of the list and it needs a domain.**
+
+**THE PAGES ARE DONE AND PAUL HAS FROZEN THEM.** He looked at the running app on
+the evening of 2026-08-27 and said *"It looks very good ... just keep it as it
+is ... don't change anything or don't add anything."* That answers the UI
+question this file has carried since 2026-08-24 and it closes item 3 of PAUL'S
+list. **Do not improve either page.** Section 30 below is what shipped and why.
+**The sign-in page is deliberately NOT done and is not Claude's to design** --
+Paul is bringing a Dribbble reference himself.
 
 ### A — Google sign-in, three causes, all closed
 
@@ -120,9 +128,12 @@ confirmation mail failed and the signup rolled back each time.
 ### E — Where this leaves the branch
 
 Branch `supabase-identity-slice`, **still not pushed**; `origin/main` is still
-`b6f64a3`, nothing merged. Eight commits today, `a51ed39..aeb4a3a`.
-Branch `supabase-identity-slice`, **not yet pushed**; `origin/main` is still
 `b6f64a3`, nothing merged. Opening a PR is Paul's call, not a prerequisite.
+
+**Seventeen commits today, `a51ed39..90093b1`** — the morning on Google sign-in,
+email and the mark, the evening on the pages and three defects they surfaced
+(section 30). This paragraph said "eight" and appeared twice; the duplicate is
+gone with the stale number.
 
 **NO CI HAS RUN ON THIS BRANCH AND NONE WILL.** Both workflows trigger on
 `push: branches: [main]` and `pull_request` only, so a feature-branch push
@@ -202,12 +213,12 @@ doing:**
    the six-digit flow testable within ten minutes and is thrown away later.
    Paul has seen both routes and has not picked one.
 1. ~~**The UI direction that unblocks rewriting DESIGN.md.**~~ **SETTLED
-   2026-08-27.** The identity exists and `DESIGN.md` carries the palette,
-   measured: cream `#FAF7F2`, sepia `#2A211B`, oxide `#A8342A`, and
-   `#D98B7A` for dark grounds. **The pages still implement Struck and have not
-   followed yet** — that rewrite is now a mechanical job with the decisions
-   already made, not a design question. **The cathode orange cannot come with
-   it**: it measures 1.95–2.21:1 on every light ground.
+   2026-08-27 AND NOW BUILT AND FROZEN — section 30.** The identity exists and
+   `DESIGN.md` carries the palette, measured. What the pages do now is not the
+   light rewrite this line used to anticipate: the ground is the chosen PLACE,
+   playing as a graded tape loop full-bleed, with the chrome on blurred glass
+   over it. Paul approved it on sight and asked that nothing be changed.
+   **The cathode orange still cannot come to a light ground**: 1.95–2.21:1.
    **The blind check is still Paul's and still not done** — packet unsent at
    `out/blind-check/`.
 2. **The two Linux CI failures (§4), BEFORE a PR is opened** — they are
@@ -297,12 +308,16 @@ and that is the designed state, not a gap.**
    wording, the protocol and the decode key. Two people, separate chats,
    "Who is this?" and nothing else. **Not the friend he primed.** Claude will
    not send these: it is a deception of third parties about Paul's own face.
-3. **THE UI IS GOING TO CHANGE AND DESIGN.md DOES NOT KNOW YET.** Paul said on
-   2026-08-24 that he **does not want it dark** — he wants something engaging.
-   That supersedes the STRUCK world (ink-blue ground, cathode orange, gauze)
-   which was chosen the same day and which every converted page now implements.
-   **DESIGN.md gets rewritten FIRST and the pages follow**; do not let pages
-   drift light one at a time. What "engaging" means is still Paul's to say.
+3. ~~**THE UI IS GOING TO CHANGE AND DESIGN.md DOES NOT KNOW YET.**~~ **CLOSED
+   2026-08-27 — section 30.** "Engaging" turned out to mean the place itself:
+   full-bleed, moving, with the interface floating on glass over it. Paul saw it
+   running and froze it. **DESIGN.md still describes STRUCK and has not been
+   rewritten** — that is now a documentation debt rather than an open design
+   question, and the pages are the authority until somebody reconciles them.
+   **The one page still to do is the SIGN-IN page, and it is Paul's:** *"We will
+   use an inspiration for that by going into Dribbble or something like that."*
+   Wait for the reference. Do not extend the landing's treatment onto it on the
+   assumption that consistency is wanted.
 4. **Seedance 2.5 exists and is DELIBERATELY NOT PURSUED.** Paul is building a
    skill for it and will bring it himself. Do not wire it, do not price it, do
    not raise it.
@@ -417,9 +432,11 @@ review's section 3 FIRST, same rule as before.
   plus the hidden field out of the HTML — or they answer 403 and set no
   session. Every web test file has a `csrfPair`/`signIn` helper; copy it rather
   than posting bare. §28.
-- **A third inline `<script>` will not run.** `script-src` names the two
-  shipped scripts by hash and nothing else. New scripts go in `views.mjs`
-  beside `INLINE_SCRIPT_HASHES` or they are dead in the browser. §28.
+- **A FOURTH inline `<script>` will not run.** `script-src` names the shipped
+  scripts by hash and nothing else. This bullet said "third" until 2026-08-27,
+  when `BG_SCRIPT` became the third and was added properly (§30) — the COUNT is
+  not the rule, `INLINE_SCRIPT_HASHES` in `views.mjs` is. A script added
+  anywhere else is dead in the browser, silently. §28.
 - **A test-mode Stripe event grants nothing**, deliberately, so the §27 replay
   demo no longer moves credits. Not a regression.
 - **Read the prompt before blaming the model.** Twice the model was doing
@@ -2426,6 +2443,188 @@ are still Paul's:** the `{{ .Token }}` template edit, and one real Google round
 trip.
 
 ---
+
+---
+
+### 30. THE PAGES BECAME THE TAPE (2026-08-27) — and Paul froze them on sight
+
+**Eight commits, `ffd3b3e..90093b1`, on `supabase-identity-slice`. Suite 1671 /
+1669 / 0 fail / 2 skipped.** Paul asked for four things: the app to look like a
+real camcorder video with the location full-screen behind it, a blurry glass
+menu floating on top, the list turned into a swipeable carousel, and the sporty
+outfit fixed. All four shipped. **He then looked at it running and said keep it
+as it is — see START HERE. Do not improve these pages.**
+
+#### The loops cost nothing, and that was the whole design
+
+`scripts/tapedeck/place-loops.mjs` cuts one six-second clip per place from the
+photographs already in `assets/places/`, grading them through
+**`buildVideoFilter` — the same function the renderer calls, on the same
+profile**. So the backgrounds inherit a look change for free, and a
+provider would have charged per place per revision to produce ones that drift.
+**1240 kB for all eight; only one loads at a time.**
+
+- **1024x576, not 960x540.** Section 13 holds every shape's short edge at 576 so
+  one set of filtergraph constants stays correct in all of them. A "friendlier"
+  web number would have scaled the head-switch band and the grain by 0.94 and
+  made these the only pictures in the product whose tape is a different tape.
+- **The drift is one full period of a sine**, so the window returns to its
+  origin and the wrap has no jump. Measured: 0.747 SSIM at the loop point
+  against 0.505 at the opposite phase. It is not 1.0 because the grain is fresh
+  every frame, which is correct — real grain does not repeat.
+- `loops.json` beside them carries each clip's **mean luma over every frame**.
+  The page needs it and nothing else can recover it: by the time a stylesheet is
+  built the mp4 is a byte range on a disk.
+
+#### One video element, and every exit returns to the page that already worked
+
+Eight elements would be eight decoders for one visible picture. There is one,
+and `BG_SCRIPT` swaps its source — **the third inline script, hashed into the
+CSP** (see the note about a third script elsewhere in this file; it is now three
+and a fourth still dies silently unless added to `INLINE_SCRIPT_HASHES`).
+
+It ships with **no `src` and no `autoplay`**, so no JavaScript, reduced motion,
+`saveData`, an unplayable codec, a 404 or a refused `play()` each leave the
+still layer exactly as it was. The still is not a fallback that was added; it is
+the layer that was already there.
+
+**TWO STATE CLASSES, AND COLLAPSING THEM IS A REGRESSION WITH A LOOK.**
+`is-live` means video works here and holds across every subsequent choice — it
+drives the scrim and the panel plate, which are properties of the ground.
+`is-showing` drops for the moment between choosing a place and its loop
+decoding, and drives only the video's own opacity. Driven from one class, every
+click threw the scrim back to full strength and changed each panel's corner
+radius until the next file loaded: the whole chrome flinching once per click.
+**Caught in a browser, not by a test**, and now pinned by one.
+
+#### The scrim is per place, and the plate is what let it come down
+
+One scrim value tuned at 0.74–0.92 is right for a picture blurred to a wash and
+far too heavy for one meant to be recognised. **The places are not equally
+bright: `wohnzimmer-abend` averages 49 and `ostsee-strand` 165, a 3.4x spread.**
+Set it for the beach and the living room is a black rectangle. `scrimOpacity()`
+in `static.mjs` gives each place the least scrim that keeps the bone body colour
+at 8:1 over its own loop — **0.30 to 0.64**.
+
+**IT COULD NOT HAVE COME DOWN AT ALL WITHOUT THE PLATE, and that is why the
+glass is structural rather than decorative.** Derive the same scrim against
+`--l-dim` (`#8D8880`) instead and every place is dragged back above 0.59, which
+undoes the whole thing — that colour only works on a near-black ground, and over
+the brightest place it measures **2.86:1**, a real AA failure on text this
+product ships in `.fine`, `.who` and the footer. So the dim tokens earn their
+contrast from a local plate: **`rgba(7, 10, 17, 0.62)`, the least that clears
+4.5:1.** The `backdrop-filter` was already declared on `.panel` and had been
+doing nothing for want of anything to tint.
+
+**DESIGN.md's "the boxes are gone" survives this intact.** That rule was written
+for a ground with nothing behind the text, and it still governs it: with no loop
+playing, `--frost` is transparent and the panels are as borderless as they have
+always been. The plate exists only while there is a photograph to separate text
+from — the one condition the original rule never had to consider.
+
+#### The landing stopped framing the place and stood inside it
+
+The 4:3 veil is **gone — markup, generated rule and stylesheet block together**,
+because the place is behind the whole page now and keeping both would show one
+photograph twice at two sizes and two crops. A rule that matches nothing is how
+dead markup survives a review, and this file has been caught by that before.
+
+- `.strike` went from a two-column grid to one column.
+- `<ul class="stack">` became `<ul class="lrail">` — **still a list in the
+  markup**, horizontal only in the styling, on the same scroll-snap mechanic the
+  place cards already used. Two screens answering a swipe the same way.
+- The OSD read-out moved out of the panel and onto the viewport, which is where
+  a camcorder put it.
+- **Almost nothing new was built for the background.** The landing's radios
+  already carry the same `pl-<id>` ids, so every generated rule reached the page
+  the moment it had a `.bgs`. Only the NAME differs — `lplace`, so a landing
+  choice can never be posted as a real order — and the script matches both.
+
+**Measured at 320 / 375 / 414 / 768 / 1024 / 1440: no horizontal overflow at
+any**, rail scrollable at every one.
+
+**THE SIGNED-IN PAGE WAS NOT REDESIGNED and should not be described as though it
+was.** It got the video, the scrim, the plate and the monogram. Its structure —
+the two-column `#tape` grid, the numbered steps, every card, all copy — is
+untouched.
+
+#### The monogram joined the wordmark, and it has two opacities
+
+`assets/brand/monogram-inline.svg`, inside the wordmark's own anchor so there is
+one tab stop, and `aria-hidden` because it draws the letters the word beside it
+already spells.
+
+**THE LOCKUP ALIGNS BASELINES AND CANNOT ALSO ALIGN THE TEARS.** `seam 0.72` is
+a fraction of INK height; `Timestamp` carries the descender of `p` and `Ts`
+carries none, so the same parameter lands **below** the wordmark's baseline —
+through the feet, where a head switch falls — and **well above** the monogram's.
+That is the generator being right: put the monogram's tear on its own baseline
+and there is nothing beneath the cut to displace, so the tear vanishes and the
+mark becomes the plain serif `Ts` it exists not to be. Aligning tears instead
+costs **5.47px** of baseline break. Cap heights already agree at 19.58 vs 20.06.
+
+**IT SEPARATES BY WEIGHT BECAUSE COLOUR IS SPOKEN FOR.** The record light is the
+only thing in the chrome wearing `--rec` and it is **3.2px** wide; a 30px mark in
+the same value is nine times the area of the thing the colour exists for.
+
+**AND THE HOLD-BACK IS TWO NUMBERS, BECAUSE ONE GROUND BECAME TWO.** 60% keeps
+the mark under the record light on `#070A11` — 6.11:1 against 7.47:1. Over a
+photograph the comparison inverts: bone composites lighter as the ground lifts
+and holds its contrast, while the accent is a mid-tone salmon whose ratio
+collapses. Measured over all eight loops, **60% out-shouts the record light on
+seven of the eight**, so a live background switches the mark to **45%**.
+
+#### Three defects surfaced on the way, each its own commit
+
+1. **`purge` accepted a flag that does not exist** (`7354214`). `npm run purge --
+   --job=<id> --apply` was typed on this machine. There is no `--job`. It was
+   accepted in silence and **the full retention sweep ran** — six uploads across
+   twenty-six jobs, while the operator believed they were clearing one. Nothing
+   was lost that was not already past its window, and that is luck rather than
+   design. It is now a whitelist: an unknown or near-miss argument is exit 2 with
+   nothing touched. **The near miss is the dangerous shape** — `--photodays=999`
+   reads like `--photo-days` and would have swept on the configured window.
+2. **The unverified-model refusal hid its own escape hatch** (`6f67a46`). A
+   resume restores the provider, video model and still model but NOT
+   `--allow-unverified-model` — defensible, since a permission a manifest carries
+   for ever is not a permission. What was wrong is that the message said "verify
+   it, edit the entry", pointing at the one edit that poisons the signal the gate
+   exists to protect. It now names the flag and says a resume does not carry it.
+3. **Three stripes are somebody's trademark** — below, and it is the most
+   expensive lesson of the day.
+
+#### THE MODEL HONOURS PRESENCE AND IGNORES COUNT — four renders, $0.16
+
+`trainingsjacke` asked for **two** white stripes. `seedream v4.5 edit` drew
+**three** every time — three renders, counted on enlarged crops, including with
+the count written as "exactly two", the pair named again on the leg, and two
+negatives aimed squarely at three. **Three stripes on a navy tracksuit is
+adidas's registered trade dress**, `large brand logo` never caught it because it
+is not a logo applied to the garment — it IS the garment — and every place in
+this catalog is set in Germany.
+
+Every *presence* instruction in the same rewrite landed first time: the chest
+crest came off, the jacket zipped, the stand collar arrived, the trousers
+arrived. **So the garment lost its number.** One broad stripe is a thing to draw
+or not draw, and `20260827-161556-cfe684` confirms it drawn as one on both
+sleeve and leg.
+
+**Do not "restore" two stripes.** It has been tried three times, it costs $0.04
+a go, and it does not work. `test/catalog.test.js` pins the absence of a count.
+
+#### Things that will bite
+
+- **Backticks inside a comment inside `BASE_CSS` broke the build again** during
+  this work, exactly as this file warns. `node --check scripts/web/static.mjs`
+  after every edit, and use plain quotes in those comments.
+- **A hidden browser tab will not start video playback and does not tick CSS
+  transitions.** Measuring the swap needed `transition: none` injected first and
+  the `playing` event fired by hand. Screenshots need the pane displayed;
+  measurement does not — same trap as section 16.
+- **`assets/places/` is +1.3 MB of mp4 in a PUBLIC repo.** Deliberate, and worth
+  knowing before anybody wonders where the weight came from.
+- **`DESIGN.md` still describes STRUCK** and does not know about any of this. The
+  pages are the authority until somebody reconciles them.
 
 ## Not in scope
 
