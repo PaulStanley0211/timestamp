@@ -170,12 +170,34 @@ chosen to glow on ink-blue and it does that well. It is not deleted, it is
 relocated: it keeps the burnt-in date stamp inside the tape, where it was
 always right, and it leaves the chrome.
 
-### The icon
+### The icon -- `Ts`
 
-The `T` from the wordmark's own face, torn the same way, knocked out of an
-oxide tile. Bare it is elegant and, at 16px, too thin -- Cormorant's fine
-strokes are where it is beautiful and where it is fragile -- so the favicon is
-the tile, and contrast does the work detail cannot at that size.
+**A capital T with a lowercase s**, from the wordmark's own face, torn the same
+way and knocked out of an oxide rounded square.
+
+**The s is not scaled.** It is 407 units against the T's 653 -- 62% straight
+out of the font, which is the proportion the face itself chose and it needs no
+help. Scaled up the two drift back into being a pair of letters; scaled down
+the s reads as a subscript. Both glyphs also sit on the same baseline in font
+space, so the s stays seated at every size with nothing nudged by hand.
+
+**It reads as Time / Stamp**, which two capitals did not: `TS` is an
+abbreviation, `Ts` is the word. The s is tucked deep enough under the T's arm
+that the two overlap, and the mark is drawn as ONE path -- under nonzero
+winding the overlap unions into a single solid, which is what a monogram is.
+Two paths would look joined until the day one took a different fill.
+
+**The icon is optically sized, and this is the part worth keeping.** A fixed
+ratio is right for a poster and wrong for a favicon: at 16px the padding that
+flatters a 512px icon is most of the pixels, and what is left for two letters
+is a smudge. The mark therefore grows as the square shrinks -- 0.60 of the box
+at 16, 0.54 at 32, 0.50 at 48, 0.46 above. Each `.ico` frame is drawn at its own
+size rather than downscaled from one master, which is the whole reason to ship
+a multi-resolution icon at all.
+
+**Two letters cannot be legible at 16px and that is accepted.** A single `T`
+was clearer there; `Ts` is the better mark everywhere else, and a 16px favicon
+works by colour and silhouette rather than by reading.
 
 ### Rules
 
