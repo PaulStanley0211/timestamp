@@ -7,8 +7,9 @@ is why they look the way they do.
 |---|---|
 | `wordmark-inline.svg` | Inlined into the page header. **No `<style>` element** — `style-src 'self'` blocks an inline `<style>` wherever it appears, an inlined SVG included. The record light carries `class="rec"` and the stylesheet animates it. |
 | `wordmark.svg` | The same mark as a **file** — an `<img>`, a README, a press kit. Self-contained: an SVG loaded as an image cannot see the page's stylesheet, so this one carries its own animation. |
-| `monogram.svg` | The `T`, bare, on transparent. |
-| `icon.svg` | The `T` knocked out of an oxide tile. What the browser tab paints. |
+| `monogram.svg` | The `Ts`, bare, on transparent, `currentColor`. |
+| `monogram-inline.svg` | The same mark prepared for the masthead lockup: **no `width`/`height`** so CSS sizes it, `class="mg"` for the stylesheet, and `aria-hidden` because it draws the letters the word beside it already spells — named, it is announced as a second "Timestamp" before the first. Generated from `monogram.svg`; do not hand-edit. |
+| `icon.svg` | The `Ts` knocked out of an oxide tile. What the browser tab paints. |
 | `favicon.ico` | 16/32/48 in one file, so the browser picks rather than downscaling badly. |
 | `icon-180.png` | apple-touch-icon. The one with **no fallback** — unlinked, iOS screenshots the page instead. |
 | `icon-192.png`, `icon-512.png` | Android / PWA sizes. |
@@ -41,6 +42,19 @@ a tape artefact and becomes a generic glitch logo.
 `shift` was chosen against two neighbours: at 22 the tear is invisible unless
 pointed out, and at 88 the letters stop reading as torn and start reading as
 doubled — the word becomes work to read and the `i` detaches from its dot.
+
+**The wordmark's tear and the monogram's do NOT line up, and must not be made
+to.** `seam` is a fraction of *ink height*, and the two marks have different
+ink: `Timestamp` carries the descender of `p`, `Ts` carries none. So 0.72 lands
+*below* the wordmark's baseline — through the feet, which is where a head
+switch falls — and *above* the monogram's, at 74.9% of its ink. That is
+correct: put the monogram's tear on its own baseline and there is nothing
+beneath the cut to displace, so the tear vanishes and the mark is a plain serif
+`Ts`, which is the one thing it exists not to be.
+
+The consequence for the masthead lockup is that you may align the baselines or
+the tears, never both. The baselines win — see `.wordmark .mg` in
+`scripts/web/static.mjs`, which carries the measured numbers.
 
 ## Regenerating
 

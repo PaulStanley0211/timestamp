@@ -53,6 +53,19 @@ import { STEPS } from '../render/job.mjs';
 const WORDMARK_SVG = fs
   .readFileSync(new URL('../../assets/brand/wordmark-inline.svg', import.meta.url), 'utf8')
   .trim();
+
+/**
+ * The monogram, on the same terms as the wordmark above.
+ *
+ * Its ids are namespaced `ts-mg-` where the wordmark's are `ts-wm-`, which is
+ * what lets both be inlined into one document. Two SVGs on a page share ONE id
+ * space, and a duplicate makes every use() and clip-path resolve to whichever
+ * element came first -- here both marks are the same glyph, so a collision
+ * would still look correct and would only surface the day one of them changes.
+ */
+const MONOGRAM_SVG = fs
+  .readFileSync(new URL('../../assets/brand/monogram-inline.svg', import.meta.url), 'utf8')
+  .trim();
 import { placeSlug, outfitSlug, qualitySlug, aspectSlug } from './static.mjs';
 
 // ---------------------------------------------------------------------------
@@ -137,14 +150,18 @@ const STATUS_COPY = Object.freeze({
 // ---------------------------------------------------------------------------
 
 /**
- * These are the only two scripts in the product, and the Content-Security-
+ * These are the only three scripts in the product, and the Content-Security-
  * Policy admits each BY ITS HASH rather than by 'unsafe-inline' -- a keyword
  * that names no scripts and therefore admits all of them, including one an
  * injection just wrote. Held as constants so the hash is computed from the
  * exact bytes the page ships: edit a script and its hash follows
- * automatically; add a third script without adding it here and the test that
+ * automatically; add a fourth script without adding it here and the test that
  * hashes what the page ACTUALLY shipped fails loudly, instead of the script
  * dying silently in the browser.
+ *
+ * The count in that first sentence has been wrong before. It says three
+ * because there are three -- HOME_SCRIPT, STATUS_SCRIPT, BG_SCRIPT -- and
+ * INLINE_SCRIPT_HASHES below is the list that actually decides.
  */
 const HOME_SCRIPT = `
 // The only thing scripting adds to this page: telling you which file you chose,
@@ -212,9 +229,88 @@ const STATUS_SCRIPT = `
 }());
 `;
 
+/**
+ * The moving background.
+ *
+ * WHY THERE IS SCRIPT HERE AT ALL, on a page whose selection mechanic is
+ * deliberately CSS-only. The stills cross-fade with no JavaScript because eight
+ * background-image layers cost nothing to have present at once. Eight VIDEO
+ * elements do not: each is a decoder, and eight of them decoding 25fps for one
+ * visible picture is a laptop fan. So there is ONE element and its source is
+ * swapped, and swapping a source is the one thing a stylesheet cannot do.
+ *
+ * EVERY EXIT IS A RETURN TO THE PAGE THAT ALREADY WORKED. No script, reduced
+ * motion, a metered connection, a browser that will not decode h264, a file
+ * that 404s, a play() the browser refuses -- each leaves the still layer
+ * underneath exactly as it is today. The video is never a requirement, and
+ * nothing above this line has to know it exists.
+ */
+const BG_SCRIPT = `
+(function () {
+  var video = document.querySelector('.bgv');
+  if (!video || !video.canPlayType || !video.canPlayType('video/mp4')) return;
+
+  // A full-bleed moving picture is the largest animation this page could make,
+  // so it is the first thing a request for reduced motion should cost.
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+  if (reduce && reduce.matches) return;
+
+  // And on a metered connection a decorative 155kB is not worth spending.
+  var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (conn && conn.saveData) return;
+
+  var bgs = video.parentNode;
+  var current = null;
+
+  // TWO STATES, NOT ONE, AND THE DIFFERENCE IS A VISIBLE BUG.
+  //
+  // "is-live" means video works on this page. It decides the per-place scrim
+  // and the plate under the panels, and once it is true it STAYS true across
+  // every subsequent choice -- because those two are properties of the page's
+  // ground, not of which clip happens to be decoding this second.
+  //
+  // "is-showing" means this particular clip has a frame to paint, and it comes
+  // off for the moment between choosing a place and its loop decoding. The
+  // video fades out over the still it was cut from, which is the same
+  // photograph, so the swap reads as a cross-fade.
+  //
+  // Driving both from one class is what the first version did, and picking a
+  // place threw the scrim back to full strength and changed every panel's
+  // corner radius for as long as the next file took to load -- the whole
+  // chrome flinching once per click.
+  function show(id) {
+    if (id === current) return;
+    current = id;
+    bgs.classList.remove('is-showing');
+    // The own-place card carries an empty value: there is no loop for a place
+    // nobody has described yet, so the ground comes back.
+    if (!id) { video.removeAttribute('src'); video.load(); return; }
+    video.src = '/places/' + encodeURIComponent(id) + '.mp4';
+    var started = video.play();
+    if (started && started.catch) started.catch(function () { /* autoplay refused; the still stands */ });
+  }
+
+  video.addEventListener('playing', function () {
+    bgs.classList.add('is-live');
+    bgs.classList.add('is-showing');
+  });
+  video.addEventListener('error', function () {
+    bgs.classList.remove('is-showing');
+    bgs.classList.remove('is-live');
+  });
+
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.name === 'place') show(e.target.value);
+  });
+
+  var checked = document.querySelector('input[name="place"]:checked');
+  if (checked) show(checked.value);
+}());
+`;
+
 /** base64 sha256 of each shipped script, for `script-src 'sha256-...'`. */
 export const INLINE_SCRIPT_HASHES = Object.freeze(
-  [HOME_SCRIPT, STATUS_SCRIPT].map((s) => crypto.createHash('sha256').update(s, 'utf8').digest('base64')),
+  [HOME_SCRIPT, STATUS_SCRIPT, BG_SCRIPT].map((s) => crypto.createHash('sha256').update(s, 'utf8').digest('base64')),
 );
 
 /**
@@ -320,7 +416,20 @@ function wordmark() {
   // `aria-label` on the link would work too, but a visually-hidden span
   // survives a stylesheet that fails to load, which is when a person most
   // needs to know what they are looking at.
-  return `<a class="wordmark" href="/">${WORDMARK_SVG}<span class="vh">Timestamp</span></a>`;
+  //
+  // THE MONOGRAM RIDES INSIDE THIS ANCHOR, NOT BESIDE IT. Two links to the
+  // same destination sitting next to each other is two tab stops and two
+  // announcements of one thing. It is also aria-hidden: it draws the letters
+  // Ts, which is what the word next to it already begins with, so left
+  // nameable it is read out as a second "Timestamp" before the first.
+  //
+  // IT IS HELD BACK BY WEIGHT AND NOT BY COLOUR, and the stylesheet is where
+  // that happens. The obvious move is to paint it in the brand accent, and the
+  // accent is spoken for: the record light is the one thing in this chrome
+  // wearing it, at 3.2px. A 30px mark in the same value is nine times the area
+  // of the thing the colour exists for, so it replaces the accent rather than
+  // joining it. See DESIGN.md.
+  return `<a class="wordmark" href="/">${MONOGRAM_SVG}${WORDMARK_SVG}<span class="vh">Timestamp</span></a>`;
 }
 
 /**
@@ -704,9 +813,18 @@ export function homePage({
     .map((p) => `<div class="bg bg--${h(placeSlug(p.id))}"></div>`)
     .join('\n');
 
+  // THE VIDEO SITS AFTER THE STILLS AND IS THE SAME PICTURE MOVING. Both are
+  // absolutely positioned with no z-index, so DOM order decides, and the loop
+  // paints over the photograph it was cut from -- which is why a loop that
+  // never arrives is invisible rather than a hole.
+  //
+  // NO src AND NO autoplay HERE, DELIBERATELY. Either one would make every
+  // browser fetch it before any of the checks in BG_SCRIPT have run, which
+  // would spend the bytes on exactly the people those checks exist to spare.
   const preBody = `${hooks}
 <div class="bgs" aria-hidden="true">
 ${backgrounds}
+<video class="bgv" muted playsinline loop preload="none"></video>
 </div>
 <div class="scrim" aria-hidden="true"></div>
 <div class="bloom" aria-hidden="true"></div>`;
@@ -950,6 +1068,7 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
 </main>
 
 <script>${HOME_SCRIPT}</script>
+<script>${BG_SCRIPT}</script>
 `;
 
   return layout({

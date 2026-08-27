@@ -151,6 +151,77 @@ const PLACE_HUES = Object.freeze({
  * @param {{id: string, timeOfDay?: string}} place
  * @returns {{from: string, to: string}} two `hsl()` strings
  */
+/**
+ * Mean luma of each place loop, written by `scripts/tapedeck/place-loops.mjs`.
+ *
+ * READ ONCE, AND MISSING IS A SUPPORTED STATE. On a fresh clone with no loops
+ * cut there is no manifest, every place falls back to the full-strength scrim,
+ * and the page is exactly what it was before the loops existed -- the same
+ * property `assets/places/` already had for the photographs.
+ */
+const LOOP_LUMA = (() => {
+  try {
+    const file = new URL('../../assets/places/loops.json', import.meta.url);
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return parsed && typeof parsed.loops === 'object' ? parsed.loops : {};
+  } catch {
+    return {};
+  }
+})();
+
+/** Relative luminance, per WCAG. */
+function relativeLuminance([r, g, b]) {
+  const f = (c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+
+/** Contrast ratio between two [r,g,b] triples. */
+function contrast(a, b) {
+  const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * How much scrim a place needs, derived from what its loop actually measures.
+ *
+ * THE SCRIM WAS ONE VALUE FOR EVERY PLACE AND THAT IS WHY THE LOCATION NEVER
+ * READ. Tuned at 0.74-0.92 it is correct for a picture blurred to a wash and far
+ * too heavy for one meant to be recognised. But the places are not equally
+ * bright: measured, `wohnzimmer-abend` averages 49 and `ostsee-strand` 165, a
+ * 3.4x spread. One number cannot serve both -- set it for the beach and the
+ * living room is a black rectangle; set it for the living room and the beach
+ * fights the text.
+ *
+ * SOLVED AGAINST THE TEXT RATHER THAN BY EYE. The bone body colour must clear
+ * 8:1 over the composite of scrim-on-loop, so each place gets the least scrim
+ * that buys that and no more.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT GUARANTEE, said out loud because it is the
+ * limitation somebody will otherwise discover as a bug: it is derived from MEAN
+ * luma, so a dark loop with a bright window in it can still strand text locally.
+ * The floor exists for that, and the dim tokens (`--l-dim`, `--muted`) are NOT
+ * in this calculation -- at 4.5:1 they would drag every place back above 0.59
+ * and undo the whole thing. They earn their contrast from the panel plate they
+ * sit on instead, which is what `.panel` is now for.
+ */
+const SCRIM_FLOOR = 0.30;
+const SCRIM_BONE = [0xED, 0xE7, 0xDC];
+const SCRIM_COLOR = [11, 10, 9];
+const SCRIM_TARGET = 8;
+
+export function scrimOpacity(yavg) {
+  if (!Number.isFinite(yavg)) return null;
+  for (let step = Math.round(SCRIM_FLOOR * 100); step <= 100; step += 1) {
+    const s = step / 100;
+    const over = SCRIM_COLOR.map((c) => yavg * (1 - s) + c * s);
+    if (contrast(SCRIM_BONE, over) >= SCRIM_TARGET) return s;
+  }
+  return 1;
+}
+
 export function placeGradient({ id, timeOfDay = '' }) {
   const key = String(id ?? '');
   const h = hash32(key);
@@ -250,6 +321,16 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       `.thumb--${slug}{background-image:${layers};}`,
       `.bg--${slug}{background-image:${layers};}`,
       `#${slug}:checked~.bgs .bg--${slug}{opacity:1;}`,
+      // THE LIGHTER SCRIM IS GATED ON THE LOOP ACTUALLY PLAYING, and that is
+      // the whole reason it is safe. "is-live" is set by the script only once a
+      // video has genuinely reached its first frame, so a browser with no JavaScript,
+      // a reader who asked for reduced motion, a metered connection or a
+      // missing file all keep the full-strength scrim over the blurred still
+      // -- which is the page exactly as it shipped. Nothing here can make the
+      // no-video path worse, because nothing here applies to it.
+      ...(scrimOpacity(LOOP_LUMA[place.id]?.yavg) === null ? [] : [
+        `#${slug}:checked~.bgs.is-live~.scrim{opacity:${scrimOpacity(LOOP_LUMA[place.id].yavg)};}`,
+      ]),
       // STRUCK, on the landing page: the same radio lights this place's veil,
       // its date read-out, and strikes its name forward out of the ghost stack.
       `#${slug}:checked~.wrap .veil--${slug}{opacity:1;filter:none;}`,
@@ -444,9 +525,34 @@ body {
   to   { transform: scale(1.13) translate3d(1.2%, 0.9%, 0); }
 }
 
+/* THE SAME PICTURE, MOVING. One element for eight places -- the script swaps
+   its source -- and it sits over the still it was cut from, so a loop that
+   never arrives is invisible rather than a hole.
+
+   IT IS BARELY BLURRED, AND THAT IS THE POINT OF THE WHOLE EXERCISE. The still
+   underneath carries blur(26px), which is correct for a colour wash and is
+   exactly what stops anybody recognising where they are. 3px is enough to keep
+   text off the detail edges while the place stays a place. It does NOT drift:
+   the loop already drifts, in ffmpeg, on a sine that returns to its origin, and
+   a CSS animation on top would beat against it. */
+.bgv {
+  position: absolute;
+  inset: -6%;
+  width: 112%;
+  height: 112%;
+  object-fit: cover;
+  opacity: 0;
+  filter: blur(3px) saturate(0.86);
+  transition: opacity 1200ms ease;
+}
+.bgs.is-showing .bgv { opacity: 1; }
+
 /* The scrim. Heavy, and heavier at the top where the wordmark sits. */
 .scrim {
   position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  /* Matched to the video's own fade, so the ground and the picture over it
+     arrive together instead of the scrim snapping off first. */
+  transition: opacity 1200ms ease;
   background:
     linear-gradient(180deg, rgba(11,10,9,0.92) 0%, rgba(11,10,9,0.74) 34%, rgba(11,10,9,0.86) 100%),
     radial-gradient(120% 70% at 50% 0%, rgba(11,10,9,0.20) 0%, rgba(11,10,9,0.80) 100%);
@@ -500,11 +606,56 @@ body {
 /* Drawn letterforms now, not type -- so this sizes a picture rather than a
    font. The height is what is fixed; the SVG's own viewBox keeps the width. */
 .wordmark {
-  display: inline-block;
+  display: inline-flex;
+  align-items: flex-start;
+  /* 5px of gap draws as about 10px of air: the monogram's box was cut as a
+     favicon tile and carries 4.4px of its own padding on that side at 30px. */
+  gap: 5px;
+  /* And 5.5px on the other side, which would otherwise indent the whole
+     masthead against every panel below it. This cancels the tile's padding so
+     the INK lines up with the page edge, not the box. Both numbers are
+     measured at height 30px and move with it. */
+  margin-left: -5.5px;
   color: var(--ink);
   text-decoration: none;
 }
 .wordmark svg { display: block; height: 30px; width: auto; }
+
+/* THE LOCKUP'S VERTICAL DATUM IS THE BASELINE, AND IT CANNOT ALSO BE THE TEAR.
+   Each mark carries both. The wordmark's baseline sits at 69.34% of its box and
+   its tear at 70.92% -- the tear cuts BELOW the line, through the feet, which is
+   what a head switch does. The monogram's baseline is at 80.57% and its tear at
+   63.91%, well above it. That is the generator being right rather than wrong:
+   its "seam 0.72" is a fraction of INK height, the wordmark's ink carries the
+   descender of p and Ts carries none, so the same parameter lands either side of
+   the line. Drop the monogram's tear to its baseline and there is nothing under
+   the cut to displace, and the tear disappears.
+
+   So: align the letters and accept two tears. Aligning the tears instead costs
+   5.47px of baseline break and the Ts visibly sinks. Cap heights already agree
+   at 19.58 against 20.06, so nothing is rescaled -- this is a lift and no more.
+
+   HELD BACK TO 60%, WHICH IS A CEILING AND NOT A TASTE. Against this ground the
+   record light measures 7.47:1 and the mark has to stay under it or the accent
+   stops being the brightest thing in the masthead. 60% lands at 6.11:1; 75%
+   overshoots at 9.14:1. */
+.wordmark .mg { opacity: 0.6; transform: translateY(-3.37px); }
+
+/* AND 60% IS ONLY RIGHT ON THE DARK GROUND IT WAS MEASURED AGAINST.
+   The rule above keeps the mark under the record light, and it does that by
+   comparing two contrast ratios against #070A11. Put a photograph behind the
+   masthead and the comparison inverts, because the two colours do not move
+   together: bone composites lighter as the ground lifts and holds its contrast,
+   while the accent is a mid-tone salmon whose ratio collapses. Measured over the
+   eight loops at the scrim each one derives, at 60% the mark out-shouts the
+   record light on SEVEN of the eight -- worst at ostsee-strand, 3.76 against
+   3.36.
+
+   45% is the most that keeps the mark under the accent on every place with
+   margin to spare (worst ratio 0.84 of the accent's, at ostsee-strand). The mark
+   itself lands at 2.81:1 there, which is low for text and fine for this: it is
+   decorative, aria-hidden, and its job is to be a mark rather than to be read. */
+.bgs.is-live ~ .wrap .wordmark .mg { opacity: 0.45; }
 
 /* The record light: the dot of the i, and the one piece of the tape's idiom
    allowed into the chrome. Animated from here rather than from a <style>
@@ -694,6 +845,28 @@ body {
   border-radius: 0;
   padding: var(--s-5);
   margin: 0 0 var(--s-6);
+}
+
+/* THE PLATE, AND WHY DESIGN.md's "THE BOXES ARE GONE" SURVIVES IT.
+   That rule was written for a near-black ground, where a panel needs no
+   background because there is nothing behind it to separate from. It is still
+   in force: with no loop playing, "--frost" is transparent and these panels are
+   exactly as borderless as they have always been. The plate appears ONLY when
+   there is a photograph behind the text, which is the one condition the
+   original rule never had to consider.
+
+   AND IT IS NOT A TASTE DECISION. Measured over the brightest place at the
+   scrim its own luma chose, "--l-dim" (#8D8880) lands at 2.86:1 -- a real AA
+   failure on text this product actually ships, in ".fine", ".who" and the
+   footer. 0.60 is the least plate that clears 4.5:1 and 0.62 is that with a
+   little margin: dim 4.67:1, muted 7.9:1, bone 13.3:1. The blur above was
+   already declared and has been doing nothing for want of anything to tint.
+
+   The radius is 3px and not 0 because at 0 a translucent plate reads as a
+   rendering seam across the photograph rather than as a surface on it. */
+.bgs.is-live ~ .wrap .panel {
+  background: rgba(7, 10, 17, 0.62);
+  border-radius: 3px;
 }
 
 .panel--anchor {

@@ -132,7 +132,10 @@ const STILL_FILE_RE = /^still-(\d+)\.(png|jpe?g|webp)$/i;
 
 /** `<id>.jpg` under `assets/places/`. The id is matched against the catalog, so
  *  no part of a request ever becomes a path component. */
-const PLACE_IMAGE_RE = /^([A-Za-z0-9-]{1,64})\.jpg$/;
+/** `<id>.jpg` or `<id>.mp4` under `assets/places/`. The id charset excludes a
+ *  dot on purpose, so a second suffix cannot be smuggled through the capture
+ *  and the extension is always exactly one of the two named here. */
+const PLACE_MEDIA_RE = /^([A-Za-z0-9-]{1,64})\.(jpg|mp4)$/;
 
 /** Routes that never look at a session: two static files, an icon, a card image
  *  and the health check. Keeping them out of the auth path means a missing
@@ -1570,23 +1573,29 @@ export function createServer({
     /**
      * The place photographs, when they exist.
      *
-     * `assets/places/` is empty today. A 404 here is the designed state, not a
-     * fault: the card's `background-image` lists the photograph first and the
-     * warm gradient second, so a layer that fails to load is simply not painted
-     * and the gradient shows through. The page is finished on a fresh clone and
-     * the real images drop in with no code change.
+     * TWO SUFFIXES, ONE ROUTE, AND A FALLBACK CHAIN BEHIND BOTH. `<id>.jpg` is
+     * the still -- the card thumbnail and the background layer -- and `<id>.mp4`
+     * is the six-second graded loop the background plays over it. A 404 on
+     * either is a designed state rather than a fault: the card's
+     * `background-image` lists the photograph first and the warm gradient
+     * second, so a missing still paints the gradient, and a missing loop leaves
+     * the still. The page is finished on a fresh clone with this directory
+     * empty, and each asset drops in with no code change.
      *
      * The id is resolved by MEMBERSHIP in the loaded catalog, so no byte of the
      * request is ever concatenated into a path.
      */
     placeImage(req, res, { params }) {
-      const m = PLACE_IMAGE_RE.exec(String(params.file ?? ''));
+      const m = PLACE_MEDIA_RE.exec(String(params.file ?? ''));
       const id = m ? m[1] : null;
+      const ext = m ? m[2] : null;
       if (!id || !placeIds.has(id)) {
         throw new HttpError(404, 'No such place image.', { code: 'NO_PLACE_IMAGE' });
       }
       if (!sendFile(req, res, {
-        file: `${assetsRoot}/places/${id}.jpg`, contentType: 'image/jpeg', maxAge: 86_400,
+        file: `${assetsRoot}/places/${id}.${ext}`,
+        contentType: ext === 'mp4' ? 'video/mp4' : 'image/jpeg',
+        maxAge: 86_400,
       })) {
         throw new HttpError(404, 'No such place image.', { code: 'NO_PLACE_IMAGE' });
       }

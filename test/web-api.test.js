@@ -601,6 +601,53 @@ test('the wordmark is the drawn mark, named, and carries no style of its own', a
   });
 });
 
+test('the monogram sits in the lockup without stealing the accent or the name', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    const from = html.indexOf('class="wordmark');
+    const lockup = html.slice(from, html.indexOf('</a>', from));
+
+    // ONE LINK, TWO MARKS. The monogram lives inside the wordmark's own anchor
+    // rather than beside it, so there is one target and one accessible name
+    // instead of two links to the same place sitting next to each other.
+    assert.ok(lockup.includes('class="mg"'), 'the monogram is not in the lockup');
+    assert.ok(lockup.indexOf('class="mg"') < lockup.indexOf('id="ts-wm-'),
+      'the monogram should precede the wordmark -- a lockup reads mark then word');
+
+    // THE MARK IS A PICTURE OF LETTERS THE WORD ALREADY SPELLS. Left nameable
+    // it is announced as a second "Timestamp" immediately before the first, so
+    // the link reads "Timestamp Timestamp" to anyone not looking at it.
+    // Slice the monogram element itself. `class` is not the first attribute on
+    // the tag, so this walks back to the opening `<svg` that carries it rather
+    // than matching on attribute order, which the asset is free to change.
+    const at = lockup.indexOf('class="mg"');
+    const mg = lockup.slice(lockup.lastIndexOf('<svg', at), lockup.indexOf('</svg>', at) + 6);
+    assert.ok(mg.includes('aria-hidden="true"'), 'the monogram is announced as a second name');
+    assert.ok(!/class="mg"[^>]*aria-label=/.test(mg), 'the monogram carries a name as well as being hidden');
+
+    // Same trap as the wordmark: style-src 'self' drops an inline <style>.
+    assert.ok(!mg.includes('<style'), 'the monogram carries a <style> the CSP will silently drop');
+
+    // TWO INLINED SVGs ON ONE PAGE SHARE AN ID SPACE, and a duplicate makes
+    // every use() and clip-path resolve to whichever came first. Here both
+    // marks are the same glyph so it would still LOOK right, which is exactly
+    // why it needs asserting rather than eyeballing.
+    const ids = [...html.matchAll(/\sid="(ts-[a-z]{2}-[a-z0-9-]+)"/g)].map((m) => m[1]);
+    assert.deepStrictEqual(ids.length, new Set(ids).size, `duplicate mark ids on one page: ${ids.join(', ')}`);
+
+    // THE ACCENT IS SPOKEN FOR, and this is the rule most likely to drift back.
+    // The record light is the one thing in the chrome wearing --rec, and it is
+    // 3.2px wide. A 30px monogram in the same value does not sit beside the
+    // accent, it replaces it -- so the mark separates from the word by WEIGHT.
+    const css = await (await fetch(`${base}/styles.css`)).text();
+    const mgRule = /\.wordmark\s+\.mg\s*\{([^}]*)\}/.exec(css);
+    assert.ok(mgRule, 'no rule sizes the monogram');
+    assert.ok(!/var\(--rec\)/.test(mgRule[1]),
+      'the monogram took the record light\'s colour; hold it back by opacity instead');
+    assert.ok(/opacity/.test(mgRule[1]), 'the monogram is not held back at all -- that is the stutter');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // the stylesheet and the place imagery
 // ---------------------------------------------------------------------------
@@ -708,6 +755,86 @@ test('a real place photograph is served when it is there', async () => {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(assets, { recursive: true, force: true });
   }
+});
+
+test('a place LOOP is served, and only for an id the catalog knows', async () => {
+  const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
+  fs.mkdirSync(`${assets}/places`, { recursive: true });
+  fs.writeFileSync(`${assets}/places/ostsee-strand.mp4`, Buffer.from('not really an mp4'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), assetsRoot: assets });
+  const port = await app.listen();
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/places/ostsee-strand.mp4`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'video/mp4');
+
+    // THE EXTENSION WIDENED; THE MEMBERSHIP CHECK DID NOT. The id is still
+    // resolved against the loaded catalog, so no byte of the request is ever
+    // concatenated into a path -- which is the property that made the .jpg
+    // route safe and is the one most easily lost while adding a second suffix.
+    // These reach the handler and are refused there, by name.
+    for (const target of [
+      '/places/nope.mp4',            // not in the catalog
+      '/places/ostsee-strand.mp4.mp4', // a second suffix cannot join the id
+      '/places/ostsee-strand.webm',  // an extension this route does not serve
+    ]) {
+      assert.equal((await fetch(`http://127.0.0.1:${port}${target}`)).status, 404, target);
+    }
+
+    // This one never reaches the handler at all -- the router refuses a
+    // traversal with a 400 first. Asserted as "not served" rather than as a
+    // specific code, because WHICH layer says no is an implementation detail
+    // and the property worth pinning is that neither layer serves it.
+    const traversal = await fetch(`http://127.0.0.1:${port}/places/..%2f..%2fpackage.json.mp4`);
+    assert.ok(traversal.status >= 400, `a traversal was answered ${traversal.status}`);
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(assets, { recursive: true, force: true });
+  }
+});
+
+test('the moving background is one element, and the page is finished without it', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    const bgs = html.slice(html.indexOf('<div class="bgs"'), html.indexOf('</div>', html.indexOf('class="scrim"')));
+
+    // ONE <video>, NOT EIGHT. Eight elements all decoding at once is eight
+    // decoders for one visible picture, and on a laptop it is audible.
+    assert.equal((html.match(/<video/g) ?? []).length, 1, 'there should be exactly one video element');
+
+    // AND IT IS INERT IN THE MARKUP. No src and no autoplay means a browser
+    // with JavaScript off, or reduced motion asked for, or a video codec it
+    // will not touch, fetches NOTHING and simply shows the still underneath --
+    // which is the layer that was already there and is still there.
+    const video = bgs.slice(bgs.indexOf('<video'), bgs.indexOf('>', bgs.indexOf('<video')) + 1);
+    assert.ok(!/\ssrc=/.test(video), 'the video names a source in the markup, so it loads for everyone');
+    assert.ok(!/\sautoplay/.test(video), 'autoplay in the markup defeats the reduced-motion check');
+    assert.ok(/\smuted/.test(video) && /\splaysinline/.test(video),
+      'without muted+playsinline a mobile browser refuses to play it at all');
+    assert.ok(/\sloop/.test(video), 'the loop is six seconds long and is meant to repeat');
+
+    // The still layers are the fallback and must survive. One per place.
+    assert.ok(/class="bg bg--pl-ostsee-strand"/.test(bgs), 'the still fallback layer is gone');
+
+    // TWO STATES, AND COLLAPSING THEM INTO ONE IS A REGRESSION WITH A LOOK.
+    // The ground -- the per-place scrim and the plate under the panels -- keys
+    // off "is-live", which stays true once video has worked here. Only the
+    // video's own opacity keys off "is-showing", which drops for the moment
+    // between choosing a place and its loop decoding. Drive both from one
+    // class and every click throws the scrim back to full strength and changes
+    // each panel's corner radius until the next file loads. Measured in a
+    // browser before this split existed; it flinched once per click.
+    const css = await (await fetch(`${base}/styles.css`)).text();
+    assert.ok(/\.bgs\.is-showing\s+\.bgv\s*\{[^}]*opacity/.test(css),
+      'the video should reveal on is-showing');
+    assert.ok(/\.bgs\.is-live\s*~\s*\.wrap\s+\.panel/.test(css),
+      'the panel plate should hold on is-live, not blink with each swap');
+    assert.ok(/:checked~\.bgs\.is-live~\.scrim\{opacity:/.test(css),
+      'the per-place scrim should hold on is-live, not blink with each swap');
+    assert.ok(!/is-playing/.test(css), 'the old single-state class is still in the sheet');
+  });
 });
 
 // ---------------------------------------------------------------------------

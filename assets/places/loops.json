@@ -1,0 +1,30 @@
+{
+  "_comment": "Mean luma of each loop, 0-255, averaged over every frame. The page derives its per-place scrim from this. Regenerate with: node scripts/tapedeck/place-loops.mjs",
+  "raster": "1024x576",
+  "loops": {
+    "autobahn-raststaette": {
+      "yavg": 69
+    },
+    "balkon-waesche": {
+      "yavg": 143.9
+    },
+    "hallenbad-nachmittag": {
+      "yavg": 144.3
+    },
+    "kuechentisch-fruehstueck": {
+      "yavg": 100.6
+    },
+    "ostsee-strand": {
+      "yavg": 164.9
+    },
+    "plattenbau-treppenhaus": {
+      "yavg": 109.4
+    },
+    "schrebergarten-august": {
+      "yavg": 92.7
+    },
+    "wohnzimmer-abend": {
+      "yavg": 49.1
+    }
+  }
+}
