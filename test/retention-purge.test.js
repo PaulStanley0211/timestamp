@@ -78,8 +78,25 @@ let seq = 0;
  * The bytes are not empty. A test that writes zero-length files and then asserts
  * they are gone cannot tell deletion from a file that was never written.
  */
-function seedJob(root, { ageDays, withMedia = true } = {}) {
-  const at = new Date(Date.parse(AT) - ageDays * DAY);
+/**
+ * `from` EXISTS BECAUSE THE CLI TESTS CANNOT FREEZE THE CLOCK.
+ *
+ * Everything in-process is handed `nowImpl` and measured against the fixed AT,
+ * which is what makes those tests read as arithmetic rather than as luck. The
+ * three tests that spawn `purge-cli.mjs` cannot do that: it is a separate
+ * process reading the real wall clock, and no flag lets a caller override it.
+ *
+ * Seeding those against AT was therefore a bug with a fuse on it. A job seeded
+ * at `ageDays: 1` relative to AT is dated the 20th of August; it stayed inside
+ * the seven-day photo window until the real date reached the 27th, and then
+ * `purge` began deleting it -- correctly -- and the test that asserted it
+ * survived began failing, six days after anyone wrote it. Measured today: real
+ * now is 2026-08-27, AT is 2026-08-21, and the "one day old" photo is seven.
+ *
+ * So a CLI test seeds from real now, and its ages mean what they say.
+ */
+function seedJob(root, { ageDays, withMedia = true, from = Date.parse(AT) } = {}) {
+  const at = new Date(from - ageDays * DAY);
   seq += 1;
   const jobId = `${at.toISOString().slice(0, 10).replace(/-/g, '')}-120000-${String(seq).padStart(6, '0')}`;
   const job = createJob({
@@ -303,7 +320,7 @@ function runCli(root, args = []) {
 
 test('npm run purge reports what is due and deletes nothing without --apply', () => {
   const root = tmpRoot();
-  const { paths } = seedJob(root, { ageDays: 400 });
+  const { paths } = seedJob(root, { ageDays: 400, from: Date.now() });
 
   const run = runCli(root);
 
@@ -315,9 +332,9 @@ test('npm run purge reports what is due and deletes nothing without --apply', ()
 
 test('npm run purge -- --apply keeps the promise, both windows in one command', () => {
   const root = tmpRoot();
-  const { paths: old } = seedJob(root, { ageDays: 400 });
-  const { paths: middling } = seedJob(root, { ageDays: 10 });
-  const { paths: fresh } = seedJob(root, { ageDays: 1 });
+  const { paths: old } = seedJob(root, { ageDays: 400, from: Date.now() });
+  const { paths: middling } = seedJob(root, { ageDays: 10, from: Date.now() });
+  const { paths: fresh } = seedJob(root, { ageDays: 1, from: Date.now() });
 
   const run = runCli(root, ['--apply']);
 
@@ -330,7 +347,7 @@ test('npm run purge -- --apply keeps the promise, both windows in one command', 
 
 test('--execute is honoured too, because that is what the operator guide called it', () => {
   const root = tmpRoot();
-  const { paths } = seedJob(root, { ageDays: 400 });
+  const { paths } = seedJob(root, { ageDays: 400, from: Date.now() });
 
   const run = runCli(root, ['--execute']);
 
