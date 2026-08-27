@@ -470,11 +470,15 @@ Linux). Fixed in `d15f71c`.
 | `the fixture really does carry EXIF and GPS...` | Asserts `meta.sideData.includes('EXIF metadata')` - a claim about how one **ffprobe build names side_data**, not about the file. **The real strip test passes on Linux, byte-grep and all**, so EXIF stripping genuinely works. Fix: assert the bytes, or accept either spelling. |
 | `a broken filtergraph fails loudly...` | Asserts ffmpeg's error *wording*, which differs between the gyan.dev Windows build and Debian's. Fix: assert the failure and that stderr is non-empty, not the text. |
 
-~~**Plus two pre-existing FLAKY tests**~~ **THE FLAKES ARE FIXED - FOUR of
-them, three on 2026-08-26 and the last on 2026-08-27, one commit each, and not
-one by widening a margin.** They fired only when `node --test` ran files in
-parallel, and every one turned out to be a test measuring the machine rather
-than the code - which is why passing in isolation never cleared them.
+~~**Plus two pre-existing FLAKY tests**~~ **THE FLAKES ARE FIXED - FIVE of
+them, three on 2026-08-26 and two on 2026-08-27, one commit each, and not one
+by widening a margin.** The first four fired only when `node --test` ran files
+in parallel, and every one turned out to be a test measuring the machine rather
+than the code - which is why passing in isolation never cleared them. **The
+fifth is a different animal and worth reading as one:** it cannot fire on CI at
+all, and there is no timing margin in it anywhere. It needs TWO suites running
+on one checkout at once - which is now routine here, with several sessions
+sharing this working copy.
 
 | Test | What was actually wrong | Fix |
 |---|---|---|
@@ -482,13 +486,24 @@ than the code - which is why passing in isolation never cleared them.
 | `a concurrent reader never sees a truncated or invalid manifest` (~2 in 8) | Starting the reader thread on a loaded machine ate the writer's 10s budget while the writer spun through `saveJob` competing with the very thread it was waiting for. `parsed > 0` then failed having proved nothing - **the exact trap this test's own comment describes being fixed once already**, one layer down. | `aba30a1` - the reader raises a flag on its first read and the writer `Atomics.wait`s for it, which hands the core over instead of contending for it. The guard is also stronger: it now counts reads taken **while** the manifest was being rewritten (19431 in an isolated run, against the 5 the writer waits for), and stands the run down as *skipped, with its reason*, when that count is zero. The `invalid` assertion is made first and always. |
 | `an oversized password takes the same work as a normal one, on both branches` (~2 in 5 - **this one was never listed here**) | Wall-clock medians of scrypt across four cells. Under load the four burn the same cpu to within a millisecond while their clocks spread 3.8x; in one measured run the cell reading **slowest** on the clock (539ms) was the one that had burned the **least** cpu (62ms). | `1dd8e02` - the comparison is made on `process.cpuUsage()`: work done, not time waited. **The 4x margin is unchanged**, and it was verified still to catch the early return by putting it back on both branches. The wall clock is still asserted - cpu time cannot see an `await` added to one branch only, which is what arrives with Supabase - but only when the run shows the machine was free enough for the number to mean anything. |
 | `the simulated latency goes through ctx.sleepImpl` (1 in 4 under 8 extra cpu hogs, 0 in ~10 unstressed) | The budget was 15000ms, half the nominal latency -- but **the window it timed had a real ffmpeg render inside it**, and on the first run of the file the `reference()` build as well, because `await reference()` sat in the argument list, evaluated AFTER the clock started. ffmpeg took 16.1s under load, so the test failed reading `injected sleepImpl was bypassed` while sleepImpl had in fact been called exactly right. **This assertion had already been widened once** - 1000ms/900ms to 30000ms/15000ms - and its own comment records that widening. The second one was the same mistake as the first. | **this commit** - **the budget went DOWN, 15000ms to 1000ms**, by taking ffmpeg out of the window instead of making room for it. `runFfmpegImpl` is a seam `createFixtureProvider` already exposed and no test had ever used; stubbed, the measured call is one mkdir, one stat and three awaits, and the pixels stay covered by the eight other ffmpeg-backed tests in the file. Both margins measured rather than guessed: 180 samples under eight cpu hogs ran **0.32ms median, 2.15ms worst** (~465x under budget), and a real timer leaked on only the *smallest* phase was caught at **6137ms** (6x over). Verified by breaking the provider three ways on purpose - ignore the injected impl, await a real timer alongside it, await one on the 0.2 phase alone - and all three fail. |
+| `the output honours the delivery contract exactly` **and eight more - nine in all, every time two runs overlap** | `test/audio-output.test.js` and `test/ffmpeg-output.test.js` both wrote into `REPO_ROOT/build/test` **with no pid**, under fixed filenames. Inside one run that is safe, which is exactly why it hid: the two files use different names, and neither is imported by another test file the way `provider-contract.test.js` imports `provider-fal.test.js` - **so it cannot fire on CI, which runs one suite**. Across two runs all six mp4s are the same path, and the second run truncates the first mid-read: `moov atom not found`, `Invalid NAL unit size (-209167041)`, a spray of audio-decode failures, single tests taking up to 170s. **It reads as load or a real regression and is neither**, which is the expensive part - one session spent a full diagnosis pass on it before another spotted the shared directory. Measured by logging every ffmpeg path claim across two concurrent suites: **6 of 6 files under `build/test` claimed by both runs**, and **the same nine tests failed in both**, all nine from these two files and nothing else in the other 53. | **this commit** - the pid goes in the directory, exactly as in `c897845` and `accounts.mjs`, and on the **directory** rather than on each filename so a test added here later is safe without its author knowing any of this. Re-measured the same way after: **0 files shared** - distinct paths went 50 to 56, the six shared names splitting into twelve - and **not one of the nine failed in either run**. No timeout widened and no retry added; the race is gone rather than tolerated. |
 
 **Two sources of red left, and both are the Linux ones above.** None of the
-four was papered over with a retry, a `continue-on-error` or a wider timeout:
+five was papered over with a retry, a `continue-on-error` or a wider timeout:
 **a test whose timing margin is narrower than machine variance tests the
-machine**, and that ruling is what picked all four fixes. The fourth went
+machine**, and that ruling is what picked the first four fixes. The fourth went
 further and made its budget **15x tighter**, which is what happens once the
-window has nothing in it but the thing being measured.
+window has nothing in it but the thing being measured. The fifth had no margin
+to widen in the first place - the answer to a shared path is to stop sharing
+it.
+
+**Still open, same class as the fifth, and measured rather than suspected.**
+`build/provider-fixture` (22 paths claimed by both runs), `build/provider-contract`
+and `build/test-intake` still build their directories without a pid, so two
+overlapping suites share those too. While the fifth fix was being verified,
+`the progress bar actually grows -- it is not a stripe` failed out of
+`build/provider-fixture/bar/` in exactly that way. Nobody has lost a diagnosis
+pass to these yet; when someone does, the fix is the one line above.
 
 ### 5. SPECS WRITTEN - one needs rewriting before any code
 

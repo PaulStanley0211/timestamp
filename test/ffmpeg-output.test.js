@@ -45,7 +45,33 @@ const skip = HAVE ? false : `ffmpeg not found (${findFfmpeg().ffmpeg}) -- pixel 
 
 // Everything lands under build/, which is gitignored, and uses a distinct
 // prefix so a failed run leaves inspectable artifacts rather than vanishing.
-const outDir = path.join(REPO_ROOT, 'build', 'test');
+//
+// THE PID IS NOT DECORATION. The names below are fixed literals, so every
+// `node --test` on this checkout wants the same `build/test/contract.mp4`.
+// Inside ONE run that is safe: this file and `audio-output.test.js` are the
+// only two writing here, their names do not overlap, and neither is imported
+// by another test file the way `provider-contract.test.js` imports
+// `provider-fal.test.js`. Across TWO runs it is not safe. A second `npm test`
+// started while the first is still going truncates the first's mp4s mid-read,
+// and what surfaces is `moov atom not found` or a torn h264 bytestream,
+// reported against whichever test happened to be reading rather than against
+// the run that overwrote the file. It reads exactly like load or a real
+// regression and is neither, which is what makes it expensive to chase.
+//
+// It therefore never fires on CI, which runs one suite at a time -- only on a
+// developer machine running two, which is now routine on this checkout.
+// Measured before this line existed: two concurrent suites claimed all SIX
+// files under build/test in common, and the SAME NINE tests failed in both
+// runs -- every one of them from these two files, and nothing else in the
+// other 53. Measured after, the same way: 0 files shared, and not one of
+// those nine failing in either run.
+//
+// The pid makes the directory this process's own -- the same fix, for the
+// same class of shared-path race, as `c897845` (the fal test) and the tmp
+// name in `scripts/auth/accounts.mjs`. It goes on the DIRECTORY rather than
+// on each filename so that a test added here later is safe without its
+// author having to know any of this.
+const outDir = path.join(REPO_ROOT, 'build', 'test', String(process.pid));
 if (HAVE) fs.mkdirSync(outDir, { recursive: true });
 
 const SOURCE = { lavfi: `testsrc2=size=1280x720:rate=${cfg.fps}:duration=${cfg.durationSeconds}` };

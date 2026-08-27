@@ -75,7 +75,14 @@ async function haveFfmpeg() {
 const HAVE = await haveFfmpeg();
 const skip = HAVE ? false : `ffmpeg not found (${findFfmpeg().ffmpeg}) -- audio tests skipped`;
 
-const outDir = path.join(REPO_ROOT, 'build', 'test');
+// THE PID IS NOT DECORATION: it is what stops a second concurrent
+// `node --test` on this checkout from writing these same fixed filenames.
+// Inside one run nothing here collides -- across two runs every mp4 below is
+// the same path, and the reader gets a file truncated mid-write, which is
+// reported as a decode failure against whichever test was reading.
+// `test/ffmpeg-output.test.js` carries the full account at the same line;
+// the precedent is `c897845` and the tmp name in `scripts/auth/accounts.mjs`.
+const outDir = path.join(REPO_ROOT, 'build', 'test', String(process.pid));
 if (HAVE) fs.mkdirSync(outDir, { recursive: true });
 
 const SOURCE = { lavfi: `testsrc2=size=1280x720:rate=${cfg.fps}:duration=${cfg.durationSeconds}` };
