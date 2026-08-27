@@ -369,3 +369,58 @@ test('no page emits an <hr>', () => {
     + 'not removing it. Delete the markup, not just its paint:\n'
     + offenders.join('\n'));
 });
+
+// ---------------------------------------------------------------------------
+// the landing page carries the same moving ground as the signed-in one
+// ---------------------------------------------------------------------------
+
+const PLACES_FIXTURE = [
+  { id: 'ostsee-strand', label: 'Baltic beach', timeOfDay: 'afternoon' },
+  { id: 'wohnzimmer-abend', label: 'Living room', timeOfDay: 'evening' },
+];
+
+test('the landing plays the place full-bleed instead of framing it in a panel', () => {
+  const html = landingPage({ places: PLACES_FIXTURE, account: null });
+
+  // ONE VIDEO, AND INERT IN THE MARKUP, exactly as on the signed-in page. The
+  // checks that decide whether it should load at all live in the script.
+  assert.equal((html.match(/<video/g) ?? []).length, 1, 'the landing should carry one video');
+  const video = html.slice(html.indexOf('<video'), html.indexOf('>', html.indexOf('<video')) + 1);
+  assert.ok(!/\ssrc=/.test(video) && !/\sautoplay/.test(video),
+    'the landing video loads for everyone before any check has run');
+  assert.ok(/\smuted/.test(video) && /\splaysinline/.test(video) && /\sloop/.test(video),
+    'without muted+playsinline a mobile browser will not play it at all');
+
+  // The full-bleed layers, keyed by the same pl- ids the stylesheet generates
+  // rules for, so the landing and the signed-in page share one set.
+  assert.ok(/class="bgs"/.test(html), 'the landing has no full-bleed ground');
+  assert.ok(/class="bg bg--pl-ostsee-strand"/.test(html), 'the still fallback layer is missing');
+
+  // AND THE 4:3 PANEL IS GONE. It framed the very picture that is now behind
+  // the whole page; keeping both would show the same photograph twice at two
+  // sizes and two crops on one screen.
+  assert.ok(!/class="veils"/.test(html), 'the landing still frames the place in a 4:3 panel');
+});
+
+test('the landing list is a rail that snaps, and its menu is a plate', () => {
+  const html = landingPage({ places: PLACES_FIXTURE, account: null });
+  const css = createStylesheet({ places: PLACES_FIXTURE, outfits: [] }).css;
+
+  // The options are still a LIST in the markup -- they are a set of choices and
+  // a screen reader should meet them as one -- and a rail only in the styling.
+  assert.ok(/<ul class="lrail">/.test(html), 'the place options are not a rail');
+  assert.ok(/<li>.*lopt--pl-ostsee-strand/s.test(html), 'the rail dropped its list items');
+
+  const rail = /\.lrail\s*\{([^}]*)\}/.exec(css);
+  assert.ok(rail, 'no .lrail rule');
+  assert.ok(/scroll-snap-type:\s*x mandatory/.test(rail[1]), 'the rail does not snap');
+  assert.ok(/overflow-x:\s*auto/.test(rail[1]), 'the rail does not scroll');
+  assert.ok(/\.lrail\s+li\s*\{[^}]*scroll-snap-align/.test(css), 'the items have no snap point');
+
+  // The menu floats over a photograph, so it needs a ground of its own -- the
+  // same argument, and the same measured value, as the signed-in page's panels.
+  const menu = /\.lmenu\s*\{([^}]*)\}/.exec(css);
+  assert.ok(menu, 'no .lmenu rule');
+  assert.ok(/backdrop-filter:\s*blur/.test(menu[1]), 'the menu does not blur what is behind it');
+  assert.ok(/background:\s*rgba\(/.test(menu[1]), 'the menu has no plate, so dim text sits on a photograph');
+});

@@ -299,11 +299,16 @@ const BG_SCRIPT = `
     bgs.classList.remove('is-live');
   });
 
+  // TWO NAMES, ONE MECHANIC. The signed-in page posts its choice as "place";
+  // the landing names its radios "lplace" precisely so a landing choice can
+  // never be submitted as a real order. Both drive the same background.
+  var SELECTOR = 'input[name="place"]:checked, input[name="lplace"]:checked';
+
   document.addEventListener('change', function (e) {
-    if (e.target && e.target.name === 'place') show(e.target.value);
+    if (e.target && (e.target.name === 'place' || e.target.name === 'lplace')) show(e.target.value);
   });
 
-  var checked = document.querySelector('input[name="place"]:checked');
+  var checked = document.querySelector(SELECTOR);
   if (checked) show(checked.value);
 }());
 `;
@@ -689,14 +694,26 @@ export function landingPage({ places = [], account = null } = {}) {
   // The gauze belongs to `layout` now -- every page gets it, which is what
   // DESIGN.md means by "runs past every edge". The bloom stays: it is this
   // page's own light, not the world's mesh.
+  // THE SAME GROUND AS THE SIGNED-IN PAGE, AND DELIBERATELY THE SAME IDS. The
+  // stylesheet generates one set of `#pl-<id>:checked ~ ...` rules from the
+  // catalog; because the landing's radios carry those same ids, every one of
+  // them -- the still layer, the cross-fade, the per-place scrim -- reaches
+  // this page for nothing. Only the radios' NAME differs (lplace, so a landing
+  // choice cannot be posted as a real order), and the script matches on both.
+  const backgrounds = places
+    .map((p) => `<div class="bg bg--${h(placeSlug(p.id))}"></div>`)
+    .join('\n');
+
   const preBody = `${hooks}
+<div class="bgs" aria-hidden="true">
+${backgrounds}
+<video class="bgv" muted playsinline loop preload="none"></video>
+</div>
+<div class="scrim" aria-hidden="true"></div>
 <div class="bloom" aria-hidden="true"></div>`;
 
   const stack = places.map((p, i) => `
       <li><label class="lopt lopt--${h(placeSlug(p.id))}" for="${h(placeSlug(p.id))}"><span class="lidx">${String(i + 1).padStart(2, '0')}</span>${h(p.label)}</label></li>`).join('');
-
-  const veils = places.map((p) => `
-      <div class="veil veil--${h(placeSlug(p.id))}" aria-hidden="true"><span class="veil-img thumb--${h(placeSlug(p.id))}"></span></div>`).join('');
 
   const osds = places.map((p) => `
       <span class="losd losd--${h(placeSlug(p.id))}" aria-hidden="true">${h(p.timeOfDay || '')}</span>`).join('');
@@ -705,12 +722,12 @@ export function landingPage({ places = [], account = null } = {}) {
 <main class="landing">
 
   <section class="strike">
-    <div>
+    <div class="lmenu">
       <h1 class="hero-line">One photograph.<span class="lit">Fifteen seconds</span>of 2003.</h1>
       <p class="hero-sub">Every place here is somewhere ordinary, and every one is
       already present, unlit. Strike one and it is the afternoon you are standing in.</p>
 
-      <ul class="stack">${stack}
+      <ul class="lrail">${stack}
       </ul>
       <p class="strike-hint">Strike one</p>
 
@@ -719,10 +736,16 @@ export function landingPage({ places = [], account = null } = {}) {
         <a class="cta cta--quiet" href="/login">I have an account</a>
       </p>
     </div>
-
-    <div class="veils">${veils}${osds}
-    </div>
   </section>
+
+  <!-- THE READ-OUT MOVED OUT OF THE PANEL AND ONTO THE PICTURE, which is where
+       a camcorder actually put it. It used to sit in the corner of the 4:3 veil
+       that framed the place; that veil is gone, because the place is now behind
+       the whole page and showing the same photograph twice at two sizes and two
+       crops is one picture too many. Kept inside .wrap so the generated
+       "#pl-x:checked ~ .wrap .losd--x" rules still reach it. -->
+  <div class="losds" aria-hidden="true">${osds}
+  </div>
 
   <section class="how">
     <div>
@@ -753,7 +776,8 @@ export function landingPage({ places = [], account = null } = {}) {
     you nothing.</p>
   </section>
 
-</main>`;
+</main>
+<script>${BG_SCRIPT}</script>`;
 
   return layout({
     title: 'Timestamp — one photo, fifteen seconds, 2003',

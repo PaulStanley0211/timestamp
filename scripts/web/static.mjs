@@ -331,9 +331,10 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       ...(scrimOpacity(LOOP_LUMA[place.id]?.yavg) === null ? [] : [
         `#${slug}:checked~.bgs.is-live~.scrim{opacity:${scrimOpacity(LOOP_LUMA[place.id].yavg)};}`,
       ]),
-      // STRUCK, on the landing page: the same radio lights this place's veil,
-      // its date read-out, and strikes its name forward out of the ghost stack.
-      `#${slug}:checked~.wrap .veil--${slug}{opacity:1;filter:none;}`,
+      // STRUCK, on the landing page: the same radio lights this place's date
+      // read-out and strikes its name forward out of the ghost rail. The veil
+      // rule that used to lead this group is gone with the panel it lit -- the
+      // place is the full-bleed ground now, and .bg--<slug> above lights it.
       `#${slug}:checked~.wrap .losd--${slug}{opacity:1;}`,
       `#${slug}:checked~.wrap .lopt--${slug}{opacity:1;color:var(--l-cathode);text-shadow:0 0 26px rgba(255,138,30,0.5);}`,
       `#${slug}:checked~.wrap .lopt--${slug} .lidx{color:var(--l-hot);}`,
@@ -1529,7 +1530,49 @@ input[type="file"]::file-selector-button {
 
 .is-landing .masthead { padding: 2.5rem 0 0; }
 
-.strike { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 4rem; align-items: center; padding: 3.5rem 0 6rem; }
+/* ONE COLUMN NOW, because the column it used to balance was the 4:3 veil and
+   the place is behind the whole page instead. The menu is capped rather than
+   full-width: a plate that reaches both edges of a wide screen stops reading as
+   something floating on a picture and starts reading as a header. */
+.strike { display: block; padding: 3.5rem 0 6rem; }
+
+/* THE MENU IS THE PAGE'S ONLY GROUND NOW, and it is the same plate, at the same
+   measured value, as the panels on the signed-in page: over the brightest place
+   at the scrim that place derives, "--l-dim" lands at 2.86:1 without one, which
+   is a real AA failure on the hint and the rail's index numerals. 0.62 is the
+   least that clears 4.5:1.
+
+   AND THE SECTIONS BELOW THE FOLD NEED IT JUST AS MUCH. The ground is fixed, so
+   scrolling past the hero does not leave the photograph behind -- it holds, and
+   every word of "how" and "plain" would otherwise sit directly on it. That is
+   the whole reason the scrim below can come down as far as it does. */
+.lmenu {
+  background: rgba(7, 10, 17, 0.62);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-radius: 3px;
+  padding: var(--s-5);
+  max-width: 46rem;
+}
+.is-landing .how > div,
+.is-landing .plain {
+  background: rgba(7, 10, 17, 0.62);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-radius: 3px;
+  padding: var(--s-5);
+}
+
+/* THE LANDING'S SUBJECT IS THE PLACE, so its still is not blurred to the wash
+   the signed-in page wants. 26px is right behind a form and wrong behind a page
+   whose whole argument is "this is somewhere you recognise". The loop, when it
+   plays, is softer still at 3px -- see .bgv. */
+.is-landing .bg { filter: blur(10px) saturate(0.8); }
+
+/* And the scrim comes down to match, because the text that needed it is on a
+   plate now. When a loop is playing the generated per-place rules take this
+   over with a value derived from that loop's own measured luma. */
+.is-landing .scrim { opacity: 0.5; }
 @media (max-width: 60rem) { .strike { grid-template-columns: 1fr; gap: 2.5rem; padding: 2rem 0 3.5rem; } }
 
 .hero-line {
@@ -1542,8 +1585,28 @@ input[type="file"]::file-selector-button {
 .hero-sub { color: #C8C2B8; margin: 0 0 var(--s-6); max-width: 42ch; font-size: 17px; line-height: 1.6; }
 
 /* the ghost stack: every place present at once, one struck */
-.stack { list-style: none; margin: 0 0 var(--s-5); padding: 0; display: flex; flex-direction: column; gap: var(--s-1); }
-.stack li { margin: 0; min-width: 0; }
+/* THE OPTIONS ARE STILL A LIST IN THE MARKUP AND A RAIL ONLY HERE. They are a
+   set of choices and a screen reader should meet them as one; horizontal is a
+   presentation of that, not a different thing. Same scroll-snap mechanic as the
+   place cards on the signed-in page, so the two screens answer a swipe the same
+   way rather than inventing a second pattern.
+
+   The gutters are negative margins against the menu's own padding, so the rail
+   bleeds to the plate's edges: a row that stops short of them looks clipped,
+   and a row that reaches them reads as continuing past the frame -- which it
+   does. */
+.lrail {
+  list-style: none;
+  display: flex; gap: var(--s-5);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  margin: 0 calc(-1 * var(--s-5)) var(--s-4);
+  padding: var(--s-1) var(--s-5) var(--s-3);
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+}
+.lrail li { margin: 0; flex: 0 0 auto; scroll-snap-align: center; }
+.lrail .lopt { white-space: nowrap; }
 .lopt {
   display: block; cursor: pointer;
   font-family: var(--osd); font-size: clamp(20px, 2.4vw, 29px); line-height: 1.24;
@@ -1558,13 +1621,16 @@ input[type="file"]::file-selector-button {
 .lopt:hover { opacity: 0.82; }
 .strike-hint { font-family: var(--osd); font-size: 15px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--l-dim); margin: 0 0 var(--s-6); }
 
-/* the veil stack: all photographs present, only the struck one lit */
-.veils { position: relative; aspect-ratio: 4 / 3; background: var(--l-lift); }
-.veil { position: absolute; inset: 0; opacity: 0; filter: blur(9px); transition: opacity 420ms linear, filter 420ms linear; }
-.veil-img { position: absolute; inset: 0; background-size: cover; background-position: center; }
-/* the gauze reaches across the photograph too -- it is one plane */
-.veil::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(190, 140, 80, 0.2) 0 1px, transparent 1px 4px); }
-.losd { position: absolute; right: 1rem; bottom: 0.9rem; z-index: 3; opacity: 0; font-family: var(--osd); font-size: 16px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--l-cathode); text-shadow: 0 0 12px rgba(255, 138, 30, 0.7); }
+/* THE VEIL STACK IS GONE, RULES AND ALL. It framed the selected place in a 4:3
+   panel beside the text; the place is now behind the whole page, and keeping
+   both would have shown one photograph twice, at two sizes and two crops, on
+   one screen. Deleted rather than hidden -- a rule that matches nothing is how
+   dead markup survives a review, and this file has been caught by that before.
+
+   THE READ-OUT SURVIVED IT and is better placed for it: it is pinned to the
+   viewport now, over the picture, which is where a camcorder put its OSD. */
+.losds { position: fixed; right: 1.15rem; bottom: 1rem; width: 14rem; height: 1.4rem; z-index: 6; pointer-events: none; }
+.losd { position: absolute; right: 0; bottom: 0; opacity: 0; font-family: var(--osd); font-size: 16px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--l-cathode); text-shadow: 0 0 12px rgba(255, 138, 30, 0.7); transition: opacity 420ms linear; }
 
 /* the act */
 .hero-do { display: flex; gap: var(--s-6); align-items: baseline; flex-wrap: wrap; margin: 0; }
