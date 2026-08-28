@@ -1,0 +1,60 @@
+# What must never enter the image.
+#
+# `COPY . .` is the most dangerous line in this Dockerfile. Everything it must
+# not copy is exactly what this project holds: `.env` carries seven secrets,
+# and `out/` carries photographs of real people's faces along with their
+# sessions and their credit ledgers. An image that bakes either one builds,
+# boots and serves identically to a correct one -- until it is pushed to a
+# registry, at which point the secrets are published and the seven-day
+# retention promise in the consent text is false.
+#
+# THIS FILE IS NOT A COPY OF `.gitignore` AND MUST NOT BE KEPT IN SYNC WITH IT.
+# They answer different questions. `.gitignore` asks "should this be in the
+# history of a public repository?"; this asks "should this be in a running
+# container?". `docs/` belongs in git and not in a container. `assets/places/`
+# belongs in both. The two files agree on the dangerous cases by coincidence of
+# subject, not by construction, which is why `test/deploy-image.test.js`
+# evaluates the rules below against concrete paths rather than diffing them.
+#
+# Docker's rule is LAST MATCH WINS, so a `!` line below reverses everything
+# above it that it matches. Read the negations at the bottom as the exceptions
+# they are.
+
+# --- credentials -----------------------------------------------------------
+.env
+.env.*
+*.pem
+*.key
+
+# --- real people -----------------------------------------------------------
+# Faces, sessions, accounts, credit ledgers, OAuth verifiers, and the unsent
+# blind-check packet. Gitignored for the same reason; an image is a second way
+# to publish a directory and needs its own rule.
+out
+assets/test-photos
+
+# --- documents that stay on this machine ------------------------------------
+# The security reviews are gitignored because this repo is public. A public
+# registry publishes just as effectively. The rest of `docs/` is simply not
+# something a runtime needs.
+docs
+
+# --- weight and local state -------------------------------------------------
+.git
+.github
+node_modules
+build
+logs
+review
+assets/stock
+test
+*.md
+!assets/fonts/OFL.txt
+
+# --- development-only files -------------------------------------------------
+.claude
+.vscode
+.idea
+Dockerfile
+.dockerignore
+docker-compose*.yml
