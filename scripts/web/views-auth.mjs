@@ -545,11 +545,20 @@ export function pricingPage({
    * has no way to know and the webhook that does may not have arrived yet.
    * Saying "your credits are ready" here would be a claim the server cannot
    * back, on a url a stranger can type.
+   *
+   * `Object.hasOwn` IS THE LOAD-BEARING PART, not the `?? null` beside it.
+   * `checkout` is a query parameter, so a stranger picks the key; a bare
+   * lookup finds `constructor`, `toString`, `valueOf` and `hasOwnProperty` on
+   * the prototype and renders their source into the notice element. `?? null`
+   * cannot catch that, because a function is not nullish. `null` prototype
+   * would work too and reads as a trick; this says what it means.
    */
-  const returned = {
+  const RETURNED = Object.freeze({
     done: 'Thank you. Your credits will appear on your balance shortly, once the payment clears.',
     cancelled: 'Nothing was charged. The bundle is still here whenever you want it.',
-  }[String(checkout ?? '')] ?? null;
+  });
+  const key = String(checkout ?? '');
+  const returned = Object.hasOwn(RETURNED, key) ? RETURNED[key] : null;
 
   const body = `
 <main>

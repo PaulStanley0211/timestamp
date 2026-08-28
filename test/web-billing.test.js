@@ -790,6 +790,36 @@ test('the success page thanks without claiming the credits have landed', async (
   }, { billing: configuredBilling() });
 });
 
+test('only the two notices this app wrote can be put on the billing page', async () => {
+  // `?checkout=` is a value a stranger types, and the notice it selects is
+  // looked up in an object literal. A bare `LOOKUP[key]` reaches the prototype
+  // as well as the literal, so `?checkout=constructor` renders the source text
+  // of `function Object()` inside a `<p class="notice">` -- on the one page in
+  // this product that handles money, which is where attacker-chosen content in
+  // a trusted-looking element is worth the least.
+  //
+  // NOT XSS: `h()` escapes it, and that was verified rather than assumed. The
+  // objection is that a page which is supposed to be able to say exactly two
+  // things can be made to say something else at all.
+  //
+  // The unknown key is asserted alongside the prototype ones so this cannot
+  // pass by making the page refuse everything.
+  await withApp(async ({ base }) => {
+    const notice = async (q) => {
+      const html = await (await fetch(`${base}/pricing?checkout=${q}`, { headers: { accept: 'text/html' } })).text();
+      return html.match(/<p class="notice">([\s\S]*?)<\/p>/)?.[1] ?? null;
+    };
+
+    assert.ok((await notice('done'))?.length, 'the real success notice stopped rendering');
+    assert.ok((await notice('cancelled'))?.length, 'the real cancelled notice stopped rendering');
+
+    for (const key of ['constructor', '__proto__', 'toString', 'valueOf', 'hasOwnProperty', 'nonsense']) {
+      assert.equal(await notice(key), null,
+        `?checkout=${key} put content on the billing page that this app never wrote`);
+    }
+  }, { billing: configuredBilling() });
+});
+
 // ---------------------------------------------------------------------------
 // the command line
 // ---------------------------------------------------------------------------
