@@ -58,7 +58,13 @@ const skip = HAVE ? false : `ffmpeg not found (${findFfmpeg().ffmpeg}) -- intake
 
 // build/ is gitignored, and a distinct prefix means a failed run leaves the
 // offending file behind to be looked at rather than vanishing.
-const outDir = path.join(ROOT, 'build', 'test-intake');
+//
+// The pid goes on the DIRECTORY, not on each filename -- same fix as `c897845`
+// and `accounts.mjs`, and deliberately at this level so a test added below is
+// safe without its author having to know any of this. Two suites running at
+// once on one checkout is routine here; without the pid both processes claimed
+// all six of these paths, and the second run truncates the first mid-read.
+const outDir = path.join(ROOT, 'build', 'test-intake', String(process.pid));
 if (HAVE) fs.mkdirSync(outDir, { recursive: true });
 const out = (name) => path.join(outDir, name);
 

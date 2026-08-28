@@ -94,7 +94,9 @@ const skip = HAVE ? false : `ffmpeg not found (${findFfmpeg().ffmpeg}) -- provid
  *  NOT deleted afterwards: when a still looks wrong the first thing anyone
  *  wants is to open it. */
 function workdir(...parts) {
-  const dir = path.join(REPO_ROOT, 'build', 'provider-contract', ...parts);
+  // The pid goes on the DIRECTORY, above `parts`, so every caller of workdir()
+  // is process-private without knowing it -- same fix as `c897845`.
+  const dir = path.join(REPO_ROOT, 'build', 'provider-contract', String(process.pid), ...parts);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

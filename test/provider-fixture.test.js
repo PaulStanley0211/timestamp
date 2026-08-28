@@ -58,7 +58,12 @@ const HAVE = await haveFfmpeg();
 const skip = HAVE ? false : `ffmpeg not found (${findFfmpeg().ffmpeg}) -- fixture pixel tests skipped`;
 
 function workdir(...parts) {
-  const dir = path.join(REPO_ROOT, 'build', 'provider-fixture', ...parts);
+  // The pid goes on the DIRECTORY, above `parts`, so every caller of workdir()
+  // is process-private without knowing it -- same fix as `c897845`. This is the
+  // one that was actually caught in the act: CLAUDE.md section 4 records
+  // `the progress bar actually grows` failing out of `build/provider-fixture/bar/`
+  // while two suites overlapped.
+  const dir = path.join(REPO_ROOT, 'build', 'provider-fixture', String(process.pid), ...parts);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

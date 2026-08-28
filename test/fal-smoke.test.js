@@ -65,7 +65,11 @@ const skip = LIVE
 
 const SECONDS = 4;
 const RESOLUTION = '480p';
-const OUT = path.join(REPO_ROOT, 'build', 'fal-smoke');
+// The pid goes on the DIRECTORY -- same fix as `c897845`. This file only runs
+// under TIMESTAMP_LIVE=1, so it has never collided in practice; it is fixed
+// with the other three because the next person to run two live smokes at once
+// should not have to discover it.
+const OUT = path.join(REPO_ROOT, 'build', 'fal-smoke', String(process.pid));
 
 test('[fal LIVE] one 4-second 480p clip: the shapes, and layer 3 on a real file', { skip }, async (t) => {
   fs.mkdirSync(OUT, { recursive: true });
