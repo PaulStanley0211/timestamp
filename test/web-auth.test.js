@@ -1399,6 +1399,19 @@ test('cookies parse tolerantly and serialize strictly', () => {
   // that would log everybody out because of an unrelated cookie.
   assert.equal(parseCookies('junk=%E0%A4%A; ts_session=v').ts_session, 'v');
 
+  // FIRST VALUE WINS, and this is the parser that is actually on the request
+  // path -- `currentAccount` and every CSRF/OAuth read below call THIS one, not
+  // the careful duplicate in `session.mjs`. A browser sends the most specific
+  // cookie first, so an attacker who can set a cookie on a wider path or a
+  // parent domain gets to append a second value with the same name. Under
+  // last-wins theirs is the one that is read, which is a session-fixation
+  // primitive. `session.mjs:606` has always had this guard and a comment
+  // explaining it; the copy on the request path did not, which is the whole
+  // finding -- the careful implementation existing is not the same as it being
+  // the one that runs.
+  assert.equal(parseCookies('ts_session=real; ts_session=forged').ts_session, 'real');
+  assert.equal(parseCookies('a=first; b=x; a=second').a, 'first');
+
   const set = serializeCookie('n', 'v alue', { maxAge: 60, secure: true });
   assert.match(set, /^n=v%20alue;/);
   assert.match(set, /HttpOnly/);

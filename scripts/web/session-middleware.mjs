@@ -112,6 +112,19 @@ export class AuthUnavailableError extends Error {
  * Tolerant on purpose: a browser will happily send a cookie set by something
  * else on the same host with a value we cannot decode, and throwing on it would
  * log everybody out because of an unrelated cookie.
+ *
+ * TOLERANT IS NOT THE SAME AS LAST-WINS. Later values do not overwrite earlier
+ * ones: a browser sends the most specific cookie first, so an attacker able to
+ * set a cookie on a PARENT DOMAIN or a WIDER PATH can append a second value
+ * under the same name. Read last-wins, theirs is the one that counts, which is
+ * a session-fixation primitive on `timestamp_session` and defeats the CSRF
+ * double-submit on `timestamp_csrf` in the same stroke.
+ *
+ * `scripts/auth/session.mjs:606` has carried this guard and this reasoning
+ * since it was written. THIS is the parser on the request path -- every
+ * `currentAccount`, CSRF and OAuth-state read below calls it -- so the guard
+ * has to be here too. The careful implementation existing somewhere is not the
+ * same as it being the one that runs; keep the two in step.
  */
 export function parseCookies(header) {
   const out = Object.create(null);
@@ -120,7 +133,7 @@ export function parseCookies(header) {
     const eq = pair.indexOf('=');
     if (eq < 1) continue;
     const name = pair.slice(0, eq).trim();
-    if (!name) continue;
+    if (!name || Object.hasOwn(out, name)) continue;
     const raw = pair.slice(eq + 1).trim();
     try {
       out[name] = decodeURIComponent(raw);

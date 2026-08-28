@@ -477,16 +477,28 @@ test('a second cookie for the other account does not win', async () => {
     // Two intact session cookies of the same name in one header. Whichever the
     // parser picks it must pick exactly ONE verified identity -- never blend
     // them, and never resolve to A's job for a header B controls the rest of.
-    for (const cookie of [`${cookieB}; ${cookieA}`, `${cookieA}; ${cookieB}`]) {
+    // THE FIRST COOKIE WINS, and this assertion is deliberately tighter than
+    // the one it replaces. That one accepted EITHER identity as "a defensible
+    // parse" -- true while the two parsers in this repo disagreed, and exactly
+    // what let the request path run last-wins unnoticed. A browser sends the
+    // most specific cookie first, so last-wins hands the session to whoever can
+    // set a cookie on a parent domain or a wider path. Only first-wins is
+    // defensible now, and `parseCookies` in `scripts/web/session-middleware.mjs`
+    // is where it is enforced. Not weaker: every no-leak guarantee below is
+    // still asserted, on top of a resolution that is now pinned rather than
+    // permitted either way.
+    for (const [cookie, firstIs] of [[`${cookieB}; ${cookieA}`, 'B'], [`${cookieA}; ${cookieB}`, 'A']]) {
       const res = await fetch(`${base}/api/jobs/${job.jobId}`, { headers: { cookie }, redirect: 'manual' });
       const text = await res.text();
-      // Either identity is a defensible parse. What is NOT defensible is a
-      // third answer, or a body that mixes the two.
       assert.ok([200, 404, 303, 401].includes(res.status), `duplicate-cookie header answered ${res.status}`);
-      if (res.status === 200) {
-        // Resolved to A. Then it must be wholly A, and B must still not own it.
+      if (firstIs === 'A') {
+        // A is first and A owns the job, so A is served -- wholly A.
+        assert.equal(res.status, 200, 'A\'s cookie came first and must be the identity used');
         assert.equal(app.sessions.ownsJob({ accountId: A.accountId, jobId: job.jobId }), true);
       } else {
+        // B is first. B does not own A's job, so appending A's cookie after it
+        // must not promote the request to A -- that is the fixation primitive.
+        assert.notEqual(res.status, 200, 'a trailing cookie promoted the request to A\'s identity');
         assert.ok(!text.includes(A_SECRET_PLACE), 'a duplicate-cookie header leaked A\'s input');
       }
     }
