@@ -1914,6 +1914,18 @@ input[type="file"]::file-selector-button {
   padding: var(--s-1) var(--s-5) var(--s-3);
   scrollbar-width: thin;
   overscroll-behavior-x: contain;
+  /* The bleed above is reaching for "this continues past the frame". Measured
+     on the landing at 1280 it was not arriving: scrollWidth 3066 against a 736
+     client, so SIX of the eight places sit outside the frame and the first
+     thing outside it is a word cut in half. A guillotined word reads as broken
+     rather than as scrollable, and the place list is the whole appeal -- a
+     visitor who sees one and a half of them concludes there are two.
+     The mask dissolves that edge instead of cutting it, which is the signal
+     the bleed already wanted. It is not a border and not a divider: it is the
+     absence of paint, which is the thing DESIGN.md's no-rules rule protects.
+     Kept narrow so the last place is still legible once it is scrolled to. */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--s-6)), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--s-6)), transparent);
 }
 .lrail li { margin: 0; flex: 0 0 auto; scroll-snap-align: center; }
 .lrail .lopt { white-space: nowrap; }
