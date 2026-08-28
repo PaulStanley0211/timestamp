@@ -10,7 +10,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "doctor": "node scripts/preflight/doctor.mjs",
+    "doctor": "node --env-file-if-exists=.env scripts/preflight/doctor.mjs",
     "look": "node scripts/tapedeck/look-cli.mjs",
     "presets": "node scripts/catalog/list-cli.mjs",
     "compose": "node scripts/compose/compose-cli.mjs",

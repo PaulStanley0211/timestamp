@@ -14,6 +14,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 import { doctor } from '../scripts/preflight/doctor.mjs';
@@ -103,4 +106,62 @@ test('doctor reports all three Supabase values present/not-set, never fatal, and
   // identity config alone must not flip it, since nothing here is fatal.
   assert.equal(withNone.checks.filter((c) => !c.ok && c.fatal).length, 0,
     'no Supabase check may be fatal');
+});
+
+// ---------------------------------------------------------------------------
+// the .env gap -- item 12
+// ---------------------------------------------------------------------------
+
+test('`npm run doctor` reads .env, so a key that IS set does not report "not set"', { skip }, (t) => {
+  // The defect: package.json ran `node scripts/preflight/doctor.mjs` bare,
+  // with none of the `--env-file-if-exists=.env` that `render`, `web`,
+  // `worker`, `smoke` and `ledger` all carry. doctor then reads only the
+  // parent environment, so a perfectly correct `.env` is invisible to it and
+  // every key reports "not set" -- the command whose whole job is telling you
+  // whether you are configured, lying about it.
+  //
+  // Behavioural on purpose. Asserting that package.json CONTAINS the flag
+  // would prove only that the file says what it says; this EXECUTES the
+  // command package.json declares and reads what it printed. The scratch cwd
+  // is what makes it hermetic: the .env under test is the one written here,
+  // never the repo's own, which this test must not read or disturb.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'timestamp-doctor-env-'));
+  // Unlike build/, which this repo deliberately leaves behind so a failed run
+  // can be looked at, this directory holds one .env with a fake URL in it and
+  // is worth nothing after the assertion. Left alone it accumulates one
+  // directory per suite run, out of sight, for ever.
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, '.env'), 'SUPABASE_URL=https://from-the-env-file.example\n');
+
+  const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const declared = pkg.scripts.doctor.trim().split(/\s+/);
+  assert.equal(declared[0], 'node', 'the doctor script is expected to be a plain node invocation');
+  // The script path is resolved against the repo so it survives the scratch
+  // cwd; every other token -- which is to say the flags -- is passed through
+  // exactly as package.json declares it. That is the thing under test.
+  const repoRoot = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
+  const args = declared.slice(1).map((tok) => (tok.endsWith('.mjs') ? path.resolve(repoRoot, tok) : tok));
+
+  // The key must reach doctor ONLY via the .env file, so strip it from the
+  // environment this child inherits.
+  const env = { ...process.env };
+  delete env.SUPABASE_URL;
+
+  let stdout;
+  try {
+    stdout = execFileSync(process.execPath, args, { cwd: dir, env, encoding: 'utf8' });
+  } catch (e) {
+    // doctor exits 1 whenever any fatal check fails, which is unrelated to
+    // what is being asserted here; its report still went to stdout. But a
+    // failure that is NOT an exit code -- node not spawnable, the script path
+    // wrong -- produced no report at all, and letting it fall through would
+    // blame the missing flag below for something that never ran. That is the
+    // shape section 3 of CLAUDE.md records as a swallowed error hiding inside
+    // the fix for a swallowed error, so it is rethrown rather than reported.
+    if (typeof e.status !== 'number') throw e;
+    stdout = e.stdout ?? '';
+  }
+
+  assert.match(stdout, /SUPABASE_URL\s+present/,
+    'doctor did not pick up SUPABASE_URL from .env -- the npm script is missing --env-file-if-exists=.env');
 });

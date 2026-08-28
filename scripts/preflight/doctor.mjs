@@ -140,12 +140,14 @@ export async function doctor({ cfg, env = process.env, root = REPO_ROOT } = {}) 
   // especially the secret key are exactly the kind of thing this command
   // must not put in a terminal's scrollback or a CI log.
   //
-  // KNOWN GAP, recorded in CLAUDE.md rather than fixed here: this script has
-  // no `--env-file-if-exists`, unlike `render` and `worker`, so it reports
-  // "not set" for a correctly configured `.env` unless run as
-  // `node --env-file-if-exists=.env scripts/preflight/doctor.mjs`. That gap
-  // was offered to the owner once and not taken up; this task does not
-  // silently fix it.
+  // That gap is CLOSED (item 12, 2026-08-28): `npm run doctor` now carries
+  // `--env-file-if-exists=.env` exactly as `render`, `web`, `worker`, `smoke`
+  // and `ledger` do, so a correctly configured `.env` is visible here and no
+  // longer reports "not set". Note what that does and does not mean -- the
+  // flag is on the npm SCRIPT, so running this file directly as
+  // `node scripts/preflight/doctor.mjs` still sees only the parent
+  // environment. `test/preflight-doctor.test.js` executes the command
+  // package.json declares, which is what keeps the two from drifting apart.
   const SUPABASE_KEYS = ['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY'];
   for (const key of SUPABASE_KEYS) {
     checks.push(check(
