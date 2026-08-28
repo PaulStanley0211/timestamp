@@ -2990,10 +2990,11 @@ verification run on their own clock. Start 1, then do 5 while it propagates.
 7. **Open the PR. NOW UNBLOCKED — item 6 was the gate.** 127 commits ahead of
    `origin/main`, nothing merged, no PR. The first CI run happens the moment a
    PR opens. **The push is Paul's line, not Claude's.**
-   **⚠️ `/ship` CANNOT SEE THAT `/review` RAN.** gstack's persistence layer
-   needs `bun`, which is not installed on this machine, so `gstack-review-log`
-   and `gstack-learnings-log` both fail silently. The review DID run clean on
-   this branch (§33); the log of it does not exist.
+   **`/review` HAS RUN CLEAN ON THIS BRANCH AND `/ship` CAN SEE IT** — logged
+   against `b199919`, status clean, tree not dirty. (It could not be logged at
+   first: gstack's persistence needs `bun`, which was missing. Installed
+   2026-08-28, `bun 1.4.0`, via `npm install -g bun` — global, so the repo's
+   zero-dependency guard is untouched.)
 8. ~~**Commit the cream work.**~~ **DONE 2026-08-28** -- see §31. Committed
    locally, NOT pushed.
 9. **The rest of the security review — PARTLY WORKED 2026-08-28.** Both files
@@ -3179,11 +3180,16 @@ on that page that reads templated.
 
 #### Things that will bite the next reader
 
-- **`bun` IS NOT INSTALLED, and gstack silently depends on it.**
+- **`bun` WAS MISSING AND GSTACK SILENTLY DEPENDS ON IT — now installed.**
   `gstack-review-log`, `gstack-learnings-log` and the browse sidebar agent all
-  fail with `bun: command not found`. **Consequence: `/ship` cannot see that
-  `/review` ran on this branch.** The review DID run clean; the log does not
-  exist. Install bun or expect `/ship` to complain.
+  failed with `bun: command not found`, so a clean `/review` left no record.
+  Fixed with `npm install -g bun` (1.4.0). **Global on purpose:** a local
+  install would put a dependency in `package.json`, which `guards.yml` fails
+  the build over. Verified after: `dependencies {}`, no `node_modules`.
+- **gstack's learnings logger rejects imperative text.** An insight phrased
+  "Do NOT flag X" is refused as `suspicious instruction-like content` — an
+  injection guard doing its job. Write learnings as description, not as
+  instructions to a future agent.
 - **`browse connect` needs port 34567 free AND no other daemon running.** A
   headless daemon from an earlier command holds it; `browse disconnect` then
   kill whatever holds 34567, then `connect`. A plain `browse <cmd>` will
