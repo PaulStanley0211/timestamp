@@ -270,19 +270,34 @@ function renderedPages() {
   ];
 }
 
-test('every page the app can render carries the gauze and none carries grain', () => {
+test('no page the app can render wears a texture of its own', () => {
   // DESIGN.md, "Texture belongs to the tape, and to nothing else": the interface
-  // carries NO grain, scanlines, noise or vignette, and the anode gauze runs
-  // past every edge. Both were page-by-page opt-ins -- `.gauze` was emitted by
-  // two callers through `preBody`, and `.grain` was suppressed by a rule naming
-  // the two converted pages -- so every page nobody remembered to list came out
-  // wearing the one texture this world bans and missing the one it requires.
-  // Structural now, and this is the test that keeps it structural.
+  // carries NO grain, scanlines, noise or vignette, and every trace of texture
+  // on any page lives inside a tape frame.
+  //
+  // THIS TEST USED TO REQUIRE THE GAUZE ON EVERY PAGE, and that is why it is
+  // worth reading rather than skimming. The Struck palette named the anode mesh
+  // "fixed, over everything", so the mesh was made structural here -- while the
+  // rule four sections above it in the same file forbade scanlines on the
+  // interface. A 1px-on-4px repeating gradient across the viewport is
+  // scanlines. Both could not hold, the texture rule is the stronger one, and
+  // the mesh was deleted from the sheet on 2026-08-28 when the pages moved to
+  // paper. The assertion is not relaxed by that -- it is the same rule with the
+  // exception taken out, and it now covers the gauze as well as the grain.
   for (const [name, html] of renderedPages()) {
-    assert.ok(html.includes('class="gauze"'), `${name} renders no gauze`);
+    assert.ok(!/class="[^"]*\bgauze\b/.test(html),
+      `${name} still renders the anode gauze, which is scanlines over the interface`);
     assert.ok(!/class="[^"]*\bgrain\b/.test(html),
       `${name} still renders the grain plate, which DESIGN.md forbids on the interface`);
   }
+});
+
+test('the gauze is gone from the stylesheet, not merely unreferenced', () => {
+  // The same argument as the grain plate below: markup nobody emits today is
+  // one `preBody` away from being emitted tomorrow, and a rule that still
+  // exists is an invitation to use it.
+  const { css } = createStylesheet(FOCUS_MENU);
+  assert.ok(!/\.gauze\b/.test(css), 'a .gauze rule is still in the sheet');
 });
 
 test('the grain plate is gone from the stylesheet, not merely switched off', () => {
@@ -423,4 +438,116 @@ test('the landing list is a rail that snaps, and its menu is a plate', () => {
   assert.ok(menu, 'no .lmenu rule');
   assert.ok(/backdrop-filter:\s*blur/.test(menu[1]), 'the menu does not blur what is behind it');
   assert.ok(/background:\s*rgba\(/.test(menu[1]), 'the menu has no plate, so dim text sits on a photograph');
+});
+
+
+// ---------------------------------------------------------------------------
+// the palette, MEASURED -- DESIGN.md § "The palette"
+// ---------------------------------------------------------------------------
+
+/** Relative luminance and contrast, per WCAG. Deliberately re-implemented here
+ *  rather than imported from `static.mjs`: a test that borrows the module's own
+ *  arithmetic cannot catch that arithmetic being wrong. */
+function contrastOf(a, b) {
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const lum = ([r, g, b2]) => {
+    const f = (c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b2);
+  };
+  const [hi, lo] = [lum(rgb(a)), lum(rgb(b))].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Read a token's literal value straight out of the served sheet, so this
+ *  measures what ships rather than a copy of it kept in step by hand. */
+function tokenValue(css, name) {
+  const m = new RegExp(String.raw`${name}:\s*(#[0-9A-Fa-f]{6})`).exec(css);
+  assert.ok(m, `${name} is not defined as a literal in the stylesheet`);
+  return m[1];
+}
+
+test('every colour the identity ships clears its floor on the ground it sits on', () => {
+  // DESIGN.md: "Measured, not asserted." The table in that file is the OUTPUT of
+  // this calculation, so the two cannot drift: change a token and this recomputes
+  // the ratio from the value that actually ships.
+  //
+  // WHY THE FLOORS DIFFER. 4.5:1 is the AA bar for body text. `--lift` is a
+  // SURFACE and not text, so it is checked as a non-text contrast against the
+  // ground it sits on -- it only has to be distinguishable, not readable.
+  const { css } = createStylesheet(FOCUS_MENU);
+  const paper = tokenValue(css, '--paper');
+  const lift = tokenValue(css, '--lift');
+
+  for (const name of ['--ink-strong', '--ink-soft', '--oxide', '--oxide-deep']) {
+    const value = tokenValue(css, name);
+    for (const [groundName, ground] of [['--paper', paper], ['--lift', lift]]) {
+      const got = contrastOf(value, ground);
+      assert.ok(got >= 4.5,
+        `${name} (${value}) measures ${got.toFixed(2)}:1 on ${groundName} (${ground}), `
+        + 'which is under the 4.5:1 floor for body text');
+    }
+  }
+
+  // The one pairing a filled control depends on: the label sits ON the accent.
+  const onAccent = contrastOf(paper, tokenValue(css, '--oxide'));
+  assert.ok(onAccent >= 4.5,
+    `--paper on --oxide measures ${onAccent.toFixed(2)}:1; the record button's label is unreadable`);
+});
+
+test('a ghost sits at its ground’s floor, and --ink is what has to survive it', () => {
+  // THE ONE NUMBER THE MOVE TO PAPER BROKE. DESIGN.md fixed ghosts at .5 and
+  // recorded 4.55:1 -- measured with bone on #070A11. On cream, --ink at .5 is
+  // 3.11:1, a real AA failure on every unlit option in the product, and one that
+  // fails silently because a ghost is SUPPOSED to look faint.
+  //
+  // This asserts the property rather than the number: whatever `--ghost` is set
+  // to, --ink composited at that opacity over its own ground must still clear
+  // the floor. Lowering the token to make something look better fails here.
+  const { css } = createStylesheet(FOCUS_MENU);
+  const grounds = [
+    ['--paper', /:root\s*\{[\s\S]*?--ghost:\s*([\d.]+)/, '--ink-strong', '--paper'],
+    ['the landing', /body\.is-landing\s*\{[\s\S]*?--ghost:\s*([\d.]+)/, '--l-bone', '--l-ground'],
+  ];
+
+  for (const [label, re, inkToken, groundToken] of grounds) {
+    const m = re.exec(css);
+    assert.ok(m, `${label} does not name a --ghost value`);
+    const alpha = Number(m[1]);
+    const ink = tokenValue(css, inkToken);
+    const ground = tokenValue(css, groundToken);
+
+    const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const mixed = '#' + rgb(ink)
+      .map((c, i) => Math.round(c * alpha + rgb(ground)[i] * (1 - alpha)).toString(16).padStart(2, '0'))
+      .join('');
+    const got = contrastOf(mixed, ground);
+
+    assert.ok(got >= 4.5,
+      `on ${label} a ghost at opacity ${alpha} puts ${inkToken} at ${got.toFixed(2)}:1 over `
+      + `${groundToken}, under the 4.5:1 floor. DESIGN.md: a ghost sits at the floor and no lower.`);
+  }
+});
+
+test('the cathode orange has left the chrome and kept the date stamp', () => {
+  // DESIGN.md: "#FF8A1E measures 1.95-2.21:1 on every candidate light ground and
+  // fails at every size. It is not deleted, it is relocated." So it may appear in
+  // the landing's own world and nowhere else -- and crucially not in the
+  // GENERATED per-catalog rules, which bake colours in at build time where no
+  // token can re-point them.
+  const { css } = createStylesheet(FOCUS_MENU);
+
+  // Everything before the landing's section is the paper world.
+  const landingAt = css.indexOf('the landing page: STRUCK');
+  assert.ok(landingAt > 0, 'the landing section marker is gone from the sheet');
+  const paperSide = css.slice(0, landingAt);
+
+  // NO `g` FLAG. A global regex carries `lastIndex` between `.test()` calls, so
+  // it would match every other offending line and silently pass on the rest.
+  const cathode = /#FF8A1E|rgba\(\s*255\s*,\s*138\s*,\s*30\b|#FFB25C|rgba\(\s*255\s*,\s*178\s*,\s*92\b/i;
+  const offenders = paperSide.split('\n')
+    .map((l, i) => [i + 1, l])
+    .filter(([, l]) => cathode.test(l) && !/^\s*(\*|\/\*|\/\/)/.test(l) && !/--l-(cathode|hot):/.test(l));
+
+  assert.deepEqual(offenders.map(([n, l]) => `${n}: ${l.trim()}`), [],
+    'the cathode orange is still painting something on the paper pages');
 });

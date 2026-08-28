@@ -32,33 +32,62 @@ Two exceptions, both named so they cannot become drift:
 ## Texture belongs to the tape, and to nothing else
 
 The interface carries **no** grain, scanlines, noise or vignette. Every trace of
-texture on any page exists inside a tape frame. This is PRODUCT.md's
+texture on any page exists inside a tape frame. **The anode gauze was the one
+exception this file made against itself, and on 2026-08-28 it was deleted rather
+than kept** -- see the palette section above for why a 1px-on-4px mesh over the
+viewport could not coexist with this sentence. This is PRODUCT.md's
 architecture made visible: the model does content, ffmpeg does texture, and the
 chrome does neither. A page that wears tape artefacts competes with the artifact
 instead of framing it, and reads as an AI tool with a filter — the exact
 impression the product exists to avoid.
 
-## Palette
+## Palette — STRUCK, and since 2026-08-28 the landing page only
 
-Two hues and their roles. Nothing else gets a colour.
+Two hues and their roles. Nothing else gets a colour. Ratios are against
+`--ground`.
 
-| Token | Value | Role |
-|---|---|---|
-| `--ground` | `#070A11` | ink-blue black, the plane |
-| `--ground-lift` | `#0C111B` | where the plane sits nearer |
-| `--cathode` | `#FF8A1E` | struck. The chosen value, and nothing else |
-| `--cathode-hot` | `#FFB25C` | the hotter core of a struck value on hover |
-| `--bone` | `#EDE7DC` | body prose |
-| `--bone-dim` | `#8D8880` | labels — measured 5.63:1, clears the floor |
-| `--gauze` | `rgba(190,140,80,.16)` | the anode mesh, 1px on 4px, fixed, over everything |
+| Token | Value | Role | Contrast |
+|---|---|---|---|
+| `--ground` | `#070A11` | ink-blue black, the plane | -- |
+| `--ground-lift` | `#0C111B` | where the plane sits nearer | -- |
+| `--cathode` | `#FF8A1E` | struck. The chosen value, and nothing else | 8.40:1 |
+| `--cathode-hot` | `#FFB25C` | the hotter core of a struck value on hover | 11.10:1 |
+| `--bone` | `#EDE7DC` | body prose | 16.09:1 |
+| `--bone-dim` | `#8D8880` | labels | 5.63:1 |
+
+**WHY THIS WORLD SURVIVES ON EXACTLY ONE PAGE.** The landing's central mechanic
+is that picking a place turns the whole page into that place -- a full-bleed
+photograph, scrimmed until bone prose clears 8:1 over it. That scrim is what
+makes the ground dark; a light scrim over a dark 2003 interior does not exist.
+Moving the landing to paper would not have been a recolour, it would have deleted
+the demo. So the app is an album page and the landing is the thing the album is
+full of. Every other page is `--paper`.
+
+**It is implemented as tokens and never as rules.** `body.is-landing` re-points
+eleven aliases at the values above and every rule in the sheet follows without
+knowing which world it is in. A rule scoped to the landing is how the two worlds
+start diverging in layout as well as colour.
+
+**`--gauze` IS DELETED, and it resolved a contradiction this file was carrying.**
+The row used to read "the anode mesh, 1px on 4px, fixed, over everything". Four
+sections below, this same file says the interface carries "no grain, scanlines,
+noise or vignette" and that every trace of texture lives inside a tape frame. A
+1px-on-4px repeating gradient across the whole viewport *is* scanlines. The two
+could not both be followed; the texture rule is the stronger one, because it is
+what keeps the chrome from competing with the artifact. The mesh is gone from the
+sheet, not suppressed in it.
 
 **Orange means exactly one thing: struck.** It is not used for labels, prices,
 flags, hints, links or decoration. The previous world let amber mean ten things
 at six sizes, and colour stopped being able to answer "what have I chosen?".
 That failure is the reason this rule is written down.
 
-Imported photographs stay **untinted** beneath the gauze veil. They are the
-subject; the world does not colour them.
+**Orange did not come to the light world and was not deleted.** It keeps the
+burnt-in date stamp inside the tape, where it was always right. On `--paper` it
+measures 2.21:1.
+
+Imported photographs stay **untinted**. They are the subject; the world does not
+colour them.
 
 ## Type
 
@@ -76,11 +105,45 @@ The catalogued grammar for this world puts unlit options at ghost opacity.
 Measured literally, a ghost at `.15` gives about **1.4:1** — a control nobody
 can read.
 
-**Ghosts sit at `opacity: .5`**, which measures **4.55:1** effective and clears
-the floor. They remain plainly unlit against a struck value that is full
-opacity, orange and haloed. This is a permanent adaptation of the world, not a
-one-off: the distinction is carried by *colour and halo*, not by making text
-invisible.
+**A ghost sits at the floor and no lower.** The distinction is carried by
+*colour and position in the palette*, never by making text invisible. That is
+the rule, and it is permanent.
+
+**THE VALUE OF THE FLOOR IS A PROPERTY OF THE GROUND, AND THIS IS THE ONE NUMBER
+THE MOVE TO PAPER ACTUALLY BROKE.** This section read "ghosts sit at
+`opacity: .5`, which measures 4.55:1" -- true, and measured with bone on
+`#070A11`. On `--paper`, `--ink` at `.5` measures **3.11:1**: a real AA failure
+on every unlit option in the product, and one that fails *quietly*, because a
+ghost is supposed to look faint and so nothing looks wrong.
+
+Re-solved against paper, **`.63` is the least opacity that clears 4.5:1** -- and
+it lands on **4.55:1**, the same number this file recorded for the dark ground.
+So the floor is a token, `--ghost`, and each ground names its own value, exactly
+as it names `--rec`.
+
+| Ground | `--ghost` | measured | hover `--ghost-hover` |
+|---|---|---|---|
+| `--paper` | `.63` | `--ink` **4.55:1** | `.82` -> 8.44:1 |
+| `--l-ground` (the landing) | `.5` | `--l-bone` **4.53:1** | `.82` |
+
+**WHAT DOES NOT FIT UNDER A GHOST ON PAPER, and this is what it costs.**
+`--ink-soft` needs `.97` to clear 4.5:1 and `--oxide` needs `.84`. Neither is a
+ghost. So **nothing inside a ghosted control is written in the soft tier any
+more**: the hierarchy inside a card is carried by SIZE, which survives being
+multiplied by an opacity, and not by colour, which does not.
+
+**AND THE GHOST MOVED OFF THE PLACE CARD ONTO ITS PHOTOGRAPH.** A place card
+carries its name and date on the image, over a scrim solved for FULL opacity;
+ghosting the whole card multiplies that scrim too, and even at the floor the name
+lands at 4.36:1 and the date at 3.32:1. The unlit half of the menu would have
+been the half nobody can read, on the control where reading the label *is* the
+choice. **The world decides which picture is lit. It does not dim the menu.** So
+the opacity sits on `.thumb` and the caption stays at full strength.
+
+**A refused option sits at the floor as well.** `--soon` states were at `.26`,
+which is `--ink` at **1.70:1**. Opacity cannot carry "not yet" on paper without
+going under the floor, so the flag carries it in words -- which is the only
+version a screen reader ever had.
 
 ## Motion
 
@@ -147,15 +210,88 @@ of every cycle.
 
 ### The palette
 
-Measured, not asserted. The identity is built for a light ground; the pages
-still implement Struck and follow later.
+Measured, not asserted. **The pages followed the identity onto `--paper` on
+2026-08-28.** The line that used to close this paragraph -- "the pages still
+implement Struck and follow later" -- is spent. Every ratio below was re-derived
+against the cream ground on that date; none of the Struck numbers carried over,
+because all of them were measured against `#070A11`.
+
+| Token | Value | Role | on `--paper` | on `--lift` |
+|---|---|---|---|---|
+| `--paper` | `#FAF7F2` | ground -- warm white, an album page | -- | -- |
+| `--lift` | `#FFFFFF` | the plane sitting nearer | 1.07:1 | -- |
+| `--ink` | `#2A211B` | body, wordmark | **14.76:1** | 15.77:1 |
+| `--ink-soft` | `#7A6A5E` | labels, hints | **4.85:1** | 5.18:1 |
+| `--oxide` | `#A8342A` | the single accent | **6.16:1** | 6.58:1 |
+| `--oxide-deep` | `#8E2A22` | struck, on hover | **7.85:1** | 8.39:1 |
+
+`--paper` on `--oxide` is **6.16:1** -- the same pair, because contrast is
+symmetric -- which is what lets a filled oxide button carry a paper label.
+
+**`--lift` GOES TO WHITE, NOT TO A DEEPER CREAM, and this is a finding rather
+than a preference.** The obvious "warmer paper" plate, `#F2EDE4`, puts
+`--ink-soft` at **4.45:1** and fails the floor. The dark world's lift was also
+*lighter* than its ground (`#0C111B` over `#070A11`), so "nearer is lighter"
+survives the move intact; it just points at white here.
+
+**`--oxide-deep` IS DEEPER, NOT BRIGHTER.** `--accent-bright` was a *lighter*
+orange because light is what glows on black. Struck on paper is the same ink
+pressed harder, so hover goes down the scale rather than up.
+
+**TWO TEXT TIERS, NOT THREE.** `--ink-soft` clears the floor by 0.35, so there
+is no room for a tier between it and `--ink`: anything in that gap either fails
+or is indistinguishable from `--ink`. The third dim colour the pages carried is
+gone, and secondary prose is simply prose -- it was only ever dimmed because
+bone on near-black glares, which cream does not.
+
+**THERE IS NO SECOND RED.** On the dark ground alarm red and cathode orange were
+different hues and told an error from a notice at a glance. Oxide *is* a brick
+red, so any distinct alarm lands in the same hue and the two banners stop being
+tellable apart. The alert takes the accent; the notice gives its accent up
+entirely and is quiet ink on a plain lift. One red, and the error is carried by
+weight and by words -- which also survives greyscale, as the old pair did not.
+
+### Text on a photograph is not text on the ground
+
+A place card's caption and a tape's status sit on the IMAGE, over a scrim of the
+tape's own matte. They never touched `--paper` and they never will, so they must
+not follow it: `--ink` over that scrim measures **1.06:1**. Three tokens belong
+to the photograph instead, and the landing does not override them -- the image is
+the same image on either ground.
 
 | Token | Value | Role | Contrast |
 |---|---|---|---|
-| `--paper` | `#FAF7F2` | ground -- warm white, an album page | -- |
-| `--ink` | `#2A211B` | body, wordmark | 14.76:1 |
-| `--ink-soft` | `#7A6A5E` | labels, hints | 4.85:1 |
-| `--oxide` | `#A8342A` | the single accent | 6.16:1 |
+| `--on-image` | `#FAF7F2` | captions on an image | 13.94:1 |
+| `--on-image-soft` | `#CFC7BC` | their labels and dates | 8.90:1 |
+| `--on-image-accent` | `#D98B7A` | struck, on an image | 5.62:1 |
+
+Measured against the worst case the caption scrim can produce, which is a **pure
+white** photograph under `rgba(11,10,9,.88)` -> `#282727`. Every real photograph
+is darker than that, so these are floors and not averages.
+
+### The tape on the cream ground
+
+**A tape is dark 2003 camcorder footage, and this file had removed the three
+tools anybody would reach for.** Decided deliberately on 2026-08-28, from three
+options rendered against real posters: a paper mat inside each tile, the tape's
+own black bled to the tile edge, or a warm tint over the still.
+
+**The tint was refused on this file's own terms** -- imported photographs stay
+untinted, "they are the subject; the world does not colour them", and the chrome
+does neither content nor texture. A tint is the chrome grading the artifact.
+
+**The choice is the bleed: nothing is drawn and nothing is softened.** The still
+fills the tile, the dark is owned, and the caption sits below it on the paper.
+
+**AND THE REAL DARK RECTANGLE WAS NOT THE FOOTAGE.** Measured on a 16-row sample
+of a real render, rows 1-4 and 13-16 are luma `0`: the delivered 9:16 file is the
+4:3 picture matted inside it, so **exactly half of every poster is letterbox**.
+On `#070A11` those bars *were* the ground and nobody could see them, which is why
+this went unnoticed until the pages moved. On paper they were 50% of every tile
+and they were what made the shelf read as a wall of black slabs. The tile is
+`aspect-ratio: 9 / 8` -- that middle half -- against the `object-fit: cover` it
+already had. One declaration, no new markup, no reprocessing, and the burnt-in
+date stamp survives because it sits inside the content band.
 
 **The accent needs two values, and this is the finding worth keeping.**
 `#A8342A` measures 2.86:1 on a dark ground -- an accent that is one hex across

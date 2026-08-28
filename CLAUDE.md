@@ -7,29 +7,46 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-27, night) — THE UI IS SETTLED AND FROZEN. EMAIL STILL CANNOT REACH ANYBODY.
+## START HERE (2026-08-28, ~04:00) — THE PAGES ARE ON CREAM. EMAIL STILL CANNOT REACH ANYBODY.
 
-**1671 tests / 1669 pass / 0 fail / 2 skipped.** The skips are the
+**1678 tests / 1676 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
+
+**THE CREAM WORK IS COMMITTED LOCALLY AND NOT PUSHED.** Section 31 is what it
+did. `origin/main` is still `b6f64a3` and no PR exists; the push is the
+irreversible line and it is Paul's, not Claude's.
+
+**THE COMPLETE LIST OF WHAT IS LEFT IS SECTION 32.** Twenty items, verified
+against the repo rather than copied from this file, grouped by who owns each.
+Read it before planning a day.
 
 ### The three sentences that matter
 
-**GOOGLE SIGN-IN IS FIXED AND PROVED — a real person signed in through it
-today.** It took three separate causes, none of them in the OAuth code, and the
-day before had been spent blaming a 503 that Supabase never sent. Section A
-below.
+**THE PAGES FOLLOWED THE IDENTITY ONTO `--paper` (2026-08-28).** Every page is
+cream except the LANDING, which keeps Struck on purpose. This supersedes the
+freeze below and closes the DESIGN.md documentation debt section 30 recorded.
+Section 31 is what shipped and why.
 
 **NOBODY CAN RECEIVE A SIX-DIGIT CODE, AND THAT IS NOT A BUG WE CAN FIX IN
 CODE.** There is currently NO address that can both receive our mail and sign
 up. Section B below. **This is the top of the list and it needs a domain.**
+Nothing about the cream work changes this; it is still the only real blocker.
 
-**THE PAGES ARE DONE AND PAUL HAS FROZEN THEM.** He looked at the running app on
-the evening of 2026-08-27 and said *"It looks very good ... just keep it as it
-is ... don't change anything or don't add anything."* That answers the UI
-question this file has carried since 2026-08-24 and it closes item 3 of PAUL'S
-list. **Do not improve either page.** Section 30 below is what shipped and why.
-**The sign-in page is deliberately NOT done and is not Claude's to design** --
-Paul is bringing a Dribbble reference himself.
+**GOOGLE SIGN-IN IS FIXED AND PROVED — a real person signed in through it.** It
+took three separate causes, none of them in the OAuth code, and the day before
+had been spent blaming a 503 that Supabase never sent. Section A below.
+
+### The freeze, and why it was lifted
+
+On the evening of 2026-08-27 Paul looked at the running app and said *"It looks
+very good ... just keep it as it is."* **That freeze is spent.** On 2026-08-28
+he directed the move onto the cream ground himself, in detail, naming
+DESIGN.md's palette and the locked reference. The pages that were frozen were
+the DARK ones; what is frozen now is nothing, and section 31 is the record.
+
+**The sign-in page is still deliberately NOT Claude's to design** -- Paul is
+bringing a Dribbble reference himself. It moved onto the cream ground with the
+rest, which is a palette change and not a design; its layout is untouched.
 
 ### A — Google sign-in, three causes, all closed
 
@@ -191,6 +208,21 @@ section 24.
 
 ### PICK UP HERE
 
+> **START AT SECTION 32 — THE PENDING LIST (2026-08-28).** It is the complete,
+> verified inventory of what is left in this project, twenty items, grouped by
+> who owns each one. It was built by checking the repo rather than by reading
+> this file, and it corrects two things this file used to claim were open.
+>
+> **PAUL'S FIRST ACTION IS ITEM 1: BUY THE DOMAIN.** Not because it is the most
+> important thing — item 5 is — but because it is **the only item with a WAIT
+> attached**. DNS and Resend verification run on their own clock, so it has to
+> be started before anything else or the whole day queues behind it. Then do
+> item 5 (the blind check) while it propagates.
+>
+> **CLAUDE'S FIRST ACTIONS ARE ITEMS 6, 12 AND 10** — the two Linux CI reds, the
+> `doctor` env gap, and the shared-path test race. All three are self-contained,
+> none needs Paul, and 6 is what stands between here and opening the PR.
+
 ~~**PICK UP AT SECTION 27: ONE COMMAND FINISHES THE PAYMENT DEMO.**~~ **DONE
 2026-08-25** — the payment path is proven end to end: checkout, webhook
 signature, grant, and idempotent replay against a genuine Stripe redelivery.
@@ -212,13 +244,13 @@ doing:**
    *If the domain is weeks away*: a Gmail App Password or a Brevo account makes
    the six-digit flow testable within ten minutes and is thrown away later.
    Paul has seen both routes and has not picked one.
-1. ~~**The UI direction that unblocks rewriting DESIGN.md.**~~ **SETTLED
-   2026-08-27 AND NOW BUILT AND FROZEN — section 30.** The identity exists and
-   `DESIGN.md` carries the palette, measured. What the pages do now is not the
-   light rewrite this line used to anticipate: the ground is the chosen PLACE,
-   playing as a graded tape loop full-bleed, with the chrome on blurred glass
-   over it. Paul approved it on sight and asked that nothing be changed.
-   **The cathode orange still cannot come to a light ground**: 1.95–2.21:1.
+1. ~~**The UI direction that unblocks rewriting DESIGN.md.**~~ **CLOSED
+   2026-08-28 — section 31.** The pages are on `--paper` and DESIGN.md is
+   reconciled with them rather than trailing them. The full-bleed place loop
+   survives on the LANDING only, which is the one page whose whole mechanic is
+   that photograph. **The cathode orange still cannot come to a light ground**
+   (2.21:1) and did not: it keeps the burnt-in date stamp inside the tape and
+   has left the chrome, with a test that fails if it comes back.
    **The blind check is still Paul's and still not done** — packet unsent at
    `out/blind-check/`.
 2. **The two Linux CI failures (§4), BEFORE a PR is opened** — they are
@@ -336,10 +368,11 @@ and that is the designed state, not a gap.**
    both the measured invoice to four decimals. It was TWO defects, not one: the
    pricing table had no raster dimension, and `render.mjs` never handed the
    `--resolution` flag to `dryRun()` at all. **§7's second gate is closed.**
-7. **The pricing page**: the "YOUR PLAN" pill is a bordered box (a third border
-   in a world that permits two), and the three plans do not use the
-   struck/ghost grammar at all. Section 23. **Possibly moot** if the UI world
-   changes — check item 3 first.
+7. ~~**The pricing page**: the "YOUR PLAN" pill is a bordered box, and the
+   three plans do not use the struck/ghost grammar.~~ **DONE 2026-08-28 —
+   section 31.** The pill is a wash and a colour with no ring; the plans ghost
+   at the floor with the current one struck, gated on `:has(.plan--current)` so
+   a visitor with no plan does not meet a page that is entirely dimmed.
 8. ~~**The Supabase spec**, then a plan, then code.~~ **THE SPEC EXISTS AS OF
    2026-08-25** — three documents, written after Paul settled four decisions:
    full migration (accounts, credits AND sessions), Google + email/password
@@ -1205,8 +1238,10 @@ were producing different rhythm either side of the breakpoint.
 cathode readout when it glows, and means no network font, which the CSP and the
 zero-dependency rule both require.
 
-**Only the landing and app pages are converted.** Login, signup, status, result
-and pricing still wear the superseded world.
+~~**Only the landing and app pages are converted.**~~ **SUPERSEDED 2026-08-28 —
+section 31.** Every page is on `--paper` now except the landing, which is the
+only page still speaking STRUCK. Login, signup, status, result and pricing came
+across with the rest.
 
 ### 16. THE KEYBOARD FOCUS INDICATOR (2026-08-24)
 
@@ -2665,8 +2700,318 @@ a go, and it does not work. `test/catalog.test.js` pins the absence of a count.
   measurement does not — same trap as section 16.
 - **`assets/places/` is +1.3 MB of mp4 in a PUBLIC repo.** Deliberate, and worth
   knowing before anybody wonders where the weight came from.
-- **`DESIGN.md` still describes STRUCK** and does not know about any of this. The
-  pages are the authority until somebody reconciles them.
+- ~~**`DESIGN.md` still describes STRUCK** and does not know about any of this.~~
+  **RECONCILED 2026-08-28 — section 31**, and in the other direction: the pages
+  followed DESIGN.md onto cream rather than DESIGN.md being rewritten to match
+  the pages. DESIGN.md is the authority again.
+
+---
+
+### 31. THE PAGES MOVED ONTO THE CREAM GROUND (2026-08-28) — and DESIGN.md's "later" is spent
+
+**Suite 1678 / 1676 pass / 0 fail / 2 skipped, from a 1674 / 1672 baseline. UNCOMMITTED.**
+Five modified files, nothing untracked: `DESIGN.md`, `scripts/web/static.mjs`,
+`scripts/web/views.mjs`, `test/web-api.test.js`, `test/web-static.test.js`.
+
+DESIGN.md had specified the cream palette since 2026-08-27 and said so itself --
+"the identity is built for a light ground; the pages still implement Struck and
+follow later". This was later.
+
+#### It was a DECOUPLING, not a repaint, and that is the whole shape of it
+
+**The `--l-*` layer was always named for the LANDING** -- its own comment reads
+"STRUCK -- the landing page's world". What made the pages dark was not those
+tokens but the eleven aliases above them pointing AT them. So `:root` now holds
+the identity on paper and `body.is-landing` re-points the same eleven back:
+
+```
+:root            --ground/--ink/--accent/... -> --paper/--ink-strong/--oxide/...
+body.is-landing  the same eleven             -> --l-ground/--l-bone/--l-cathode/...
+```
+
+**Every declaration in that block is a TOKEN and never a rule.** The landing gets
+no stylesheet and no components of its own; add a rule scoped to it and the two
+worlds start diverging in layout as well as colour, which is exactly what one
+source of truth exists to prevent.
+
+**THE LANDING KEPT STRUCK ON PURPOSE, and it is not an exception that drifted.**
+Its central mechanic is that choosing a place turns the whole page into that
+place -- a full-bleed photograph scrimmed until bone prose clears 8:1 over it.
+That scrim is what makes the ground dark, and **a light scrim over a dark 2003
+interior does not exist**. Moving it to paper would not have been a recolour, it
+would have deleted the demo. The app is an album page; the landing is the thing
+the album is full of.
+
+#### THE "NOTHING ELSE HAS TO CHANGE" NOTE WAS WRONG, and it is worth knowing why
+
+`static.mjs` carried a comment promising that when the pages followed the
+identity onto cream, `--rec` "becomes #A8342A and nothing else has to change".
+That was true of `--rec` alone. Measured before trusting it:
+
+- **50 dark-ground colour literals outside `:root`** -- `rgba(11,10,9,.92)`
+  scrims, `rgba(255,138,30,…)` glows, `#17120A` button ink, `#4E463C`
+  placeholders. None reachable from a token.
+- **4 more baked into the GENERATED per-catalog rules**, where a build-time
+  literal cannot be re-pointed by any token at all.
+- **`.gauze`, `.bgs` and `.scrim` on EVERY page** via `layout()`.
+- **`<meta name="color-scheme" content="dark">`** on every document.
+- **Nine visible borders drawn through `var(--accent-deep)` / `var(--alarm)`**,
+  which the border sweep cannot see because it only catches LITERAL colours.
+
+**An alias layer is a place where a colour is DECIDED. It is not evidence that
+every colour was decided there.** The comment is now replaced by that finding.
+
+#### THE ONE NUMBER THE MOVE BROKE, and it failed silently
+
+**The ghost floor.** DESIGN.md fixed ghosts at `opacity: .5` and recorded
+4.55:1 -- measured with bone on `#070A11`. On cream, `--ink` at `.5` measures
+**3.11:1**: a real AA failure on every unlit option in the product. It fails
+QUIETLY, which is what makes it dangerous -- a ghost is supposed to look faint,
+so nothing looks wrong.
+
+Re-solved against paper, **`.63` is the least opacity that clears 4.5:1, and it
+lands on 4.55:1** -- the same number DESIGN.md recorded for the dark ground. The
+RULE was always "a ghost sits at the floor and no lower"; only the value the
+floor takes is a property of the ground. So it is a token, `--ghost`, and each
+ground names its own, exactly as it names `--rec`.
+
+**WHAT WILL NOT FIT UNDER A GHOST ON PAPER:** `--ink-soft` needs `.97` and
+`--oxide` needs `.84`. Neither is a ghost. So **nothing inside a ghosted control
+is written in the soft tier any more** -- hierarchy inside a card is carried by
+SIZE, which survives being multiplied by an opacity, and not by colour, which
+does not.
+
+**AND THE GHOST MOVED OFF THE PLACE CARD ONTO ITS PHOTOGRAPH.** A place card
+carries its name and date ON the image, over a scrim solved for FULL opacity;
+ghosting the whole card multiplies that scrim too, and even at the floor the name
+lands at 4.36:1 and the date at 3.32:1. The unlit half of the menu would have
+been the half nobody can read, on the control where reading the label IS the
+choice. The opacity now sits on `.thumb` and the caption stays lit. **The
+generated `:checked` and focus rules had to follow it** -- lifting `.placecard`
+now lights nothing.
+
+#### HALF OF EVERY TAPE POSTER IS LETTERBOX, and on cream that was the dark rectangle
+
+Measured on a 16-row sample of a real render: **rows 1-4 and 13-16 are luma 0.**
+The delivered 9:16 file is the 4:3 picture matted inside it, so exactly half the
+poster is surround. On `#070A11` those bars WERE the ground and nobody could see
+them -- which is why this survived until the pages moved. On paper they were 50%
+of every tile and they were what made the shelf read as a wall of black slabs.
+
+Paul was shown three options rendered against real posters -- a paper mat, the
+tape's own black bled to the tile edge, or a warm tint -- and chose **the bleed**.
+The tint was refused on DESIGN.md's own terms: photographs stay untinted, and the
+chrome does neither content nor texture.
+
+**The crop is `aspect-ratio: 9 / 8` against the `object-fit: cover` the tile
+already had.** One declaration, no new markup, no image reprocessing, and the
+burnt-in date stamp survives because it sits inside the content band.
+
+**The shelf is the reference's grid now** (`artifactuprising.com`, locked in
+DESIGN.md): image, then name, then caption, straight on the paper, nothing drawn
+around the image, only space between tiles. The caption came OUT of the picture,
+which also deleted the 90% near-black gradient it used to need.
+
+#### THREE TOKENS FOR TEXT ON A PHOTOGRAPH, because it is not text on the ground
+
+`--ink` over the caption scrim measures **1.06:1**. A place card's caption and a
+tape's status never touched `--paper` and never will, so they must not follow it.
+`--on-image` (13.94:1), `--on-image-soft` (8.90:1) and `--on-image-accent`
+(5.62:1) belong to the photograph, and `.is-landing` deliberately does NOT
+override them -- the image is the same image on either ground. Measured against
+the worst case the scrim can produce, a pure WHITE photograph under it.
+
+#### Closed on the way, each because the move exposed it
+
+- **The gauze is deleted.** DESIGN.md's Struck palette called it "the anode mesh
+  ... over everything" while the same file, four sections earlier, forbids
+  "grain, scanlines, noise or vignette" on the interface. A 1px-on-4px repeating
+  gradient across the viewport IS scanlines. The two could not both be followed;
+  the texture rule is the stronger one. Deleted, not suppressed.
+- **Nine borders drawn through tokens are gone** -- the two banners' 2px bars,
+  the pill's ring, the dropzone's hover box, the selection rings on the contact
+  sheet, the plan pill. `.framecard .shape` stays: it is the named exception.
+- **`.plan` finally uses the struck/ghost grammar** section 23 asked for, gated
+  on `:has(.plan--current)` so a signed-out visitor does not meet a page where
+  every plan is dimmed.
+- **`.lopt .lidx` was a PRE-EXISTING 2.21:1 failure on the landing**, unchanged
+  by this work and found only by re-measuring. Fixed with the same ruling as the
+  paper cards: it takes the option's own colour and is distinguished by size.
+- **The `--soon` states were at `.26`**, which is `--ink` at 1.70:1. They sit at
+  the floor now and the flag carries "not yet" in words -- the only version a
+  screen reader ever had.
+
+#### The signed-in page lost its moving ground, deliberately
+
+`homePage` used to carry the same full-bleed place still, loop and scrim as the
+landing. It is the page somebody WORKS on -- choosing, reading prices, watching a
+queue -- and every one of those is text over a moving photograph competing with
+it. The demo belongs on the landing; here it was the product's workspace wearing
+its own advert. **The hoisted radios stay** -- they are the CSS-only selection
+mechanic and had nothing to do with the background; the background merely read
+them. Removing it cost no interaction. `BG_SCRIPT` is no longer emitted here, so
+it is a landing-only script now (still hashed; `INLINE_SCRIPT_HASHES` unchanged).
+
+#### Verified in a browser, not just asserted
+
+- **The mechanical border check DESIGN.md actually specifies**: 260 elements
+  inside `.wrap`, **12 border edges, all twelve on `.shape`** (3 glyphs x 4
+  sides). Zero others.
+- **A live contrast sweep of every visible text element**: 87 on the ground on
+  the signed-in page, **0 failures**, tightest exactly **4.55:1** -- the ghost
+  floor, by design. Status, result, select, pricing, error, the empty shelf,
+  login and signup all sweep clean.
+- The sweep found **one real defect**: the `WORKING` badge at 1.67:1. An
+  unfinished tile never has a poster, so the badge always sits on the pale
+  plate and the on-image tier was exactly wrong for it.
+
+#### Two tests changed, and neither was weakened
+
+- **"every page carries the gauze"** became **"no page wears a texture of its
+  own"**. Same rule with the exception taken out; it now covers the gauze as
+  well as the grain, plus a new test that the rule is gone from the sheet.
+- **"the moving background is one element"** followed its subject to the landing
+  and GAINED assertions: the signed-in page must carry no video, no `.bgs` and
+  no `.scrim`. The one assertion it lost -- the plate under the panels -- had its
+  SUBJECT deleted, and its replacement asserts that the configuration is now
+  impossible, which is stronger than tinting it correctly.
+
+**Three new tests, each sabotage-verified to go red**: the palette clears its
+floor on the ground it sits on (recomputed from the values that actually ship, so
+DESIGN.md's table cannot drift from the sheet); a ghost clears the floor at
+whatever `--ghost` is set to, on both grounds; and the cathode orange appears
+nowhere on the paper side, including in the generated rules.
+
+#### Things that will bite
+
+- **Backticks inside a comment inside `BASE_CSS` broke the build twice again**,
+  exactly as this file has warned since 2026-08-21. It is still the most
+  repeated mistake in this codebase. `node --check scripts/web/static.mjs` after
+  every edit to that file.
+- **The Bash heredoc on this machine eats backslashes.** `\\s` written into a
+  test file arrived as `\s`, which inside a JS template literal is just `s`, and
+  a regex silently matched nothing. Use the Write/Edit tools for any file
+  containing regex escapes rather than `cat <<'EOF'`.
+- **A page served from a different port cannot load this app's images.** The
+  asset routes send same-origin CORP, so a review harness on :3100 gets the
+  stylesheet and is refused every place photograph it references. Inline the
+  sheet and copy the images if you build one.
+- **`263db24` is not on this branch** -- an unreachable duplicate of `d1f56e1`
+  carrying the same message. Work from `d1f56e1`.
+- **A stale `npm run web` holds port 3000 and serves stale CSS**, which is this
+  file's own oldest trap. Kill by PID (`netstat -ano | grep ":3000.*LISTENING"`),
+  never `taskkill /F /IM node.exe`.
+
+---
+
+### 32. THE PENDING LIST (2026-08-28) — everything left, verified against the repo
+
+**This is the inventory. It was built by CHECKING, not by reading this file**,
+which is why two items other sections still call open are struck below. Twenty
+items, grouped by who can actually do them. Numbers are stable — say "do 6 and
+12" and they mean these.
+
+**THE ORDER THAT MATTERS IS NOT THE IMPORTANCE ORDER.** Item 5 is the most
+important thing in the project and item 1 is the one to start, because **item 1
+is the only one with a WAIT attached**. DNS propagation and Resend domain
+verification run on their own clock. Start 1, then do 5 while it propagates.
+
+#### A — Blocked on Paul or on an outside party. The critical path.
+
+1. **BUY A DOMAIN.** ~$10-15/yr. Gates 2, 3 and 4 at once, and it is the only
+   item where doing it early buys time back. **This is the first action of the
+   day, every day, until it exists.**
+2. **Verify that domain in Resend.** Until then no address but Paul's can
+   receive mail, so **nobody can create an account by email**. Google sign-in
+   works, so it is not a total block on signup -- but the six-digit flow cannot
+   be exercised end to end by anybody. Open since 2026-08-26.
+3. **Deploy.** No host chosen and **NO DEPLOY CONFIG OF ANY KIND EXISTS** --
+   checked: no Dockerfile, no fly.toml, no vercel.json, no Procfile.
+   `TIMESTAMP_PUBLIC_URL` is still commented out in `.env.example`.
+   **Consequence worth stating plainly: this app has never been reachable by
+   anyone not sitting at this machine.**
+4. **Stripe: get off the shared sandbox.** The account is shared with another
+   product, so Stripe puts the WRONG BUSINESS NAME on the hosted checkout page
+   -- verified by rendering it. Going live needs business verification, which is
+   paperwork only Paul can file and takes days. Both test Price IDs are filled
+   in and the whole path is proven; §27 has the detail.
+5. **THE BLIND CHECK. The most important item in this file.** Packet built and
+   unsent at `out/blind-check/` -- five images plus `BRIEF.md` with the exact
+   wording and the decode key. Two people, separate chats, "Who is this?" and
+   NOTHING else. **Not the friend who was primed.** It is the only evidence that
+   a STRANGER recognises Paul rather than Paul recognising himself, and it is
+   free and takes ten minutes. **Claude will not send these** -- it is a
+   deception of third parties about Paul's own face.
+
+#### B — Claude's, self-contained, none of it needs Paul
+
+6. **The two Linux CI reds.** Confirmed present:
+   `test/intake-photo.test.js:182` asserts how one ffprobe build spells
+   `EXIF metadata`, and `test/ffmpeg-output.test.js:165` asserts ffmpeg's error
+   wording. **Neither is a product defect** -- EXIF stripping demonstrably works
+   on Linux. Fix by asserting the bytes and the failure rather than the text.
+   **This is what stands between here and opening the PR.**
+7. **Open the PR.** 120 commits ahead of `origin/main`, nothing merged. Do 6
+   first or the first CI run is red on arrival.
+8. ~~**Commit the cream work.**~~ **DONE 2026-08-28** -- see §31. Committed
+   locally, NOT pushed.
+9. **The rest of the security review.** Both files local and gitignored, as they
+   must stay. Includes the one that **ARMS ON THE NEXT `config/models.json`
+   EDIT** -- whoever fills in the still model reads §3 of the review FIRST.
+10. **The shared-path test race, still open.** Confirmed: `build/test-intake`,
+    `build/provider-contract` and `build/fal-smoke` build their directories with
+    no pid, so two suites running at once on this checkout collide. The fix is
+    the one line already applied twice elsewhere -- put `process.pid` in the
+    directory name. Nobody has lost a diagnosis pass to these three yet; §4
+    records what it cost the time somebody did.
+11. **16:9 and 9:16 refuse on the paid path.** Fixture does all three;
+    `resolveRaster` throws `ASPECT_UNSUPPORTED` (`pipeline.mjs:182`) for a paid
+    provider on any non-default aspect. **fal's own enum accepts them** -- the
+    refusal is this repo's, not the vendor's. §18 has the four places that must
+    move together, and lifting it reopens pricing.
+12. **`npm run doctor` does not load `.env`**, so it prints "not set" for a key
+    that is correct. One word in `package.json`; it has been offered twice and
+    never applied unasked.
+
+#### C — Decisions only Paul can make
+
+13. **The judder, and it is in every tape ever made.** fal delivers 24fps
+    against a 25fps contract, so 361 source frames stretched to 375 duplicate 15
+    of them at frames 12, 37, 62 ... **exactly one every 25**. Periodic judder is
+    the most visible kind. Three ways out in §26 -- interpolate, scatter the
+    duplicates from the job seed, or leave it. **The call has never been made.**
+14. **The free-tape exposure.** 21 CR at signup is **$2.07 of real provider
+    spend per account**, ~$207 against the global ceiling of 100. Harmless at
+    seven local accounts; it is the first thing that matters the hour a public
+    URL exists.
+15. **The pack ladder, before real money touches it.** A Stripe Price is
+    IMMUTABLE. Starter $12/92 CR and Standard $19/138 CR are live in test mode;
+    changing a rung later means a new Price object.
+16. **1080p.** Never run, still `available: false`. Its deferral rests on an
+    SSIM measured back when nothing could actually ORDER 720p, so **the
+    reasoning is suspect** -- and an ordered 720p turned out to be a genuine step
+    up. One metered run settles it. Paul has said he wants to sell the tier.
+17. **Supabase: the rest of the migration.** Accounts, credits and sessions are
+    still files. The identity slice is built and wired; the full migration was
+    decided on 2026-08-25 and never started.
+
+#### D — Smaller debt, real but not blocking
+
+18. `npm run accounts -- create` mints a password nothing checks any more --
+    Supabase decides -- so its own `--help` text lies. Inspector, `invite`, or
+    removal; open question 5 of the parent spec.
+19. The equal-time refusal guard no longer protects `/login`; that timing is
+    Supabase's property now. **Known and accepted, not a regression to chase.**
+20. `18352f4`'s commit MESSAGE on the remote still carries security detail.
+    Rewriting published history is Paul's call and he has not made it.
+
+#### Struck from this list after checking — do not re-open
+
+- ~~PRODUCT.md still says "warm, grainy, quiet" and the vlog rewrite made it
+  untrue.~~ **PRODUCT.md already records the change** and distinguishes the
+  PICTURE (no longer quiet, cuts six times) from the TEXTURE (still warm,
+  grainy, quiet). Nothing to do.
+- ~~TODOs left in shipped code.~~ **Zero** `TODO`/`FIXME`/`XXX` in `scripts/`.
 
 ## Not in scope
 

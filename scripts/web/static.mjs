@@ -298,7 +298,17 @@ const CSS_IDENT_RE = /^[a-z0-9][a-z0-9-]{0,62}$/i;
  * @param {string} kind the card class it labels, e.g. 'placecard'
  */
 function focusRing(slug, kind) {
-  return `#${slug}:focus-visible~.wrap .${kind}--${slug}{opacity:1;outline:2px solid var(--accent);outline-offset:3px;}`;
+  // A RING ON A GHOST IS DRAWN AT THE GHOST'S OPACITY, because opacity applies
+  // to an element's outline too -- so the indicator is at half strength on
+  // exactly the controls that most need it. Lifting the element is part of the
+  // focus treatment, not a side effect.
+  //
+  // A PLACE CARD KEEPS ITS GHOST ON '.thumb', so lifting the CARD would light
+  // nothing. It needs both: the ring on the card, the lift on the picture.
+  const lift = kind === 'placecard'
+    ? `#${slug}:focus-visible~.wrap .${kind}--${slug} .thumb{opacity:1;}`
+    : '';
+  return `#${slug}:focus-visible~.wrap .${kind}--${slug}{opacity:1;outline:2px solid var(--accent);outline-offset:3px;}${lift}`;
 }
 
 /**
@@ -340,7 +350,11 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       `#${slug}:checked~.wrap .lopt--${slug} .lidx{color:var(--l-hot);}`,
       `#${slug}:focus-visible~.wrap .lopt--${slug}{opacity:1;text-decoration:underline;text-underline-offset:6px;text-decoration-color:var(--l-cathode);}`,
       focusRing(slug, 'placecard'),
-      `#${slug}:checked~.wrap .placecard--${slug}{opacity:1;transform:scale(1.03);}`,
+      // STRUCK LIGHTS THE PHOTOGRAPH. The ghost lives on '.thumb' rather than on
+      // the card (see the rule for why -- the caption must stay readable while
+      // unlit), so the rule that undoes the ghost has to name the same element.
+      `#${slug}:checked~.wrap .placecard--${slug}{transform:scale(1.03);}`,
+      `#${slug}:checked~.wrap .placecard--${slug} .thumb{opacity:1;}`,
       `#${slug}:checked~.wrap .placecard--${slug} .badge{opacity:1;}`,
       `#${slug}:checked~.wrap .dot--${slug}{background:var(--accent);}`,
     );
@@ -350,7 +364,12 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
     const slug = outfitSlug(outfit.id);
     out.push(
       `#${slug}:checked~.wrap .lookcard--${slug}{opacity:1;}`,
-      `#${slug}:checked~.wrap .lookcard--${slug} .name{color:var(--accent);text-shadow:0 0 22px rgba(255,138,30,0.45);}`,
+      // A HALO IS HOW A VALUE READS AS LIT ON A NEAR-BLACK PLANE, and nothing
+      // else. On paper there is no light to bloom, so a 22px orange glow behind
+      // dark red text is a smudge -- and it was a baked-in cathode literal that
+      // no token could have re-pointed. Struck is carried by the accent and by
+      // full opacity against a 0.5 ghost, which is DESIGN.md's own grammar.
+      `#${slug}:checked~.wrap .lookcard--${slug} .name{color:var(--accent);}`,
       `#${slug}:checked~.wrap .lookcard--${slug} .tick{opacity:1;}`,
       focusRing(slug, 'lookcard'),
     );
@@ -366,7 +385,7 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
     const slug = qualitySlug(res.id);
     out.push(
       `#${slug}:checked~.wrap .qualitycard--${slug}{opacity:1;}`,
-      `#${slug}:checked~.wrap .qualitycard--${slug} .name{color:var(--accent);text-shadow:0 0 22px rgba(255,138,30,0.45);}`,
+      `#${slug}:checked~.wrap .qualitycard--${slug} .name{color:var(--accent);}`,
       `#${slug}:checked~.wrap .qualitycard--${slug} .tick{opacity:1;}`,
       `#${slug}:checked~.wrap .cost--${slug}{display:inline;}`,
       `#${slug}:checked~.wrap .why--${slug}{display:block;}`,
@@ -383,7 +402,7 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
     if (!CSS_IDENT_RE.test(slug)) continue;
     out.push(
       `#${slug}:checked~.wrap .framecard--${slug}{opacity:1;}`,
-      `#${slug}:checked~.wrap .framecard--${slug} .ratio{color:var(--accent);text-shadow:0 0 22px rgba(255,138,30,0.45);}`,
+      `#${slug}:checked~.wrap .framecard--${slug} .ratio{color:var(--accent);}`,
       `#${slug}:checked~.wrap .framecard--${slug} .shape{border-color:var(--accent);}`,
       `#${slug}:checked~.wrap .framecard--${slug} .tick{opacity:1;}`,
       focusRing(slug, 'framecard'),
@@ -392,7 +411,8 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
 
   // The escape hatch at the end of the rail. Same mechanism, no image.
   out.push(
-    `#pl-own:checked~.wrap .placecard--own{opacity:1;transform:scale(1.03);}`,
+    `#pl-own:checked~.wrap .placecard--own{transform:scale(1.03);}`,
+    `#pl-own:checked~.wrap .placecard--own .thumb{opacity:1;}`,
     `#pl-own:checked~.wrap .placecard--own .badge{opacity:1;}`,
     `#pl-own:checked~.wrap .ownplace{display:block;}`,
     `#pl-own:checked~.wrap .dot--own{background:var(--accent);}`,
@@ -428,32 +448,56 @@ export const BASE_CSS = `
 
 :root {
   /* ONE WORLD, ONE SOURCE OF TRUTH. The names below are the old frost-and-amber
-     world's; their VALUES are now STRUCK (DESIGN.md). Kept as aliases rather
-     than renamed across 300 rules, so there is exactly one place a colour is
-     decided and no rule can drift back to the superseded palette. */
-  --ground: var(--l-ground);
-  --accent: var(--l-cathode);
-  --accent-bright: var(--l-hot);
-  --accent-deep: #B35F0B;
-  --ink: var(--l-bone);
-  --muted: #B9B3A9;
-  --faint: var(--l-dim);
-  --alarm: ${PALETTE.alarm};
+     world's; their VALUES are now the IDENTITY's, on paper (DESIGN.md § "The
+     palette"). Kept as aliases rather than renamed across 300 rules, so there is
+     exactly one place a colour is decided and no rule can drift back to a
+     superseded palette.
+
+     THE PAGES FOLLOWED THE IDENTITY ONTO CREAM ON 2026-08-28, and the note that
+     used to sit here -- "this becomes #A8342A and nothing else has to change" --
+     was wrong, which is worth recording rather than quietly deleting. The alias
+     layer covered the NAMED colours and nothing else: fifty dark-ground literals
+     sat outside this block in scrims, glows and button ink, four more were baked
+     into the generated per-catalog rules, and the full-bleed ground, the gauze
+     and the document's own 'color-scheme' all had to move by hand. An alias
+     layer is a place to decide a colour, not a proof that every colour was
+     decided there. */
+  --ground: var(--paper);
+  --accent: var(--oxide);
+  --accent-bright: var(--oxide-deep);
+  /* ONE ACCENT, NOT TWO. '--accent-deep' was a dimmer orange for the places a
+     full-strength cathode would shout. Oxide does not shout, so the second
+     value has nothing left to do and the token is an alias of the first. */
+  --accent-deep: var(--oxide);
+  --ink: var(--ink-strong);
+  /* TWO TEXT TIERS ON PAPER, NOT THREE. '--muted' was a dimmed prose colour
+     because bone on near-black glares; cream does not, so secondary prose is
+     simply prose. There is also no room for a third tier: '--ink-soft' clears
+     the floor by 0.35, so anything between it and '--ink' fails or is a hair's
+     width from '--ink' anyway. */
+  --muted: var(--ink-strong);
+  --faint: var(--ink-soft);
+  /* THERE IS NO SECOND RED ON PAPER. On the dark ground alarm red and cathode
+     orange were different hues and told an error from a notice at a glance.
+     Oxide IS a brick red, so a distinct alarm would land in the same hue and
+     the two banners would stop being tellable apart. The alert takes the accent
+     and the notice gives its accent up entirely: one red, and the error is
+     carried by weight and by words. */
+  --alarm: var(--oxide);
 
   /* THE RECORD LIGHT, and the reason it is a token rather than a literal in
-     the mark. The brand accent is oxide red #A8342A, measured 6.16:1 on the
-     cream ground the identity is built for. On THIS ground it measures 2.86:1,
-     which is not a colour anyone can see. So the ground names the value and
-     the wordmark takes it: the lifted #D98B7A is the same hue raised until it
-     clears the floor here (7.10:1). When the pages follow the identity onto
-     cream this becomes #A8342A and nothing else has to change. */
-  --rec: #D98B7A;
+     the mark. The brand accent is oxide red #A8342A, measured 6.16:1 on this
+     ground. On the landing's near-black it measures 2.86:1, which is not a
+     colour anyone can see -- so the GROUND names the value, and '.is-landing'
+     below lifts it to #D98B7A. The mark itself never learns which page it is
+     on. */
+  --rec: var(--oxide);
 
   /* THE BOXES ARE GONE. This world forbids borders, rules and dividers; these
      four tokens existed only to draw them. --frost-lit survives as DEPTH -- the
      plane sitting nearer -- which is how grouping is carried now. */
   --frost: transparent;
-  --frost-lit: rgba(12, 17, 27, 0.66);
+  --frost-lit: var(--lift);
   --hairline: transparent;
   --hairline-firm: transparent;
   --r: 20px;
@@ -475,17 +519,120 @@ export const BASE_CSS = `
   --s-7: 48px;
   --s-8: 64px;
 
-  /* STRUCK -- the landing page's world. Two hues and their roles, nothing else
-     gets a colour. Orange means exactly one thing: struck. See DESIGN.md. */
+  /* THE IDENTITY, ON PAPER. DESIGN.md § "The palette". Every ratio below was
+     re-derived against --paper on 2026-08-28; none of the Struck numbers carry
+     over, because they were all measured against #070A11.
+
+     TWO OF THESE ARE FINDINGS RATHER THAN TRANSCRIPTION, and both are the same
+     lesson -- a light ground inverts the gesture, it does not just swap the
+     values.
+
+     --lift GOES TO WHITE, NOT TO A DEEPER CREAM. The obvious "warmer paper"
+     plate, #F2EDE4, puts --ink-soft at 4.45:1 and fails the floor; on white it
+     measures 5.18:1. The dark world's lift was LIGHTER than its ground too
+     (#0C111B over #070A11), so "nearer is lighter" survives the move intact --
+     it just points at white here.
+
+     --oxide-deep IS DEEPER, NOT BRIGHTER. '--accent-bright' was a lighter
+     orange because light is what glows on black. Struck on paper is the same
+     ink pressed harder, so hover goes down the scale rather than up. */
+  --paper: #FAF7F2;      /* ground, a warm album page                --      */
+  --lift: #FFFFFF;       /* the plane sitting nearer               1.07:1    */
+  --ink-strong: #2A211B; /* body and wordmark                     14.76:1    */
+  --ink-soft: #7A6A5E;   /* labels and hints                       4.85:1    */
+  --oxide: #A8342A;      /* the single accent                      6.16:1    */
+  --oxide-deep: #8E2A22; /* struck, on hover                       7.85:1    */
+
+  /* TEXT ON A PHOTOGRAPH IS NOT TEXT ON THE GROUND, and forgetting that is how
+     a light-ground migration silently breaks half its own labels.
+   *
+   * A place card's caption and a tape's status sit on the IMAGE, over a scrim
+   * of the tape's own matte. They never touched --paper and they never will, so
+   * they must not follow it: --ink over that scrim measures 1.06:1. These three
+   * belong to the photograph, which is why '.is-landing' below does not
+   * override them -- the image is the same image on either ground.
+   *
+   * Measured against the worst case the scrim can produce, which is a PURE
+   * WHITE photograph under it (rgba(11,10,9,.88) -> #282727). Every real
+   * photograph is darker than that, so these are floors, not averages. */
+  --on-image: #FAF7F2;        /* captions on an image             13.94:1    */
+  --on-image-soft: #CFC7BC;   /* their labels and dates            8.90:1    */
+  --on-image-accent: #D98B7A; /* struck, on an image               5.62:1    */
+
+  /* THE GHOST FLOOR IS A PROPERTY OF THE GROUND, AND THIS IS THE ONE NUMBER
+     THE MOVE TO PAPER ACTUALLY BROKE.
+   *
+   * DESIGN.md fixes ghosts at 'opacity: .5' and records 4.55:1 for them. That
+   * measurement is bone on '#070A11' and it does not survive the move: --ink at
+   * .5 over --paper measures 3.11:1, a real AA failure on every unlit option in
+   * the product. It fails QUIETLY, which is what makes it dangerous -- a ghost
+   * is supposed to look faint, so nothing looks wrong.
+   *
+   * Re-solved against paper, .63 is the least opacity that clears 4.5:1 -- and
+   * it lands on 4.55:1, the same number DESIGN.md measured on the dark ground.
+   * The RULE was always "a ghost sits at the floor and no lower"; only the
+   * value the floor takes is a property of what it is sitting on. So the floor
+   * is a token and the ground names it, exactly as it names --rec.
+   *
+   * WHAT DOES NOT FIT UNDER IT: --ink-soft needs .97 to clear 4.5:1 and --oxide
+   * needs .84. Neither is a ghost. That is why nothing inside a ghosted card is
+   * written in the soft tier any more -- see the cards below. */
+  --ghost: 0.63;        /* --ink at this opacity over --paper       4.55:1    */
+  --ghost-hover: 0.82;  /* --ink                                    8.44:1    */
+
+  /* STRUCK -- the landing page's world, and as of 2026-08-28 ONLY the landing
+     page's. These were never renamed because the '--l-' was always for
+     "landing"; what changed is that the aliases above no longer point at them.
+     The landing keeps the full-bleed place photograph, so it keeps the ground
+     that photograph was scrimmed for. Orange means exactly one thing: struck.
+     Ratios here are against --l-ground. See DESIGN.md. */
   --l-ground: #070A11;
   --l-lift: #0C111B;
-  --l-cathode: #FF8A1E;
-  --l-hot: #FFB25C;
-  --l-bone: #EDE7DC;
-  --l-dim: #8D8880;
+  --l-cathode: #FF8A1E;  /* struck                                 8.40:1    */
+  --l-hot: #FFB25C;      /* the hotter core, on hover             11.10:1    */
+  --l-bone: #EDE7DC;     /* body prose                            16.09:1    */
+  --l-dim: #8D8880;      /* labels                                 5.63:1    */
 
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --osd: 'TapeOSD', ui-monospace, 'Courier New', monospace;
+}
+
+/* THE LANDING IS THE ONE PAGE STILL SPEAKING STRUCK, and it is the whole reason
+   the alias layer exists rather than a global find-and-replace.
+ *
+ * WHY IT DID NOT COME TO PAPER WITH THE OTHERS. Its central mechanic is that
+ * picking a place turns the entire page into that place -- a full-bleed
+ * photograph, scrimmed until bone prose clears 8:1 over it. That scrim is what
+ * makes the ground dark; a light scrim over a dark 2003 interior does not
+ * exist. Moving the landing to paper would not have been a recolour, it would
+ * have deleted the demo. So the app is an album page and the landing is the
+ * thing the album is full of, and both are honest.
+ *
+ * EVERY DECLARATION HERE IS A TOKEN, NEVER A RULE. The landing does not get its
+ * own stylesheet or its own components -- it re-points the same eleven aliases
+ * at the Struck values and every rule in the sheet follows without knowing. Add
+ * a rule here and the two worlds start to diverge in layout as well as colour,
+ * which is exactly what one source of truth exists to prevent. */
+body.is-landing {
+  --ground: var(--l-ground);
+  --accent: var(--l-cathode);
+  --accent-bright: var(--l-hot);
+  --accent-deep: var(--l-cathode);
+  --ink: var(--l-bone);
+  --muted: var(--l-bone);
+  --faint: var(--l-dim);
+  --alarm: var(--l-cathode);
+  --frost-lit: rgba(12, 17, 27, 0.66);
+
+  /* The dark world's own floor, which is where DESIGN.md's .5 was measured:
+     --l-bone at .5 over --l-ground is 4.53:1. Same rule, different ground. */
+  --ghost: 0.5;
+
+  /* THE GROUND NAMES THE RECORD LIGHT. Oxide measures 2.86:1 here and is not a
+     colour anyone can see; #D98B7A is the same hue raised until it clears the
+     floor (7.47:1). This is the token DESIGN.md put in the mark so the mark
+     would never have to know which page it was drawn on. */
+  --rec: #D98B7A;
 }
 
 * { box-sizing: border-box; }
@@ -686,7 +833,7 @@ body {
 }
 .ring-fill {
   fill: none;
-  stroke: var(--l-dim);
+  stroke: var(--faint);
   stroke-width: 2.5;
   stroke-linecap: round;
   /* Start the arc at twelve o'clock instead of three, so it drains the way a
@@ -716,11 +863,13 @@ body {
 
 /* --- type -------------------------------------------------------------- */
 
+/* The eyebrow is on the landing AND on six paper pages, so it names no ground:
+   '--faint' resolves to --l-dim there and to --ink-soft here. */
 .eyebrow {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
-  color: var(--l-dim);
+  color: var(--faint);
   margin: 0 0 var(--s-2);
 }
 
@@ -738,24 +887,40 @@ body {
   margin: 0 0 1rem;
 }
 
+/* THE TWO BANNERS LOST THEIR 2px BARS, and that is the one rule of this world
+   catching up with two elements that had been quietly breaking it.
+ *
+ * A 'border-left: 2px solid' is a rule. It is the exact device DESIGN.md
+ * forbids -- a line drawn to separate the banner from the page -- and it
+ * survived every previous pass because the border sweep can only see a LITERAL
+ * colour in a border declaration, and these two were written against tokens.
+ * On the near-black ground they were also dim enough to overlook. On paper an
+ * oxide bar down the side of a banner is the loudest thing on the page.
+ *
+ * WHAT CARRIES THE DISTINCTION NOW THAT NEITHER A LINE NOR A SECOND HUE CAN.
+ * The alert is the accent on a tinted plate; the notice gives up its accent
+ * altogether and is quiet ink on a plain lift. That is a bigger difference than
+ * two similar reds ever were, and it survives greyscale, which the old pair did
+ * not. */
 .alert {
-  border-left: 2px solid var(--alarm);
-  background: rgba(194, 96, 63, 0.09);
-  color: #E8BCAC;
+  /* a 10% wash of --alarm's own value. CSS cannot take alpha from a custom
+     property without color-mix, and this is how every other tint in the sheet
+     is written, so it stays consistent rather than clever. */
+  background: rgba(168, 52, 42, 0.10);
+  color: var(--alarm);
   padding: 0.75rem 0.95rem;
   margin: 0 0 1.5rem;
   font-size: 14px;
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  border-radius: var(--r-sm);
 }
 
 .notice {
-  border-left: 2px solid var(--accent-deep);
-  background: rgba(200, 161, 90, 0.07);
-  color: var(--muted);
+  background: var(--lift);
+  color: var(--faint);
   padding: 0.75rem 0.95rem;
   margin: 0 0 1.5rem;
   font-size: 14px;
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  border-radius: var(--r-sm);
 }
 
 /* --- the signed-in page's subject -------------------------------------- */
@@ -823,27 +988,18 @@ body {
   margin: 0 0 var(--s-6);
 }
 
-/* THE PLATE, AND WHY DESIGN.md's "THE BOXES ARE GONE" SURVIVES IT.
-   That rule was written for a near-black ground, where a panel needs no
-   background because there is nothing behind it to separate from. It is still
-   in force: with no loop playing, "--frost" is transparent and these panels are
-   exactly as borderless as they have always been. The plate appears ONLY when
-   there is a photograph behind the text, which is the one condition the
-   original rule never had to consider.
-
-   AND IT IS NOT A TASTE DECISION. Measured over the brightest place at the
-   scrim its own luma chose, "--l-dim" (#8D8880) lands at 2.86:1 -- a real AA
-   failure on text this product actually ships, in ".fine", ".who" and the
-   footer. 0.60 is the least plate that clears 4.5:1 and 0.62 is that with a
-   little margin: dim 4.67:1, muted 7.9:1, bone 13.3:1. The blur above was
-   already declared and has been doing nothing for want of anything to tint.
-
-   The radius is 3px and not 0 because at 0 a translucent plate reads as a
-   rendering seam across the photograph rather than as a surface on it. */
-.bgs.is-live ~ .wrap .panel {
-  background: rgba(7, 10, 17, 0.62);
-  border-radius: 3px;
-}
+/* THE PLATE IS GONE BECAUSE THE PHOTOGRAPH BEHIND IT IS.
+   It existed for one condition: a place loop playing full-bleed behind this
+   page, with body text over it. Measured then, "--l-dim" over the brightest
+   place landed at 2.86:1 -- a real AA failure -- and 0.62 of near-black was the
+   least plate that cleared 4.5:1.
+ *
+ * The signed-in page moved to paper on 2026-08-28 and its ground is now a flat
+ * #FAF7F2 with nothing behind it, so there is no composite left to solve
+ * against and every token measures what the table in ':root' says it measures.
+ * Deleted rather than left dormant: it keyed off '.bgs.is-live', which this
+ * page no longer emits, so it was a rule that could never fire again and would
+ * have read to the next person as a plate that was still in play. */
 
 .panel--anchor {
   /* DEPTH, NOT A BOX. The plane sits nearer here; there is no line around it. */
@@ -859,7 +1015,11 @@ body {
    TRANSPARENT rather than removing it makes both box models identical to the
    pixel while leaving this panel visually open. */
 .panel--choice {
-  background: rgba(26, 22, 19, 0.34);
+  /* Was a 34% near-black wash, there to keep body text off a backlit place
+     photograph. On paper there is no photograph and no backlight; the choice
+     panels are the lightest things on the page, which is what the comment above
+     always said they were for, and now nothing has to be washed to achieve it. */
+  background: transparent;
   border: 0;
   border-radius: 0;
   padding: var(--s-5) var(--s-5) var(--s-2);
@@ -1006,15 +1166,30 @@ body {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 0.5rem;
   min-height: 15rem;
-  border: 1px dashed var(--hairline-firm);
+  border: 0;
   border-radius: var(--r-sm);
-  background: rgba(11, 10, 9, 0.35);
+  /* DEPTH, NOT A DASHED BOX. The dashed border was transparent -- drawn against
+     '--hairline-firm', which this world zeroes -- so what actually said "drop a
+     photo here" was the 35% near-black well behind it, never the outline.
+     Paper keeps the well and inverts the direction: the anchor panel around it
+     is --lift, so dropping back to --paper is the recess. It cannot go deeper
+     than that. A warmer, darker plate would put '.say' (--faint) at 4.45:1 and
+     fail the floor, which is the measurement that decided this rather than a
+     preference for the lighter one. */
+  background: var(--paper);
   text-align: center;
   padding: 1.5rem;
   cursor: pointer;
-  transition: border-color 160ms, background 160ms;
+  transition: background 160ms;
 }
-.drop:hover { border-color: var(--accent-deep); background: rgba(11, 10, 9, 0.5); }
+/* Hover warms the recess rather than drawing a line round it. The old rule
+   turned on an oxide border on hover, which on paper is a hard rectangle
+   appearing under the pointer -- the exact thing DESIGN.md's one rule forbids,
+   and invisible to the border sweep because it was written against a token.
+   The wash is the accent at 5%, which is the only direction left: the recess
+   cannot deepen without failing '.say', and lifting it would flatten it into
+   the panel it is recessed into. */
+.drop:hover { background: rgba(168, 52, 42, 0.05); }
 .drop input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .drop .plus { font-size: 20px; color: var(--ink); letter-spacing: 0.04em; }
 .drop .say { color: var(--faint); font-size: 13px; max-width: 22rem; }
@@ -1031,14 +1206,19 @@ body {
   border: 0;
   border-radius: 0;
   background: none;
-  opacity: 0.5;
+  opacity: var(--ghost);
   cursor: pointer;
   /* VALUES SNAP. Only the ghost's own legibility eases; the strike does not. */
   transition: opacity 160ms linear;
 }
-.lookcard:hover { opacity: 0.82; }
+.lookcard:hover { opacity: var(--ghost-hover); }
 .lookcard .name { display: block; font-size: 15px; color: var(--ink); }
-.lookcard .detail { display: block; font-size: 13px; color: var(--faint); margin-top: 0.15rem; }
+/* NOTHING INSIDE A GHOSTED CARD IS WRITTEN IN THE SOFT TIER. --ink-soft under
+   the ghost measures 2.45:1; it would need .97 opacity to clear the floor, and
+   .97 is not a ghost. The hierarchy inside a card is carried by SIZE -- 15px
+   name over 13px detail -- which survives being multiplied by an opacity, and a
+   colour step does not. */
+.lookcard .detail { display: block; font-size: 13px; color: var(--ink); margin-top: 0.15rem; }
 /* The state marks carry NO TEXT IN THE MARKUP. They are hidden by opacity, and
    with the stylesheet switched off an opacity rule does nothing -- so a badge
    that spelled out "Selected" would appear on all nine cards at once and the
@@ -1086,32 +1266,61 @@ body {
   border-radius: 0;
   overflow: hidden;
   cursor: pointer;
-  /* A place card is a photograph, so it ghosts the way every other value does:
-     unlit until struck. The photograph itself stays untinted -- this world does
-     not colour the subject, it only decides which one is lit. */
-  opacity: 0.5;
-  transition: opacity 160ms linear, transform 220ms cubic-bezier(.2,.9,.3,1);
+  transition: transform 220ms cubic-bezier(.2,.9,.3,1);
 }
-.placecard:hover { opacity: 0.82; }
 
-.thumb { position: absolute; inset: 0; background-size: cover; background-position: center; }
-.placecard--own .thumb { background: repeating-linear-gradient(135deg, #17130F 0 8px, #120F0C 8px 16px); }
+/* THE GHOST IS ON THE PHOTOGRAPH, NOT ON THE CARD, and this is the one place
+ * where the ghosting rule had to be applied to a different element rather than
+ * a different number.
+ *
+ * A place card carries its name and date on the image, over a scrim solved for
+ * FULL opacity. Ghosting the whole card multiplies that scrim as well: measured
+ * against the worst ground the gradient can produce, the name lands at 4.36:1
+ * and the date at 3.32:1 even at the .63 floor -- so the unlit half of the menu
+ * would be the half nobody can read, on the control where reading the label IS
+ * the choice.
+ *
+ * The world decides which PICTURE is lit. It does not dim the menu. So the
+ * opacity moves to '.thumb' and the caption stays at full strength, where it
+ * measures 13.94:1 and 8.90:1. The card still reads as unlit, because the
+ * photograph is the thing anybody is looking at.
+ *
+ * The photograph itself stays untinted -- this world does not colour the
+ * subject, it only decides which one is lit. */
+.thumb {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center;
+  opacity: var(--ghost);
+  transition: opacity 160ms linear;
+}
+.placecard:hover .thumb { opacity: var(--ghost-hover); }
+/* The "your own photo" card has no photograph to show, so it draws a hatch
+   where one would be. It followed the ground from near-black to paper: the two
+   stops are --paper and --lift, which is the same 4-unit step the dark version
+   used, kept as the faintest thing on the page rather than a dark slab where
+   every other card is a picture. */
+.placecard--own .thumb { background: repeating-linear-gradient(135deg, #FAF7F2 0 8px, #FFFFFF 8px 16px); }
 
 .placecard .cap {
   position: absolute; inset: auto 0 0 0;
   padding: 2.5rem 0.75rem 0.7rem;
   background: linear-gradient(180deg, rgba(11,10,9,0) 0%, rgba(11,10,9,0.88) 62%);
 }
-.placecard .cap .name { display: block; font-size: 14px; color: var(--ink); line-height: 1.25; }
-.placecard .cap .when { display: block; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); margin-top: 0.25rem; }
+.placecard .cap .name { display: block; font-size: 14px; color: var(--on-image); line-height: 1.25; }
+.placecard .cap .when { display: block; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--on-image-soft); margin-top: 0.25rem; }
 
 .placecard .badge {
   position: absolute; top: 0.6rem; left: 0.6rem;
   font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
-  color: var(--accent);
+  /* Struck, ON THE IMAGE -- so it takes the lifted oxide, not --accent. The
+     glow went with the cathode: a halo is how a value reads as lit on a
+     near-black plane, and on a photograph under a paper-world page it reads as
+     a filter. What is left is the drop shadow, which is legibility over an
+     unknown picture rather than decoration. */
+  color: var(--on-image-accent);
   background: none;
   border: 0;
-  text-shadow: 0 0 14px rgba(255, 138, 30, 0.9), 0 1px 3px rgba(0, 0, 0, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
   padding: 0;
   opacity: 0;
   transition: opacity 160ms;
@@ -1155,19 +1364,23 @@ body {
 
 input[type="text"], input[type="email"], input[type="password"], select {
   width: 100%;
-  background: rgba(11, 10, 9, 0.55);
+  background: var(--lift);
   border: 1px solid var(--hairline-firm);
   border-radius: var(--r-sm);
   color: var(--ink);
   font: inherit;
   padding: 0.7rem 0.85rem;
 }
-input::placeholder { color: #4E463C; }
+/* THE PLACEHOLDER IS TEXT, SO IT CLEARS THE FLOOR. #4E463C was 2.4:1 on the old
+   field and is the kind of value a dark theme gets away with because nobody
+   measures a hint. On --lift it is --ink-soft at 5.18:1, which is the same
+   colour every other hint on the page already uses. */
+input::placeholder { color: var(--ink-soft); }
 select { width: auto; min-width: 6rem; }
 
 input[type="file"] { color: var(--muted); font-size: 13px; }
 input[type="file"]::file-selector-button {
-  background: rgba(40, 34, 27, 0.7);
+  background: var(--paper);
   border: 1px solid var(--hairline-firm);
   border-radius: 999px;
   color: var(--ink);
@@ -1194,8 +1407,12 @@ input[type="file"]::file-selector-button {
 .pill {
   font-size: 12px; letter-spacing: 0.14em;
   color: var(--accent);
-  background: rgba(200, 161, 90, 0.10);
-  border: 1px solid var(--accent-deep);
+  /* A 10% wash of the accent, and NO ring. The 1px oxide border was a box drawn
+     round a fact -- forbidden by DESIGN.md's one rule, and invisible to the
+     border sweep because it named a token rather than a literal. The wash alone
+     already says "this is a value, not a control", which is the whole job. */
+  background: rgba(168, 52, 42, 0.10);
+  border: 0;
   border-radius: 999px;
   padding: 0.3rem 0.8rem;
 }
@@ -1216,14 +1433,14 @@ input[type="file"]::file-selector-button {
   border: 0;
   border-radius: 0;
   background: none;
-  opacity: 0.5;
+  opacity: var(--ghost);
   cursor: pointer;
   /* VALUES SNAP. Only the ghost's own legibility eases; the strike does not. */
   transition: opacity 160ms linear;
 }
-.framecard:hover { opacity: 0.82; }
+.framecard:hover { opacity: var(--ghost-hover); }
 .framecard .ratio { font-family: var(--osd); font-size: 16px; letter-spacing: 0.08em; color: var(--ink); }
-.framecard .detail { font-size: 12px; color: var(--faint); }
+.framecard .detail { font-size: 12px; color: var(--ink); }
 .framecard .tick { color: var(--accent); font-size: 11px; opacity: 0; transition: opacity 140ms; }
 .framecard .tick::before { content: "●"; }
 
@@ -1232,13 +1449,23 @@ input[type="file"]::file-selector-button {
 .framecard--a-4x3 .shape { width: 24px; }
 .framecard--a-16x9 .shape { width: 32px; }
 .framecard--a-9x16 .shape { width: 10px; }
-.framecard--soon .shape { border-color: var(--hairline-firm); }
+/* A deferred shape still DRAWS its glyph -- the exception DESIGN.md grants is
+   for the rectangle that depicts an aspect ratio, and one drawn in a
+   transparent colour depicts nothing. It was invisible on the dark ground for
+   the same reason; ghosting it in --faint is what "unavailable" should have
+   looked like all along. */
+.framecard--soon .shape { border-color: var(--faint); }
 
 /* Same rule as the deferred quality card: a <span>, no radio behind it, so
    there is nothing to select and nothing that can be posted. */
-.framecard--soon { cursor: default; opacity: 0.26; }
-.framecard--soon:hover { opacity: 0.26; }
-.framecard--soon .flag { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--l-dim); }
+/* A DEFERRED SHAPE SITS AT THE SAME FLOOR AS EVERY OTHER UNLIT ONE. It was at
+   .26, which is --ink at 1.70:1 -- text nobody can read, on the element whose
+   only job is to say "not yet". Opacity cannot carry this distinction on paper
+   without going under the floor, so the FLAG carries it, in words, which is
+   also the only version a screen reader ever had. */
+.framecard--soon { cursor: default; opacity: var(--ghost); }
+.framecard--soon:hover { opacity: var(--ghost); }
+.framecard--soon .flag { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); }
 
 /* --- the quality row: a real choice, and it must not look like the pills --- */
 
@@ -1250,24 +1477,27 @@ input[type="file"]::file-selector-button {
   border: 0;
   border-radius: 0;
   background: none;
-  opacity: 0.5;
+  opacity: var(--ghost);
   cursor: pointer;
   /* VALUES SNAP. Only the ghost's own legibility eases; the strike does not. */
   transition: opacity 160ms linear;
 }
-.qualitycard:hover { opacity: 0.82; }
+.qualitycard:hover { opacity: var(--ghost-hover); }
 .qualitycard .name { display: block; font-family: var(--osd); font-size: 17px; letter-spacing: 0.1em; color: var(--ink); }
-.qualitycard .cr { display: block; font-size: 12px; letter-spacing: 0.14em; color: var(--l-dim); margin-top: 0.1rem; }
-.qualitycard .detail { display: block; font-size: 13px; color: var(--faint); margin-top: 0.35rem; }
-.qualitycard .flag { display: inline-block; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--l-dim); margin-top: 0.4rem; }
+.qualitycard .cr { display: block; font-size: 12px; letter-spacing: 0.14em; color: var(--ink); margin-top: 0.1rem; }
+.qualitycard .detail { display: block; font-size: 13px; color: var(--ink); margin-top: 0.35rem; }
+.qualitycard .flag { display: inline-block; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); margin-top: 0.4rem; }
 .qualitycard .tick { position: absolute; top: 0.7rem; right: 0.8rem; color: var(--accent); font-size: 11px; opacity: 0; transition: opacity 140ms; }
 .qualitycard .tick::before { content: "●"; }
 
 /* Unavailable options are a <span>, not a <label>: there is no radio behind
    them, so there is nothing to select and nothing that can be posted. */
-/* A refused value stays dark rather than outlined: this world has no lines. */
-.qualitycard--soon { cursor: default; opacity: 0.26; }
-.qualitycard--soon:hover { opacity: 0.26; }
+/* A refused value stays unlit rather than outlined: this world has no lines.
+   AT THE FLOOR AND NOT BELOW IT -- .26 put --ink at 1.70:1. The flag says
+   "coming soon" in words, which is the only version that ever reached a screen
+   reader anyway, and words do not have a contrast ratio to fail. */
+.qualitycard--soon { cursor: default; opacity: var(--ghost); }
+.qualitycard--soon:hover { opacity: var(--ghost); }
 
 /* One cost per resolution, all hidden until the matching radio is checked. */
 .cost { display: none; }
@@ -1285,7 +1515,10 @@ input[type="file"]::file-selector-button {
   margin-top: var(--s-5);
   background: var(--accent);
   border: 0; border-radius: 999px;
-  color: #17120A;
+  /* The label sits ON the accent, so it takes --paper and not --ink: oxide is a
+     mid-dark red and dark ink on it measures 2.4:1. Paper on oxide is 6.16:1
+     -- the same pair as oxide on paper, because contrast is symmetric. */
+  color: var(--paper);
   font: inherit; font-weight: 600; font-size: 15px;
   letter-spacing: 0.04em;
   padding: 0.85rem 1rem;
@@ -1293,49 +1526,104 @@ input[type="file"]::file-selector-button {
   text-align: center; text-decoration: none;
 }
 .record:hover { background: var(--accent-bright); }
-.record:disabled { background: rgba(200, 161, 90, 0.18); color: var(--faint); cursor: not-allowed; }
+.record:disabled { background: var(--lift); color: var(--faint); cursor: not-allowed; }
 
 .reason { text-align: center; color: var(--faint); font-size: 13px; margin: var(--s-3) 0 0; }
 
 /* --- the shelf --------------------------------------------------------- */
 
-.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.75rem; }
+/* THE SHELF IS THE REFERENCE'S GRID, and DESIGN.md § "The reference" says why
+   this one and not a nicer-looking one: artifactuprising.com solves OUR problem,
+   not an adjacent one -- somebody's photographs go in and a keepsake comes out.
+   Image, then name, then caption, sitting directly on the paper. No box around
+   the image, no border, no shadow, nothing between one tile and the next except
+   space. It is a grid that obeys this file's one rule already.
+
+   THE GAP GREW FROM 0.75rem TO --s-5. Space is the only thing separating two
+   tiles now, so it has to be legible as separation rather than as a seam. */
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: var(--s-5); }
 
 .tape {
-  position: relative;
   display: block;
-  aspect-ratio: 9 / 16;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-sm);
-  overflow: hidden;
-  background: rgba(11, 10, 9, 0.5);
   text-decoration: none;
-  color: var(--ink);
+  color: inherit;
+}
+
+/* HALF OF EVERY POSTER IS LETTERBOX, AND ON CREAM THAT IS THE DARK RECTANGLE.
+ *
+ * The tape is delivered 9:16 with the 4:3 camcorder picture matted inside it, so
+ * the poster is the picture plus two bars of the surround colour. Measured on a
+ * 16-row sample of a real render, rows 1-4 and 13-16 are luma 0: the content is
+ * EXACTLY the middle half.
+ *
+ * On '#070A11' those bars WERE the ground and nobody could see them -- which is
+ * why this went unnoticed until the pages moved. On paper they are 50% of every
+ * tile, and they are what made the shelf read as a wall of black slabs rather
+ * than as photographs.
+ *
+ * 9/8 is that middle half. With the 'object-fit: cover' the tile already had,
+ * one declaration crops to the picture and nothing else changes -- no new
+ * markup, no reprocessing, and the burnt-in date stamp survives because it sits
+ * inside the content band, not on the bar below it. */
+.tape .frame {
+  display: block;
+  aspect-ratio: 9 / 8;
+  overflow: hidden;
+  position: relative;
+  /* AN UNFINISHED TAPE HAS NO POSTER, AND THE TILE MUST STILL BE SOMETHING.
+     On the dark ground this was a 50% near-black wash, so a rendering job read
+     as a dark plate with its status on it. Dropping the wash with the rest of
+     the near-black left a 151px hole in the shelf with a status pill floating
+     in the middle of nothing. --lift is the plate: pale, present, and covered
+     completely by the poster the moment there is one. */
+  background: var(--lift);
 }
 .tape img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.tape .cap {
-  position: absolute; inset: auto 0 0 0;
-  padding: 2rem 0.6rem 0.55rem;
-  background: linear-gradient(180deg, rgba(11,10,9,0) 0%, rgba(11,10,9,0.9) 60%);
-  font-size: 12px;
+
+/* THE CAPTION CAME OUT OF THE PICTURE AND ONTO THE PAGE, which is the other
+   half of what the reference does. It used to sit inside the tile under a 90%
+   near-black gradient -- a scrim that exists to make text survive over an
+   unknown photograph, and a device this world does not need once the text has
+   paper to sit on. Deleting it also deletes the only dark rectangle left in
+   the tile after the crop. */
+.tape .cap { display: block; padding-top: var(--s-3); font-size: 12px; }
+.tape .what { display: block; font-size: 14px; color: var(--ink); line-height: 1.3; overflow-wrap: anywhere; }
+.tape .when { display: block; font-family: var(--osd); letter-spacing: 0.1em; color: var(--faint); }
+
+/* Unfinished tapes still say so -- AND THE BADGE IS NEVER ON AN IMAGE, which is
+   the detail that decided its colours. 'shelfTile' only emits a poster when the
+   tape is done, so a tile carrying this badge is always the bare --lift plate.
+   The on-image tier was therefore exactly wrong here: measured in the browser,
+   --on-image-soft on its near-black pill over that plate came out at 1.67:1,
+   the one contrast failure the sweep found on this page. Ink on paper is the
+   same badge read as what it is -- a small label on a pale card. */
+.tape .state {
+  position: absolute; top: 0.5rem; left: 0.5rem;
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink); background: var(--paper);
+  border-radius: 999px; padding: 0.15rem 0.5rem;
 }
-.tape .when { font-family: var(--osd); letter-spacing: 0.1em; color: var(--accent-deep); display: block; }
-.tape .what { color: var(--muted); display: block; overflow-wrap: anywhere; }
-.tape .state { position: absolute; top: 0.5rem; left: 0.5rem; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); background: rgba(11,10,9,0.7); border-radius: 999px; padding: 0.15rem 0.5rem; }
 
 .empty {
-  border: 1px dashed var(--hairline-firm);
+  /* The dashed border was drawn against '--hairline-firm' and has therefore been
+     invisible since this world began. Removed rather than left as a declaration
+     that looks like it does something. */
+  border: 0;
   border-radius: var(--r-sm);
+  background: var(--lift);
   padding: 2.5rem 1.5rem;
   text-align: center;
   color: var(--faint);
 }
-.empty .title { color: var(--muted); margin-bottom: 0.3rem; }
+.empty .title { color: var(--ink); margin-bottom: 0.3rem; }
 
 /* --- progress ---------------------------------------------------------- */
 
 .bar { display: flex; gap: 3px; list-style: none; padding: 0; margin: 0 0 0.6rem; }
-.seg { flex: 1; height: 4px; border-radius: 1px; background: rgba(242,237,228,0.08); }
+/* The unlit track was a 8% BONE wash -- a light colour, which on paper is
+   invisible. It inverts to an ink wash: the track is a shadow on the page now,
+   not a highlight on a dark one. */
+.seg { flex: 1; height: 4px; border-radius: 1px; background: rgba(42, 33, 27, 0.12); }
 .seg-done { background: var(--accent-deep); }
 .seg-skipped { background: transparent; box-shadow: inset 0 0 0 1px var(--accent-deep); }
 .seg-running { background: var(--accent); animation: breathe 1.9s ease-in-out infinite; }
@@ -1357,9 +1645,9 @@ input[type="file"]::file-selector-button {
   padding: 0.6rem 0;
   color: var(--faint);
 }
-.step-mark { grid-area: mark; width: 6px; height: 6px; margin-top: 0.6rem; border-radius: 50%; background: rgba(242,237,228,0.12); }
+.step-mark { grid-area: mark; width: 6px; height: 6px; margin-top: 0.6rem; border-radius: 50%; background: rgba(42, 33, 27, 0.18); }
 .step-name { grid-area: name; font-size: 15px; }
-.step-note { grid-area: note; font-size: 13px; color: #4E463C; }
+.step-note { grid-area: note; font-size: 13px; color: var(--faint); }
 .step-done { color: var(--muted); }
 .step-done .step-mark { background: var(--accent-deep); }
 .step-skipped .step-mark { box-shadow: inset 0 0 0 1px var(--accent-deep); background: transparent; }
@@ -1374,32 +1662,50 @@ input[type="file"]::file-selector-button {
 
 /* --- contact sheet ----------------------------------------------------- */
 
-.sheet { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.7rem; }
+.sheet { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--s-5); }
 .still {
   position: relative; display: block; padding: 0;
-  background: rgba(11,10,9,0.5);
-  border: 1px solid var(--hairline);
+  background: transparent;
+  border: 0;
   border-radius: var(--r-sm);
   cursor: pointer; overflow: hidden; line-height: 0;
+  /* STRUCK, NOT RINGED. Selection here was two border-colour rules -- a line
+     drawn round the chosen thing, which is the device DESIGN.md's one rule
+     exists to forbid, and which the border sweep could not see because both
+     named tokens. It is the world's own grammar instead: every option present
+     as an unlit ghost, one struck forward. A ghost sits at the floor and no
+     lower; on this ground the floor is .63, and '--ghost' is where the ground
+     names it. */
+  opacity: var(--ghost);
+  transition: opacity 160ms linear;
 }
 .still img { width: 100%; height: auto; display: block; }
-.still:hover { border-color: var(--accent-deep); }
-.still.chosen { border-color: var(--accent); }
+.still:hover { opacity: var(--ghost-hover); }
+.still.chosen { opacity: 1; }
 .still-n {
   position: absolute; left: 0.45rem; bottom: 0.35rem;
-  font-family: var(--osd); color: var(--accent); font-size: 16px; line-height: 1;
-  text-shadow: 0 1px 3px #000;
+  font-family: var(--osd); color: var(--on-image-soft); font-size: 16px; line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
+/* The index of the struck one goes to the accent-on-an-image. It is the one
+   place on this grid where colour answers "which have I chosen?". */
+.still.chosen .still-n { color: var(--on-image-accent); }
 
 /* --- the video --------------------------------------------------------- */
 
+/* THE PLAYER KEEPS THE TAPE'S OWN MATTE AND DOES NOT FOLLOW THE GROUND. It used
+   to be 'var(--ground)', which was right only while the page and the surround
+   happened to be the same near-black. On paper that would put a cream box behind
+   a letterboxed video -- the delivered file is matted on '#0B0A09' and the
+   player must not argue with it. This is PALETTE.ground, the colour the finished
+   video is actually matted onto. */
 .player {
-  background: var(--ground);
-  border: 1px solid var(--hairline);
+  background: ${PALETTE.ground};
+  border: 0;
   border-radius: var(--r-sm);
   overflow: hidden; line-height: 0;
 }
-.player video { width: 100%; height: auto; display: block; background: var(--ground); }
+.player video { width: 100%; height: auto; display: block; background: ${PALETTE.ground}; }
 .meta { font-family: var(--osd); color: var(--faint); letter-spacing: 0.12em; font-size: 14px; margin: 0.8rem 0 1.5rem; }
 
 /* --- buttons and links ------------------------------------------------- */
@@ -1407,7 +1713,7 @@ input[type="file"]::file-selector-button {
 .go {
   display: inline-block;
   background: var(--accent); border: 0; border-radius: 999px;
-  color: #17120A; font: inherit; font-weight: 600;
+  color: var(--paper); font: inherit; font-weight: 600;
   padding: 0.7rem 1.4rem; cursor: pointer; text-align: center; text-decoration: none;
 }
 .go:hover { background: var(--accent-bright); }
@@ -1451,8 +1757,19 @@ input[type="file"]::file-selector-button {
 /* --- pricing ----------------------------------------------------------- */
 
 .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.9rem; }
-.plan { position: relative; }
-.plan--current { border-color: var(--accent); }
+/* EVERY VALUE PRESENT, ONE STRUCK -- the world's central mechanic, finally on
+   the page that most needs it. DESIGN.md § 23 recorded the failure in its own
+   words: the page that answers "which plan am I on?" was the one page not using
+   the grammar, and the current plan was marked with a bordered pill instead.
+   Ghosts sit at .5, which is the floor this world fixes and does not go below. */
+.plan { position: relative; transition: opacity 160ms linear; }
+/* GATED ON SOMETHING ACTUALLY BEING STRUCK. An unconditional ghost would dim
+   every plan for a visitor who has no plan yet -- which is most of the people
+   this page exists for, and it would read as the whole page being disabled.
+   Ghosting is only meaningful against something lit, so ':has' asks whether
+   there is anything lit before anything is dimmed. */
+.plans:has(.plan--current) .plan { opacity: var(--ghost); }
+.plans:has(.plan--current) .plan--current { opacity: 1; }
 .plan .price { font-family: var(--osd); font-size: 30px; letter-spacing: 0.06em; color: var(--ink); margin: 0.3rem 0 0.1rem; }
 .plan .per { color: var(--faint); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; }
 .plan ul { list-style: none; padding: 0; margin: 1rem 0 0; color: var(--muted); font-size: 14px; }
@@ -1462,7 +1779,10 @@ input[type="file"]::file-selector-button {
 .plan .mark {
   position: absolute; top: -0.65rem; left: 1.4rem;
   font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent);
-  background: #14110E; border: 1px solid var(--accent-deep); border-radius: 999px; padding: 0.15rem 0.6rem;
+  /* THE THIRD BORDER DESIGN.md NAMED AND REFUSED. Its § 23 note says this pill
+     "never argued" itself onto the list of two permitted borders. It is a wash
+     and a colour now, like every other flag on the page. */
+  background: rgba(168, 52, 42, 0.10); border: 0; border-radius: 999px; padding: 0.15rem 0.6rem;
 }
 
 /* --- foot -------------------------------------------------------------- */
@@ -1474,8 +1794,12 @@ input[type="file"]::file-selector-button {
    readout and becomes an ordinary dark UI with orange accents.
    The one permitted outline is :focus-visible, which is not decoration. */
 
-.is-landing,
-.page-home { background: var(--l-ground); }
+/* The ground is 'body { background: var(--ground) }' and nothing else. This rule
+   used to name the two pages that had been converted to Struck, which is what a
+   half-finished migration looks like: a list of exceptions that has to be edited
+   every time a page moves. '.is-landing' now re-points the token instead, so the
+   landing is dark because of what --ground means on it, not because a selector
+   remembered its name. */
 
 /* TEXTURE BELONGS TO THE TAPE AND TO NOTHING ELSE, and as of 2026-08-24 that is
    structural rather than remembered. This used to be a "display: none" naming
@@ -1487,13 +1811,24 @@ input[type="file"]::file-selector-button {
 
 .is-landing .wrap { max-width: 76rem; position: relative; z-index: 6; }
 
-/* the anode gauze and its bloom, fixed, running past every edge */
-.gauze {
-  position: fixed; inset: 0; z-index: 5; pointer-events: none; opacity: 0.5;
-  background-image:
-    repeating-linear-gradient(0deg, rgba(190, 140, 80, 0.16) 0 1px, transparent 1px 4px),
-    repeating-linear-gradient(90deg, rgba(190, 140, 80, 0.13) 0 1px, transparent 1px 4px);
-}
+/* THE ANODE GAUZE IS DELETED, and it resolved a contradiction DESIGN.md had
+   been carrying rather than merely retiring a texture.
+ *
+ * The Struck palette listed '--gauze' as "the anode mesh, 1px on 4px, fixed,
+ * over everything". Four sections earlier the same file says the interface
+ * carries "no grain, scanlines, noise or vignette" and that "every trace of
+ * texture on any page exists inside a tape frame". A 1px-on-4px repeating
+ * gradient across the whole viewport is scanlines; the two rules could not both
+ * be followed, and the mesh was only ever invisible enough to hide that.
+ *
+ * The texture rule is the stronger of the two -- it is the one that keeps the
+ * chrome from competing with the artifact, which is the product's whole thesis
+ * -- so the mesh goes and the rule stands. Deleted rather than suppressed, for
+ * the reason the grain plate was: a 'display: none' naming today's pages is one
+ * tidy-up away from being switched back on.
+ *
+ * The bloom stays. It is a soft radial glow, not a texture, and it is the
+ * landing's cathode reading as light rather than as a filter over one. */
 .bloom {
   position: fixed; inset: 0; z-index: 4; pointer-events: none;
   background: radial-gradient(58% 42% at 50% 28%, rgba(255, 138, 30, 0.10), transparent 70%);
@@ -1592,7 +1927,15 @@ input[type="file"]::file-selector-button {
    options far dimmer; measured, that is about 1.4:1 and a control nobody can
    read. At .5 a ghost measures 4.55:1 and the unlit/struck distinction is
    carried by colour and halo instead of by illegibility. See DESIGN.md. */
-.lopt .lidx { font-size: 0.5em; letter-spacing: 0.22em; color: var(--l-dim); margin-right: var(--s-3); vertical-align: 0.3em; }
+/* THE INDEX TAKES THE OPTION'S OWN COLOUR, and this was a pre-existing failure
+   on this page rather than anything the move to paper caused -- found by
+   re-measuring, which is the point of measuring. The rail's options are ghosted
+   at .5; --l-dim UNDER that ghost measures 2.21:1, while --l-bone under the same
+   ghost is 4.53:1, which is the floor DESIGN.md fixes. Same ruling as the paper
+   cards: inside a ghosted control the hierarchy is carried by SIZE -- this is
+   already 0.5em -- because a colour step gets multiplied by the ghost and a
+   size does not. */
+.lopt .lidx { font-size: 0.5em; letter-spacing: 0.22em; color: var(--l-bone); margin-right: var(--s-3); vertical-align: 0.3em; }
 .lopt:hover { opacity: 0.82; }
 .strike-hint { font-family: var(--osd); font-size: 15px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--l-dim); margin: 0 0 var(--s-6); }
 
@@ -1629,12 +1972,16 @@ input[type="file"]::file-selector-button {
 .plain { padding: 0 0 5rem; }
 .plain p { margin: 0; font-size: 17px; line-height: 1.68; color: #B9B3A9; max-width: 62ch; }
 
-.is-landing .foot { border-top: 0; margin-top: 0; color: var(--l-dim); }
-.is-landing .fine { color: var(--l-dim); font-size: 12px; }
+/* THE FOOT IS ON EVERY PAGE, SO IT NAMES NO GROUND. It used to reach straight
+   for '--l-dim' and a #453E36 literal, which is the landing's palette hard-coded
+   into shared chrome -- correct on one page out of thirteen and 1.3:1 on paper.
+   '--faint' resolves per ground, so this rule is now the same rule on both. */
+.is-landing .foot { margin-top: 0; }
+.is-landing .fine { font-size: 12px; }
 
-.foot { margin-top: var(--s-8); padding-top: 0; border-top: 0; color: var(--l-dim); font-size: 13px; }
+.foot { margin-top: var(--s-8); padding-top: 0; border-top: 0; color: var(--faint); font-size: 13px; }
 .foot p { margin: 0 0 0.4rem; }
-.fine { color: #453E36; }
+.fine { color: var(--faint); }
 
 /* --- when there is no CSS at all --------------------------------------- */
 /* (nothing to do here; the markup is ordered so the page reads top to bottom

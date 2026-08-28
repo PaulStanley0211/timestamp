@@ -551,7 +551,7 @@ export function layout({
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="${bodyClass === 'is-landing' ? 'dark' : 'light'}">
 <title>${h(title)}</title>
 <link rel="stylesheet" href="/styles.css">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
@@ -560,8 +560,7 @@ export function layout({
 ${refreshSeconds ? `<noscript><meta http-equiv="refresh" content="${Number(refreshSeconds)}"></noscript>` : ''}
 </head>
 <body class="${h(bodyClass)}">
-${preBody || '<div class="bgs" aria-hidden="true"></div>\n<div class="scrim" aria-hidden="true"></div>'}
-<div class="gauze" aria-hidden="true"></div>
+${preBody}
 <div class="wrap ${h(wrapClass)}">
 <header class="masthead">
   ${wordmark()}
@@ -835,25 +834,23 @@ export function homePage({
     )),
   ].join('\n');
 
-  const backgrounds = places
-    .map((p) => `<div class="bg bg--${h(placeSlug(p.id))}"></div>`)
-    .join('\n');
-
-  // THE VIDEO SITS AFTER THE STILLS AND IS THE SAME PICTURE MOVING. Both are
-  // absolutely positioned with no z-index, so DOM order decides, and the loop
-  // paints over the photograph it was cut from -- which is why a loop that
-  // never arrives is invisible rather than a hole.
+  // THE GROUND HERE IS PAPER, NOT A PHOTOGRAPH (2026-08-28). This page used to
+  // carry the same full-bleed place still, loop and scrim as the landing, so
+  // that choosing a place turned the whole page into that place.
   //
-  // NO src AND NO autoplay HERE, DELIBERATELY. Either one would make every
-  // browser fetch it before any of the checks in BG_SCRIPT have run, which
-  // would spend the bytes on exactly the people those checks exist to spare.
-  const preBody = `${hooks}
-<div class="bgs" aria-hidden="true">
-${backgrounds}
-<video class="bgv" muted playsinline loop preload="none"></video>
-</div>
-<div class="scrim" aria-hidden="true"></div>
-<div class="bloom" aria-hidden="true"></div>`;
+  // WHY IT CAME OFF, when it is the nicest thing the app did. The identity is
+  // an album page and this is the page somebody works on: they are choosing a
+  // place, a look and a frame, reading prices and watching a queue, and every
+  // one of those is text over a moving photograph competing with it. The demo
+  // belongs on the landing, where the whole job is to show what the product
+  // makes; here it was the product's own workspace wearing its own advert.
+  //
+  // THE HOOKS STAY, and that is the part worth being careful about. They are
+  // the CSS-only selection mechanic -- hoisted radios whose `:checked` drives
+  // every card on the page -- and they have nothing to do with the background;
+  // the background was merely one more thing that read them. Removing the
+  // ground does not cost a single interaction.
+  const preBody = hooks;
 
   const lookCards = outfits.map((o) => `
     <label class="lookcard lookcard--${h(outfitSlug(o.id))}" for="${h(outfitSlug(o.id))}">
@@ -1096,7 +1093,6 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
 </main>
 
 <script>${HOME_SCRIPT}</script>
-<script>${BG_SCRIPT}</script>
 `;
 
   return layout({
@@ -1110,18 +1106,31 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
 }
 
 /** One poster on the shelf. `status` is shown for anything unfinished, because a
- *  grid of identical grey rectangles tells you nothing about which one stopped. */
+ *  grid of identical grey rectangles tells you nothing about which one stopped.
+ *
+ *  THE TILE IS TWO PARTS NOW, AND THE SPLIT IS THE POINT. `.frame` is the
+ *  picture and only the picture; `.cap` sits underneath it on the paper. That is
+ *  DESIGN.md's locked reference taken literally -- image, name, caption, nothing
+ *  drawn around the image -- and it is what let the caption's near-black scrim
+ *  go, because text on the page needs no plate to survive.
+ *
+ *  THE NAME COMES BEFORE THE DATE, which is the reverse of the old overlay. On
+ *  the reference the product name leads and the detail follows; here the place
+ *  is what somebody is looking for on a shelf of their own tapes, and the date
+ *  is how they tell two of the same place apart. */
 function shelfTile(tape) {
   const finished = tape.status === 'done';
   const inner = finished && tape.posterUrl
     ? `<img src="${h(tape.posterUrl)}" alt="" loading="lazy" decoding="async">`
     : '';
   return `<a class="tape" href="${h(tape.href)}">
-  ${inner}
-  ${finished ? '' : `<span class="state">${h(STATUS_COPY[tape.status] ?? tape.status)}</span>`}
+  <span class="frame">
+    ${inner}
+    ${finished ? '' : `<span class="state">${h(STATUS_COPY[tape.status] ?? tape.status)}</span>`}
+  </span>
   <span class="cap">
-    <span class="when">${h(stampDate(tape.jobId))}</span>
     <span class="what">${h(tape.place)}</span>
+    <span class="when">${h(stampDate(tape.jobId))}</span>
   </span>
 </a>`;
 }

@@ -805,7 +805,14 @@ test('a place LOOP is served, and only for an id the catalog knows', async () =>
 
 test('the moving background is one element, and the page is finished without it', async () => {
   await withServer(async ({ base, cookieA }) => {
-    const html = await (await get(base, '/', cookieA)).text();
+    // THE SUBJECT OF THIS TEST MOVED ON 2026-08-28 AND THE PROPERTIES DID NOT.
+    // The full-bleed place loop used to run behind BOTH the landing and the
+    // signed-in page. The signed-in page moved to paper -- it is somebody's
+    // workspace, and text over a moving photograph competes with the work --
+    // so the ground lives on the landing alone, which is `/` when signed out.
+    // Every assertion below is the one that was here before; only the page it
+    // is made against changed. The signed-in half is asserted at the bottom.
+    const html = await (await get(base, '/')).text();
     const bgs = html.slice(html.indexOf('<div class="bgs"'), html.indexOf('</div>', html.indexOf('class="scrim"')));
 
     // ONE <video>, NOT EIGHT. Eight elements all decoding at once is eight
@@ -837,11 +844,27 @@ test('the moving background is one element, and the page is finished without it'
     const css = await (await fetch(`${base}/styles.css`)).text();
     assert.ok(/\.bgs\.is-showing\s+\.bgv\s*\{[^}]*opacity/.test(css),
       'the video should reveal on is-showing');
-    assert.ok(/\.bgs\.is-live\s*~\s*\.wrap\s+\.panel/.test(css),
-      'the panel plate should hold on is-live, not blink with each swap');
     assert.ok(/:checked~\.bgs\.is-live~\.scrim\{opacity:/.test(css),
       'the per-place scrim should hold on is-live, not blink with each swap');
     assert.ok(!/is-playing/.test(css), 'the old single-state class is still in the sheet');
+
+    // THE PLATE UNDER THE PANELS WAS THE THIRD THING is-live HELD, and its
+    // SUBJECT is gone rather than its rule being relaxed. It tinted `.panel`
+    // while a photograph played behind it; the only page with panels is the
+    // signed-in one and it has no photograph behind it any more. So the
+    // property is asserted where it now lives -- as the absence of the whole
+    // configuration, which is stronger than tinting it correctly.
+    assert.ok(!/\.bgs\.is-live\s*~\s*\.wrap\s+\.panel/.test(css),
+      'a plate rule survives for a photograph no page puts behind a panel');
+
+    // THE SIGNED-IN PAGE IS PAPER, AND CARRIES NONE OF IT. Not "does not
+    // autoplay" -- there is no element, no still layer and no scrim, so there
+    // is nothing for a future change to switch back on by accident.
+    const home = await (await get(base, '/', cookieA)).text();
+    assert.equal((home.match(/<video/g) ?? []).length, 0,
+      'the signed-in page still carries a background video');
+    assert.ok(!/class="bgs"/.test(home), 'the signed-in page still carries the full-bleed ground');
+    assert.ok(!/class="scrim"/.test(home), 'the signed-in page still carries the scrim');
   });
 });
 
