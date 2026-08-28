@@ -2128,8 +2128,50 @@ Windows the CLI is an npm shim** -- `stripe.cmd`, no `.exe` -- so
 `execFileSync('stripe')` fails with `ENOENT` on a machine where typing `stripe`
 works. Resolve the real file and pass `shell: true` for a `.cmd`.
 
-**The test Price is `price_1U8I1t0WJAHtsKz673YZyToR` on
-`prod_V8ZAgOINl0TIkL`, `livemode: false`. It must not go live** -- section 25.
+~~**The test Price is `price_1U8I1t0WJAHtsKz673YZyToR` on
+`prod_V8ZAgOINl0TIkL`, `livemode: false`. It must not go live** -- section 25.~~
+**SUPERSEDED 2026-08-27.** That Price sold 40 credits for $10 and no rung is 40
+credits any more. **The live pair, both `livemode: false`:**
+
+| Rung | Price | Stripe Price id |
+|---|---|---|
+| Starter | $12 / 92 CR | `price_1U9BtZ0WJAHtsKz66FvdVNW2` |
+| Standard | $19 / 138 CR | `price_1U9Bta0WJAHtsKz6vBWjZyMG` |
+
+Both are one-time, NOT recurring: `createCheckoutSession` opens in
+`mode: payment`, and a recurring Price there is refused by Stripe at the moment
+a customer clicks Buy -- in front of them, not at deploy. The 40-credit object
+is harmless where it is; do not reuse it, because a Price is immutable and it
+names the wrong number of credits.
+
+**THE STRIPE SANDBOX IS NOT TIMESTAMP'S OWN, AND IT MUST BE BEFORE LAUNCH.**
+The account these Prices live in is shared with another product, and has been
+since the first Price on 2026-08-25. This is not cosmetic and it is not a
+detail: **Stripe puts the ACCOUNT's business name on the hosted checkout page**,
+so the page a Timestamp customer would pay on is branded as something else
+entirely. Verified by rendering it, not by reading about it.
+
+Splitting it was attempted on 2026-08-27 and is BLOCKED upstream -- Stripe will
+not create a second sandbox until the business behind the account is verified,
+which is a paperwork step only the owner can do. Decision taken with the
+checkout page on screen: **leave it**. It is test mode, no customer sees that
+page, and verification is required before going live regardless.
+
+**THE TRIGGER TO REVISIT IS THE FIRST REAL CUSTOMER**, and the split at that
+point is bigger than it looks: a LIVE Stripe account is per-business, so it is a
+separate ACCOUNT rather than merely a separate sandbox, and new live Prices have
+to be created alongside it because a Price is immutable. Doing it now, in test
+mode, costs minutes; doing it after launch costs a migration.
+
+**OPEN `TIMESTAMP_PUBLIC_URL`, NOT THE BOUND ADDRESS, OR GOOGLE SIGN-IN 400s.**
+`.env` sets `http://localhost:3000` while the server binds `127.0.0.1`. The
+state cookie is set on whichever host the browser is on, `redirectTo` is built
+from the public url, and **`localhost` and `127.0.0.1` are separate cookie
+jars** -- so signing in from the bound address lands the callback with no
+cookie. `oauthStateCheck` then refuses BEFORE `takeVerifier`, which means it
+**logs nothing and consumes nothing**: the only trace is verifier rows piling up
+in `out/oauth/`. Same two hostnames as the 2026-08-27 morning bug, opposite half
+of the loop. The startup banner now prints the public url and says so.
 
 ---
 

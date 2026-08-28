@@ -119,6 +119,40 @@ test('a pack cannot be edited after it is resolved', () => {
  * This is an assertion about the CONFIG, not about the code: it fails when
  * somebody edits a number rather than when somebody edits a function.
  */
+/**
+ * THE DEFECT THAT PROMPTED THE 2026-08-27 LADDER, WRITTEN DOWN SO IT CANNOT
+ * COME BACK.
+ *
+ * The old paid plans were $10/48 CR and $12/64 CR. Against a 46-credit 720p
+ * tape both floor to ONE, so /pricing printed "1 tape at 720p" on both cards
+ * and two dollars bought a single extra 480p tape. Two rungs, two prices, one
+ * offer -- and nothing anywhere went red, because every individual number was
+ * defensible. The page was the only place the collision was visible, and by
+ * then it was in front of a customer.
+ *
+ * A rung has to be DISTINGUISHABLE FROM EVERY OTHER RUNG in what it actually
+ * buys, not merely in what it costs. This asserts the thing a reader compares:
+ * the tuple of tape counts across every size on sale. Two rungs that buy the
+ * same tapes are one product with two prices, whatever the credit figures say.
+ */
+test('no two packs buy the same tapes, at every size on sale', () => {
+  const sizes = Object.entries(CONFIG.resolutions)
+    .filter(([id, r]) => !id.startsWith('_') && r.available)
+    .map(([id, r]) => [id, Math.round(r.estimatedUSDPer15s / CONFIG.creditUSD)]);
+
+  assert.ok(sizes.length > 0, 'no resolution is on sale, so this proves nothing');
+
+  const seen = new Map();
+  for (const id of PACK_IDS) {
+    const tapes = sizes.map(([size, cost]) => `${size}:${Math.floor(PACKS[id].credits / cost)}`).join(' ');
+    const clash = seen.get(tapes);
+    assert.equal(clash, undefined,
+      `packs ${clash} and ${id} both buy ${tapes} -- two prices for one offer, which is the `
+      + 'defect the shelf/archive tiers shipped with');
+    seen.set(tapes, id);
+  }
+});
+
 test('a pack sells credits for more than they cost to serve', () => {
   const costBasis = CONFIG.creditUSD;
   for (const id of PACK_IDS) {

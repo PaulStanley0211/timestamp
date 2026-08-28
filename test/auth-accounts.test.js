@@ -379,7 +379,7 @@ test('PLANS is frozen, has a monthly and an annual rate, and comes from config',
 
   for (const id of PLAN_IDS) {
     assert.deepEqual(Object.keys(PLANS[id]).sort(),
-      ['annualUSD', 'creditsPerPeriod', 'id', 'label', 'monthlyUSD']);
+      ['annualUSD', 'available', 'creditsPerPeriod', 'id', 'label', 'monthlyUSD']);
     assert.equal(PLANS[id].id, id);
     assert.ok(Number.isInteger(PLANS[id].creditsPerPeriod) && PLANS[id].creditsPerPeriod > 0);
     // An annual rate that is not cheaper than twelve monthlies is not an annual

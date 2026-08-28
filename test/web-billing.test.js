@@ -540,6 +540,60 @@ async function buy(base, cookie, body, { accept = 'application/json' } = {}) {
   });
 }
 
+/**
+ * PRESSING BUY WHILE SIGNED OUT HAS TO END SOMEWHERE A PERSON CAN STAND.
+ *
+ * The gate used to carry the pathname of whatever was blocked, which is right
+ * for a GET and wrong for a POST: a visitor who pressed Buy on /pricing went to
+ * `/login?next=/api/billing/checkout`, signed in, and was redirected onto a
+ * route that only answers POST -- a 405 at the end of the one path this page
+ * exists to open. The checkout form cannot carry its own return field (the test
+ * below holds it to exactly one input), so the Referer is the only thing left
+ * that knows where the person was.
+ */
+test('pressing Buy while signed out returns to the page it was pressed on', async () => {
+  await withApp(async ({ base }) => {
+    const res = await fetch(`${base}/api/billing/checkout`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: {
+        accept: 'text/html',
+        referer: `${base}/pricing`,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: 'pack=starter',
+    });
+    assert.equal(res.status, 303);
+    assert.equal(res.headers.get('location'), '/login?next=%2Fpricing');
+  }, { billing: configuredBilling() });
+});
+
+/**
+ * AND A REFERER IS A HEADER A CLIENT CHOOSES. It is read for convenience and
+ * trusted for nothing: a cross-origin one is dropped rather than followed, so
+ * the worst a forged header buys is the plain login page. A JSON caller still
+ * gets a status code it can branch on instead of an HTML form.
+ */
+test('a forged or absent Referer falls back to the plain login page', async () => {
+  await withApp(async ({ base }) => {
+    const post = (headers) => fetch(`${base}/api/billing/checkout`, {
+      method: 'POST', redirect: 'manual', body: 'pack=starter',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
+    });
+
+    const forged = await post({ accept: 'text/html', referer: 'https://evil.example/attack' });
+    assert.equal(forged.status, 303);
+    assert.equal(forged.headers.get('location'), '/login', 'a cross-origin Referer was followed');
+
+    const bare = await post({ accept: 'text/html' });
+    assert.equal(bare.headers.get('location'), '/login');
+
+    const json = await post({});
+    assert.equal(json.status, 401, 'a JSON client must get a code, not a redirect');
+    assert.equal((await json.json()).error.code, 'NOT_SIGNED_IN');
+  }, { billing: configuredBilling() });
+});
+
 test('checkout refuses a pack the config does not name', async () => {
   await withApp(async ({ base, root, app }) => {
     const account = await makeAccount(root);
@@ -695,7 +749,11 @@ test('the pricing page offers the pack, and never a payment field', async () => 
 test('a priced pack renders a live buy button', async () => {
   await withApp(async ({ base }) => {
     const html = await (await fetch(`${base}/pricing`, { headers: { accept: 'text/html' } })).text();
-    assert.match(html, /Buy credits/, 'the button does not offer to sell anything');
+    // The button names the rung it buys -- "Buy Starter", not "Buy credits" --
+    // because since 2026-08-27 there is more than one rung on the page and a
+    // row of identical buttons is the thing that made the old ladder
+    // unchoosable in the first place.
+    assert.match(html, /Buy \w+/, 'the button does not offer to sell anything');
     assert.ok(!/<button[^>]*\sdisabled/.test(html), 'the buy button is disabled while a Price exists');
   }, {
     billing: pricedBilling({

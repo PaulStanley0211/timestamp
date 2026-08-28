@@ -276,7 +276,29 @@ export async function main(argv = process.argv.slice(2), { log = console.log } =
 
   const bound = await app.listen();
   log('');
-  log(`  Timestamp  http://${opts.host}:${bound}`);
+  /**
+   * OPEN THE PUBLIC URL, NOT THE BOUND ONE, WHEN THEY DISAGREE.
+   *
+   * This line used to print the bound address unconditionally, and following it
+   * BREAKS GOOGLE SIGN-IN when `TIMESTAMP_PUBLIC_URL` names a different host.
+   * The state cookie is set on whichever host the browser is on, `redirectTo`
+   * is built from the public url, and `localhost` and `127.0.0.1` are separate
+   * cookie jars -- so the callback lands with no cookie, `oauthStateCheck`
+   * refuses BEFORE `takeVerifier`, and the person gets a bare 400.
+   *
+   * IT IS THE QUIETEST FAILURE IN THE APPLICATION. That refusal logs nothing,
+   * on purpose, and because it refuses before consuming anything the pending
+   * row stays on disk -- so the only visible trace is verifier rows piling up
+   * in `out/oauth/`. It cost a debugging session on 2026-08-27, entered from
+   * this very banner. Printing the url that actually works is one line.
+   */
+  const publicUrl = opts.publicUrl ? String(opts.publicUrl).replace(/\/+$/, '') : null;
+  const boundUrl = `http://${opts.host}:${bound}`;
+  log(`  Timestamp  ${publicUrl ?? boundUrl}`);
+  if (publicUrl && publicUrl !== boundUrl) {
+    log(`             ^ TIMESTAMP_PUBLIC_URL -- open THIS one. Signing in on`);
+    log(`               ${boundUrl} sets the state cookie on the wrong host and 400s.`);
+  }
   log(`  root       ${opts.root}`);
   log(`  provider   ${opts.provider}`);
   for (const line of supabaseBannerLines(supabaseConfig)) log(line);

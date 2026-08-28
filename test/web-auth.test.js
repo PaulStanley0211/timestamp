@@ -1242,7 +1242,15 @@ test('the pricing page lists the plans in credits and marks the current one', as
     // Credits are the honest unit -- "N tapes a month" stopped being true the
     // moment a tape had two prices -- but the translation is shown as well,
     // because "153 credits" on its own tells a first-time reader nothing.
-    assert.ok(anonHtml.includes('153 credits a month'));
+    //
+    // "a month" IS GONE AND MUST STAY GONE. Nothing on this page recurs: the
+    // rungs are one-off bundles bought through Stripe in `mode: payment`, and
+    // there is no code anywhere in scripts/billing/ that could charge a second
+    // time. A page that says "a month" next to a Buy button is describing a
+    // subscription this application cannot sell.
+    assert.ok(anonHtml.includes('153 credits'));
+    assert.ok(!/credits a month/.test(anonHtml), 'nothing on this page may claim to recur');
+    assert.ok(!/per month/.test(anonHtml), 'nothing on this page may claim to recur');
     assert.ok(anonHtml.includes('3 tapes at 480p'), 'shelf is three 480p tapes');
     assert.ok(anonHtml.includes('1 tape at 720p'), 'and one 720p tape, singular');
     assert.ok(!anonHtml.includes('1 tapes'), 'and nothing reads like a placeholder');

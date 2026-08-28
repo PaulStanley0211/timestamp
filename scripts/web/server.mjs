@@ -626,6 +626,39 @@ export function safeNext(value) {
   return next;
 }
 
+/**
+ * The path part of a Referer, for working out where a gated POST came FROM.
+ *
+ * A REFERER IS A HEADER A CLIENT CHOOSES, so nothing here trusts it: the return
+ * value goes straight through `safeNext`, which admits only a same-origin
+ * absolute path, so the worst a forged Referer buys is a redirect to another
+ * page of this application. The query and hash are dropped rather than
+ * preserved -- a return path is a destination, and carrying somebody's old
+ * query string into a fresh page is how a `?checkout=done` ends up on a url it
+ * was never issued for.
+ *
+ * Absent, cross-origin and unparseable all answer '', which `safeNext` turns
+ * into the plain `/login` that the caller already handles.
+ */
+function refererPath(referer, host) {
+  const raw = String(referer ?? '');
+  if (raw === '') return '';
+  // SENTINEL, NOT A REAL BASE. A relative Referer resolves against it and keeps
+  // this host; an absolute one replaces it. So "did the host survive?" is
+  // exactly the question "was this Referer same-origin or relative?", and it is
+  // asked below rather than assumed.
+  const SENTINEL = 'http://referer.invalid';
+  let url;
+  try {
+    url = new URL(raw, SENTINEL);
+  } catch {
+    return '';
+  }
+  const ours = String(host ?? '');
+  const sameOrigin = url.host === new URL(SENTINEL).host || (ours !== '' && url.host === ours);
+  return sameOrigin ? url.pathname : '';
+}
+
 /** The first of several form fields that actually has text in it. The step cards
  *  post a preset id; the "or describe it" box posts free text; a person who does
  *  both meant the card they clicked. */
@@ -1524,6 +1557,8 @@ export function createServer({
         balance,
         account,
         tapes: shelfFor(account),
+        // Same window, same source as /pricing -- see the note on that route.
+        retentionDays: cfg?.retention?.jobDays ?? null,
       }));
     },
 
@@ -2675,7 +2710,11 @@ export function createServer({
       let resolutions = [];
       try {
         const mod = await auths.api();
-        plans = Object.values(mod.PLANS ?? {});
+        // WITHDRAWN PLANS ARE NOT OFFERED, filtered here for the same reason a
+        // 1080p row never reaches the page: the config decides what is on sale,
+        // and the view renders what it is handed. `shelf` and `archive` are
+        // still legal ids an account may hold -- they are simply not choices.
+        plans = Object.values(mod.PLANS ?? {}).filter((p) => p.available !== false);
         resolutions = await resolutionRows();
       } catch (err) {
         if (!(err instanceof AuthUnavailableError)) throw err;
@@ -2692,6 +2731,12 @@ export function createServer({
         currentPlan: account?.plan ?? null,
         account,
         balance,
+        // HOW LONG A TAPE SURVIVES, TAKEN FROM THE THING THAT DELETES IT. The
+        // page used to promise "Every tape stays on your shelf" on every card
+        // while `npm run purge` removed the video after `retention.jobDays`.
+        // Reading the window from the same config the purge reads means the
+        // promise and the deletion cannot drift apart in a later edit.
+        retentionDays: cfg?.retention?.jobDays ?? null,
         // WHERE STRIPE SENDS SOMEBODY BACK TO, AND IT GRANTS NOTHING. This is a
         // query parameter on a public page: anybody can type it, so it may
         // change what the page SAYS and may never change what an account HAS.
@@ -3420,7 +3465,18 @@ export function createServer({
    */
   function unauthenticated(req, res, matched) {
     if (wantsHtml(req)) {
-      const next = safeNext(matched.pathname);
+      // A `next` HAS TO BE SOMEWHERE A BROWSER CAN GET. Carrying the pathname
+      // of a POST does not end the round trip where it started, it ends it on a
+      // 405: a signed-out visitor pressing Buy on /pricing was sent to
+      // /login?next=/api/billing/checkout, signed in, and landed on Method Not
+      // Allowed. The checkout form cannot carry its own return field --
+      // test/web-auth.test.js holds it to exactly one input, the pack id -- so
+      // the referring page is the only thing that knows where to go back to,
+      // and `safeNext` keeps it to a same-origin absolute path.
+      const from = req.method === 'GET'
+        ? matched.pathname
+        : refererPath(req.headers.referer, req.headers.host);
+      const next = safeNext(from);
       return redirect(res, next && next !== '/' ? `/login?next=${encodeURIComponent(next)}` : '/login');
     }
     return sendJson(req, res, 401, {

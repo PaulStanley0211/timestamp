@@ -170,6 +170,45 @@ chosen to glow on ink-blue and it does that well. It is not deleted, it is
 relocated: it keeps the burnt-in date stamp inside the tape, where it was
 always right, and it leaves the chrome.
 
+### The reference (locked 2026-08-28)
+
+**`artifactuprising.com`.** Paul chose it after looking at three candidates in a
+browser and measuring them. It is the reference for the pages when they follow
+the identity onto `--paper`.
+
+**WHY THAT ONE, AND THE REASON IS NOT TASTE.** It is the same product. Somebody's
+photographs go in and a keepsake comes out, which is the sentence at the top of
+this section. Borrowing from it is borrowing a solved version of our own problem
+rather than translating one from another category. Two things follow for free:
+
+- **Its type is our type's cousin.** They set Crimson Text; the wordmark is
+  Cormorant Garamond. Both are Garamond-descended serifs, so the mark already
+  belongs on a page built this way.
+- **Its product grid IS the shelf.** Image, then name, then price, sitting
+  directly on the paper -- no box around the image, no border, no shadow,
+  nothing between one tile and the next except space. That is `Your tapes`,
+  finished, and it is a grid that obeys this file's one rule already.
+
+**WHAT NOT TO TAKE FROM IT.** Its secondary buttons are 1px-bordered boxes. They
+would fail the border sweep at the top of this file on the first render.
+
+**MEASURED, SO THE NUMBERS ARE NOT A VIBE.** A second candidate, `aesop.com`,
+was kept only as proof that this discipline survives at commercial scale: ground
+`#FFFEF2` against our `--paper #FAF7F2`, text `#333333` against our `--ink`, and
+**two** bordered elements in the first four hundred. Its typography is Suisse
+Intl throughout and must not be copied -- sans everywhere fights the serif mark.
+A third, `vsco.co`, was REJECTED on sight: it has rebranded to black-on-white
+with a rainbow gradient banner, and the muted-film aesthetic it was suggested
+for is gone.
+
+**THE ONE PROBLEM NEITHER REFERENCE SOLVES, and it is ours to solve.** Both sites
+put light, warm photography on warm paper, so their images dissolve into the
+ground. **A tape is dark 2003 camcorder footage.** On `--paper` every thumbnail
+becomes a hard dark rectangle, and this file has removed the three tools most
+people would reach for -- there is no border, no rule and no shadow to soften it
+with. Decide it deliberately: a paper mat inside each tile, the tape's own black
+bars bled to the tile edge, or a warm tint over the still. Do not discover it.
+
 ### The icon -- `Ts`
 
 **A capital T with a lowercase s**, from the wordmark's own face, torn the same

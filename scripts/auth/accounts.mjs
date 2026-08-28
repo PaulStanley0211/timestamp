@@ -229,7 +229,14 @@ export function creditConfig({ root = REPO_ROOT, reload = false } = {}) {
   // Every entry in that file has to say it is an estimate, for the same reason
   // config/pricing.json refuses an entry without a `_comment`: an unannotated
   // number in the money path reads as fact to whoever finds it next.
+  // `_comment` KEYS ARE DOCUMENTATION, NOT PLANS, exactly as `isPackKey` treats
+  // them one block down. The `plans` object had no container-level comment until
+  // 2026-08-27, so this filter had nothing to do and was never written; the
+  // moment one was added, every plan read turned into BAD_CREDIT_CONFIG at
+  // import time. A convention the whole config file uses has to be understood
+  // by the reader in every block, not just the block where it happened first.
   for (const [id, plan] of Object.entries(parsed?.plans ?? {})) {
+    if (id.startsWith('_')) continue;
     for (const key of ['id', 'label', 'monthlyUSD', 'annualUSD', 'creditsPerPeriod']) {
       if (plan?.[key] === undefined) {
         throw new AuthError(`plan ${id} in ${file} is missing ${key}`, { code: 'BAD_CREDIT_CONFIG' });
@@ -320,12 +327,19 @@ function deepFreeze(value) {
  * page renders; the reasoning stays in the file, where the numbers are.
  */
 export const PLANS = Object.freeze(Object.fromEntries(
-  Object.entries(creditConfig().plans).map(([id, plan]) => [id, Object.freeze({
+  Object.entries(creditConfig().plans).filter(([id]) => !id.startsWith('_')).map(([id, plan]) => [id, Object.freeze({
     id: plan.id,
     label: plan.label,
     monthlyUSD: plan.monthlyUSD,
     annualUSD: plan.annualUSD,
     creditsPerPeriod: plan.creditsPerPeriod,
+    // ABSENT MEANS OFFERED, exactly as it reads for a pack and for a
+    // resolution. A withdrawn plan stays in `PLANS` -- it is still a legal id
+    // for an account that already holds it, and setPlan must still accept it --
+    // so this flag governs one thing only: whether /pricing offers it. A plan
+    // that vanished from PLANS instead would turn every existing account on it
+    // into an unloadable record.
+    available: plan.available !== false,
   })]),
 ));
 

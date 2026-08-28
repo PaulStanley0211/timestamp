@@ -606,57 +606,32 @@ body {
 
 /* Drawn letterforms now, not type -- so this sizes a picture rather than a
    font. The height is what is fixed; the SVG's own viewBox keeps the width. */
+/* ONE MARK SINCE 2026-08-28, and this rule lost two declarations with the
+   monogram rather than keeping them out of caution. The 5px gap spaced two
+   children where there is now one. The -5.5px left margin cancelled padding
+   baked into the MONOGRAM's tile -- it was cut as a favicon and carried its own
+   border -- so leaving it behind would have hauled the wordmark 5.5px off the
+   page edge and misaligned the masthead against every panel below it. A
+   negative margin that outlives the box it was cancelling is a hard bug to see
+   and a trivial one to cause. */
 .wordmark {
   display: inline-flex;
   align-items: flex-start;
-  /* 5px of gap draws as about 10px of air: the monogram's box was cut as a
-     favicon tile and carries 4.4px of its own padding on that side at 30px. */
-  gap: 5px;
-  /* And 5.5px on the other side, which would otherwise indent the whole
-     masthead against every panel below it. This cancels the tile's padding so
-     the INK lines up with the page edge, not the box. Both numbers are
-     measured at height 30px and move with it. */
-  margin-left: -5.5px;
   color: var(--ink);
   text-decoration: none;
 }
 .wordmark svg { display: block; height: 30px; width: auto; }
 
-/* THE LOCKUP'S VERTICAL DATUM IS THE BASELINE, AND IT CANNOT ALSO BE THE TEAR.
-   Each mark carries both. The wordmark's baseline sits at 69.34% of its box and
-   its tear at 70.92% -- the tear cuts BELOW the line, through the feet, which is
-   what a head switch does. The monogram's baseline is at 80.57% and its tear at
-   63.91%, well above it. That is the generator being right rather than wrong:
-   its "seam 0.72" is a fraction of INK height, the wordmark's ink carries the
-   descender of p and Ts carries none, so the same parameter lands either side of
-   the line. Drop the monogram's tear to its baseline and there is nothing under
-   the cut to displace, and the tear disappears.
-
-   So: align the letters and accept two tears. Aligning the tears instead costs
-   5.47px of baseline break and the Ts visibly sinks. Cap heights already agree
-   at 19.58 against 20.06, so nothing is rescaled -- this is a lift and no more.
-
-   HELD BACK TO 60%, WHICH IS A CEILING AND NOT A TASTE. Against this ground the
-   record light measures 7.47:1 and the mark has to stay under it or the accent
-   stops being the brightest thing in the masthead. 60% lands at 6.11:1; 75%
-   overshoots at 9.14:1. */
-.wordmark .mg { opacity: 0.6; transform: translateY(-3.37px); }
-
-/* AND 60% IS ONLY RIGHT ON THE DARK GROUND IT WAS MEASURED AGAINST.
-   The rule above keeps the mark under the record light, and it does that by
-   comparing two contrast ratios against #070A11. Put a photograph behind the
-   masthead and the comparison inverts, because the two colours do not move
-   together: bone composites lighter as the ground lifts and holds its contrast,
-   while the accent is a mid-tone salmon whose ratio collapses. Measured over the
-   eight loops at the scrim each one derives, at 60% the mark out-shouts the
-   record light on SEVEN of the eight -- worst at ostsee-strand, 3.76 against
-   3.36.
-
-   45% is the most that keeps the mark under the accent on every place with
-   margin to spare (worst ratio 0.84 of the accent's, at ostsee-strand). The mark
-   itself lands at 2.81:1 there, which is low for text and fine for this: it is
-   decorative, aria-hidden, and its job is to be a mark rather than to be read. */
-.bgs.is-live ~ .wrap .wordmark .mg { opacity: 0.45; }
+/* THE MONOGRAM'S TWO RULES LIVED HERE AND WENT WITH IT ON 2026-08-28.
+   One lifted it 3.37px so the two marks shared a baseline rather than a tear,
+   and held it to 60% opacity; the other dropped that to 45% over a photograph,
+   because at 60% the mark out-shouted the record light on seven of the eight
+   place loops. Both were measurements rather than taste, and both are only
+   worth re-deriving if the mark ever comes back.
+   THE RULE THEY PROTECTED OUTLIVES THEM AND IS NOT ABOUT THE MONOGRAM: the
+   record light is the one thing in this chrome wearing the accent, at 3.2px.
+   Anything larger painted in the same value replaces the accent rather than
+   joining it. See DESIGN.md. */
 
 /* The record light: the dot of the i, and the one piece of the tape's idiom
    allowed into the chrome. Animated from here rather than from a <style>

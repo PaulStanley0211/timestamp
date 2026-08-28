@@ -410,48 +410,128 @@ export function identityUnavailablePage() {
  * `/pricing`. Public, so it renders for a signed-out visitor too; `currentPlan`
  * is simply null for them and nothing is marked.
  *
- * WHY A PLAN IS DESCRIBED IN CREDITS AND THEN TRANSLATED INTO TAPES. "N tapes a
- * month" stopped being true the moment a tape had two prices: a 720p tape costs
- * 2.25x a 480p one, so the same allowance is three tapes or one depending on a
- * choice made after the plan was bought. Credits are the honest unit, and the
- * translation is shown underneath rather than instead, because "204 CR" on its
- * own tells a first-time reader nothing.
+ * ONE LADDER, NOT TWO. Until 2026-08-27 this page rendered two competing price
+ * lists: three subscription plans that could not be bought, above a separate
+ * one-off pack that could. They collided -- `$10` appeared twice on the page
+ * meaning two different products -- and the only thing carrying a Buy button
+ * was the one nobody had come to read about. Now every card on the page is a
+ * rung of the same ladder: the free grant first, then the bundles, cheapest to
+ * dearest, each one buyable.
+ *
+ * WHY A RUNG IS DESCRIBED IN CREDITS AND THEN TRANSLATED INTO TAPES. "N tapes"
+ * stopped being true the moment a tape had two prices: a 720p tape costs 2.19x
+ * a 480p one, so the same pool is four tapes or two depending on a choice made
+ * after the money is spent. Credits are the honest unit, and the translation is
+ * shown underneath rather than instead, because "92 CR" on its own tells a
+ * first-time reader nothing.
+ *
+ * THE TWO TAPE COUNTS ARE NOT INDEPENDENTLY SETTABLE, which is the thing most
+ * likely to be forgotten by whoever next edits `config/credits.json`. Both are
+ * floored off ONE pool, so a rung that funds two 720p tapes necessarily funds
+ * four 480p tapes -- "three at 480p and two at 720p" is not a rung anyone can
+ * write, at any price. Move the credits and both numbers move together.
  *
  * @param {{plans: Array<{id,label,monthlyUSD,annualUSD,creditsPerPeriod}>,
  *          resolutions: Array<{id,credits,available}>,
+ *          packs: Array<{id,label,priceUSD,credits,buyable}>,
+ *          retentionDays?: number|null,
  *          currentPlan?: string|null}} data
  */
 export function pricingPage({
   plans = [], resolutions = [], packs = [], currentPlan = null, account = null,
-  balance = null, checkout = null,
+  balance = null, checkout = null, retentionDays = null,
 } = {}) {
   const offered = resolutions.filter((r) => r.available && r.credits > 0);
 
-  const cards = plans.map((plan) => {
-    const current = plan.id === currentPlan;
-    // "0 tapes at 720p" is arithmetically right and reads like a bug, so a plan
-    // that cannot fund one says so in words. Singular and plural are spelled out
-    // for the same reason: "1 tapes" is the sort of thing a reader notices
-    // instead of the number.
-    const tapes = offered.map((r) => {
-      const n = Math.floor(plan.creditsPerPeriod / r.credits);
-      const line = n === 0
-        ? `not enough for a ${r.id} tape`
-        : `${n} ${n === 1 ? 'tape' : 'tapes'} at ${r.id}`;
-      return `<li>${h(line)}</li>`;
-    }).join('');
+  /**
+   * What one pool of credits buys, per size that is actually on sale.
+   *
+   * "0 tapes at 720p" is arithmetically right and reads like a bug, so a rung
+   * that cannot fund one says so in words. Singular and plural are spelled out
+   * for the same reason: "1 tapes" is the sort of thing a reader notices
+   * instead of the number.
+   */
+  const tapeLines = (credits) => offered.map((r) => {
+    const n = Math.floor(credits / r.credits);
+    const line = n === 0
+      ? `not enough for a ${r.id} tape`
+      : `${n} ${n === 1 ? 'tape' : 'tapes'} at ${r.id}`;
+    return `<li>${h(line)}</li>`;
+  }).join('');
+
+  /**
+   * HOW LONG A TAPE ACTUALLY SURVIVES, read from the retention config rather
+   * than asserted here.
+   *
+   * Every card on this page used to say "Every tape stays on your shelf". That
+   * was FALSE the whole time it was shipped: `config/render.json` sets
+   * `retention.jobDays` to 30 and `scripts/render/purge-cli.mjs` deletes the
+   * video when it expires. A promise the purge contradicts is the one kind of
+   * copy this page must never carry, because the person reading it is deciding
+   * whether to pay on the strength of it. It is threaded in rather than written
+   * here so that changing the window is one edit to `config/render.json`.
+   */
+  const shelfLine = Number.isFinite(retentionDays) && retentionDays > 0
+    ? `Kept on your shelf for ${retentionDays} days`
+    : null;
+
+  /**
+   * THE LADDER, IN ORDER. The grant is first because it is where a reader
+   * starts, not because it is a product -- it has no price and no button, and
+   * `plans` holds exactly one row since the stale subscription tiers were
+   * deleted on 2026-08-27.
+   */
+  const rungs = [
+    ...plans.map((plan) => ({
+      id: plan.id,
+      label: plan.label,
+      priceUSD: plan.monthlyUSD,
+      credits: plan.creditsPerPeriod,
+      grant: true,
+      buyable: false,
+      current: plan.id === currentPlan,
+    })),
+    ...packs.map((pack) => ({
+      id: pack.id,
+      label: pack.label,
+      priceUSD: pack.priceUSD,
+      credits: pack.credits,
+      grant: false,
+      buyable: pack.buyable,
+      current: false,
+    })),
+  ];
+
+  const cards = rungs.map((rung) => {
+    /**
+     * THE BROWSER SENDS A RUNG ID AND NOTHING ELSE -- no amount, no credit
+     * count, no price. A tampered form has nothing to tamper with, and
+     * test/web-auth.test.js asserts exactly this: one input, hidden, named
+     * `pack`. Adding a second field to this form fails that test, which is what
+     * the test is for.
+     */
+    const buy = rung.grant ? '' : `
+      <form method="post" action="/api/billing/checkout">
+        <input type="hidden" name="pack" value="${h(rung.id)}">
+        <button type="submit" class="record"${rung.buyable ? '' : ' disabled'}>
+          ${h(rung.buyable ? `Buy ${rung.label}` : 'Not open yet')}
+        </button>
+      </form>
+      ${rung.buyable ? '' : '<p class="hint">Checkout opens once the price is set. Nothing is charged here.</p>'}`;
+
     return `
-    <section class="panel plan${current ? ' plan--current' : ''}">
-      ${current ? '<span class="mark">Your plan</span>' : ''}
-      <p class="eyebrow">${h(plan.label)}</p>
-      <p class="price">${h(plan.monthlyUSD === 0 ? 'FREE' : `$${plan.monthlyUSD}`)}</p>
-      <p class="per">${h(plan.monthlyUSD === 0 ? 'forever' : 'per month')}</p>
+    <section class="panel plan${rung.current ? ' plan--current' : ''}">
+      ${rung.current ? '<span class="mark">Your plan</span>' : ''}
+      <p class="eyebrow">${h(rung.label)}</p>
+      <p class="price">${h(rung.priceUSD === 0 ? 'FREE' : `$${rung.priceUSD}`)}</p>
+      <p class="per">${h(rung.grant ? 'on sign-up' : 'one payment')}</p>
       <ul>
-        <li>${h(`${plan.creditsPerPeriod} credits a month`)}</li>
-        ${tapes}
+        <li>${h(`${rung.credits} credits`)}</li>
+        ${tapeLines(rung.credits)}
         <li>15 seconds, 4:3, PAL, 25 fps</li>
-        <li>Every tape stays on your shelf</li>
+        ${shelfLine ? `<li>${h(shelfLine)}</li>` : ''}
       </ul>
+      ${buy}
     </section>`;
   }).join('');
 
@@ -468,52 +548,13 @@ export function pricingPage({
    */
   const returned = {
     done: 'Thank you. Your credits will appear on your balance shortly, once the payment clears.',
-    cancelled: 'Nothing was charged. The pack is still here whenever you want it.',
+    cancelled: 'Nothing was charged. The bundle is still here whenever you want it.',
   }[String(checkout ?? '')] ?? null;
-
-  const packCards = packs.map((pack) => {
-    const each = pack.credits > 0 ? pack.priceUSD / pack.credits : 0;
-    return `
-    <section class="panel plan">
-      <p class="eyebrow">${h(pack.label)}</p>
-      <p class="price">${h(`${pack.priceUSD}`)}</p>
-      <p class="per">one payment, no renewal</p>
-      <ul>
-        <li>${h(`${pack.credits} credits`)}</li>
-        ${offered.map((r) => {
-    const n = Math.floor(pack.credits / r.credits);
-    const line = n === 0
-      ? `not enough for a ${r.id} tape`
-      : `${n} ${n === 1 ? 'tape' : 'tapes'} at ${r.id}`;
-    return `<li>${h(line)}</li>`;
-  }).join('')}
-        <li>${h(`about ${(each * 100).toFixed(0)}c a credit`)}</li>
-      </ul>
-      <form method="post" action="/api/billing/checkout">
-        <input type="hidden" name="pack" value="${h(pack.id)}">
-        <button type="submit" class="record"${pack.buyable ? '' : ' disabled'}>
-          ${h(pack.buyable ? 'Buy credits' : 'Not open yet')}
-        </button>
-      </form>
-      ${pack.buyable ? '' : '<p class="hint">Checkout opens once the price is set. Nothing is charged here.</p>'}
-    </section>`;
-  }).join('');
-
-  const packSection = packCards === '' ? '' : `
-  <section class="panel">
-    <p class="eyebrow">Credits</p>
-    <h1 class="headline">Buy a pack</h1>
-    <p class="sub">One payment, no subscription, nothing renews. The card is entered on the
-    payment provider's own page — this application never sees it.</p>
-    ${returned ? `<p class="notice">${h(returned)}</p>` : ''}
-  </section>
-
-  <div class="plans">${packCards}</div>`;
 
   const body = `
 <main>
   <section class="panel">
-    <p class="eyebrow">Plans</p>
+    <p class="eyebrow">Credits</p>
     <h1 class="headline">What a tape costs</h1>
     <p class="sub">A tape is fifteen seconds of generated video put through the tape deck.
     You spend credits, and how many depends on the size the video is generated at before
@@ -521,17 +562,17 @@ export function pricingPage({
     <p class="hint">${costs || 'Costs are unavailable right now.'}</p>
     <p class="hint">There is no payment form here and there is not one anywhere else either.
     Checkout is hosted by the payment provider on their own domain, and this application
-    never sees a card number. To change a plan today, write to us.</p>
+    never sees a card number.</p>
+    ${returned ? `<p class="notice">${h(returned)}</p>` : ''}
   </section>
-
-  ${packSection}
 
   <div class="plans">${cards}</div>
 
   <section class="panel">
-    <p class="hint">Every figure on this page is an estimate of provider cost until a metered
-    run proves it, and it will be revisited when one does. A pack is a single payment and
-    nothing renews. Credits do not expire.</p>
+    <p class="hint">Nothing here renews and nothing is a subscription. Credits do not expire,
+    and when you want more tapes you buy another bundle — including a second one the same
+    size. Every figure on this page is an estimate of provider cost until a metered run
+    proves it, and it will be revisited when one does.</p>
     <p class="actions"><a class="quiet" href="/">Back to the shelf</a></p>
   </section>
 </main>

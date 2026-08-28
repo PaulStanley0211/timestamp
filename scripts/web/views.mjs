@@ -55,17 +55,17 @@ const WORDMARK_SVG = fs
   .trim();
 
 /**
- * The monogram, on the same terms as the wordmark above.
+ * THE MONOGRAM IS NOT INLINED HERE ANY MORE. Until 2026-08-28 the masthead drew
+ * `Ts` beside the word, and `assets/brand/monogram-inline.svg` was read in at
+ * this point. Paul removed it on sight: two marks saying the same thing, and
+ * the small one reading as basic next to the drawn word.
  *
- * Its ids are namespaced `ts-mg-` where the wordmark's are `ts-wm-`, which is
- * what lets both be inlined into one document. Two SVGs on a page share ONE id
- * space, and a duplicate makes every use() and clip-path resolve to whichever
- * element came first -- here both marks are the same glyph, so a collision
- * would still look correct and would only surface the day one of them changes.
+ * THE ASSET IS STILL USED, WHICH IS WHY IT IS STILL THERE. `/icon.svg` and
+ * `/favicon.ico` serve it from disk, and that surface has the opposite problem
+ * to this one -- a browser tab has no room for the word, so the mark is the
+ * only thing that can carry the brand there. Deleting the file to tidy up would
+ * blank the tab icon.
  */
-const MONOGRAM_SVG = fs
-  .readFileSync(new URL('../../assets/brand/monogram-inline.svg', import.meta.url), 'utf8')
-  .trim();
 import { placeSlug, outfitSlug, qualitySlug, aspectSlug } from './static.mjs';
 
 // ---------------------------------------------------------------------------
@@ -422,19 +422,20 @@ function wordmark() {
   // survives a stylesheet that fails to load, which is when a person most
   // needs to know what they are looking at.
   //
-  // THE MONOGRAM RIDES INSIDE THIS ANCHOR, NOT BESIDE IT. Two links to the
-  // same destination sitting next to each other is two tab stops and two
-  // announcements of one thing. It is also aria-hidden: it draws the letters
-  // Ts, which is what the word next to it already begins with, so left
-  // nameable it is read out as a second "Timestamp" before the first.
+  // ONE MARK, NOT TWO. A monogram drawing `Ts` used to sit ahead of the word
+  // inside this same anchor. It went on 2026-08-28: it spelled the first two
+  // letters of the word standing next to it, so the lockup said the same thing
+  // twice, and at 30px against the drawn wordmark it read as the plainer of the
+  // two. The word can carry the masthead alone; the mark still carries the
+  // browser tab, where there is no room for a word.
   //
-  // IT IS HELD BACK BY WEIGHT AND NOT BY COLOUR, and the stylesheet is where
-  // that happens. The obvious move is to paint it in the brand accent, and the
-  // accent is spoken for: the record light is the one thing in this chrome
-  // wearing it, at 3.2px. A 30px mark in the same value is nine times the area
-  // of the thing the colour exists for, so it replaces the accent rather than
-  // joining it. See DESIGN.md.
-  return `<a class="wordmark" href="/">${MONOGRAM_SVG}${WORDMARK_SVG}<span class="vh">Timestamp</span></a>`;
+  // DO NOT REINSTATE IT WITHOUT READING THE STYLESHEET. Its old rules are gone
+  // with it, and they were not decoration: `.wordmark`'s gap and negative
+  // margin existed to cancel the padding baked into the monogram's tile, and it
+  // was held back to 60% opacity (45% over a photograph) so that a 30px mark
+  // would not out-shout the 3.2px record light, which is the one thing in this
+  // chrome allowed to wear the accent. See DESIGN.md.
+  return `<a class="wordmark" href="/">${WORDMARK_SVG}<span class="vh">Timestamp</span></a>`;
 }
 
 /**
@@ -801,6 +802,7 @@ export function homePage({
   tapes = [],
   error = null,
   values = {},
+  retentionDays = null,
 } = {}) {
   const offered = resolutions.filter((r) => r.available);
   const offeredAspects = aspects.filter((a) => a.available);
@@ -1080,7 +1082,9 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
     <p class="stepno"><span class="stepno-k">Archive</span><span class="stepno-n stepno-n--mark">&#9679;</span></p>
     <div class="step-say">
       <h2 class="title">Your tapes</h2>
-      <p class="sub">Every recording stays on the shelf.</p>
+      <p class="sub">${h(Number.isFinite(retentionDays) && retentionDays > 0
+    ? `Every recording stays on the shelf for ${retentionDays} days.`
+    : 'Every finished recording lands here.')}</p>
     </div>
   </div>
   ${tapes.length ? `<div class="shelf">${tapes.map(shelfTile).join('')}</div>` : `

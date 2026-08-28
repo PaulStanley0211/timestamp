@@ -555,7 +555,12 @@ test('a balance between the two prices warns about the dear one only', async () 
 test('the shelf is empty until there is something on it, and then it is not', async () => {
   await withServer(async ({ base, cookieA, app, root, accountA }) => {
     const empty = await (await get(base, '/', cookieA)).text();
-    assert.ok(empty.includes('Every recording stays on the shelf.'));
+    // THE WINDOW, NOT A PROMISE OF FOREVER. This used to assert "Every
+    // recording stays on the shelf." while `retention.jobDays` deleted the
+    // video after 30 days -- the page and the purge disagreed, and the page was
+    // the one a customer read. The number is threaded from config/render.json,
+    // so this asserts the sentence carries a window rather than a fixed count.
+    assert.match(empty, /Every recording stays on the shelf for \d+ days\./);
     assert.ok(empty.includes('The shelf is empty'));
     assert.ok(empty.includes('your first tape lands here'));
 
@@ -601,50 +606,53 @@ test('the wordmark is the drawn mark, named, and carries no style of its own', a
   });
 });
 
-test('the monogram sits in the lockup without stealing the accent or the name', async () => {
+/**
+ * THE MASTHEAD CARRIES THE WORD AND NOTHING ELSE, since 2026-08-28.
+ *
+ * This test used to assert the opposite -- that a `Ts` monogram sat ahead of
+ * the wordmark inside the same anchor. Paul removed it on sight: it spelled the
+ * first two letters of the word standing next to it, so the lockup said one
+ * thing twice, and the small mark read as the plainer half.
+ *
+ * INVERTED RATHER THAN DELETED, because "we took it out" is a claim worth
+ * holding. The monogram was reachable from one line of `views.mjs` and its CSS
+ * is three lines; a later edit reinstating either would put the doubled mark
+ * back with nothing to say so.
+ */
+test('the masthead draws the word alone -- no monogram beside it', async () => {
   await withServer(async ({ base, cookieA }) => {
     const html = await (await get(base, '/', cookieA)).text();
     const from = html.indexOf('class="wordmark');
     const lockup = html.slice(from, html.indexOf('</a>', from));
 
-    // ONE LINK, TWO MARKS. The monogram lives inside the wordmark's own anchor
-    // rather than beside it, so there is one target and one accessible name
-    // instead of two links to the same place sitting next to each other.
-    assert.ok(lockup.includes('class="mg"'), 'the monogram is not in the lockup');
-    assert.ok(lockup.indexOf('class="mg"') < lockup.indexOf('id="ts-wm-'),
-      'the monogram should precede the wordmark -- a lockup reads mark then word');
+    assert.ok(!lockup.includes('class="mg"'), 'the monogram is back in the lockup');
+    assert.ok(!/id="ts-mg-/.test(html), 'the monogram is inlined somewhere on the page');
+    assert.ok(lockup.includes('id="ts-wm-'), 'the wordmark itself went missing with it');
 
-    // THE MARK IS A PICTURE OF LETTERS THE WORD ALREADY SPELLS. Left nameable
-    // it is announced as a second "Timestamp" immediately before the first, so
-    // the link reads "Timestamp Timestamp" to anyone not looking at it.
-    // Slice the monogram element itself. `class` is not the first attribute on
-    // the tag, so this walks back to the opening `<svg` that carries it rather
-    // than matching on attribute order, which the asset is free to change.
-    const at = lockup.indexOf('class="mg"');
-    const mg = lockup.slice(lockup.lastIndexOf('<svg', at), lockup.indexOf('</svg>', at) + 6);
-    assert.ok(mg.includes('aria-hidden="true"'), 'the monogram is announced as a second name');
-    assert.ok(!/class="mg"[^>]*aria-label=/.test(mg), 'the monogram carries a name as well as being hidden');
+    // ONE LINK, ONE NAME. The drawn letters carry no text, so the accessible
+    // name is the visually-hidden span -- which must survive the mark going.
+    assert.ok(/<span class="vh">Timestamp<\/span>/.test(lockup),
+      'the lockup lost the only thing that gives it an accessible name');
 
-    // Same trap as the wordmark: style-src 'self' drops an inline <style>.
-    assert.ok(!mg.includes('<style'), 'the monogram carries a <style> the CSP will silently drop');
-
-    // TWO INLINED SVGs ON ONE PAGE SHARE AN ID SPACE, and a duplicate makes
-    // every use() and clip-path resolve to whichever came first. Here both
-    // marks are the same glyph so it would still LOOK right, which is exactly
-    // why it needs asserting rather than eyeballing.
+    // Ids stay unique. With one mark a collision is no longer possible between
+    // marks, but the assertion costs nothing and the page may inline more SVG.
     const ids = [...html.matchAll(/\sid="(ts-[a-z]{2}-[a-z0-9-]+)"/g)].map((m) => m[1]);
     assert.deepStrictEqual(ids.length, new Set(ids).size, `duplicate mark ids on one page: ${ids.join(', ')}`);
 
-    // THE ACCENT IS SPOKEN FOR, and this is the rule most likely to drift back.
-    // The record light is the one thing in the chrome wearing --rec, and it is
-    // 3.2px wide. A 30px monogram in the same value does not sit beside the
-    // accent, it replaces it -- so the mark separates from the word by WEIGHT.
     const css = await (await fetch(`${base}/styles.css`)).text();
-    const mgRule = /\.wordmark\s+\.mg\s*\{([^}]*)\}/.exec(css);
-    assert.ok(mgRule, 'no rule sizes the monogram');
-    assert.ok(!/var\(--rec\)/.test(mgRule[1]),
-      'the monogram took the record light\'s colour; hold it back by opacity instead');
-    assert.ok(/opacity/.test(mgRule[1]), 'the monogram is not held back at all -- that is the stutter');
+
+    // THE DEAD RULES ARE GONE TOO, and the negative margin is the one that
+    // matters. `margin-left: -5.5px` cancelled padding baked into the
+    // MONOGRAM's tile; left behind with the monogram removed it hauls the
+    // wordmark off the page edge and misaligns the masthead against every panel
+    // below it -- a few pixels, so it is easy to ship and hard to notice.
+    assert.ok(!/\.wordmark\s+\.mg\s*\{/.test(css), 'a rule still styles the removed monogram');
+    const wordmarkRule = /\.wordmark\s*\{([^}]*)\}/.exec(css);
+    assert.ok(wordmarkRule, 'no rule lays out the wordmark at all');
+    assert.ok(!/margin-left/.test(wordmarkRule[1]),
+      'the monogram tile\'s negative margin outlived the tile');
+    assert.ok(!/\bgap\b/.test(wordmarkRule[1]),
+      'the lockup still spaces two children and there is only one');
   });
 });
 
