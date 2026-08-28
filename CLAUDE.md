@@ -16,9 +16,10 @@ Warm, grainy, quiet.
 did. `origin/main` is still `b6f64a3` and no PR exists; the push is the
 irreversible line and it is Paul's, not Claude's.
 
-**THE COMPLETE LIST OF WHAT IS LEFT IS SECTION 32.** Twenty items, verified
-against the repo rather than copied from this file, grouped by who owns each.
-Read it before planning a day.
+**WHAT IS LEFT IS SECTION 32; WHAT JUST HAPPENED IS SECTION 33.** Read 33
+first — it strikes items 1, 2, 6, 10 and 12 off 32 and records two items that
+32 listed as open and were already done. **Re-verify any item before working
+it.** Read both before planning a day.
 
 ### The three sentences that matter
 
@@ -35,7 +36,6 @@ Supabase SMTP sender was moved off Resend's shared sandbox address onto it.
 code arrived.** Section B below is now a HISTORICAL record of why it was
 blocked, not a live blocker. **This was the top of the list for two days and it
 is closed.**
-Nothing about the cream work changes this; it is still the only real blocker.
 
 **GOOGLE SIGN-IN IS FIXED AND PROVED — a real person signed in through it.** It
 took three separate causes, none of them in the OAuth code, and the day before
@@ -213,20 +213,30 @@ section 24.
 
 ### PICK UP HERE
 
-> **START AT SECTION 32 — THE PENDING LIST (2026-08-28).** It is the complete,
-> verified inventory of what is left in this project, twenty items, grouped by
-> who owns each one. It was built by checking the repo rather than by reading
-> this file, and it corrects two things this file used to claim were open.
+> **READ SECTION 33 FIRST (2026-08-28 evening), THEN SECTION 32.** §33 is what
+> the last session did and what it corrected; §32 is the inventory, now with
+> items 1, 2, 6, 10 and 12 struck.
 >
-> **PAUL'S FIRST ACTION IS ITEM 1: BUY THE DOMAIN.** Not because it is the most
-> important thing — item 5 is — but because it is **the only item with a WAIT
-> attached**. DNS and Resend verification run on their own clock, so it has to
-> be started before anything else or the whole day queues behind it. Then do
-> item 5 (the blind check) while it propagates.
+> **PAUL'S FIRST ACTION IS ITEM 5: THE BLIND CHECK.** It is free, it takes ten
+> minutes, the packet is built and unsent at `out/blind-check/`, and it is now
+> **the only thing on the critical path that needs nobody but Paul**. It has
+> been open for days while infrastructure got built around it. It still decides
+> whether any of the rest matters: Paul has proved the tape looks good TO PAUL,
+> and nothing has yet proved a stranger recognises him.
 >
-> **CLAUDE'S FIRST ACTIONS ARE ITEMS 6, 12 AND 10** — the two Linux CI reds, the
-> `doctor` env gap, and the shared-path test race. All three are self-contained,
-> none needs Paul, and 6 is what stands between here and opening the PR.
+> **THE DOMAIN IS BOUGHT AND EMAIL WORKS.** `timestamptapes.com`. Anyone can
+> sign up and receive a six-digit code — proved against a real non-owner
+> address. That was the project's oldest blocker and it is closed. §33.
+>
+> **CLAUDE'S ITEMS 6, 10 AND 12 ARE ALL DONE**, one commit each, test-first,
+> plus a security fix and a design fix. **Nothing is pushed.** The obvious next
+> pieces are: the free-tape ceiling (§32 item 14 — now that strangers can
+> actually sign up), a Dockerfile for the deploy, and the rest of the security
+> review.
+>
+> **BEFORE WORKING ANY ITEM ON §32, RE-VERIFY IT.** Two items on that list
+> turned out to be already done when checked this session. A stale list costs an
+> afternoon; checking costs a minute.
 
 ~~**PICK UP AT SECTION 27: ONE COMMAND FINISHES THE PAYMENT DEMO.**~~ **DONE
 2026-08-25** — the payment path is proven end to end: checkout, webhook
@@ -639,7 +649,13 @@ invisible when they break: the test script must stay a bare `node --test`,
 tracked, no `.env` or `out/`, and the consent text must still quote the retention
 config.
 
-### 4. CI IS RED ON LINUX - two known, pre-existing, NOT product defects
+### 4. ~~CI IS RED ON LINUX~~ **BOTH LINUX REDS ARE FIXED (2026-08-28, `096ba76`) - and there were THREE**
+
+> **THIS SECTION IS NOW HISTORY.** The table below is why they were red and how
+> they were diagnosed; it is no longer a list of open failures. §33 records the
+> fix and the third red that was hiding behind the first. **The shared-path
+> race at the bottom of this section is also closed** (`5be6c1f`, all four
+> directories). What is left of CI red on a first PR run is: nothing known.
 
 **Windows 991/991 green. Linux 989/991.** The matrix paid for itself on its first
 run by catching a Windows-only assumption in the purge CLI tests (a `file:` URL
@@ -2714,7 +2730,7 @@ a go, and it does not work. `test/catalog.test.js` pins the absence of a count.
 
 ### 31. THE PAGES MOVED ONTO THE CREAM GROUND (2026-08-28) — and DESIGN.md's "later" is spent
 
-**Suite 1678 / 1676 pass / 0 fail / 2 skipped, from a 1674 / 1672 baseline. UNCOMMITTED.**
+**Suite 1678 / 1676 pass / 0 fail / 2 skipped, from a 1674 / 1672 baseline.** (Committed the same day as `fbbb09a`; the suite is 1679 / 1677 as of §33.)
 Five modified files, nothing untracked: `DESIGN.md`, `scripts/web/static.mjs`,
 `scripts/web/views.mjs`, `test/web-api.test.js`, `test/web-static.test.js`.
 
@@ -2962,33 +2978,59 @@ verification run on their own clock. Start 1, then do 5 while it propagates.
 
 #### B — Claude's, self-contained, none of it needs Paul
 
-6. **The two Linux CI reds.** Confirmed present:
-   `test/intake-photo.test.js:182` asserts how one ffprobe build spells
-   `EXIF metadata`, and `test/ffmpeg-output.test.js:165` asserts ffmpeg's error
-   wording. **Neither is a product defect** -- EXIF stripping demonstrably works
-   on Linux. Fix by asserting the bytes and the failure rather than the text.
-   **This is what stands between here and opening the PR.**
-7. **Open the PR.** 120 commits ahead of `origin/main`, nothing merged. Do 6
-   first or the first CI run is red on arrival.
+6. ~~**The two Linux CI reds.**~~ **DONE 2026-08-28 — `096ba76`. THERE WERE
+   THREE, NOT TWO.** Line 182 threw, so the GPS assertion below it never ran on
+   Linux; fixing only the reported failure would have turned that one red on the
+   next CI run. Measured on both CI images rather than reasoned about — ffprobe
+   8.1 and 6.1 disagree on the NAMES (`EXIF metadata` side_data and a `GPSInfo/`
+   tag prefix exist on 8.1 only). The exit-code red was `234 !== -22`: the same
+   EINVAL, truncated to 8 bits by POSIX, so it was a per-OS claim rather than
+   wording. **Verified green on the real CI image** (ubuntu:24.04 + apt ffmpeg
+   6.1.1 + node 24, in Docker) — see §33 for how to re-run that.
+7. **Open the PR. NOW UNBLOCKED — item 6 was the gate.** 127 commits ahead of
+   `origin/main`, nothing merged, no PR. The first CI run happens the moment a
+   PR opens. **The push is Paul's line, not Claude's.**
+   **⚠️ `/ship` CANNOT SEE THAT `/review` RAN.** gstack's persistence layer
+   needs `bun`, which is not installed on this machine, so `gstack-review-log`
+   and `gstack-learnings-log` both fail silently. The review DID run clean on
+   this branch (§33); the log of it does not exist.
 8. ~~**Commit the cream work.**~~ **DONE 2026-08-28** -- see §31. Committed
    locally, NOT pushed.
-9. **The rest of the security review.** Both files local and gitignored, as they
-   must stay. Includes the one that **ARMS ON THE NEXT `config/models.json`
-   EDIT** -- whoever fills in the still model reads §3 of the review FIRST.
-10. **The shared-path test race, still open.** Confirmed: `build/test-intake`,
-    `build/provider-contract` and `build/fal-smoke` build their directories with
-    no pid, so two suites running at once on this checkout collide. The fix is
-    the one line already applied twice elsewhere -- put `process.pid` in the
-    directory name. Nobody has lost a diagnosis pass to these three yet; §4
-    records what it cost the time somebody did.
+9. **The rest of the security review — PARTLY WORKED 2026-08-28.** Both files
+   local and gitignored, as they must stay.
+   **Closed:** the duplicate cookie parser (`382cbb5`) — the one on the request
+   path took the LAST value for a repeated cookie name while the careful one in
+   `session.mjs:606` took the first. Test-first, sabotage-verified, and one
+   existing assertion was TIGHTENED rather than added to.
+   **Verified already closed, so the review is stale on both:** the signup
+   limiter exists (10/hour per IP), and `/auth/reset` + `/auth/reset/complete`
+   exist with their own limiter, so a leaked credential CAN be revoked.
+   **Still open:** the structural half of the cookie finding (there are still
+   two parsers; deleting the duplicate is a dependency-shape decision, since
+   `session-middleware.mjs` imports only node builtins today), plus a handful of
+   MEDIUMs and LOWs. **The one that ARMS ON THE NEXT `config/models.json` EDIT
+   is still open** — whoever fills in the still model reads §3 of the review
+   FIRST.
+10. ~~**The shared-path test race.**~~ **DONE 2026-08-28 — `5be6c1f`. FOUR
+    DIRECTORIES, NOT THREE.** This list named `test-intake`,
+    `provider-contract` and `fal-smoke`; §4 named `provider-fixture` instead of
+    `fal-smoke`. Both lists were right and both were incomplete. Measured before
+    and after the same way §4 measured the previous fix: `build/test-intake`
+    went from 6 paths all shared to 12 across two pid directories with none
+    shared; `build/provider-fixture` from 22 leaf names claimed by both — the
+    exact number §4 recorded — to 44 disjoint paths.
 11. **16:9 and 9:16 refuse on the paid path.** Fixture does all three;
     `resolveRaster` throws `ASPECT_UNSUPPORTED` (`pipeline.mjs:182`) for a paid
     provider on any non-default aspect. **fal's own enum accepts them** -- the
     refusal is this repo's, not the vendor's. §18 has the four places that must
     move together, and lifting it reopens pricing.
-12. **`npm run doctor` does not load `.env`**, so it prints "not set" for a key
-    that is correct. One word in `package.json`; it has been offered twice and
-    never applied unasked.
+12. ~~**`npm run doctor` does not load `.env`.**~~ **DONE 2026-08-28 —
+    `493989b`.** `npm run doctor` now prints `all three present` against the
+    real `.env`. The test is BEHAVIOURAL, not a string match on the manifest: it
+    executes the command `package.json` declares, in a scratch cwd with its own
+    `.env`, so dropping the flag turns it red. **Note what it does not do:** the
+    flag is on the npm SCRIPT, so `node scripts/preflight/doctor.mjs` directly
+    still sees only the parent environment.
 
 #### C — Decisions only Paul can make
 
@@ -3015,8 +3057,12 @@ verification run on their own clock. Start 1, then do 5 while it propagates.
 #### D — Smaller debt, real but not blocking
 
 18. `npm run accounts -- create` mints a password nothing checks any more --
-    Supabase decides -- so its own `--help` text lies. Inspector, `invite`, or
-    removal; open question 5 of the parent spec.
+    Supabase decides. **THE `--help` HALF OF THIS IS STALE and was already
+    fixed on 2026-08-26 in `7083519`** -- checked 2026-08-28, the help now
+    prints "(that password cannot sign anyone in -- /login asks Supabase now,
+    not this file)" directly beneath the create line. What genuinely remains is
+    the DESIGN call: inspector, `invite`, or removal; open question 5 of the
+    parent spec. Paul's, not Claude's.
 19. The equal-time refusal guard no longer protects `/login`; that timing is
     Supabase's property now. **Known and accepted, not a regression to chase.**
 20. `18352f4`'s commit MESSAGE on the remote still carries security detail.
@@ -3029,6 +3075,144 @@ verification run on their own clock. Start 1, then do 5 while it propagates.
   PICTURE (no longer quiet, cuts six times) from the TEXTURE (still warm,
   grainy, quiet). Nothing to do.
 - ~~TODOs left in shipped code.~~ **Zero** `TODO`/`FIXME`/`XXX` in `scripts/`.
+
+---
+
+### 33. THE DOMAIN LANDED AND CLAUDE'S HALF OF THE LIST CLOSED (2026-08-28, evening)
+
+**Suite 1679 / 1677 pass / 0 fail / 2 skipped**, from a 1678 / 1676 baseline —
+the +1 is a new behavioural test on `npm run doctor`. **Six commits,
+`096ba76..e7d2486`, NONE PUSHED.** `origin/main` is still `b6f64a3`, 127 commits
+behind, no PR. Tree clean.
+
+#### THE ONE THAT MATTERS: email reaches anybody now
+
+`timestamptapes.com`, $10.46/yr, Cloudflare Registrar. **Nameservers delegated
+instantly**, so the DNS propagation wait that made item 1 "the only item with a
+WAIT attached" never happened — the whole day did not have to queue behind it.
+
+Verified in Resend as the SUBDOMAIN `send.timestamptapes.com` (eu-west-1). DKIM,
+MX and SPF all green. **The four records went in BY HAND rather than through
+Resend's auto-configure**, which wanted ongoing write access to the zone: DNS is
+the root of trust for mail AND for TLS issuance, and four one-time records are
+not worth a standing third-party grant.
+
+**THE HANDOFF HAD THE BLOCKER SLIGHTLY WRONG, and the correction is worth
+keeping.** Custom SMTP and the `{{ .Token }}` six-digit template were already
+done on 2026-08-27 (spec steps 9 and 6). What was still wrong is that Resend was
+in **SANDBOX**, so the sender was the shared `onboarding@resend.dev` — which
+delivers only to the Resend account owner and lands in Gmail's Spam. Moving
+Supabase's SMTP sender onto the verified domain is the edit that opened it.
+**Proved by the only evidence that counts: a real signup to an address that is
+not the owner's received its six digits.**
+
+#### The three self-contained items, each its own commit, all test-first
+
+| Commit | What it does |
+|---|---|
+| `096ba76` | Both Linux CI reds — and a THIRD that was hiding behind the first |
+| `493989b` | `npm run doctor` reads `.env` |
+| `5be6c1f` | The pid goes in the directory for the last FOUR shared test paths |
+| `382cbb5` | The request path's cookie parser keeps the FIRST value |
+| `c0bb4ce` | The place rail fades instead of cutting a word in half |
+| `e7d2486` | This file, corrected |
+
+**A THIRD CI RED WAS HIDING BEHIND THE FIRST.** `intake-photo.test.js:182` threw
+on Linux, so the GPS assertion below it NEVER RAN there. Fixing only the
+reported failure would have turned that one red on the next CI run. Measured on
+both images rather than reasoned about: ffprobe 8.1 (windows-latest) reports an
+`EXIF metadata` side_data and prefixes GPS frame tags `GPSInfo/`; ffprobe 6.1
+(ubuntu-latest) reports neither and names them flat, `GPSLatitudeRef`.
+
+**AND THE SECOND RED WAS NOT WORDING, WHICH IS WHAT THE LIST SAID IT WAS.** It
+was `234 !== -22` — the same EINVAL, truncated to 8 bits by POSIX. A per-OS
+claim, not a per-build one. The unsigned-32 wrap stays tested in
+`ffmpeg-run.test.js` against a literal, identically on both platforms, which is
+why dropping it from the integration test is not a weakening.
+
+**HOW TO RE-RUN THE LINUX CHECK FROM THIS WINDOWS MACHINE.** Docker Desktop is
+installed and this works:
+
+```bash
+docker run --rm -v "/c/Users/pauls/Timestamp:/src:ro" ubuntu:24.04 bash -lc \
+  "apt-get update -qq && apt-get install -y -qq ffmpeg curl xz-utils && ..."
+```
+
+Copy `scripts test config presets assets package.json` out of the read-only
+mount into `/repo` and run there. **Omitting `presets/` produces bogus ENOENT
+failures in `provider-contract`** that look like real breakage and are not.
+
+#### Two findings that were the LIST being wrong, not the code
+
+- **Item 18's `--help` complaint is stale.** It was fixed on 2026-08-26 in
+  `7083519`. §32 claimed to have been built by checking; this one slipped.
+- **Two of the three security findings re-checked were already closed.** The
+  signup limiter exists, and `/auth/reset` exists — so "a leaked credential
+  cannot be revoked" is no longer true.
+
+**THE LESSON, since it has now happened twice in one session: a pending list
+ages badly, and re-verifying an item costs minutes while acting on a stale one
+costs an afternoon.** Check before you work an item.
+
+#### A design review ran, and two of its three flags were the TOOL being wrong
+
+`/design-review` against the live app. **One real finding, fixed** (`c0bb4ce`):
+the landing's place rail had `scrollWidth 3066` against a `736` client — SIX of
+the eight places outside the frame, and the first one outside it a word cut in
+half. At 390px it was one of eight. A guillotined word reads as broken rather
+than scrollable, and the place list is the landing's whole argument.
+
+**The two dropped flags are the useful part:**
+
+- The tool flagged `-apple-system…` as the "I gave up on typography" signal.
+  **DESIGN.md answers it**: *"Body prose: the system sans stack. Prose is not
+  the voice of this world; the readout is."* A second expressive body face would
+  fight VT323 and the serif wordmark. Not a defect — a documented decision.
+- The tool flagged the nav links as undersized touch targets (19px). **Measured
+  67px centre-to-centre**, which clears SC 2.5.8's spacing exception exactly as
+  §6b already recorded.
+
+**What was NOT fixed and is a taste call:** the `CONTENT / TEXTURE / CONSENT`
+block is a three-column symmetric grid, which is the canonical AI-generated
+landing layout. Yours is a restrained instance of it and it is the only section
+on that page that reads templated.
+
+#### Things that will bite the next reader
+
+- **`bun` IS NOT INSTALLED, and gstack silently depends on it.**
+  `gstack-review-log`, `gstack-learnings-log` and the browse sidebar agent all
+  fail with `bun: command not found`. **Consequence: `/ship` cannot see that
+  `/review` ran on this branch.** The review DID run clean; the log does not
+  exist. Install bun or expect `/ship` to complain.
+- **`browse connect` needs port 34567 free AND no other daemon running.** A
+  headless daemon from an earlier command holds it; `browse disconnect` then
+  kill whatever holds 34567, then `connect`. A plain `browse <cmd>` will
+  silently start a NEW headless daemon and drop your headed session.
+- **The gstack browser is a SEPARATE Chromium with its own profile.** It does
+  not carry your real Chrome's logins. Signing into Cloudflare or Resend there
+  is a fresh login, and Claude must not type the credentials.
+- **PowerShell here-strings (`@'...'@`) do not work in the Bash tool.** Use
+  `git commit -F <file>` for multi-line messages — it also dodges the heredoc
+  backslash-eating trap this file already warns about.
+
+#### What is left, in the order it is worth doing
+
+1. **THE BLIND CHECK (§32 item 5).** Free, ten minutes, still unsent at
+   `out/blind-check/`. **It is now the only thing on the critical path that
+   needs nobody but Paul**, and it still decides whether any of the rest
+   matters.
+2. **The free-tape ceiling (§32 item 14).** 21 CR at signup is $2.07 of real fal
+   spend per account, ~$207 against a ceiling of 100. **Strangers can create
+   accounts as of tonight**, so this stopped being theoretical.
+3. **Deploy (§32 item 3).** Newly possible — there is a domain. **No host
+   chosen and no config exists.** The binding constraint is that the queue
+   claims jobs with `linkSync`, so web and worker need ONE shared block
+   filesystem: that rules out Render and Railway (a disk attaches to one
+   service) and every serverless runtime. One small VM, or one Fly machine with
+   both processes in it. A Dockerfile is host-agnostic and was offered but not
+   written.
+4. **Open the PR (§32 item 7).** Item 6 was the gate and it is closed.
+
 
 ## Not in scope
 
