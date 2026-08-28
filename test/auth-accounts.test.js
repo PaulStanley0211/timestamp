@@ -212,6 +212,43 @@ test('email is normalised in exactly one place, so capitalisation cannot fork an
   assert.equal(findAccountByEmail({ root, email: 'PAUL@example.com ' }).accountId, account.accountId);
 });
 
+test('an account error names the code, never the address a person typed', async (t) => {
+  // WHERE THIS ACTUALLY LEAKS. `scripts/web/server.mjs` logs `err.stack` on
+  // four identity paths -- login, verify, reset and the Google callback -- and
+  // an error whose MESSAGE carries the address puts it in plaintext in the log
+  // of a service that promises to delete a photograph after seven days. The
+  // address is more durable than the face.
+  //
+  // FIXED AT THE SOURCE RATHER THAN AT THE FIVE LOG SITES, because a log site
+  // is added by whoever adds the next route and the careful handling does not
+  // travel with it. An error that never carries the address cannot leak it
+  // through a call site nobody has written yet.
+  //
+  // The address stays available on `detail` for a developer with a debugger,
+  // which is not a channel that gets written to disk.
+  const root = makeRoot(t);
+  const ADDRESS = 'a.very.identifiable.person@example.com';
+  await signUp(root, { email: ADDRESS });
+
+  await assert.rejects(() => signUp(root, { email: ADDRESS }), (err) => {
+    assert.equal(err.code, 'EMAIL_TAKEN', 'the code is what a caller branches on and must survive');
+    assert.ok(!String(err.message).includes(ADDRESS), `the message carries the address: ${err.message}`);
+    assert.ok(!String(err.stack).includes(ADDRESS), 'the stack carries the address');
+    return true;
+  });
+
+  // The same rule for a malformed one: a typo'd address is still somebody's
+  // address, and this one is interpolated straight out of a form field.
+  for (const bad of ['person@bad@example.com', 'someone@example', '   ']) {
+    assert.throws(() => normaliseEmail(bad), (err) => {
+      assert.equal(err.code, 'BAD_EMAIL');
+      assert.ok(!String(err.message).includes(bad.trim()) || bad.trim() === '',
+        `the message echoes what was typed: ${err.message}`);
+      return true;
+    });
+  }
+});
+
 test('a duplicate signup leaves no orphan account directory behind', async (t) => {
   const root = makeRoot(t);
   const first = await signUp(root);

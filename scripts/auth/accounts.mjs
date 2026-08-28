@@ -494,7 +494,11 @@ export function normaliseEmail(email) {
   }
   const cleaned = email.trim().toLowerCase();
   if (cleaned.length === 0 || cleaned.length > MAX_EMAIL_CHARS || !EMAIL_RE.test(cleaned)) {
-    throw new AuthError(`email ${JSON.stringify(email)} is not a usable address`, {
+    // The length and the reason, not the value. What was typed is a form field
+    // from a stranger and is very often a real address with a typo in it --
+    // still theirs, and still not something to write into a log file. Same
+    // ruling as `emailTaken` below.
+    throw new AuthError(`email is not a usable address (${cleaned.length} chars)`, {
       code: 'BAD_EMAIL',
       userMessage: 'That does not look like an email address.',
     });
@@ -1237,8 +1241,14 @@ function emailTaken(address) {
   // in a way login is not, and the only real fix is a verification email, which
   // this build has no way to send. The wording is kept flat so it reads as "use
   // the other form" rather than as a confirmation. Do not make it more helpful.
-  return new AuthError(`an account already exists for ${address}`, {
+  // THE ADDRESS GOES ON `detail`, NEVER IN THE MESSAGE. The web layer logs
+  // `err.stack` on four identity paths, so an address in the message is an
+  // address in plaintext in the log of a service that promises to delete a
+  // photograph after seven days -- and the address outlives the face. `detail`
+  // is reachable from a debugger and is not what gets written to disk.
+  return new AuthError('an account already exists for that address', {
     code: 'EMAIL_TAKEN',
+    detail: { emailHash: emailHash(address) },
     userMessage: 'We could not create an account with that email. If you already have one, sign in instead.',
   });
 }
