@@ -790,6 +790,35 @@ test('the success page thanks without claiming the credits have landed', async (
   }, { billing: configuredBilling() });
 });
 
+test('an over-cap body gets a readable 413, not a connection reset', async () => {
+  // `readRawBody` called `req.destroy()` and only then rejected, so the catch
+  // that writes the refusal was writing onto a socket that no longer existed.
+  // Every over-cap body therefore presented as a transport error rather than
+  // an answer -- on /login, /signup, /api/billing/checkout, the still-select
+  // route and this one.
+  //
+  // The multipart parser two files over goes to documented lengths to avoid
+  // exactly this and says why in its own comment: "a refusal nobody can read
+  // is indistinguishable from a broken server". It uses `pause()`. This path
+  // did not.
+  //
+  // The webhook is the route under test because it takes the largest body and
+  // needs no anti-forgery pair, so the size refusal is the only thing in the
+  // way. Stripe is the caller that would have seen this: a delivery too large
+  // got a reset, which its dashboard reports as an endpoint failure with no
+  // status at all.
+  await withApp(async ({ base }) => {
+    const res = await fetch(`${base}/api/stripe/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=deadbeef' },
+      body: 'x'.repeat(256 * 1024),
+    });
+    assert.equal(res.status, 413, 'the over-cap body did not get a status');
+    const text = await res.text();
+    assert.match(text, /large/i, `the 413 carried no readable reason: ${text.slice(0, 120)}`);
+  }, { billing: configuredBilling() });
+});
+
 test('only the two notices this app wrote can be put on the billing page', async () => {
   // `?checkout=` is a value a stranger types, and the notice it selects is
   // looked up in an object literal. A bare `LOOKUP[key]` reaches the prototype

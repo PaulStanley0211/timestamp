@@ -562,8 +562,21 @@ function readRawBody(req, maxBytes = 8_192) {
     req.on('data', (chunk) => {
       bytes += chunk.length;
       if (bytes > maxBytes) {
-        req.destroy();
-        reject(new HttpError(413, 'Request body is too large.', { code: 'BODY_TOO_LARGE' }));
+        // PAUSE, NOT DESTROY, and it is the same ruling `multipart.mjs` writes
+        // out at length: a destroyed socket cannot carry an HTTP status, so
+        // destroying here meant the catch that writes this refusal was writing
+        // onto a socket that no longer existed. The sender saw a connection
+        // reset instead of "that body is too large", and a refusal nobody can
+        // read is indistinguishable from a broken server -- for Stripe, from
+        // an endpoint that is simply down.
+        //
+        // The socket still has to close, because the rest of the body is never
+        // going to be wanted and keep-alive would sit waiting for it. That is
+        // `closeConnection`'s job, once the response has flushed.
+        req.pause();
+        reject(new HttpError(413, 'Request body is too large.', {
+          code: 'BODY_TOO_LARGE', closeConnection: true,
+        }));
         return;
       }
       chunks.push(chunk);
@@ -3465,11 +3478,30 @@ export function createServer({
    * precisely so that this function can put a status on it; the socket is then
    * torn down once the response has flushed, because the remaining megabytes are
    * never going to be wanted and keep-alive would sit and wait for them.
+   *
+   * THE TEARDOWN IS A FIN AND NOT AN RST, AND THAT DISTINCTION IS THE WHOLE
+   * POINT OF THIS BRANCH. `destroy()` on a socket that still has unread inbound
+   * data sends a reset, and a reset discards the response that was just written
+   * -- so the refusal this function exists to deliver never arrived whenever
+   * the sender was still mid-upload, which is precisely when `closeConnection`
+   * is set. Measured: a body four times the cap got `ECONNRESET` and no status
+   * at all. `end()` sends FIN, the already-flushed response survives, and the
+   * caller can read why it was refused.
+   *
+   * The grace timer is what keeps the original guarantee. FIN asks the peer to
+   * stop; a client that ignores it could otherwise hold the socket open, which
+   * is the very thing the abrupt close was there to prevent. `unref` so a
+   * pending timer never keeps the process alive.
    */
   function fail(req, res, status, title, detail, jobId = null, { closeConnection = false, code = null } = {}) {
     if (res.headersSent) { res.end(); return; }
     if (closeConnection) {
-      res.on('finish', () => { req.socket?.destroy(); });
+      res.on('finish', () => {
+        const socket = req.socket;
+        if (!socket) return;
+        socket.end();
+        setTimeout(() => socket.destroy(), 1000).unref?.();
+      });
     }
     const headers = closeConnection ? { Connection: 'close' } : {};
     if (wantsHtml(req)) {
