@@ -7,9 +7,9 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-28, ~04:00) — THE PAGES ARE ON CREAM. EMAIL STILL CANNOT REACH ANYBODY.
+## START HERE (2026-08-28, evening) — THE DOMAIN IS BOUGHT AND EMAIL REACHES ANYBODY.
 
-**1678 tests / 1676 pass / 0 fail / 2 skipped.** The skips are the
+**1679 tests / 1677 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 
 **THE CREAM WORK IS COMMITTED LOCALLY AND NOT PUSHED.** Section 31 is what it
@@ -27,9 +27,14 @@ cream except the LANDING, which keeps Struck on purpose. This supersedes the
 freeze below and closes the DESIGN.md documentation debt section 30 recorded.
 Section 31 is what shipped and why.
 
-**NOBODY CAN RECEIVE A SIX-DIGIT CODE, AND THAT IS NOT A BUG WE CAN FIX IN
-CODE.** There is currently NO address that can both receive our mail and sign
-up. Section B below. **This is the top of the list and it needs a domain.**
+**~~NOBODY CAN RECEIVE A SIX-DIGIT CODE~~ ANYBODY CAN, AS OF 2026-08-28
+EVENING.** `timestamptapes.com` was bought at Cloudflare Registrar, verified in
+Resend as `send.timestamptapes.com` (DKIM, MX and SPF all green), and the
+Supabase SMTP sender was moved off Resend's shared sandbox address onto it.
+**Proved by a real signup to an address that is NOT the owner's: the six-digit
+code arrived.** Section B below is now a HISTORICAL record of why it was
+blocked, not a live blocker. **This was the top of the list for two days and it
+is closed.**
 Nothing about the cream work changes this; it is still the only real blocker.
 
 **GOOGLE SIGN-IN IS FIXED AND PROVED — a real person signed in through it.** It
@@ -2918,13 +2923,25 @@ verification run on their own clock. Start 1, then do 5 while it propagates.
 
 #### A — Blocked on Paul or on an outside party. The critical path.
 
-1. **BUY A DOMAIN.** ~$10-15/yr. Gates 2, 3 and 4 at once, and it is the only
-   item where doing it early buys time back. **This is the first action of the
-   day, every day, until it exists.**
-2. **Verify that domain in Resend.** Until then no address but Paul's can
-   receive mail, so **nobody can create an account by email**. Google sign-in
-   works, so it is not a total block on signup -- but the six-digit flow cannot
-   be exercised end to end by anybody. Open since 2026-08-26.
+1. ~~**BUY A DOMAIN.**~~ **DONE 2026-08-28 — `timestamptapes.com`**, $10.46/yr
+   at Cloudflare Registrar. Nameservers were delegated instantly
+   (`maisie`/`duke.ns.cloudflare.com`), so the propagation wait this item was
+   ranked first for never happened.
+2. ~~**Verify that domain in Resend.**~~ **DONE 2026-08-28 — AND IT CLOSED THE
+   PROJECT'S OLDEST BLOCKER.** Added as the SUBDOMAIN `send.timestamptapes.com`
+   (eu-west-1), records entered by hand in Cloudflare rather than granting
+   Resend DNS write access; DKIM, MX and SPF all verified.
+   **The sender then had to move.** Custom SMTP and the `{{ .Token }}` template
+   were already done on 2026-08-27 — what was still wrong is that Resend was in
+   SANDBOX, so the sender was the shared `onboarding@resend.dev`, which delivers
+   only to the account owner and lands in Gmail's Spam. Supabase's SMTP sender
+   is now on the verified domain. **Proved end to end: a real signup to an
+   address that is not the owner's received its six digits.**
+   **A trap that returns silently:** Authentication → Sign In / Providers →
+   Email → `Email OTP length` must stay **6**. At 8 the form truncates the code
+   and Supabase answers an invalid token with `otp_expired`, the same code it
+   uses for a genuinely expired one — so the page blames the clock. Nothing in
+   the app can detect it.
 3. **Deploy.** No host chosen and **NO DEPLOY CONFIG OF ANY KIND EXISTS** --
    checked: no Dockerfile, no fly.toml, no vercel.json, no Procfile.
    `TIMESTAMP_PUBLIC_URL` is still commented out in `.env.example`.
