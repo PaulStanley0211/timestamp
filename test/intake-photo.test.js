@@ -179,9 +179,19 @@ test('no IntakeError leaks a filesystem path to the user', { skip }, async () =>
 
 test('the fixture really does carry EXIF and GPS, or the strip test proves nothing', { skip }, async () => {
   const meta = await metadataOf(fixture('exif-orientation.jpg'));
-  assert.ok(meta.sideData.includes('EXIF metadata'), 'fixture lost its EXIF block');
-  assert.ok(meta.sideData.includes('3x3 displaymatrix'), 'fixture lost its orientation');
-  assert.ok(Object.keys(meta.frameTags).some((k) => k.startsWith('GPSInfo/')), 'fixture lost its GPS tags');
+  // What ffprobe CALLS this metadata differs by build, so naming one build's
+  // spelling tests the build and not the file. Measured on both CI images:
+  // ffprobe 8.1 (windows-latest) reports side_data ['3x3 displaymatrix',
+  // 'EXIF metadata'] and prefixes the GPS frame tags 'GPSInfo/'; ffprobe 6.1
+  // (ubuntu-latest) reports ['3x3 displaymatrix'] and names them flat, as
+  // 'GPSLatitudeRef'. Assert the property the strip test mirrors instead --
+  // that there IS side data and there ARE GPS-bearing tags here to remove --
+  // and the EXIF marker in the bytes, which is the ground truth ffprobe is
+  // only a witness to. Orientation is deliberately not asserted here: it
+  // lives in side_data on 8.1 but in frame tags on 6.1, and the autorotate
+  // test below already proves it behaviourally (640x480, rotated) on both.
+  assert.ok(meta.sideData.length > 0, 'fixture lost its frame side data');
+  assert.ok(Object.keys(meta.frameTags).some((k) => k.includes('GPS')), 'fixture lost its GPS tags');
   assert.match(fs.readFileSync(fixture('exif-orientation.jpg')).toString('latin1'), /Exif\0\0/);
 });
 

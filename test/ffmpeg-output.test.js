@@ -176,8 +176,17 @@ test('a broken filtergraph fails loudly with the ffmpeg error attached', { skip 
       // unknown filter as a filterchain parse error rather than "No such
       // filter", so assert on the offending name rather than on the wording.
       assert.match(err.message, /nosuchfilter/);
-      // And the exit code must read as the -22 it is, not its unsigned wrap.
-      assert.equal(err.code, -22);
+      // The exit code is the OS's to spell, not ffmpeg's: the same EINVAL comes
+      // back as -22 on Windows (through the unsigned-32 wrap normalizeExitCode
+      // undoes) and as 234 on POSIX, which truncates it to 8 bits. Measured:
+      // asserting -22 was one of the two Linux CI reds. Assert the property --
+      // ffmpeg RAN and FAILED -- and leave the wrap itself to ffmpeg-run.test.js,
+      // which asserts normalizeExitCode(4294967274) === -22 on a literal and so
+      // tests it identically on both platforms. Integer, not merely non-zero:
+      // a code of null is how run() reports a process that never started, and
+      // that must not read as a filtergraph rejection.
+      assert.ok(Number.isInteger(err.code) && err.code !== 0,
+        `expected a non-zero integer exit code from a failed ffmpeg, got ${err.code}`);
       assert.ok(err.stderr.length > 0, 'the full stderr is attached for diagnosis');
       return true;
     },
