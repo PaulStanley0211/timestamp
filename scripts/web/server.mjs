@@ -96,6 +96,12 @@ import {
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
 import { createBilling } from '../billing/billing.mjs';
+// A LEAF IMPORT, AND THAT IS THE WHOLE POINT. `contract.mjs` pulls in node
+// builtins, `seed.mjs` and `errors.mjs` -- no provider module. Importing
+// `providers/index.mjs` here instead would statically load `fal.mjs` into the
+// web process, which is exactly what the money guards exist to prevent, and
+// which `server-cli.mjs` already takes a lazy import to avoid.
+import { isPaidProviderId } from '../providers/contract.mjs';
 
 /** Anything a handler throws that has a status. Everything else becomes a 500
  *  with a generic message, because a filesystem error message contains an
@@ -1434,9 +1440,29 @@ export function createServer({
    * here.
    */
   function aspectRows() {
+    // THE CONFIG SAYS WHAT THE PRODUCT OFFERS; THE RENDERER DECIDES WHAT CAN
+    // ACTUALLY BE MADE, AND THE PAGE HAS TO AGREE WITH THE SECOND.
+    //
+    // `resolveRaster` refuses any non-default shape on a paid provider, because
+    // `fal.mjs` sends a hardcoded `aspect_ratio` and a 9:16 tape built around a
+    // 4:3 source delivers something other than what was ordered -- with every
+    // check downstream agreeing, since they all read the same resolved config.
+    // A page that offers those shapes anyway is selling a compose failure that
+    // happens AFTER the credits are debited.
+    //
+    // Asked by NAME, never by loading a provider: `providers/index.mjs`
+    // statically imports `fal.mjs`, and keeping that out of the web process is
+    // what three of the four money guards are for. `PAID_PROVIDER_IDS` is a
+    // leaf constant and a contract test keeps it honest.
+    //
+    // Lift this the day the paid path gains the aspect dimension -- and price
+    // it first: holding the short edge, a 16:9 or 9:16 source is 4/3 the pixels
+    // of 4:3 at the same tier, and fal bills tokens as pixels x seconds.
+    const paidRenderer = isPaidProviderId(provider);
     return aspectIds(cfg).map((id) => ({
       id,
-      available: id === cfg.defaultAspect || cfg.aspects?.[id]?.available === true,
+      available: id === cfg.defaultAspect
+        || (!paidRenderer && cfg.aspects?.[id]?.available === true),
     }));
   }
 

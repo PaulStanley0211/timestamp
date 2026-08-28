@@ -100,6 +100,31 @@ export const PROGRESS_PHASES = Object.freeze(['submit', 'queued', 'running', 'do
  *  in the ledger. */
 export const CURRENCY = 'USD';
 
+/**
+ * Which provider ids spend money, as a plain list.
+ *
+ * WHY THIS IS DUPLICATED FROM THE PROVIDERS THEMSELVES, WHICH IS NORMALLY THE
+ * WRONG ANSWER. The web layer needs it -- it renders a menu of frame shapes
+ * and only some of them are renderable on a paid path, so a page that does not
+ * know is a page that offers a choice the renderer will refuse. But it must
+ * not ASK a provider: `providers/index.mjs` statically imports `fal.mjs`, and
+ * keeping that module out of the web process is what three of the four money
+ * guards are for. `server-cli.mjs` already goes to the trouble of a lazy
+ * import for exactly this reason.
+ *
+ * This file is a leaf -- node builtins, `seed.mjs` and `errors.mjs` -- so
+ * importing it costs nothing and pulls in no provider.
+ *
+ * THE DRIFT IS CLOSED BY A TEST, not by hoping. `provider-contract.test.js`
+ * builds every real provider and compares this list against its own `paid`
+ * flag, so a provider added later that nobody lists here goes red rather than
+ * being quietly treated as free.
+ */
+export const PAID_PROVIDER_IDS = Object.freeze(['fal']);
+
+/** Whether a provider id spends money, by name alone. */
+export const isPaidProviderId = (id) => PAID_PROVIDER_IDS.includes(String(id));
+
 const bad = (code, message, detail = null) => new TerminalError(message, { code, detail, provider: 'contract' });
 
 const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);

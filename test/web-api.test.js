@@ -244,7 +244,7 @@ function signIn(auth, { email, password }) {
   return `${SESSION_COOKIE}=${auth.signCookie(sessionId, auth.sessionSecret())}`;
 }
 
-async function withServer(run, { queue = fakeQueue(), credits = 5_000 } = {}) {
+async function withServer(run, { queue = fakeQueue(), credits = 5_000, provider = 'fixture' } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
   const auth = fakeAuth();
   auth.createAccount({ email: 'a@example.com', password: 'correct horse battery', plan: 'archive', credits });
@@ -256,6 +256,7 @@ async function withServer(run, { queue = fakeQueue(), credits = 5_000 } = {}) {
     queue,
     port: 0,
     auth,
+    provider,
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
   });
   const port = await app.listen();
@@ -1649,6 +1650,36 @@ test('GET /api/health reports ffmpeg, the queue and the worker, without a sessio
     assert.deepEqual(Object.keys(body.queue).sort(), ['claimed', 'done', 'failed', 'pending']);
     assert.ok('lastSeen' in body.worker);
   });
+});
+
+test('the frame-shape menu never offers a shape the configured renderer will refuse', async () => {
+  // THE PAGE AND THE PIPELINE DISAGREED, AND THE PAGE WAS THE OPTIMISTIC ONE.
+  // `config/render.json` marks 16:9 and 9:16 available, so the form rendered
+  // all three as selectable -- while `resolveRaster` refuses any non-default
+  // shape on a PAID provider, because fal is sent a hardcoded aspect_ratio and
+  // a 9:16 tape built around a 4:3 source is a render that silently delivers
+  // something other than what was ordered.
+  //
+  // Invisible today only because the web app defaults to the fixture, which
+  // renders all three. The moment a real provider is configured -- which is
+  // what deploying means -- two thirds of the menu becomes a guaranteed
+  // failure at compose, after the credits have already been debited.
+  //
+  // The radio inputs are what is asserted rather than the cards, because the
+  // radio is what makes a shape submittable. A shape with no input cannot be
+  // ordered even by a hand-written POST.
+  const offered = (html) => [...html.matchAll(/name="aspect"[^>]*value="([^"]+)"/g)].map((m) => m[1]).sort();
+  const page = async (base, cookie) => (await fetch(base, { headers: { cookie, accept: 'text/html' } })).text();
+
+  await withServer(async ({ base, cookieA }) => {
+    assert.deepEqual(offered(await page(base, cookieA)), ['16:9', '4:3', '9:16'],
+      'the free renderer does all three, so the menu should still offer all three');
+  }, { provider: 'fixture' });
+
+  await withServer(async ({ base, cookieA }) => {
+    assert.deepEqual(offered(await page(base, cookieA)), ['4:3'],
+      'the page offers a frame shape that this renderer refuses at compose');
+  }, { provider: 'fal' });
 });
 
 test('a burst on the public health endpoint reads the queue once, and reads it again later', async () => {

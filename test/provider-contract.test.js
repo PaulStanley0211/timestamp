@@ -53,6 +53,7 @@ import {
   PROGRESS_PHASES,
   FIRST_INDEX,
   CURRENCY,
+  PAID_PROVIDER_IDS,
   assertProvider,
   assertStillResult,
   assertVideoResult,
@@ -544,6 +545,75 @@ test('the registry refuses an unknown provider rather than falling back', () => 
     return true;
   });
   assert.deepEqual(PROVIDER_IDS, ['fixture', 'fal']);
+});
+
+test('the paid-provider list agrees with what the providers themselves say', () => {
+  // WHY THE LIST EXISTS AT ALL. The web layer must know whether the configured
+  // provider spends money -- it offers a menu of frame shapes and only some of
+  // them are renderable on a paid path -- and it deliberately CANNOT ask a
+  // provider, because `providers/index.mjs` statically imports `fal.mjs` and
+  // loading that into the web process is the thing four separate money guards
+  // exist to prevent. So the fact is duplicated into a leaf module.
+  //
+  // A DUPLICATED FACT DRIFTS, so this is the test that stops it. It builds
+  // every real provider and compares. A provider added later that nobody adds
+  // to the list turns this red rather than quietly being treated as free.
+  for (const id of PROVIDER_IDS) {
+    const provider = createProvider(id, id === 'fixture' ? { latencyMs: 0 } : {});
+    assert.equal(
+      PAID_PROVIDER_IDS.includes(id), provider.paid,
+      `PAID_PROVIDER_IDS ${PAID_PROVIDER_IDS.includes(id) ? 'claims' : 'denies'} ${id} spends money, and the provider says ${provider.paid}`,
+    );
+  }
+  assert.deepEqual([...PAID_PROVIDER_IDS].sort(), ['fal']);
+});
+
+test('no paid provider is reachable from the web layer by a static import', () => {
+  // A FIFTH MONEY GUARD, AND IT IS STRUCTURAL RATHER THAN A CONVENTION.
+  //
+  // `npm test` cannot spend money four independent ways, and one of them is
+  // that `fal.mjs` has no default `fetchImpl`. That guard is only as good as
+  // the module never being loaded somewhere it can be handed a real transport.
+  // `server-cli.mjs` goes to the trouble of a LAZY import of
+  // `providers/index.mjs` for exactly this reason -- and `index.mjs` statically
+  // imports `fal.mjs`, so any static import of it from the web layer would
+  // quietly undo that care.
+  //
+  // The web layer needs one fact from the provider layer -- whether a provider
+  // spends money -- and takes it from `contract.mjs`, a leaf. This walks the
+  // real static import graph and proves that is still all it takes.
+  const walk = (entry) => {
+    const seen = new Set();
+    const stack = [entry];
+    while (stack.length > 0) {
+      const file = path.normalize(stack.pop());
+      if (seen.has(file) || !fs.existsSync(file)) continue;
+      seen.add(file);
+      const src = fs.readFileSync(file, 'utf8');
+      // Static `import ... from './x.mjs'` only. A dynamic import() is the
+      // sanctioned escape hatch and is deliberately not followed -- that is
+      // the whole difference this test is here to preserve.
+      for (const m of src.matchAll(/^\s*import\s[^'"]*['"](\.[^'"]+)['"]/gm)) {
+        stack.push(path.join(path.dirname(file), m[1]));
+      }
+    }
+    return seen;
+  };
+
+  const graph = walk(path.join(REPO_ROOT, 'scripts', 'web', 'server.mjs'));
+  const loaded = [...graph].filter((f) => f.includes(`${path.sep}providers${path.sep}`));
+  const paid = loaded.filter((f) => /fal\.mjs$/.test(f));
+
+  assert.deepEqual(paid, [],
+    `the web layer statically imports a paid provider: ${paid.join(', ')}`);
+  // Not asserting the graph is EMPTY of provider modules -- it legitimately
+  // reaches contract.mjs for the paid-provider list. Naming what is allowed
+  // means adding another one is a decision rather than an accident.
+  assert.deepEqual(
+    loaded.map((f) => path.basename(f)).sort(),
+    ['contract.mjs', 'errors.mjs'],
+    'the web layer reaches a provider module it did not before -- check it pulls in no transport',
+  );
 });
 
 test('requireFetchImpl is a TypeError, not a ProviderError', () => {
