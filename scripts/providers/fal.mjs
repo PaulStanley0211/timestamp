@@ -725,18 +725,70 @@ export function createFalProvider(opts = {}) {
 
         let res;
         try {
-          res = await fetchImpl(checked, {
-            method,
-            headers,
-            ...(body === null ? {} : { body: JSON.stringify(body) }),
-            ...(ctx?.signal ? { signal: ctx.signal } : {}),
-          });
+          // THE ALLOW-LIST GATES EVERY HOP, NOT JUST THE FIRST.
+          //
+          // Node's global fetch defaults to `redirect: 'follow'` and chases up
+          // to twenty hops, so `assertAllowedHost` above gated only the url we
+          // dial: an allowlisted host answering
+          // `302 Location: http://169.254.169.254/…` was followed without the
+          // list being consulted again, and that address is the instance
+          // metadata service on every cloud this could deploy to. The fetch
+          // spec strips Authorization on a cross-origin redirect, so the
+          // credential was never what was at risk -- the request was.
+          //
+          // `manual` hands the 3xx back instead, so the decision is made here.
+          // Three hops is a cap and not a guess at fal's behaviour: the CDN
+          // uses one, and a chain longer than three is a redirector rather
+          // than a download.
+          let target = checked;
+          for (let hop = 0; ; hop += 1) {
+            res = await fetchImpl(target, {
+              method,
+              headers,
+              redirect: 'manual',
+              ...(body === null ? {} : { body: JSON.stringify(body) }),
+              ...(ctx?.signal ? { signal: ctx.signal } : {}),
+            });
+
+            const status = Number(res?.status ?? 0);
+            const location = status >= 300 && status < 400
+              ? (res?.headers?.get?.('location') ?? null)
+              : null;
+            // Not a redirect, or a redirect with nowhere to go: let the
+            // existing status handling below have it.
+            if (!location) break;
+
+            if (hop >= 3) {
+              throw fail('too_many_redirects',
+                `${FAL_ID}: ${method} ${checked} redirected more than 3 times`, { url: checked });
+            }
+
+            let next;
+            try {
+              next = new URL(String(location), target).href;
+            } catch {
+              throw fail('bad_url',
+                `${FAL_ID}: ${method} ${checked} redirected to something that is not a URL: ${JSON.stringify(location)}`,
+                { url: checked, location });
+            }
+            // Same two questions the first request had to answer.
+            target = assertAllowedHost(next, { what: `${method} redirect target` });
+            if (authorize && new URL(target).hostname.toLowerCase() !== queueHost) {
+              throw fail('credential_scope',
+                `${FAL_ID}: refusing to follow a redirect to ${new URL(target).hostname} on an authorized ${method} -- the credential goes to ${queueHost} and nowhere else`,
+                { url: target, queueHost });
+            }
+          }
         } catch (err) {
           // A transport failure arrives as a bare TypeError with the real
           // cause buried, and `isRetriable` deliberately does not sniff for
           // that -- providers wrap their own. An aborted fetch is a decision
           // and must not be retried.
           throwIfAborted(ctx?.signal);
+          // A refusal raised by the redirect loop above is a DECISION, not a
+          // transport failure. Without this it would be rewrapped as retriable
+          // and the same poisoned Location would be dialled four times.
+          if (err instanceof TerminalError) throw err;
           throw new RetriableError(`${FAL_ID}: ${method} failed before a response: ${err?.message ?? err}`, {
             provider: FAL_ID, code: 'transport', detail: { url: checked }, cause: err,
           });

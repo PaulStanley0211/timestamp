@@ -595,6 +595,116 @@ test('[fal] a status url steered off the queue host is refused and never sees th
   }
 });
 
+/**
+ * The allow-list gates the URL we DIAL. Until this test it did not gate where
+ * that URL sent us next.
+ *
+ * `assertAllowedHost` runs once, before the request. Node's global fetch
+ * defaults to `redirect: 'follow'` and will chase up to twenty hops, so an
+ * allowlisted host answering `302 Location: http://169.254.169.254/…` was
+ * followed without the list being consulted again. That address is the cloud
+ * instance metadata service on every major provider -- which this project is
+ * about to have one of -- and it serves instance credentials to anything that
+ * can make it a request.
+ *
+ * WHY THE FAKE HONOURS `init.redirect` INSTEAD OF JUST ASSERTING ON IT. A fake
+ * transport does not follow redirects by itself, so a test that hands one back
+ * proves nothing about the real bug: the defect is in what this code ASKS the
+ * platform to do. So the fake behaves as the platform does -- it follows when
+ * asked to follow, and hands the 3xx back when asked not to -- and the
+ * assertion is the outcome that matters: no request ever reaches a host that
+ * is not on the list. That fails before the fix for the right reason, because
+ * the fake really does make the metadata request.
+ *
+ * The Authorization header is stripped by the fetch spec on a cross-origin
+ * redirect, so `FAL_KEY` was never the thing at risk here. The request itself
+ * is.
+ */
+test('[fal] a redirect off the allow-list is refused, not followed', async () => {
+  const METADATA = 'http://169.254.169.254/latest/meta-data/iam/security-credentials/';
+  const base = makeFalTransport();
+  const seen = [];
+
+  const platformish = async (url, init = {}) => {
+    seen.push(String(url));
+    // The media CDN answers with a redirect that leaves the allow-list.
+    if (String(url).startsWith('https://v3.fal.media/')) {
+      const hop = {
+        ok: false, status: 302, redirected: false,
+        headers: { get: (h) => (h.toLowerCase() === 'location' ? METADATA : null) },
+        async text() { return ''; },
+        async arrayBuffer() { return new ArrayBuffer(0); },
+      };
+      // This is what Node does when `redirect` is unset or 'follow'.
+      if ((init.redirect ?? 'follow') === 'follow') return platformish(METADATA, { ...init, redirect: 'follow' });
+      return hop;
+    }
+    if (String(url) === METADATA) {
+      return {
+        ok: true, status: 200,
+        headers: { get: () => null },
+        async text() { return 'AccessKeyId=AKIA-STOLEN'; },
+        async arrayBuffer() { return new TextEncoder().encode('AccessKeyId=AKIA-STOLEN').buffer; },
+      };
+    }
+    return base.fetchImpl(url, init);
+  };
+
+  const { provider, ctx } = falUnderTest({ transport: { ...base, fetchImpl: platformish } });
+
+  await assert.rejects(
+    () => provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('redirect') })),
+    (err) => {
+      assert.ok(err, 'the redirect was followed and the render succeeded');
+      return true;
+    },
+  );
+
+  const offList = seen.filter((u) => {
+    try { return !/(^|\.)(fal\.run|fal\.media|storage\.googleapis\.com)$/.test(new URL(u).hostname); }
+    catch { return true; }
+  });
+  assert.deepEqual(offList, [],
+    `a redirect took a request to ${offList.join(', ')} -- the allow-list was consulted once and then bypassed`);
+});
+
+test('[fal] a redirect that stays on the allow-list is still followed', async () => {
+  // The refusal above must not become a refusal to redirect at all: fal's CDN
+  // legitimately 302s between its own hosts, and a fix that broke downloads
+  // would be caught here rather than on the first paid render.
+  const base = makeFalTransport();
+  const FINAL = 'https://storage.googleapis.com/fal-bucket/final.mp4';
+  let servedFinal = false;
+
+  const platformish = async (url, init = {}) => {
+    if (String(url).startsWith('https://v3.fal.media/')) {
+      const hop = {
+        ok: false, status: 302, redirected: false,
+        headers: { get: (h) => (h.toLowerCase() === 'location' ? FINAL : null) },
+        async text() { return ''; },
+        async arrayBuffer() { return new ArrayBuffer(0); },
+      };
+      if ((init.redirect ?? 'follow') === 'follow') return platformish(FINAL, { ...init, redirect: 'follow' });
+      return hop;
+    }
+    if (String(url) === FINAL) {
+      servedFinal = true;
+      const buf = Buffer.from('fake media bytes, and nobody probed them\n');
+      return {
+        ok: true, status: 200,
+        headers: { get: () => null },
+        async text() { return buf.toString('utf8'); },
+        async arrayBuffer() { return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength); },
+      };
+    }
+    return base.fetchImpl(url, init);
+  };
+
+  const { provider, ctx } = falUnderTest({ transport: { ...base, fetchImpl: platformish } });
+  await provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('redirect-ok') }));
+  assert.equal(servedFinal, true, 'a legitimate redirect within the allow-list was not followed');
+});
+
 test('[fal] an idempotency key is sent with the submit', async () => {
   // fal does not document the header. Sending it costs nothing and is the
   // honest attempt; the guarantee that actually holds is the intent record
