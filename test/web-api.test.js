@@ -40,7 +40,11 @@ const BOUNDARY = 'testboundary9f2a';
 /** Records what the web layer asks of a queue, and lets a test pretend a worker
  *  is holding a lease. */
 function fakeQueue() {
-  const calls = { enqueued: [], peeked: 0 };
+  // `statted` counts what the real `stats()` would have cost: one readFileSync
+  // per pending entry plus three readdirSync. It is counted separately from
+  // `peeked` because they are two different reads of the same directory and a
+  // cache has to stop both.
+  const calls = { enqueued: [], peeked: 0, statted: 0 };
   let claimed = [];
   return {
     calls,
@@ -54,6 +58,7 @@ function fakeQueue() {
       return state === 'claimed' ? claimed : calls.enqueued.map((jobId) => ({ jobId }));
     },
     stats() {
+      calls.statted += 1;
       return { pending: calls.enqueued.length, claimed: claimed.length, done: 0, failed: 0 };
     },
   };
@@ -1644,6 +1649,54 @@ test('GET /api/health reports ffmpeg, the queue and the worker, without a sessio
     assert.deepEqual(Object.keys(body.queue).sort(), ['claimed', 'done', 'failed', 'pending']);
     assert.ok('lastSeen' in body.worker);
   });
+});
+
+test('a burst on the public health endpoint reads the queue once, and reads it again later', async () => {
+  // `/api/health` is unauthenticated and on the public allow-list, and both
+  // queue reads are SYNCHRONOUS on the event loop: `stats()` does one
+  // readFileSync per pending entry plus three readdirSync, and `peek` walks
+  // the claimed directory. `out/queue/done` and `failed` accumulate one file
+  // per job forever, so the cost per hit grows monotonically for the life of
+  // the deployment and never comes back down.
+  //
+  // `ffmpegHealth` immediately above it is already cached for exactly this
+  // reason, and says so in its own comment -- a health endpoint that shells
+  // out on every hit is a denial-of-service primitive somebody else operates.
+  // The queue reads sitting beside it got no such cache.
+  //
+  // BOTH HALVES ARE ASSERTED, and the second is what stops the fix being
+  // wrong in the other direction: a value cached forever is not a health
+  // endpoint, it is a fossil. So the clock is moved past the window and the
+  // read must happen again.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const queue = fakeQueue();
+  let now = new Date('2026-08-28T12:00:00Z');
+  const app = createServer({
+    root, cfg: CFG, queue, port: 0, auth: fakeAuth(), nowImpl: () => now,
+  });
+  const port = await app.listen();
+  try {
+    const hit = () => fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.json());
+
+    const first = await hit();
+    assert.deepEqual(Object.keys(first.queue).sort(), ['claimed', 'done', 'failed', 'pending'],
+      'the cached payload must still be the real shape');
+
+    for (let i = 0; i < 9; i += 1) await hit();
+    assert.equal(queue.calls.statted, 1,
+      `ten hits caused ${queue.calls.statted} queue.stats() reads; one client can drive this endlessly`);
+    assert.equal(queue.calls.peeked, 1,
+      `ten hits caused ${queue.calls.peeked} queue.peek() reads`);
+
+    // Past the window: it is a cache, not a freeze.
+    now = new Date(now.getTime() + 31_000);
+    await hit();
+    assert.equal(queue.calls.statted, 2, 'the queue block never refreshes, so health is permanently stale');
+    assert.equal(queue.calls.peeked, 2, 'the claimed block never refreshes');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('health says so honestly when ffmpeg is missing', async () => {

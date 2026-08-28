@@ -1524,6 +1524,50 @@ export function createServer({
     return value;
   }
 
+  /** The queue half of the same endpoint, on the same 30 s timer and for the
+   *  same reason.
+   *
+   *  BOTH READS ARE SYNCHRONOUS AND BOTH GROW WITHOUT BOUND. `stats()` does
+   *  one `readFileSync` per pending entry plus three `readdirSync`, and
+   *  `out/queue/done` and `failed` accumulate one file per job for the life of
+   *  the deployment -- so the per-hit cost of an unauthenticated endpoint
+   *  rises monotonically and never comes back down. Nothing else in the
+   *  process is scheduled while they run.
+   *
+   *  30 SECONDS IS NOT A COMPROMISE HERE. What this endpoint answers is "is
+   *  there a worker and is it keeping up", and neither question changes
+   *  meaningfully inside half a minute; a render takes minutes. It is a cache
+   *  and not a freeze -- past the window the next caller pays for a fresh read
+   *  -- which is asserted in both directions rather than left to the comment.
+   *
+   *  It takes `nowImpl` rather than `Date.now` so a test can move the clock
+   *  instead of sleeping through the window. */
+  let queueCache = { at: -Infinity, value: null };
+  function queueHealth() {
+    const now = nowImpl().getTime();
+    if (queueCache.value && now - queueCache.at < 30_000) return queueCache.value;
+
+    let stats = null;
+    try { stats = queue.stats(); } catch { stats = null; }
+
+    // `worker.lastSeen` is the most recent live claim, which is the only
+    // evidence of a worker this process has: there is no heartbeat file in
+    // docs/interfaces.md 6 and inventing one here would be a second contract.
+    // null therefore means "no work is in flight", NOT "no worker exists" --
+    // an idle worker next to an empty queue is indistinguishable from none,
+    // and saying so is more useful than a confident wrong answer.
+    let lastSeen = null;
+    try {
+      for (const row of queue.peek({ state: 'claimed' })) {
+        if (row.claimedAt && (lastSeen === null || row.claimedAt > lastSeen)) lastSeen = row.claimedAt;
+      }
+    } catch { /* the queue directory can be mid-write; not a health failure */ }
+
+    const value = { stats, lastSeen };
+    queueCache = { at: now, value };
+    return value;
+  }
+
   // -------------------------------------------------------------------------
   // handlers
   // -------------------------------------------------------------------------
@@ -2930,21 +2974,7 @@ export function createServer({
 
     async health(req, res) {
       const ffmpeg = await ffmpegHealth();
-      let stats = null;
-      try { stats = queue.stats(); } catch { stats = null; }
-
-      // `worker.lastSeen` is the most recent live claim, which is the only
-      // evidence of a worker this process has: there is no heartbeat file in
-      // docs/interfaces.md 6 and inventing one here would be a second contract.
-      // null therefore means "no work is in flight", NOT "no worker exists" --
-      // an idle worker next to an empty queue is indistinguishable from none,
-      // and saying so is more useful than a confident wrong answer.
-      let lastSeen = null;
-      try {
-        for (const row of queue.peek({ state: 'claimed' })) {
-          if (row.claimedAt && (lastSeen === null || row.claimedAt > lastSeen)) lastSeen = row.claimedAt;
-        }
-      } catch { /* the queue directory can be mid-write; not a health failure */ }
+      const { stats, lastSeen } = queueHealth();
 
       sendJson(req, res, 200, {
         ok: ffmpeg.available && stats !== null,
