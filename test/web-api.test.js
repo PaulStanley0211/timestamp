@@ -1044,6 +1044,61 @@ test('no resolution posted means the default one, and a deferred one is refused'
 });
 
 /**
+ * A PART NAMED AFTER AN Object.prototype MEMBER WRITES NO FILE.
+ *
+ * `UPLOAD_NAMES` is frozen, which seals it without taking Object.prototype off
+ * its chain -- so `UPLOAD_NAMES[part.name]` was satisfied by inherited members
+ * and the `if (!rel)` guard passed on a function. `part.name` is attacker-chosen
+ * text straight out of Content-Disposition.
+ *
+ * Measured before the fix: a part named `constructor` streamed its bytes to a
+ * file called `function Object() { [native code] }` inside the job directory.
+ * `__proto__`, `toString`, `valueOf` and `hasOwnProperty` all worked too.
+ *
+ * Bounded, and worth saying so: no reachable prototype value stringifies to
+ * anything containing `/`, `\` or `..`, so this was never traversal and could
+ * not leave the job directory. What it leaves is a file the retention purge
+ * does not know by name -- and it is the SECOND appearance of this pattern,
+ * after the billing page, which is the reason to close the class rather than
+ * the instance.
+ */
+test('an upload part named after a prototype member is discarded, not written', async () => {
+  await withServer(async ({ base, root, cookieA }) => {
+    const stray = ['constructor', '__proto__', 'toString', 'valueOf', 'hasOwnProperty'];
+    const res = await post(base, '/api/jobs', multipart([
+      ...goodParts(),
+      ...stray.map((name) => ({ name, filename: 'x.png', type: 'image/png', body: fakePhoto() })),
+    ]), cookieA);
+    assert.equal(res.status, 201, 'the ordinary parts are still accepted');
+
+    const { jobId } = await res.json();
+    const jobDir = path.join(root, 'out', 'jobs', jobId);
+
+    // LOOK IN THE JOB DIRECTORY ROOT, NOT IN input/. The legitimate values in
+    // UPLOAD_NAMES already carry the `input/` prefix -- `input/upload-photo` --
+    // and the sink joins them onto the job directory. A stringified prototype
+    // member has no prefix, so it lands one level UP, beside the manifest. The
+    // first draft of this test looked in input/, found nothing, and passed
+    // against a deliberately sabotaged guard.
+    const inInput = fs.existsSync(path.join(jobDir, 'input'))
+      ? fs.readdirSync(path.join(jobDir, 'input')) : [];
+    assert.ok(inInput.some((f) => /upload-photo/.test(f)),
+      `the legitimate photo was not written, so this test proves nothing. input/ held: ${JSON.stringify(inInput)}`);
+
+    const atRoot = fs.readdirSync(jobDir);
+    for (const name of atRoot) {
+      assert.ok(!/native code|object Object/.test(name),
+        `a prototype member became a filename: ${JSON.stringify(name)}`);
+    }
+    // Only the directories and the manifest the pipeline itself creates.
+    assert.deepEqual(
+      atRoot.filter((f) => !/^(manifest\.json|input|intent|stills|segments|review|logs)$/.test(f)),
+      [],
+      `unexpected entries in the job directory: ${JSON.stringify(atRoot)}`);
+  });
+});
+
+/**
  * THE NUMBER ON THE BUTTON MUST BE THE NUMBER ON THE LEDGER.
  *
  * The cost line was keyed on the QUALITY radio alone and its number came from

@@ -3084,7 +3084,21 @@ export function createServer({
           boundary,
           limits: { maxBytes: limits.maxBytes },
           sinkFor: (part) => {
-            const rel = UPLOAD_NAMES[part.name];
+            // `Object.hasOwn` IS THE LOAD-BEARING PART, exactly as it is on the
+            // billing page. `part.name` is attacker-chosen text out of
+            // Content-Disposition, and `Object.freeze` seals the object without
+            // removing Object.prototype from its chain -- so a part named
+            // `constructor`, `__proto__`, `toString`, `valueOf` or
+            // `hasOwnProperty` returned a truthy inherited member, sailed past
+            // the `if (!rel)` guard, and got stringified into a destination
+            // path. Measured: a part named `constructor` wrote a file called
+            // `function Object() { [native code] }` into the job directory.
+            //
+            // Bounded -- no reachable prototype value stringifies to anything
+            // containing a separator, so it was never traversal -- but it is a
+            // file the retention purge does not know by name, and this is the
+            // second place the same pattern has appeared.
+            const rel = Object.hasOwn(UPLOAD_NAMES, part.name) ? UPLOAD_NAMES[part.name] : null;
             if (!rel) return discard;
             // Hashed while it streams. Re-reading a 12 MB file to hash it would
             // put back the whole-file buffer this parser exists to avoid.
