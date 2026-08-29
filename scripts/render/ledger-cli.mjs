@@ -69,6 +69,28 @@ export function parseArgs(argv) {
 const usd = (n) => Number(n.toFixed(4));
 
 /**
+ * A per-unit RATE, which is not money and must not be rounded like money.
+ *
+ * `usd()` is right for a total and for a per-second or per-image rate. It is
+ * wrong for a per-TOKEN one by three orders of magnitude: the configured rate is
+ * $0.000014 per token, and `Number((0.000014039).toFixed(4))` is 0.
+ *
+ * That zero is not cosmetic. The report would then say "$0/token against
+ * $0.000014/token configured", flag it as a 100% divergence, and print -- under
+ * its own heading EDIT THESE BY HAND -- the instruction to set the model's usd
+ * to 0. `assertPricingTable` permits zero, because zero is the exempt "this is
+ * genuinely free" fact, so an operator who followed the report would make every
+ * future --dry-run, estimateJob and frozen manifest quote $0.00 for a render
+ * that costs between $2.08 and $6.26.
+ *
+ * SIGNIFICANT FIGURES, not decimal places, so the same function is correct for
+ * $0.3027 per second and $0.000014 per token without either knowing about the
+ * other. Six is enough to reproduce the measured invoice and few enough that
+ * float noise does not reach the printed line.
+ */
+const rate = (n) => (Number.isFinite(n) && n !== 0 ? Number(n.toPrecision(6)) : n);
+
+/**
  * The estimate lines a job froze at compose, keyed by step.
  *
  * The frozen block is where a step's MODEL and UNIT QUANTITY live, and it is the
@@ -235,7 +257,7 @@ export function rollupByModel(rows, { pricing }) {
     };
     const denominatorIsHonest = g.meteredLines.length > 0 && g.meteredLines.every(reconcilable);
     const impliedUsd = denominatorIsHonest && g.meteredCalls > 0 && g.quantity > 0
-      ? usd(g.actual / g.quantity)
+      ? rate(g.actual / g.quantity)
       : null;
     // WHICH REFUSAL IT IS, because "3/3 call(s) metered - nothing metered" is a
     // sentence that argues with itself. No invoice at all is a waiting game;

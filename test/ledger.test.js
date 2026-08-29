@@ -235,16 +235,74 @@ test('the rollup groups by model and implies the per-unit rate to write down', (
   assert.equal(video.meteredCalls, 2);
   assert.equal(video.quantity, 30, 'two 15-second calls priced by the second');
   assert.equal(video.actual, 3.02);
-  // THE NUMBER THAT GOES IN THE CONFIG. $3.02 over 30 seconds is $0.1007/s
+  // THE NUMBER THAT GOES IN THE CONFIG. $3.02 over 30 seconds is $0.100667/s
   // against the $0.3027 guess -- and the guess is what every estimate and the
   // whole credit table are built on.
-  assert.equal(video.impliedUsd, 0.1007);
+  //
+  // SIX SIGNIFICANT FIGURES, NOT FOUR DECIMALS, and the change is a correction
+  // rather than a cosmetic one: four decimals gave 0.1007, and 0.1007 x 30 is
+  // $3.021 -- a cent away from the invoice this rate is derived from. 0.100667
+  // x 30 reproduces $3.02. The same rounding at four decimals turned a
+  // per-TOKEN rate of $0.000014 into $0, which made the report instruct an
+  // operator to price a $2-6 render at zero.
+  assert.equal(video.impliedUsd, 0.100667);
   assert.equal(video.configuredUsd, 0.3027);
   assert.equal(video.flagged, true);
 
   assert.equal(still.unit, 'image');
   assert.equal(still.impliedUsd, 0.05);
   assert.equal(still.flagged, true, '0.04 -> 0.05 is 25%');
+});
+
+/**
+ * A PER-TOKEN RATE MUST NOT BE ROUNDED LIKE MONEY.
+ *
+ * `usd()` is four decimals, which is right for a per-second or per-image rate
+ * and destroys a per-token one: the configured rate is $0.000014 per token, and
+ * `Number((0.000014039).toFixed(4))` is 0.
+ *
+ * The consequence is not a cosmetic zero. The report then says
+ * "$0/token against $0.000014/token configured" and prints, under its own
+ * heading EDIT THESE BY HAND, the instruction to set the model's usd to 0.
+ * `assertPricingTable` permits 0 -- zero is the exempt "this is free" fact --
+ * so an operator who follows the report makes every future --dry-run,
+ * estimateJob and frozen manifest quote $0.00 for a $2.08 to $6.26 render.
+ *
+ * The invoice here is the real one: 148050 tokens billed at $2.0785, which is
+ * 0.3% from the configured rate, i.e. the config is RIGHT and the report was
+ * the thing that was wrong.
+ *
+ * Latent today only because every token-billed job on disk was frozen with a
+ * per-second quantity and is correctly refused as unreconcilable. It arms on
+ * the next metered render made with the current estimateJob.
+ */
+test('a per-token rate survives rounding, so the report cannot say zero', () => {
+  const root = tmpRoot();
+  const TOKEN_MODEL = 'bytedance/seedance-2.0/reference-to-video';
+  const tokenPricing = {
+    currency: 'USD',
+    models: { [TOKEN_MODEL]: { usd: 0.000014, unit: 'token', estimate: true, _comment: 'ESTIMATE' } },
+  };
+
+  seedJob(root, {
+    lines: [{
+      step: 'animate', model: TOKEN_MODEL, unit: 'token',
+      usd: 2.0727, quantity: 148050, actual: 2.0785,
+    }],
+  });
+
+  const [group] = rollupByModel(buildLedger({ root }).rows, { pricing: tokenPricing });
+
+  assert.equal(group.quantity, 148050);
+  assert.ok(group.impliedUsd > 0,
+    `the implied rate rounded to ${group.impliedUsd}; the report would tell an operator to set the price to zero`);
+  // 2.0785 / 148050 = 0.000014039..., which is the configured rate to within
+  // 0.3%. The point of the assertion is that the number SURVIVES, not its
+  // exact digits, so it is compared as a ratio.
+  assert.ok(Math.abs(group.impliedUsd / 0.000014 - 1) < 0.01,
+    `implied ${group.impliedUsd} should be within 1% of the configured 0.000014`);
+  assert.equal(group.flagged, false,
+    'a rate 0.3% from the configured one must not be flagged as a 15% divergence');
 });
 
 test('the rollup counts unmetered calls without letting them move the rate', () => {
