@@ -81,6 +81,10 @@ export const ROUTES = Object.freeze([
   { method: 'GET', pattern: '/privacy', name: 'privacyPage' },
   { method: 'GET', pattern: '/terms', name: 'termsPage' },
   { method: 'GET', pattern: '/impressum', name: 'impressumPage' },
+  // Crawlers, and what the Impressum address is worth protecting from. Public
+  // and session-free like the stylesheet; see `indexable` in server.mjs for
+  // why the default refuses everything.
+  { method: 'GET', pattern: '/robots.txt', name: 'robots' },
 
   // --- where a new account first lands (spec §10, task 12) ----------------
   // BEHIND A SESSION, unlike everything else in this block: every route that
@@ -201,6 +205,9 @@ export const PUBLIC_ROUTES = Object.freeze(new Set([
   // A privacy policy behind a login is not a privacy policy, and an Impressum
   // exists precisely for people who are not customers yet.
   'privacyPage', 'termsPage', 'impressumPage',
+  // A crawler holds no session, and a robots.txt that answered 303 to /login
+  // would be read as "no rules" -- the opposite of what it is for.
+  'robots',
   // PUBLIC SINCE 2026-08-21, AND IT IS THE ONE ENTRY HERE THAT SERVES TWO
   // DIFFERENT PAGES. `/` used to 303 a signed-out visitor to `/login`, which
   // made the entire product a password box: there was nowhere to say what this

@@ -23,7 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-import { createServer } from '../scripts/web/server.mjs';
+import { createServer, normaliseLegalEntity } from '../scripts/web/server.mjs';
 
 const CFG = JSON.parse(fs.readFileSync(new URL('../config/render.json', import.meta.url), 'utf8'));
 
@@ -160,5 +160,252 @@ test('the pages are covered by the texture and border sweeps', () => {
   const source = fs.readFileSync(new URL('./web-static.test.js', import.meta.url), 'utf8');
   for (const name of ['privacyPage', 'termsPage', 'impressumPage']) {
     assert.match(source, new RegExp(name), `web-static.test.js renderedPages() does not cover ${name}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// the entity from the environment, so a home address need never enter the repo
+// ---------------------------------------------------------------------------
+
+/**
+ * `TIMESTAMP_LEGAL_ENTITY` is a JSON object in `.env` -- the channel compose
+ * already passes into both containers, `.gitignore` already covers with
+ * `.env.*`, and `.dockerignore` already keeps out of the image. It exists
+ * because a sole trader's disclosure address IS a home address, and a public
+ * repository's history is permanent in a way a taken-down page is not. It
+ * closes the git half only; the pages still publish the address while the
+ * site is live, which is the point of them.
+ *
+ * The validator is the other half and it guards a failure this file could not
+ * previously see: `h()` renders null and undefined as the EMPTY STRING, so an
+ * entity missing its email produced a legal page with a silently blank contact
+ * line -- not a visible "undefined", but a page that looks deliberate and is
+ * wrong. An entity that cannot render completely is refused and logged.
+ */
+const ENV_ENTITY = Object.freeze({
+  name: 'Sole Trader & Co <test>',
+  addressLines: ['Musterweg 4', '10115 Berlin', 'Germany'],
+  email: 'support@timestamptapes.com',
+  vatId: null,
+});
+
+async function withEnvLegalServer({ legalEntityJson = null, legal = null, indexable = undefined }, run) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-legal-env-'));
+  const logged = [];
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(),
+    legal, legalEntityJson, ...(indexable === undefined ? {} : { indexable }),
+    logImpl: (line) => logged.push(String(line)),
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
+  });
+  const port = await app.listen();
+  try {
+    await run({ base: `http://127.0.0.1:${port}`, logged });
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test('the entity can come from the environment, and never touch the repo', async () => {
+  await withEnvLegalServer({ legalEntityJson: JSON.stringify(ENV_ENTITY) }, async ({ base }) => {
+    for (const p of ['/privacy', '/terms', '/impressum']) {
+      const html = await (await fetch(`${base}${p}`)).text();
+      assert.match(html, /Sole Trader &amp; Co &lt;test&gt;/, `${p} does not carry the escaped entity name`);
+      assert.ok(!html.includes('Sole Trader & Co <test>'), `${p} rendered the entity name unescaped`);
+      assert.ok(!/will be published/i.test(html), `${p} still shows the operator placeholder`);
+    }
+    const impressum = await (await fetch(`${base}/impressum`)).text();
+    for (const line of ENV_ENTITY.addressLines) {
+      assert.match(impressum, new RegExp(line), `impressum is missing the address line "${line}"`);
+    }
+  });
+});
+
+test('the committed config stays null while the environment carries the truth', () => {
+  // The whole point of the route: this assertion fails the day somebody pastes
+  // a home address into the tracked file, which is the irreversible move.
+  const onDisk = JSON.parse(fs.readFileSync(new URL('../config/legal.json', import.meta.url), 'utf8'));
+  assert.equal(onDisk.entity, null,
+    'config/legal.json carries an entity -- if that is a real address it is now permanent in git history');
+});
+
+test('a malformed environment entity degrades to the placeholder and NAMES the variable', async () => {
+  await withEnvLegalServer({ legalEntityJson: '{"name": "half a json' }, async ({ base, logged }) => {
+    const impressum = await (await fetch(`${base}/impressum`)).text();
+    assert.match(impressum, /will be published/i,
+      'a malformed entity must fall back to the honest placeholder, never a half-rendered page');
+    assert.ok(logged.some((l) => l.includes('TIMESTAMP_LEGAL_ENTITY')),
+      'nothing in the log names the variable the operator got wrong');
+  });
+});
+
+test('an entity missing a field it renders is refused, not published half-blank', async () => {
+  // h() renders undefined as '', so this page would otherwise ship a contact
+  // block with an empty line where the address must legally be.
+  const partial = { name: 'Someone', addressLines: ['1 Example Road'] };
+  await withEnvLegalServer({ legalEntityJson: JSON.stringify(partial) }, async ({ base, logged }) => {
+    const impressum = await (await fetch(`${base}/impressum`)).text();
+    assert.match(impressum, /will be published/i,
+      'an entity with no contact address was published anyway');
+    assert.ok(!impressum.includes('Someone'), 'a refused entity still reached the page');
+    assert.ok(logged.some((l) => l.includes('email')),
+      'the log does not say which field was missing');
+  });
+});
+
+test('the legal option still beats the environment, so tests keep control', async () => {
+  await withEnvLegalServer({
+    legal: { entity: null },
+    legalEntityJson: JSON.stringify(ENV_ENTITY),
+  }, async ({ base }) => {
+    const impressum = await (await fetch(`${base}/impressum`)).text();
+    assert.match(impressum, /will be published/i,
+      'the environment overrode an explicitly pinned legal option');
+  });
+});
+
+test('the impressum cites the DDG, and never the statute it replaced', async () => {
+  // The owner is RESIDENT IN GERMANY (established 2026-08-29 -- India is
+  // citizenship, Germany is residence, and it is residence that decides this).
+  // So § 5 DDG genuinely binds this service and the page is a legal duty, not
+  // a courtesy to German buyers.
+  //
+  // What it must never carry again is § 5 TMG. That statute was REPEALED in
+  // May 2024 and replaced by the DDG, so the heading this page shipped with
+  // named a law that no longer exists -- wrong for every operator, not just
+  // this one.
+  await withEnvLegalServer({ legalEntityJson: JSON.stringify(ENV_ENTITY) }, async ({ base }) => {
+    const impressum = await (await fetch(`${base}/impressum`)).text();
+    assert.ok(!/\bTMG\b/.test(impressum), 'the impressum cites the repealed TMG');
+    assert.match(impressum, /\bDDG\b/, 'the impressum no longer cites the statute that requires it');
+    assert.match(impressum, /Impressum/, 'the page lost the word German buyers look for');
+    assert.match(impressum, /Sole Trader &amp; Co &lt;test&gt;/, 'the impressum no longer names the seller');
+    assert.match(impressum, /support@timestamptapes\.com/, 'the impressum no longer carries a contact');
+  });
+});
+
+test('the cookie claim matches the cookies this app actually sets', async () => {
+  // It said "the only cookie is the one that keeps you signed in" and there
+  // are THREE. All strictly necessary, so the consent position is unchanged --
+  // but a privacy notice that misstates what it sets is the wrong thing to
+  // publish. Pinned against the real constants rather than a literal, so a
+  // fourth cookie fails here and forces the prose to be reviewed, exactly as
+  // the retention numbers are pinned to config.
+  const middleware = await import('../scripts/web/session-middleware.mjs');
+  const cookies = [middleware.SESSION_COOKIE, middleware.CSRF_COOKIE, middleware.OAUTH_STATE_COOKIE];
+  assert.equal(new Set(cookies).size, 3, 'the cookie constants moved -- review the privacy page prose');
+
+  await withEnvLegalServer({ legalEntityJson: JSON.stringify(ENV_ENTITY) }, async ({ base }) => {
+    const privacy = await (await fetch(`${base}/privacy`)).text();
+    assert.ok(!/only cookie is/i.test(privacy),
+      'the privacy page still claims a single cookie');
+    assert.match(privacy, /strictly necessary/i,
+      'the privacy page does not say why there is no cookie banner');
+    assert.match(privacy, /no analytics/i, 'the no-tracking claim was lost');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// keeping the disclosure address out of a search index
+// ---------------------------------------------------------------------------
+
+/**
+ * These live beside the legal tests because the thing they protect is the
+ * IMPRESSUM ADDRESS. § 5 DDG wants an address at which documents can be
+ * served, so for a sole trader it is a home address; `.env` keeps it out of
+ * git, and this keeps it out of Google until the owner is ready to be public.
+ *
+ * "Just do not share the URL" is not the protection it sounds like: Caddy
+ * issues a certificate on first boot, and a certificate puts the hostname in
+ * public Certificate Transparency logs that crawlers watch. The site is
+ * discoverable from the first TLS handshake, linked or not.
+ *
+ * THE DEFAULT IS noindex, AND THE ASYMMETRY IS THE WHOLE ARGUMENT. Forgetting
+ * to turn indexing ON costs traffic, which is visible and fixable any day.
+ * Forgetting to turn it OFF costs an indexed and archived home address, which
+ * cannot be taken back. The recoverable failure is the one that gets to be the
+ * default.
+ */
+test('by default nothing may be indexed, on every kind of response', async () => {
+  await withEnvLegalServer({ legalEntityJson: JSON.stringify(ENV_ENTITY) }, async ({ base }) => {
+    for (const p of ['/impressum', '/privacy', '/terms', '/', '/nothing-here']) {
+      const res = await fetch(`${base}${p}`);
+      assert.equal(res.headers.get('x-robots-tag'), 'noindex, nofollow',
+        `${p} did not refuse indexing (it answered ${res.status})`);
+    }
+    // A JSON route too -- the header is set before routing, so a response this
+    // test does not know about is covered by construction rather than by
+    // somebody remembering.
+    const health = await fetch(`${base}/api/health`);
+    assert.equal(health.headers.get('x-robots-tag'), 'noindex, nofollow');
+  });
+});
+
+test('by default robots.txt disallows everything, and says why', async () => {
+  await withEnvLegalServer({ legalEntityJson: JSON.stringify(ENV_ENTITY) }, async ({ base }) => {
+    const res = await fetch(`${base}/robots.txt`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type'), /text\/plain/);
+    const body = await res.text();
+    assert.match(body, /User-agent: \*/);
+    assert.match(body, /Disallow: \//);
+    assert.ok(!/Allow: \//.test(body), 'the disallowing robots.txt also allows');
+  });
+});
+
+test('the operator can open the site to search engines with one flag', async () => {
+  await withEnvLegalServer({
+    legalEntityJson: JSON.stringify(ENV_ENTITY), indexable: true,
+  }, async ({ base }) => {
+    const page = await fetch(`${base}/privacy`);
+    assert.equal(page.headers.get('x-robots-tag'), null,
+      'the noindex header survived the flag that is supposed to lift it');
+    const robots = await fetch(`${base}/robots.txt`);
+    const body = await robots.text();
+    assert.ok(!/Disallow: \/\s*$/m.test(body), 'robots.txt still disallows everything');
+  });
+});
+
+test('the media a customer paid for is never indexable, flag or not', async () => {
+  // A tape is somebody's face. Opening the marketing site to crawlers must not
+  // open the artefacts with it, so this one is not a function of the flag.
+  await withEnvLegalServer({
+    legalEntityJson: JSON.stringify(ENV_ENTITY), indexable: true,
+  }, async ({ base }) => {
+    const robots = await fetch(`${base}/robots.txt`);
+    const body = await robots.text();
+    assert.match(body, /Disallow: \/j\//, 'job pages and their media are crawlable');
+  });
+});
+
+test('normaliseLegalEntity takes only what renders, and refuses the rest', () => {
+  const ok = normaliseLegalEntity(ENV_ENTITY);
+  assert.equal(ok.entity.name, ENV_ENTITY.name);
+  assert.deepEqual(ok.entity.addressLines, ENV_ENTITY.addressLines);
+  assert.equal(ok.entity.vatId, null);
+  assert.equal(ok.reason, null);
+
+  // An allow-list, like the export block in §39: the record is built field by
+  // field, never spread, so a key added to the config can never ride into a
+  // render nobody designed.
+  const extra = normaliseLegalEntity({ ...ENV_ENTITY, secretNote: 'do not publish' });
+  assert.deepEqual(Object.keys(extra.entity).sort(), ['addressLines', 'email', 'name', 'vatId']);
+
+  for (const [label, raw] of [
+    ['null', null],
+    ['a string', 'Sole Trader'],
+    ['no name', { ...ENV_ENTITY, name: '   ' }],
+    ['no email', { ...ENV_ENTITY, email: '' }],
+    ['an email with no @', { ...ENV_ENTITY, email: 'support' }],
+    ['no address', { ...ENV_ENTITY, addressLines: [] }],
+    ['an address that is not a list', { ...ENV_ENTITY, addressLines: 'One line' }],
+    ['a blank address line', { ...ENV_ENTITY, addressLines: ['1 Example Road', ''] }],
+    ['a numeric vatId', { ...ENV_ENTITY, vatId: 42 }],
+  ]) {
+    const out = normaliseLegalEntity(raw);
+    assert.equal(out.entity, null, `${label} was accepted`);
+    assert.ok(typeof out.reason === 'string' && out.reason.length > 0,
+      `${label} was refused without saying why`);
   }
 });

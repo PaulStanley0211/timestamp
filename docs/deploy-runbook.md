@@ -33,7 +33,14 @@ top to bottom; nothing here is optional.
    TIMESTAMP_PROVIDER=fal
    TIMESTAMP_PUBLIC_URL=https://timestamptapes.com
    TIMESTAMP_TRUST_PROXY=1
+   TIMESTAMP_LEGAL_ENTITY={"name":"...","addressLines":["..."],"email":"...","vatId":null}
    ```
+
+   The last one is who is selling, for the three legal pages. It lives here and
+   not in `config/legal.json` because the repository is public and a sole
+   trader's disclosure address is a home address — this file is gitignored and
+   kept out of the image. `.env.example` documents the shape; §4 step 7 is what
+   proves it took.
 
    `chmod 600 .env`. The compose file never carries a secret; this file is
    the only place they live on the box.
@@ -72,6 +79,30 @@ prerequisite.
    page. This is also the §38E direct-path proof if it has not run yet.
 5. Test-mode Stripe purchase end to end; confirm the grant in the ledger.
 6. `docker compose logs web worker` — no `FATAL` lines.
+7. `https://timestamptapes.com/impressum` → **your details, not the operator
+   placeholder.** This is the only check that catches a malformed
+   `TIMESTAMP_LEGAL_ENTITY`: the pages degrade to the placeholder rather than
+   failing the boot, so a rejected value looks exactly like the unconfigured
+   state. If you see the placeholder, `docker compose logs web | grep
+   TIMESTAMP_LEGAL_ENTITY` says which field was refused.
+8. `https://timestamptapes.com/robots.txt` → `Disallow: /` while you are still
+   testing, and every page answering `X-Robots-Tag: noindex, nofollow`. That is
+   the default and it is what keeps the Impressum address out of a search index
+   during a friends-only launch. **Do not skip this on the assumption that an
+   unlinked site is unfindable** — the TLS certificate publishes the hostname
+   to Certificate Transparency logs the moment Caddy issues it.
+
+### Going public
+
+One line, one restart, and it is the last step rather than part of the deploy:
+
+```bash
+echo 'TIMESTAMP_INDEXABLE=1' >> .env && docker compose up -d
+```
+
+Do it when the legal pages are right, the support mailbox receives, and you
+have decided whether the published address is your home or a business address —
+because indexing is the step that makes those choices hard to reverse.
 
 ## 5. Backups
 

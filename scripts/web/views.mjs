@@ -1415,7 +1415,10 @@ export function privacyPage({ entity = null, retention = { photoDays: 7, jobDays
   <p class="sub">Your email address, to run your account. The photograph you upload and the
   place and outfit you choose, to generate your tape. Your credit balance and its history,
   to charge and refund fairly. We never see a card number and we run no analytics or
-  advertising trackers &mdash; the only cookie is the one that keeps you signed in.</p>
+  advertising trackers. We set three cookies and no others: one keeps you signed in, one
+  protects the forms you submit, and one carries a Google sign-in safely back to us. All
+  three are strictly necessary to run the service, which is why you are not asked to
+  consent to them and why there is no cookie banner.</p>
 
   <p class="eyebrow">Who touches the data</p>
   <p class="sub">Your photograph is sent to fal.ai, the AI provider that generates the video,
@@ -1480,12 +1483,26 @@ export function termsPage({ entity = null, account = null }) {
   return layout({ title: 'Timestamp - terms', body, bodyClass: 'page-legal', account });
 }
 
+/**
+ * A legal duty, not a courtesy: the operator is resident in Germany, so § 5
+ * DDG binds this service and this page is how it is discharged.
+ *
+ * THE CITATION IS DDG AND NEVER TMG. This page shipped reading "Angaben
+ * gemäß § 5 TMG" -- the Telemediengesetz, which was REPEALED in May 2024 and
+ * replaced by the Digitale-Dienste-Gesetz. That heading named a statute that
+ * no longer exists, and it would have been wrong for any operator, anywhere.
+ *
+ * The address must be one at which documents can be served (ladungsfähige
+ * Anschrift) -- which is why the entity comes from TIMESTAMP_LEGAL_ENTITY in
+ * `.env` and not from the committed config: for a sole trader that address is
+ * usually a home address, and this repository is public.
+ */
 export function impressumPage({ entity = null, account = null }) {
   const body = `
 <main>
   <section class="panel">
   <p class="eyebrow">Impressum</p>
-  <h1 class="headline">Angaben gem&auml;&szlig; &sect; 5 TMG</h1>
+  <h1 class="headline">Angaben gem&auml;&szlig; &sect; 5 DDG</h1>
   ${operatorBlock(entity, { heading: 'Anbieter' })}
   ${entity ? `<p class="eyebrow">Kontakt</p>
   <p class="sub">${h(entity.email)}</p>` : ''}

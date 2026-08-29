@@ -150,7 +150,7 @@ const PLACE_MEDIA_RE = /^([A-Za-z0-9-]{1,64})\.(jpg|mp4)$/;
  *  `scripts/auth/` still serves the stylesheet, and a load balancer still gets
  *  an answer. */
 const NO_SESSION_ROUTES = new Set([
-  'stylesheet', 'font', 'favicon', 'placeImage', 'health',
+  'stylesheet', 'font', 'favicon', 'placeImage', 'health', 'robots',
   // STRIPE SENDS NO COOKIE, so resolving a session for it is work that can only
   // fail. Keeping it out of the session path also means a webhook is answered
   // while the sign-in half of the app is degraded -- which matters, because the
@@ -695,6 +695,55 @@ function firstFilled(...values) {
   return '';
 }
 
+/**
+ * Who is selling, reduced to exactly the four fields the pages render -- or
+ * `null` with a reason, which is the operator placeholder.
+ *
+ * IT IS AN ALLOW-LIST AND NEVER A SPREAD, for the reason the account export in
+ * the deletion work is one: a key added to the entity config must not be able
+ * to ride into a render nobody designed. Four fields go in, four come out.
+ *
+ * AND IT REFUSES A PARTIAL ENTITY, which guards a failure that was previously
+ * invisible: `h()` renders null and undefined as the EMPTY STRING, so an entity
+ * with no `email` did not print "undefined" on the Impressum -- it printed
+ * nothing at all, leaving a contact block that looks deliberate and is missing
+ * the one thing a disclosure page exists to carry. Half-configured is refused
+ * so the placeholder (which is honest) shows instead, and the reason is
+ * returned so the caller can name the field in a log.
+ *
+ * The email test is deliberately only "has an @": this value is typed by the
+ * operator into their own `.env`, it is escaped like everything else, and a
+ * stricter pattern here would refuse valid addresses for no gain.
+ */
+export function normaliseLegalEntity(raw) {
+  const refuse = (reason) => ({ entity: null, reason });
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return refuse('it is not a JSON object');
+  }
+
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  if (name === '') return refuse('name is missing or blank');
+
+  const email = typeof raw.email === 'string' ? raw.email.trim() : '';
+  if (email === '') return refuse('email is missing or blank');
+  if (!email.includes('@')) return refuse('email does not look like an address');
+
+  if (!Array.isArray(raw.addressLines) || raw.addressLines.length === 0) {
+    return refuse('addressLines is missing or empty');
+  }
+  const addressLines = raw.addressLines.map((line) => (typeof line === 'string' ? line.trim() : ''));
+  if (addressLines.some((line) => line === '')) {
+    return refuse('addressLines contains a blank or non-string line');
+  }
+
+  const vatId = raw.vatId ?? null;
+  if (vatId !== null && (typeof vatId !== 'string' || vatId.trim() === '')) {
+    return refuse('vatId must be a non-empty string or null');
+  }
+
+  return { entity: { name, addressLines, email, vatId: vatId === null ? null : vatId.trim() }, reason: null };
+}
+
 // ---------------------------------------------------------------------------
 // the server
 // ---------------------------------------------------------------------------
@@ -730,6 +779,42 @@ export function createServer({
    *  the routes not existing, because a privacy policy is owed before the
    *  entity question is settled. A seam so tests can pin both states. */
   legal = null,
+  /**
+   * The same entity as a one-line JSON object, out of `.env` -- and the route
+   * an operator should prefer, because a sole trader's disclosure address IS
+   * their home address and a public repository's history is permanent in a way
+   * a taken-down page is not.
+   *
+   * `.env` and not a config file because that channel already exists end to
+   * end: `.gitignore` covers it (`.env.*`), `.dockerignore` keeps it out of the
+   * image, compose passes it into both containers with `env_file`, and the
+   * runbook already has the operator writing it `chmod 600`. A new
+   * `config/legal.local.json` would need a bind mount that none of that has.
+   *
+   * It closes the GIT half only. The pages still publish the address while the
+   * site is live, which is what they are for.
+   */
+  legalEntityJson = process.env.TIMESTAMP_LEGAL_ENTITY || null,
+  /**
+   * Whether search engines may index this site. DEFAULT FALSE, and the default
+   * is the whole point.
+   *
+   * The Impressum carries an address at which documents can be served, so for
+   * a sole trader it is a home address. `.env` keeps that out of the public
+   * repository; this keeps it out of Google until the operator chooses to be
+   * public. "Do not share the URL" is not a substitute: Caddy issues a
+   * certificate on first boot and a certificate puts the hostname into public
+   * Certificate Transparency logs that crawlers watch, so the site is
+   * discoverable from the first TLS handshake whether or not anybody linked it.
+   *
+   * FORGETTING THIS IN EITHER DIRECTION HAS VERY DIFFERENT COSTS, which is why
+   * the safe value is the default rather than the documented one. Left off by
+   * mistake, the site gets no search traffic -- visible, and fixable any day.
+   * Left ON by mistake, a home address is indexed and archived, and that cannot
+   * be withdrawn. The recoverable failure is the one that gets to be the
+   * default.
+   */
+  indexable = process.env.TIMESTAMP_INDEXABLE === '1',
   auth = null,
   sessions = null,
   /**
@@ -1666,16 +1751,47 @@ export function createServer({
   // who is selling (the legal pages)
   // -------------------------------------------------------------------------
 
-  // Resolved once at construction. The file is committed and tiny; a missing
-  // or unreadable one degrades to the placeholder state rather than a boot
-  // failure -- the same manners as the packs above. The `legal` option wins so
-  // tests can pin both states without touching the repo's own config.
-  let legalEntity = legal?.entity ?? null;
-  if (legal === null) {
+  // Resolved once at construction, in one order: the `legal` option (tests
+  // pin both states with it, so it wins over everything), then
+  // TIMESTAMP_LEGAL_ENTITY, then the committed file. The environment beats the
+  // file because the file's `entity: null` is the DESIGNED published state --
+  // an operator who set the variable has said what the truth is, and the repo
+  // is not where a home address should have to live to be published.
+  //
+  // Every route ends at `normaliseLegalEntity`, so a half-configured entity
+  // from ANY of the three is refused identically. Nothing here fails the boot:
+  // a legal page is owed, and the honest placeholder is a better answer to a
+  // broken config than a dead web server -- the same manners as the packs. The
+  // runbook's smoke list is what stops a placeholder reaching customers.
+  let legalEntity = null;
+  if (legal !== null) {
+    legalEntity = legal.entity ?? null;
+  } else if (legalEntityJson !== null) {
+    let parsed = null;
     try {
-      legalEntity = JSON.parse(
+      parsed = JSON.parse(legalEntityJson);
+    } catch (err) {
+      logImpl(`[web] TIMESTAMP_LEGAL_ENTITY is not valid JSON (${err?.message}); the legal pages show the operator placeholder`);
+    }
+    if (parsed !== null) {
+      const { entity, reason } = normaliseLegalEntity(parsed);
+      if (entity === null) {
+        logImpl(`[web] TIMESTAMP_LEGAL_ENTITY was refused: ${reason}; the legal pages show the operator placeholder`);
+      }
+      legalEntity = entity;
+    }
+  } else {
+    try {
+      const fromFile = JSON.parse(
         fs.readFileSync(new URL('../../config/legal.json', import.meta.url), 'utf8'),
       ).entity ?? null;
+      if (fromFile !== null) {
+        const { entity, reason } = normaliseLegalEntity(fromFile);
+        if (entity === null) {
+          logImpl(`[web] config/legal.json's entity was refused: ${reason}; the legal pages show the operator placeholder`);
+        }
+        legalEntity = entity;
+      }
     } catch (err) {
       logImpl(`[web] config/legal.json could not be read (${err?.code ?? err?.message}); the legal pages show the operator placeholder`);
       legalEntity = null;
@@ -3390,6 +3506,30 @@ export function createServer({
       });
     },
 
+    /**
+     * The crawler-facing half of `indexable`; the `X-Robots-Tag` header on
+     * every response is the other, and either alone would be enough for a
+     * well-behaved bot. Both exist because they fail differently: the header
+     * covers a URL nobody thought to list, and this file is what an operator
+     * (and a crawler that never requests a page) can read directly.
+     *
+     * THE JOB ROUTES ARE DISALLOWED IN BOTH MODES. Opening the marketing site
+     * to search engines must not open the artefacts with it -- a tape is
+     * somebody's face, and `/j/<id>` urls are unguessable rather than secret.
+     */
+    async robots(req, res) {
+      const body = indexable
+        ? 'User-agent: *\nDisallow: /j/\nDisallow: /api/\nDisallow: /account\n'
+        : 'User-agent: *\nDisallow: /\n';
+      res.writeHead(200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body),
+        'Cache-Control': 'no-store',
+        ...BASE_SECURITY_HEADERS,
+      });
+      res.end(body);
+    },
+
     // --- API -------------------------------------------------------------
 
     async health(req, res) {
@@ -3997,6 +4137,14 @@ export function createServer({
   }
 
   async function handler(req, res) {
+    // BEFORE ROUTING, so it reaches every response this server can produce --
+    // pages, JSON, files, media, and the 404 for a path no route claims. Set
+    // here rather than in the header constants because those are frozen at
+    // module scope and this is a per-server decision; `writeHead` merges with
+    // headers already set, and nothing below sends this name, so it survives.
+    // A route added later is covered without its author knowing this exists.
+    if (!indexable) res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+
     const matched = matchRoute(req.method, req.url ?? '/');
 
     if (!matched.ok) {
