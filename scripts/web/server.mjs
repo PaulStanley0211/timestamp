@@ -2693,6 +2693,26 @@ export function createServer({
      *  reason sessions are opaque ids rather than JWTs: a token cannot be
      *  revoked, and this app can hand somebody else's face to whoever holds one. */
     async logout(req, res) {
+      // A FOREIGN PAGE CANNOT SIGN SOMEBODY OUT.
+      //
+      // This was the one state-changing route with neither gate, and it is not
+      // a session-integrity break: SameSite=Lax withholds the cookie on a
+      // cross-site POST, so `endSession` finds nothing and no record dies. But
+      // the response still carried the Max-Age=0 clearing cookie, which a
+      // browser applies on a top-level navigation to this origin -- so a
+      // foreign page could sign the victim out at a moment of its choosing.
+      // Mid-upload, or as a phishing premise, which is worse here because
+      // `/login` already renders an unauthenticated notice a forged link can
+      // trigger.
+      //
+      // The same-origin check alone, not the full CSRF pair: the nav form has
+      // no token to give, threading one into every page render is a much larger
+      // change, and this attack has to come from a browser to work -- every
+      // browser that can mount it sends `Sec-Fetch-Site`.
+      if (!sameOriginPost(req)) {
+        return sendJson(req, res, 403,
+          { error: { code: 'NOT_FROM_THIS_SITE', message: 'We could not confirm that came from this site.', status: 403 } });
+      }
       const cookie = await auths.endSession(req);
       if (wantsHtml(req)) return redirect(res, '/login', 303, { 'Set-Cookie': cookie });
       return sendJson(req, res, 200, { ok: true }, { 'Set-Cookie': cookie });

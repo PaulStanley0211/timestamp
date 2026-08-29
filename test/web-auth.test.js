@@ -935,6 +935,51 @@ test('the session cookie is HttpOnly, SameSite=Lax and not Secure over plain HTT
   });
 });
 
+/**
+ * A FOREIGN PAGE CANNOT SIGN SOMEBODY OUT.
+ *
+ * `/logout` was the one state-changing route with neither the same-origin check
+ * nor the anti-forgery pair. Every sibling form-backed POST opens with both.
+ *
+ * It is NOT a session-integrity break, and saying so is the point: `SameSite=Lax`
+ * withholds the cookie on a cross-site POST, so `endSession` finds nothing and
+ * no server-side record dies. But the 303 still carries the `Max-Age=0` clearing
+ * cookie, and a browser applies that on a top-level navigation to this origin --
+ * so the victim is signed out at a moment the attacker picks. Mid-upload on a
+ * 12 MB multipart POST, or as a ready-made phishing premise, which is worse here
+ * because `/login` already renders an unauthenticated notice a forged link can
+ * trigger -- the comment beside that notice names the premise explicitly.
+ *
+ * `sameOriginPost` rather than the full CSRF pair, deliberately: the nav form
+ * has no token to give it, threading one into every page render is a much larger
+ * change, and `Sec-Fetch-Site` is sent by every browser that can mount this
+ * attack. The token buys nothing extra against a request that must come from a
+ * browser to work at all.
+ */
+test('a cross-site POST cannot sign anybody out', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
+    assert.equal(auth.sessions.size, 1);
+
+    for (const headers of [
+      { cookie, 'sec-fetch-site': 'cross-site' },
+      { cookie, 'sec-fetch-site': 'same-site' },
+      { cookie, origin: 'https://evil.example' },
+    ]) {
+      const res = await fetch(`${base}/logout`, { method: 'POST', headers, redirect: 'manual' });
+      assert.equal(res.status, 403, `a POST with ${JSON.stringify(headers)} was accepted`);
+      // THE CLEARING COOKIE IS THE PAYLOAD. A 403 that still sets it would
+      // sign the victim out anyway, which is the whole exploit.
+      const setCookie = res.headers.get('set-cookie') ?? '';
+      assert.ok(!/timestamp_session=;|timestamp_session=\s*;/.test(setCookie),
+        `the refusal still cleared the session cookie: ${setCookie}`);
+    }
+
+    assert.equal(auth.sessions.size, 1, 'a cross-site post destroyed the session record');
+  });
+});
+
 /** The server-side record is what makes logout actually log out. A JWT cannot be
  *  revoked, and this app can hand somebody else's face to whoever holds one. */
 test('signing out destroys the record, so the old cookie stops working', async () => {
