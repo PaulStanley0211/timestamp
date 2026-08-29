@@ -7,27 +7,45 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-29) — THERE IS AN IMAGE, AND THREE FRAME SHAPES ARE REAL.
+## START HERE (2026-08-29, evening) — THE PAID PATH WAS BROKEN IN TWO PLACES AND IS NOT ANY MORE.
 
-**1712 tests / 1710 pass / 0 fail / 2 skipped.** The skips are the
+**1739 tests / 1737 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 
-**EVERYTHING IS COMMITTED LOCALLY AND NOTHING IS PUSHED.** `origin/main` is
-still `b6f64a3`, now **141 commits behind**, and no PR exists; the push is the
-irreversible line and it is Paul's, not Claude's.
+**WHAT JUST HAPPENED IS SECTION 35.** A full gstack `/cso` audit, five parallel
+auditors, then eighteen findings closed across **seventeen commits,
+`4d08ff6..42b3745`**, every one test-first and sabotage-verified. **Read §35
+before working anything**, because it corrects this file in three places.
 
-**WHAT IS LEFT IS SECTION 32; WHAT JUST HAPPENED IS SECTION 34.** Read 34
-first — it closes half of item 3 and most of item 9, turns item 11 from a
-decision into shipped work, and corrects item 14. Section 33 is the day before.
-**Re-verify any item before working it: three items across the last two
-sessions turned out to be already done, and one turned out to be a live defect
-rather than the decision the list called it.**
+**TWO OF THEM WERE CRITICAL AND BOTH WERE ON THE SHIPPED PAID PATH.** Every
+16:9 and 9:16 tape was cropped to 4:3 and stretched — a 9:16 tape discarded 58%
+of the frame and came out a circle two and a half times taller than wide. And a
+direct render PAID FAL, DOWNLOADED THE MP4, AND THEN THREW, so no tape shipped
+and a resume could not adopt the download. **The documented paid command in
+this file would have failed that way.** Neither was visible to 1712 passing
+tests. §35A.
+
+**~~EVERYTHING IS COMMITTED LOCALLY AND NOTHING IS PUSHED~~ — THAT WAS NEVER
+TRUE AND IT MATTERS.** `origin/main` is still `b6f64a3`, but
+**`origin/supabase-identity-slice` EXISTS at `d1f56e1`** and so does
+`origin/ui-redesign-signed-in-page` at `5c3267e`. Local is 22 commits ahead of
+the first. Verified with `git ls-remote`. §35D.
 
 **THE ONE DECISION BLOCKING THE MOST WORK: PAUL HAS NOT PICKED A DEPLOY HOST.**
 The Dockerfile is built, tested and proven; the topology file after it is
 shaped by the answer, so nothing further is worth building until he chooses.
 The options with real prices measured on 2026-08-29 are in §34A. **It is a
 thirty-second decision.**
+
+**AND THE FREE TEN MINUTES THAT GATES EVERYTHING IS STILL THE BLIND CHECK.**
+Packet built and unsent at `out/blind-check/`. It has been the top item for
+three sessions. Yesterday's work and today's both rest on it.
+
+**WHAT IS LEFT IS SECTION 32**, still, with §35F as the current read on it.
+**Re-verify any item before working it: four items across three sessions turned
+out to be already done, one turned out to be a live defect rather than the
+decision the list called it, and one was understated by two orders of
+magnitude.**
 
 ### The three sentences that matter
 
@@ -462,6 +480,25 @@ review's section 3 FIRST, same rule as before.
 
 ### Things that will bite you
 
+- **A TEST THAT ASSERTS AN ABSENCE PASSES VACUOUSLY IF IT LOOKS IN THE WRONG
+  PLACE** (2026-08-29). `[].every()` is true, and an empty `readdir` satisfies
+  every negative assertion you can write. One test here looked in `input/` for
+  files that land in the job directory ROOT — the legitimate sink values already
+  carry the `input/` prefix — found nothing, and passed against a deliberately
+  sabotaged guard. **Assert the legitimate artefact is PRESENT first, then
+  assert the absence.** Pair with the uncaught-sabotage rule below: both fired
+  in the same session and only the second caught the first.
+- **THE SHAPE MUST REACH FOUR PLACES, NOT ONE** (2026-08-29). `aspect` is now
+  threaded through `resolveRaster`, `falAspectFor`, `creditCost`/`costOf`,
+  `dryRun`, the tape crop and the compose log. Three of those were found missing
+  it AFTER the feature shipped, in one audit. **Grep every consumer when adding
+  a dimension; a unit test of the receiver cannot see the call site that forgot
+  to pass it.**
+- **A GUARD CAN CHECK THE WRONG LAYER AND READ GREEN FOREVER** (2026-08-29).
+  Three did: a path check that could not see a commit message, a grep aimed at a
+  file that does not hold the guard, and an ignore rule matching a filename
+  rather than a family. **When auditing a control, RUN it and confirm it can
+  fail** — presence in the file is not enforcement.
 - **THE FRAME SHAPE IS PART OF THE PRICE NOW** (2026-08-29). `creditCost` takes
   an `aspect`, and a non-default shape costs 4/3 — 28 CR at 480p, 61 at 720p.
   **A call site that forgets to hand it on charges the 4:3 price and sells a
@@ -2986,10 +3023,29 @@ which is why two items other sections still call open are struck below. Twenty
 items, grouped by who can actually do them. Numbers are stable — say "do 6 and
 12" and they mean these.
 
-**MAINTAINED THROUGH 2026-08-29.** Struck: 1, 2, 6, 10, 11, 12. Rewritten
-because the entry was wrong or half-done: **3** (image built, host not chosen),
-**9** (five more closed, three left), **14** (not the attack surface it
-claimed). **§34 is the record.**
+**MAINTAINED THROUGH 2026-08-29 EVENING.** Struck: 1, 2, 6, 10, 11, 12.
+Rewritten because the entry was wrong or half-done: **3** (image built, host
+not chosen), **9**, **14**, **19**, **20**. **§34 and §35 are the record.**
+
+**WHAT §35 DID TO THIS LIST:**
+- **9 — the security review.** The three items §34C left are now closed, along
+  with fifteen more from a fresh audit. **What remains open is ONE item and it
+  is a product decision, not a defect** — see §35F. The `config/models.json`
+  still-model warning **STILL STANDS**.
+- **14 — the free-tape exposure.** Rewritten AGAIN, in the other direction.
+  §34E said it was not an attack surface because the grant needs a confirmed
+  identity. The premise is true and the conclusion does not follow. **STILL
+  OPEN, so the mechanism is in the gitignored review and not in this file.**
+  §35D item 3.
+- **19 — the equal-time refusal guard.** Unchanged and still accepted, but note
+  `/logout` gained a same-origin check this session (`adff90d`), so the list of
+  state-changing routes with no forgery gate is now zero rather than one.
+- **20 — the commit message.** THREE commits, not one, and all three are on
+  pushed branches. A CI guard now catches the next one; the three are named as
+  known exceptions. §35D item 2.
+- **7 — open the PR.** Still Paul's. Worth knowing before he does: this is the
+  first CI run the branch has ever had, and it now runs SEVEN guards.
+- **13, 15, 16, 17** — untouched, all still Paul's decisions.
 
 **THE ORDER THAT MATTERS IS NOT THE IMPORTANCE ORDER.** Item 5 is still the
 most important thing in the project. **Item 3 is the one to start**, because
@@ -3585,6 +3641,176 @@ urgent column into Paul's.
 and the three tape-quality items (punch-in zoom, ambience tones, audible cuts
 at shot boundaries). The tape items feed the blind check and are worth doing —
 but judging them needs Paul's paid runs.
+
+---
+
+### 35. THE AUDIT, AND THE TWO CRITICALS IT FOUND ON THE PAID PATH (2026-08-29, evening)
+
+**1712 / 1710 → 1739 / 1737, 0 fail throughout. Seventeen commits,
+`4d08ff6..42b3745`. Tree clean. NOTHING PUSHED THIS SESSION.** All seven
+`guards.yml` checks run green locally, including two new ones.
+
+A full gstack `/cso` audit: five auditors in parallel over auth, money, the web
+request surface, infra/supply-chain, and render correctness, plus live probing
+against the running app. Eighteen findings closed, each test-first, each
+sabotage-verified where a guard was involved.
+
+**THE FINDINGS THEMSELVES ARE IN `docs/security-review-2026-08-29.md`, WHICH IS
+GITIGNORED AND MUST STAY THAT WAY.** This section says what the code now DOES.
+It does not say what each fix closed, and neither does any commit message —
+that rule is the whole subject of §35D. Read the file.
+
+#### A — The two CRITICALs, both on the shipped paid path, both invisible to 1712 passing tests
+
+**EVERY 16:9 AND 9:16 TAPE WAS CROPPED TO 4:3 AND STRETCHED** (`4d08ff6`). The
+source crop was a hardcoded `4/3` sitting one line above a `scale` target that
+reads `cfg.tape`, so the ratio did not follow the shape. Measured on rendered
+frames, not reasoned about:
+
+```
+4:3    497x497   roundness 1.000   unaffected -- it was always the default
+16:9   878x662   roundness 1.326   stretched horizontally
+9:16   667x1551  roundness 0.430   stretched 2.33x vertically
+```
+
+A 9:16 tape threw away 58% of the frame and delivered a circle two and a half
+times taller than wide, on the shape the customer pays a 4/3 premium for. It is
+the DISPLAY aspect and not `width/height`, because the source has square pixels
+and the 4:3 tape does not (SAR 16/15) — reduced, 4:3 comes out as exactly `4/3`,
+so the default shape's graph is byte-identical and the golden test never moved.
+
+**A DIRECT RENDER PAID FAL AND THEN THREW** (`059e3fd`). `generateVideo`
+resolved `size` and did not hand it to `estimateVideo`. Harmless on a
+per-SECOND model, fatal on the per-TOKEN one — which is the only video model the
+direct path uses. Submit succeeded, poll completed, **the mp4 landed on disk**,
+then the cost line threw: `completeIntent` never ran, no tape shipped, and on
+resume `decideIntent` could not adopt the clip because `clip.path` was never
+written, so the job either hard-stopped or paid again. The last good direct run
+predates the token-pricing change that introduced the requirement, which is why
+nobody had met it.
+
+#### B — What else shipped, and the shape most of it shares
+
+Six of the eighteen are the same shape: **a value that exists, is correct, and
+is not handed on** — the class §26 records three of. `aspect` was the new
+dimension and it was dropped in three more places.
+
+| Commit | What it does |
+|---|---|
+| `944501e` | `--dry-run` gets the shape, so a quote matches the bill: 720p 9:16 went from quoting $4.5646 to $6.2625, which is what it bills |
+| `72193a4` | A shape with no tier is refused rather than silently fetching a 4:3 source |
+| `5c2804b` | Three guards check the layer they actually bind at, and `.gitignore` covers the file FAMILY |
+| `18f154b` | `--stop-after` the worker does not recognise is a refusal, not a silent spend |
+| `5f6dfc0` | Only a human supersedes an open intent, so an automatic revive cannot re-buy a paid call |
+| `e0c0d77` | The still count the API accepts is the one the page offers |
+| `5643f03` | The number on the button is the number on the ledger, for every shape |
+| `f5866d7` | The app cannot rewrite its own code |
+| `544d475` | The upload sink is looked up by own property, not by inheritance |
+| `506604e` | A per-unit rate is rounded by significant figures, not decimal places |
+| `adff90d` | A foreign page cannot sign somebody out |
+| `7d783bc` | A job reaped to death gets its credits back, and says which directory it went to |
+| `58a17c1` | A manifest the purge cannot read is reported, not invisible |
+| `6c4f6ef` | The compose log names the shape that was actually frozen |
+| `42b3745` | Geometry is asserted on pixels |
+
+**THE GUARD THAT HAD BEEN PASSING VACUOUSLY IS WORTH ITS OWN LINE.**
+`guards.yml`'s "the fal adapter has no default fetch" greps `fal.mjs` — but
+`requireFetchImpl` lives in `contract.mjs` and `fal.mjs` only CALLS it. The
+regex matched nothing, so the check could not fail, and four independent money
+guards were quietly three. It is asserted behaviourally now, by running it.
+
+**AND `.gitignore` MATCHED A NAME, NOT A FAMILY.** `git check-ignore` reported
+NOT-IGNORED for `.env.local`, `.env.production`, `tls.pem` and `server.key`,
+while `.dockerignore` already covered all four — the image was better protected
+than the PUBLIC repo. The deploy that is next terminates TLS on a small VM,
+which is exactly the workflow that writes those files.
+`test/repo-hygiene.test.js` asserts it against `git check-ignore` rather than
+against the text of a pattern, because a pattern can be right and still not
+match.
+
+#### C — Video QA, and the blind spot it closed in this session's own work
+
+The crop fix was verified by arithmetic and by reading the emitted filtergraph.
+**Neither looks at a frame**, which is the same blind spot as the end-to-end
+9:16 check that shipped the feature: it measured frames, duration, LUFS and edge
+luma, and a tape cropped to the wrong shape has exactly the right value for all
+four.
+
+`test/tapedeck-geometry.test.js` renders one frame through the real graph in
+each shape and **measures a circle**. A circle is the probe because its
+distortion is unambiguous: squeeze either axis and the bounding box stops being
+square, and the ratio IS the distortion factor. The numbers in §35A are that
+test run against the pre-fix code. 2.5 seconds, and it is the only assertion in
+this repository that can see a geometric error.
+
+**The source rasters are what fal RETURNS, not what is ordered.** The endpoint
+upscales and picks its own size and the crop operates on what arrives, so
+testing at the ordered raster would miss the entire defect.
+
+#### D — Three corrections to this file
+
+1. **"NOTHING IS PUSHED" was never true.** `origin/supabase-identity-slice`
+   exists at `d1f56e1` and `origin/ui-redesign-signed-in-page` at `5c3267e`.
+2. **§32 item 20 names one commit; there are THREE**, and all three are
+   reachable from those pushed branches: `18352f4`, `190a9ec`, `6efb0e6`. A new
+   guard scans commit messages — the path check at `guards.yml:56` was never
+   able to see a message, which is why it stayed green. **The three are named as
+   known exceptions in the workflow so CI is green on new work while the history
+   decision is Paul's.** Rewriting published history is his call; note GitHub
+   serves unreachable commits by SHA indefinitely, so closing the disclosed
+   items is the durable answer either way.
+3. **§34E's conclusion about the free-tape exposure does not hold.** It reasons
+   that the grant is safe because it needs a confirmed identity. The premise is
+   true and the conclusion does not follow. **THIS ONE IS STILL OPEN, so the
+   mechanism is NOT written here** — it is in
+   `docs/security-review-2026-08-29.md`, which is gitignored, and this file is
+   committed to a public repo. Same rule as `.gitignore:16` and the same rule
+   §35D item 2 exists because somebody broke. **Read the review before touching
+   `normaliseEmail` or `reserveFreeTape`.** What is safe to say here: it is a
+   product decision rather than a defect fix, and §35F says why.
+
+#### E — Two things that will bite the next reader
+
+- **A test that asserts something was NOT written passes vacuously when it reads
+  the wrong directory.** `[].every()` is true. My first upload-sink test looked
+  in `input/` — but the legitimate sink values already carry that prefix, so a
+  stray filename lands in the job directory ROOT — found nothing, and passed
+  against a deliberately sabotaged guard. **Assert the legitimate artefact is
+  PRESENT first, then assert the absence.** This is CLAUDE.md's own
+  uncaught-sabotage rule earning its place twice in one session.
+- **The Bash heredoc ate backslashes again**, twice, exactly as §31 warns. A
+  `\n` inside a Python-in-heredoc replacement arrived as a real newline and
+  broke `views.mjs`. **Use Write/Edit for anything containing an escape.**
+
+#### F — What is left
+
+**PAUL'S, and both are short:**
+
+1. **THE BLIND CHECK.** Free, ten minutes, unsent at `out/blind-check/`. Top
+   item for three sessions. More work depends on it now than did yesterday.
+2. **PICK A DEPLOY HOST.** §34A. Thirty seconds, and it gates the whole
+   remaining deploy.
+
+**ONE FINDING LEFT OPEN ON PURPOSE**, and it is §35D item 3. It touches how an
+address is normalised before it becomes an account, which changes WHO CAN SIGN
+UP and carries migration risk against existing account records — so it is a
+product decision rather than a defect fix, and it is Paul's.
+
+**The mechanism and the numbers are in the gitignored review, not here.** What
+belongs in a public file is the shape of the decision and the implementation
+note that goes with it: **if it is taken, the narrow form only.** The broader
+form is provider-specific, riskier, and getting address canonicalisation wrong
+in auth means two people colliding on one account.
+
+**NOT RUN THIS SESSION:** `/qa`, `/design-review`, `/devex-review`, `/health`.
+The audit covered security and correctness; the live-app and DX passes are
+still owed.
+
+**STILL UNMEASURED, and one paid render settles three questions at once:** no
+non-4:3 shape has ever been ORDERED from fal. A single 720p 9:16 render would
+confirm whether the delivered upscale differs by SHAPE (which would move the
+4/3 multiplier), whether the vlog shot list composes in portrait, and — with the
+same file — feed the blind check.
 
 ## Not in scope
 
