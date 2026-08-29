@@ -909,14 +909,35 @@ export function homePage({
     </label>`;
   }).join('');
 
+  // THE SHAPE IS PART OF THE PRICE ON THE CARD TOO, and not only on the
+  // estimate line below it. This was the un-shaped `r.credits`, so with 9:16
+  // chosen the 720p card said ~46 CR while the estimate two panels down said
+  // ~61 CR and the ledger took 61 -- two prices for one tape, on one screen.
+  // It is the same defect the `costLines` comment below already records; it
+  // was fixed on the estimate and left behind on the card.
+  //
+  // KEYED ON THE SHAPE ALONE, not on the pair: a card already knows its own
+  // tier, so it needs one span per shape rather than one per (tier, shape).
+  // A shape the pricing refuses gets no span, exactly as it gets no cost line.
+  const crSpans = (r) => offeredAspects.map((a) => {
+    const credits = r.creditsByAspect?.[a.id];
+    if (!Number.isFinite(credits)) return '';
+    return `<span class="cr cr--${h(aspectSlug(a.id))}">${h(`~${credits} CR`)}</span>`;
+  }).join('');
+
   const qualityCards = resolutions.map((r) => {
     const detail = h(resolutionDetail(r));
     const cr = h(`~${r.credits} CR`);
     if (!r.available) {
+      // A DEFERRED TIER HAS NO PER-SHAPE QUOTE AT ALL -- `creditCost` refuses it
+      // outright (RESOLUTION_UNAVAILABLE), so there is no shape-specific number
+      // to switch between. It keeps the un-shaped figure, under its own class so
+      // that no card anywhere still carries a bare `class="cr"`, and nothing is
+      // being mispriced because nothing here can be bought.
       return `
     <span class="qualitycard qualitycard--soon">
       <span class="name">${h(r.id)}</span>
-      <span class="cr">${cr}</span>
+      <span class="cr cr--soon">${cr}</span>
       <span class="detail">${detail}</span>
       <span class="flag">Coming soon</span>
     </span>`;
@@ -925,7 +946,7 @@ export function homePage({
     <label class="qualitycard qualitycard--${h(qualitySlug(r.id))}" for="${h(qualitySlug(r.id))}">
       <span class="tick" aria-hidden="true"></span>
       <span class="name">${h(r.id)}</span>
-      <span class="cr">${cr}</span>
+      ${crSpans(r)}
       <span class="detail">${detail}</span>
       ${r.id === chosen ? '<span class="flag">Recommended</span>' : ''}
     </label>`;

@@ -648,3 +648,76 @@ test('the controls beside the email keep their full width', () => {
   assert.match(navItems.slice(0, 400), /flex:\s*none/,
     '.nav a and .nav button must not shrink -- only .who gives way');
 });
+
+/**
+ * TWO PRICES FOR ONE TAPE, ON ONE SCREEN, 25% APART.
+ *
+ * The estimated-cost line was already fixed for exactly this: it renders one
+ * number per (resolution, shape) pair and CSS switches it, because the charge
+ * at enqueue applies 4/3 for 16:9 and 9:16. The comment above `costLines` in
+ * views.mjs still describes that fix -- "The page said ~21 CR and the ledger
+ * took 28."
+ *
+ * The quality card five lines above it kept the un-shaped number. So with 9:16
+ * chosen the page showed, in one viewport:
+ *
+ *   QUALITY   480p ~21 CR   720p ~46 CR   1080p ~103 CR
+ *   ESTIMATED COST                              ~61 CR
+ *
+ * and the ledger took 28 for the 480p order -- measured, an account went
+ * 153 -> 125 on a 16:9 480p tape while the card beside the button said 21.
+ * Nobody is overcharged; the tier card simply advertises a price a third under
+ * what the button will take, on the control being looked at while choosing.
+ *
+ * THE CARD'S PRICE SWITCHES ON THE SHAPE ALONE, not on the pair. Each card
+ * already knows its own tier, so it needs one span per shape and one rule per
+ * shape -- three rules rather than nine. The estimate keeps its pair-keyed
+ * rules because it is a single line that must name both.
+ */
+test('a quality card quotes the shape that is actually selected', () => {
+  const menu = {
+    ...FOCUS_MENU,
+    resolutions: [
+      { id: '480p', width: 640, height: 480, available: true, credits: 21,
+        creditsByAspect: { '4:3': 21, '16:9': 28, '9:16': 28 } },
+      { id: '720p', width: 960, height: 720, available: true, credits: 46,
+        creditsByAspect: { '4:3': 46, '16:9': 61, '9:16': 61 } },
+    ],
+  };
+  const html = homePage({ ...menu, consentText: 'I agree' });
+
+  // PRESENT FIRST, then absent. An empty match set satisfies every negative
+  // assertion that follows, so the positive one has to establish that the
+  // markup this test is about was rendered at all.
+  const crSpans = [...html.matchAll(/<span class="cr cr--([a-z0-9-]+)">~(\d+) CR<\/span>/g)]
+    .map((m) => `${m[1]}:${m[2]}`);
+  assert.ok(crSpans.length > 0, 'the quality cards render no per-shape price at all');
+
+  for (const want of ['a-4x3:21', 'a-16x9:28', 'a-9x16:28',
+    'a-4x3:46', 'a-16x9:61', 'a-9x16:61']) {
+    assert.ok(crSpans.includes(want),
+      `the quality cards are missing ${want} -- every offered shape needs its own `
+      + 'quote or the card shows the 4:3 price for a shape charged 4/3 of it');
+  }
+
+  // The un-shaped span is the bug. A card that still emits `class="cr"` alone
+  // is quoting one number whatever the frame row says.
+  assert.doesNotMatch(html, /<span class="cr">/,
+    'a quality card still carries a single un-shaped price');
+});
+
+test('the quality card price is hidden until a shape is chosen for it', () => {
+  const { css } = createStylesheet(FOCUS_MENU);
+
+  const start = css.indexOf('.qualitycard .cr {');
+  assert.notEqual(start, -1, 'the .qualitycard .cr rule has disappeared');
+  const rule = css.slice(start, css.indexOf('}', start) + 1);
+  assert.match(rule, /display:\s*none/,
+    '.qualitycard .cr must default to display:none -- otherwise every shape\'s '
+    + 'price is painted at once and the card lists three numbers');
+
+  for (const slug of ['a-4x3', 'a-16x9', 'a-9x16']) {
+    assert.ok(css.includes(`#${slug}:checked~.wrap .qualitycard .cr--${slug}{display:block;}`),
+      `no rule reveals the quality card price for ${slug}`);
+  }
+});

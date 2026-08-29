@@ -424,6 +424,11 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       `#${slug}:checked~.wrap .framecard--${slug} .ratio{color:var(--accent);}`,
       `#${slug}:checked~.wrap .framecard--${slug} .shape{border-color:var(--accent);}`,
       `#${slug}:checked~.wrap .framecard--${slug} .tick{opacity:1;}`,
+      // The quality cards quote the chosen SHAPE. One rule per shape rather
+      // than per (tier, shape) pair, because a card already knows its own tier
+      // -- three rules instead of nine, and the estimate line above keeps its
+      // pair-keyed rules because it is one line that has to name both.
+      `#${slug}:checked~.wrap .qualitycard .cr--${slug}{display:block;}`,
       focusRing(slug, 'framecard'),
     );
   }
@@ -1519,7 +1524,13 @@ input[type="file"]::file-selector-button {
 }
 .qualitycard:hover { opacity: var(--ghost-hover); }
 .qualitycard .name { display: block; font-family: var(--osd); font-size: 17px; letter-spacing: 0.1em; color: var(--ink); }
-.qualitycard .cr { display: block; font-size: 12px; letter-spacing: 0.14em; color: var(--ink); margin-top: 0.1rem; }
+/* One price per shape, hidden until the frame row says which shape. Painting
+   them all at once would list three numbers on one card; painting the un-shaped
+   one quotes the 4:3 price for a shape charged 4/3 of it. The deferred tier is
+   the exception and says so in its own class -- it has no per-shape quote to
+   switch to, because creditCost refuses it outright. */
+.qualitycard .cr { display: none; font-size: 12px; letter-spacing: 0.14em; color: var(--ink); margin-top: 0.1rem; }
+.qualitycard .cr--soon { display: block; }
 .qualitycard .detail { display: block; font-size: 13px; color: var(--ink); margin-top: 0.35rem; }
 .qualitycard .flag { display: inline-block; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); margin-top: 0.4rem; }
 .qualitycard .tick { position: absolute; top: 0.7rem; right: 0.8rem; color: var(--accent); font-size: 11px; opacity: 0; transition: opacity 140ms; }
