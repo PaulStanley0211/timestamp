@@ -61,7 +61,20 @@ WORKDIR /app
 # Zero npm dependencies, therefore no install step, no lockfile and no
 # node_modules layer. That is not an omission -- it is the property
 # `guards.yml` protects, and it is why this image has no build stage.
-COPY --chown=node:node . .
+# NO --chown HERE, DELIBERATELY. /app stays root-owned and is read-only to the
+# user the app runs as.
+#
+# Nothing in the running container writes to /app: state is on /data, which is
+# chowned separately below for exactly that reason. Handing /app to `node` cost
+# nothing visible and removed the last containment layer between a file-write
+# bug and code execution -- this service accepts multipart uploads of arbitrary
+# files from strangers through a hand-written parser, and if the writing process
+# owns every .mjs the worker imports, an arbitrary-write becomes RCE with
+# FAL_KEY, SUPABASE_SECRET_KEY and STRIPE_SECRET_KEY in the environment.
+#
+# The preflight below still runs as `node` and only READS, so the gate is
+# unaffected.
+COPY . .
 
 # Where the queue, the jobs, the accounts and the sessions live.
 #
