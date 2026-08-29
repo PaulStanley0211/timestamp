@@ -582,7 +582,17 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
           creditsByAspect[aspect] = mod.creditCost({
             resolution: row.resolution, seconds, aspect,
           });
-        } catch { /* an unpriced or unavailable pair simply has no quote */ }
+        } catch (err) {
+          // An unpriced or unavailable pair simply has no quote -- that is the
+          // designed refusal and the page renders without it. ANYTHING ELSE IS
+          // A BUG AND MUST NOT READ AS ONE: a bare catch here would answer an
+          // unforeseen throw with an empty map for every row, and the quality
+          // cards would render with no price at all on a page that still looked
+          // finished. This seam's own header says a quote computed differently
+          // from the charge is a quote that will one day differ from it; a
+          // quote that silently vanishes is the same failure, quieter.
+          if (err?.code !== 'UNKNOWN_ASPECT' && err?.code !== 'RESOLUTION_UNAVAILABLE') throw err;
+        }
       }
       return {
         id: row.resolution,
