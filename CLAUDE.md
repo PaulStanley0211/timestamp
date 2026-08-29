@@ -630,8 +630,11 @@ review's section 3 FIRST, same rule as before.
 - **A fixed shape that projects fields will drop yours.** `entriesOf` in
   `credits.mjs` returns a literal object, so a field written to disk and not
   named there reads back `undefined` forever. Cost an hour today. Section 5.
-- **`job-model` and `queue-race` fail under full parallel load on Windows** and
-  pass in isolation. Section 12, not a regression. Re-run the file alone.
+- **`job-model` fails under full parallel load on Windows** and passes in
+  isolation. Section 12, not a regression. Re-run the file alone. **`queue-race`
+  no longer belongs on this line: its load failure was a REAL double-claim
+  race, found by Linux CI and fixed 2026-08-29 — section 40.** A queue-race
+  failure now is a regression until proven otherwise.
 - **CLAUDE CANNOT RUN PAID COMMANDS.** Paste them and paste the output back.
 - **Every price in this repo was a guess until 2026-08-24, and three still are.**
   `image-to-video` has never been called; 720p has never been run.
@@ -4407,7 +4410,7 @@ handles it loudly; accepted noise). After the pass: **1888 / 1890, 0 fail.**
 
 ---
 
-### 40. THE QUEUE CAN DOUBLE-CLAIM UNDER MULTI-WORKER CONTENTION — DIAGNOSED, REPRODUCED, NOT YET FIXED (2026-08-29, night)
+### 40. THE QUEUE COULD DOUBLE-CLAIM UNDER MULTI-WORKER CONTENTION — DIAGNOSED, REPRODUCED, AND FIXED (2026-08-29)
 
 **CI went red twice today on `test/queue-race.test.js:334` — "24 workers start
 at once -- reap then claim -- and nothing is lost or doubled" — with seven
@@ -4453,28 +4456,61 @@ MSYS_NO_PATHCONV=1 docker run --rm --cpus=2 -v "/c/Users/pauls/Timestamp:/src:ro
   transient no-lock moment that admits the spurious entry, and the restore
   can clobber a claim that landed in the window. It widens the hole.
 
-#### The direction that survives analysis
+#### The fix that landed (2026-08-29, later the same day)
 
-**Generation-scoped lock files**: `claimed/<jobId>.<generation>.lock`.
-Claiming a reaped job means exclusively creating the NEXT generation;
-`readLock` reads the highest; deleting an old-generation file is always safe
-because a strictly higher generation proves it dead — a uniquely-named
-deletion races nothing. That is a lock-LIFECYCLE redesign (claim, readLock,
-requireHolder, heartbeat, enqueue, stats all touch it), on the module whose
-header documents that only `openSync 'wx'` and `linkSync` are exclusive on
-Windows. It needs the repo's measurement discipline: a pre-fix baseline from
-the reproducer above, then ~200 clean rounds after, plus the 120-round
-barrier style for any new primitive.
+**One caller per lease may unlink the lock, and it is the reap-mark holder.**
+`acquireDropSanction` in queue.mjs: taking the lease's `.reaped` mark — already
+the exclusive per-lease artifact — is now also the licence to run
+`dropLockIfUnchanged`. A caller that finds the mark taken may inherit the drop
+only once the mark's `reapedAt` is a full `leaseMs` old, the same backstop
+workers themselves get, so a mark holder that dies mid-drop cannot strand the
+job. **`enqueue()`'s expired-lease clearing goes through the same sanction** —
+it was a third unserialized unlink of the same name, reachable by a re-enqueue
+racing a reaper, found in review of the first fix. Why this closes the trace
+above: a successor lock can only exist at `claimed/<jobId>.lock` after the one
+sanctioned unlink for the previous lease has returned, so a stale unlink never
+has a live lock to hit, and step 3's resurrection never finds the lock absent.
+Everyone may still write the pending entry — exclusive create is
+multi-caller-safe; only the unlink needed one owner.
 
-#### What bounds the urgency
+Evidence, in the repo's discipline: the interleaving is replayed
+**deterministically** in `test/queue-race.test.js` (the two "parked over"
+tests) — the actor thread's own **thread-local** `fs.unlinkSync` (worker
+threads get private copies of builtins) parks between the check and the
+unlink, a rival reaps and claims in the gap, and releasing the park fires the
+exact stale unlink. Barriers cannot force a thread to park between two
+adjacent syscalls; this can. RED pre-fix on Windows AND Linux every run,
+GREEN post-fix; sabotage-verified in both directions (everyone-drops restored
+→ reaper test red; enqueue sanction removed → enqueue test red; swapping only
+the drop primitive while keeping the mark acquisition stays green, which
+proves the protection is the mark, not the fingerprint re-check). Reproducer
+above, pre-fix baseline: 4 failures in 60 rounds; post-fix: clean over 200.
+The accepted residual: a mark holder parked longer than a FULL LEASE between
+two adjacent syscalls (VM-pause scale) — the same class of residual the lease
+design already accepts for workers, and now stated in the code.
 
-**The shipped single-worker topology cannot hit this.** One worker process,
-synchronous fs calls, no concurrent reaper — the race needs two or more
-worker processes reaping and claiming at once, which is a scale-out that has
-not happened. Until then its only symptom is intermittent CI red on loaded
-ubuntu legs (~2 of 3 full-suite runs today); a re-run goes green. **A fix
-session was spun off the night this was diagnosed** — check `git branch -a`
-for its work before starting over.
+#### Optional hardening, no longer the required direction
+
+**Generation-scoped lock files** (`claimed/<jobId>.<generation>.lock` —
+claiming creates the NEXT generation, `readLock` reads the highest, deleting
+an old generation races nothing because a higher one proves it dead) would
+close the remaining zombie windows the landed fix deliberately leaves:
+`complete()`/`fail()`/`release()` unlink their own lock and `heartbeat()`
+rename-replaces it after a token check that can go stale if the lease expired
+and was reaped-and-reclaimed in the same microsecond — `LEASE_LOST` catches
+the aftermath today. That is a lock-LIFECYCLE redesign (claim, readLock,
+requireHolder, heartbeat, enqueue, stats all touch it) and needs the
+120-round barrier discipline for any new primitive. Worth doing only if
+multi-worker scale-out makes those windows real.
+
+#### What bounded the urgency
+
+**The shipped single-worker topology could not hit this.** One worker
+process, synchronous fs calls, no concurrent reaper — the race needed two or
+more worker processes reaping and claiming at once. Its only symptom was
+intermittent CI red on loaded ubuntu legs (~2 of 3 full-suite runs on
+2026-08-29); a re-run went green. The fix session spun off that night
+delivered the fix above.
 
 ---
 

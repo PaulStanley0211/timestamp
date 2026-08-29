@@ -372,3 +372,126 @@ test(`${CONTENDERS} workers start at once -- reap then claim -- and nothing is l
   assert.ok(peak >= 2, `peak concurrent startups was ${peak}`);
   t.diagnostic(`${won.length} of 6 jobs claimed on startup; ${reported.length} leases reaped`);
 });
+
+/**
+ * The interleaving the stampede above only sometimes produces, forced every
+ * time. CI caught the startup test failing with SEVEN wins over six jobs
+ * (ubuntu, node 22, run 33258055925): two workers both claimed the same job.
+ *
+ * The mechanism: a reaper checks that the lock is still the dead lease it read
+ * and then unlinks it -- two separate calls on one shared name. A reaper
+ * descheduled between them wakes up and unlinks whatever is at that name NOW,
+ * and by then it can be the LIVE lock of the worker that claimed the job in the
+ * gap. The stolen claim's job then gets resurrected and claimed a second time,
+ * with every reap still reported exactly once and every count plausible.
+ *
+ * Barriers cannot force a thread to park between two adjacent syscalls, so this
+ * test does it directly: the actor thread's own `fs.unlinkSync` (thread-local
+ * -- worker threads get their own copy of every builtin) parks on the first
+ * lock unlink and stays parked while a rival reaps and claims. Releasing it
+ * replays the exact stale unlink. The assertion is the same one CI failed:
+ * across the whole episode, the job is claimed exactly once.
+ *
+ * `op` picks the actor, because reapExpired() is not the only caller that
+ * unlinks the shared lock name: enqueue() clears an expired lease too, and an
+ * enqueue parked over that unlink steals a successor's lock the same way.
+ */
+const PARKED_ACTOR_SOURCE = `
+const { workerData, parentPort } = require('node:worker_threads');
+const fs = require('node:fs');
+const shared = new Int32Array(workerData.shared);
+const realUnlinkSync = fs.unlinkSync;
+let parkedOnce = false;
+fs.unlinkSync = (p) => {
+  if (!parkedOnce && String(p).endsWith('.lock')) {
+    parkedOnce = true;
+    parentPort.postMessage({ parkedAtUnlink: true });
+    Atomics.wait(shared, 0, 0); // the main thread releases this
+  }
+  return realUnlinkSync(p);
+};
+(async () => {
+  const { createQueue } = await import(workerData.moduleUrl);
+  const queue = createQueue({
+    queueDir: workerData.queueDir, leaseMs: workerData.leaseMs, nowImpl: () => workerData.nowMs,
+  });
+  const result = workerData.op === 'enqueue'
+    ? { entry: queue.enqueue(workerData.jobId) }
+    : { reaped: queue.reapExpired() };
+  parentPort.postMessage({ done: true, ...result, parkedOnce });
+})().catch((err) => parentPort.postMessage({ error: String((err && err.stack) || err) }));
+`;
+
+/**
+ * One job abandoned mid-render, one actor parked over its lock unlink, one
+ * rival that reaps and claims in the gap. Returns everything the assertions
+ * need; the assertions differ per actor.
+ */
+async function parkedActorEpisode(t, { op, jobId }) {
+  const queueDir = makeDir(t);
+  const { createQueue } = await import(QUEUE_URL);
+  const t0 = Date.UTC(2026, 7, 20, 14, 45, 0);
+  const setup = createQueue({ queueDir, leaseMs: 1000, nowImpl: () => t0 });
+  setup.enqueue(jobId);
+  setup.claim({ workerId: 'renderer-that-died' });
+
+  const shared = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
+  const view = new Int32Array(shared);
+  const actor = new Worker(PARKED_ACTOR_SOURCE, {
+    eval: true,
+    workerData: { moduleUrl: QUEUE_URL, queueDir, leaseMs: 1000, nowMs: t0 + 60_000, shared, op, jobId },
+  });
+  t.after(() => actor.terminate());
+
+  const nextMessage = () => new Promise((resolve, reject) => {
+    actor.once('message', resolve);
+    actor.once('error', reject);
+  });
+
+  const first = await nextMessage();
+  assert.equal(first.parkedAtUnlink, true,
+    `the ${op} must reach its lock unlink and park there, got ${JSON.stringify(first)}`);
+
+  // While the actor is frozen between "the lock is still the dead lease" and
+  // "unlink it", a rival worker starts up: reaps, then claims.
+  const rival = createQueue({ queueDir, leaseMs: 1000, nowImpl: () => t0 + 60_000 });
+  rival.reapExpired();
+  const claimBefore = rival.claim({ workerId: 'rival-before-release' });
+
+  // Release the parked unlink -- the stale syscall now fires against whatever
+  // is at the lock's name -- and let the actor run to the end.
+  Atomics.store(view, 0, 1);
+  Atomics.notify(view, 0);
+  const finished = await nextMessage();
+  assert.equal(finished.done, true, `the ${op} must finish cleanly, got ${JSON.stringify(finished)}`);
+
+  const claimAfter = rival.claim({ workerId: 'rival-after-release' });
+  return { queueDir, rival, finished, claimBefore, claimAfter };
+}
+
+function assertClaimedExactlyOnce({ queueDir, rival, claimBefore, claimAfter }, jobId) {
+  const wins = [claimBefore, claimAfter].filter(Boolean);
+  assert.equal(wins.length, 1,
+    `one job must be claimed exactly once across the episode, got ${wins.length}: `
+    + wins.map((w) => `${w.jobId} by ${w.workerId}`).join(', '));
+  assert.equal(wins[0].jobId, jobId);
+  assert.equal(assertAccountedFor(queueDir, jobId), 'claimed');
+  assertNoDuplicatePending(queueDir);
+
+  // And the win is real: the token still opens the lock it claims to hold.
+  rival.complete(jobId, wins[0].token);
+  assert.equal(assertAccountedFor(queueDir, jobId), 'done');
+}
+
+test('a reaper parked over its own unlink cannot hand one job to two workers', async (t) => {
+  const episode = await parkedActorEpisode(t, { op: 'reap', jobId: JOB(1) });
+  assert.deepEqual(episode.finished.reaped, [JOB(1)],
+    'the parked reaper holds the mark, so the reap is its to report');
+  assertClaimedExactlyOnce(episode, JOB(1));
+});
+
+test('an enqueue parked over its expired-lease unlink cannot either', async (t) => {
+  const episode = await parkedActorEpisode(t, { op: 'enqueue', jobId: JOB(1) });
+  assert.equal(episode.finished.entry.jobId, JOB(1), 'the re-enqueue itself succeeds');
+  assertClaimedExactlyOnce(episode, JOB(1));
+});
