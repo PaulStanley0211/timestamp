@@ -57,28 +57,40 @@
  * because it is tested and the next provider may need it. Phase-0 criterion 5
  * -- "is the join visible" -- is simply not asked of this model.
  *
- * ALWAYS 4:3, ALWAYS. `aspect_ratio: '4:3'` is sent on every call because the
- * tape raster is 720x576 at SAR 16/15, i.e. DAR 4:3. Asking for 16:9 and
- * cropping throws away a third of the frame we paid for AND moves the crop
- * decision to whichever downstream filter happens to make it. The resolutions
- * offered here are therefore the 4:3 rasters -- 640x480 and 960x720 -- not the
- * 16:9 shapes those labels usually name. config/credits.json carries the same
- * reasoning next to the money.
+ * THE SHAPE IS ORDERED, NEVER CROPPED, AND IT IS NO LONGER ALWAYS 4:3. This
+ * block used to read "ALWAYS 4:3, ALWAYS" and send a hardcoded `aspect_ratio`
+ * on every call. The argument it made was against CROPPING -- taking a 4:3
+ * frame and throwing away a third of what we paid for, with the crop decision
+ * landing on whichever downstream filter happened to make it -- and that
+ * argument was always correct and is untouched. What it was NOT is an argument
+ * against 16:9, and it had been doing duty as one.
  *
- * AND THE ENDPOINT IS NOT WHAT STOPS US, WHICH IS WORTH KNOWING BEFORE THE NEXT
- * PERSON RE-DERIVES IT. Read on both of fal's pages on 2026-08-24: `aspect_ratio`
- * accepts `auto`, `21:9`, `16:9`, `4:3`, `1:1`, `3:4` and `9:16` on image-to-video
- * AND on reference-to-video, so the other two shapes this product sells would be
- * ORDERED natively rather than cropped, and the paragraph above is an argument
- * against cropping rather than an argument against 16:9. What stops it is here
- * and one level up: `FAL_RESOLUTIONS` is a 4:3 table by construction -- the label
- * is the height and 4:3 supplies the width -- `animate/plan.mjs` derives the same
- * rasters from the same rule with a test that they agree, and `resolveRaster`
- * refuses a paid job at any non-default shape. Three things move together, and
- * the fourth is pricing: 16:9 at 1024x576 is FEWER pixels than 4:3 at 720p and
- * every price in this repo is still an unmetered estimate. See the raster
- * question in config/models.json first -- this endpoint has already returned a
- * size nobody ordered.
+ * fal's own enum, read on both endpoint pages on 2026-08-24, accepts `auto`,
+ * `21:9`, `16:9`, `4:3`, `1:1`, `3:4` and `9:16`. So the other two shapes this
+ * product sells are ORDERED natively. `falAspectFor` reads the shape off the
+ * raster that was actually requested, so a 9:16 job asks fal for 9:16 rather
+ * than fetching 4:3 and building a portrait frame around it -- which nothing
+ * downstream could have caught, because every check reads the same resolved
+ * config the filtergraph does.
+ *
+ * A LABEL NAMES THE SHORT EDGE, which is `animate/plan.mjs`'s rule and section
+ * 13's before it: 480p is 640x480, 854x480 or 480x854. `FAL_RESOLUTIONS` stays
+ * the 4:3 raster per tier because every existing caller reads it that way, and
+ * `FAL_SIZES` is the cross product.
+ *
+ * AND THE PRICING FALLS OUT OF THAT, in the direction that costs money rather
+ * than saves it. An earlier version of this comment said "16:9 at 1024x576 is
+ * FEWER pixels than 4:3 at 720p" -- that compared the TAPE raster against the
+ * SOURCE raster ordered here, which are different things, and fal bills the
+ * second. Like for like, 4:3 is the squarest shape shipped, so holding the
+ * short edge makes 16:9 and 9:16 exactly 4/3 the pixels at the same tier. fal
+ * bills tokens as pixels x seconds, so they cost 4/3 as much and
+ * `config/credits.json` charges 4/3 for them.
+ *
+ * STILL UNMEASURED: no non-4:3 shape has ever been ORDERED from fal, and this
+ * endpoint picks its own delivered raster -- 752x560 for an ordered 640x480.
+ * If that upscale turns out to differ by SHAPE rather than by tier, the
+ * multiplier moves. See the raster question in config/models.json.
  *
  * WHAT IS NOT VERIFIED, AND IS MARKED SO. The video endpoints and their
  * parameters come from fal's own documentation. THE STILL MODEL HAS NOT BEEN
@@ -131,12 +143,6 @@ export const FAL_ID = 'fal';
 export const FAL_QUEUE_BASE = 'https://queue.fal.run';
 
 /**
- * The only aspect ratio this product ever asks for. Named rather than inlined
- * because it appears in both bodies and in the report a reviewer reads.
- */
-export const FAL_ASPECT_RATIO = '4:3';
-
-/**
  * The resolutions on offer, as the 4:3 RASTER each label means here.
  *
  * fal's `resolution` enum is a label; what "720p" renders as depends on the
@@ -157,10 +163,44 @@ export const FAL_RESOLUTIONS = Object.freeze({
   '720p': Object.freeze({ width: 960, height: 720 }),
 });
 
+/**
+ * Every shape this provider will be asked for, cheapest-and-squarest first.
+ *
+ * A LABEL NAMES THE SHORT EDGE, which is `animate/plan.mjs`'s rule and section
+ * 13's before that. So the table above stays the 4:3 raster per tier -- every
+ * existing caller and all of config/credits.json read it that way -- and the
+ * other shapes are derived from its short edge rather than written out again.
+ *
+ * DERIVED HERE RATHER THAN IMPORTED FROM `animate/plan.mjs`, deliberately. A
+ * provider importing the pipeline's planner inverts the layering that makes
+ * `planSegments({ capabilities })` take capabilities as an argument in the
+ * first place. The duplication is the same one this file already had for the
+ * 4:3 case, and it is closed the same way: a test asserts the two agree for
+ * every tier and every shape, and goes red if they ever do not.
+ */
+export const FAL_ASPECT_RATIOS = Object.freeze(['4:3', '16:9', '9:16']);
+
+const falRaster = (short, aspect) => {
+  const [w, h] = aspect.split(':').map(Number);
+  const even = (n) => 2 * Math.round(n / 2);
+  return w >= h
+    ? { width: even((short * w) / h), height: short }
+    : { width: short, height: even((short * h) / w) };
+};
+
 /** In offer order, cheapest first -- `stillSizes[0]` is what a caller that has
  *  not asked for a resolution gets, and the default in config/credits.json is
- *  480p because the product is credit-conscious. */
-export const FAL_SIZES = Object.freeze(Object.values(FAL_RESOLUTIONS));
+ *  480p because the product is credit-conscious. 4:3 leads within each tier for
+ *  the same reason: a CLI render with no order behind it must not suddenly
+ *  start coming back portrait. */
+export const FAL_SIZES = Object.freeze(
+  Object.entries(FAL_RESOLUTIONS).flatMap(([resolution, base]) =>
+    FAL_ASPECT_RATIOS.map((aspect) => Object.freeze({
+      ...falRaster(Math.min(base.width, base.height), aspect),
+      resolution,
+      aspect,
+    }))),
+);
 
 /** Seedance 2.0 takes 4..15 seconds in ONE call. The 15 is the whole reason
  *  this provider has no segment seam; the 4 is a real floor and a request for
@@ -289,17 +329,34 @@ export function falRequestId(idempotencyKey) {
 /** The `resolution` label for a raster, or a CapabilityError naming what is on
  *  offer. Exact match only: "nearest" would silently render 480p for a 720p
  *  order, which is a billing bug wearing a rendering bug's clothes. */
-export function falResolutionFor(size) {
-  const hit = Object.entries(FAL_RESOLUTIONS)
-    .find(([, r]) => r.width === size?.width && r.height === size?.height);
+function falOfferFor(size) {
+  const hit = FAL_SIZES.find((r) => r.width === size?.width && r.height === size?.height);
   if (!hit) {
     throw new CapabilityError(
-      `${FAL_ID}: no resolution renders ${size?.width}x${size?.height} at ${FAL_ASPECT_RATIO}. ` +
-      `Offers: ${Object.entries(FAL_RESOLUTIONS).map(([id, r]) => `${id} (${r.width}x${r.height})`).join(', ')}`,
-      { provider: FAL_ID, code: 'unsupported_size', detail: { requested: size ?? null, offered: FAL_RESOLUTIONS } },
+      `${FAL_ID}: nothing on offer renders ${size?.width}x${size?.height}. ` +
+      `Offers: ${FAL_SIZES.map((r) => `${r.resolution} ${r.aspect} (${r.width}x${r.height})`).join(', ')}`,
+      { provider: FAL_ID, code: 'unsupported_size', detail: { requested: size ?? null, offered: FAL_SIZES } },
     );
   }
-  return hit[0];
+  return hit;
+}
+
+export function falResolutionFor(size) {
+  return falOfferFor(size).resolution;
+}
+
+/**
+ * The shape to ask fal for, read off the raster rather than assumed.
+ *
+ * THE CONSTANT THIS REPLACES WAS THE BUG. `aspect_ratio: FAL_ASPECT_RATIO` went
+ * on every call, so a job ordered at 9:16 fetched a 4:3 source and the tape
+ * stage built a 9:16 frame around it -- with every check downstream agreeing,
+ * because they all read the same resolved config the filtergraph does. That is
+ * why `resolveRaster` refused the shape outright rather than trusting this, and
+ * lifting that refusal means this has to be real first.
+ */
+export function falAspectFor(size) {
+  return falOfferFor(size).aspect;
 }
 
 /** Magic bytes first, extension second. The staged upload is deliberately
@@ -390,7 +447,7 @@ export function falStillBody({
     // reference marker is the only thing that points at them.
     prompt,
     [referencesParam]: urls,
-    aspect_ratio: FAL_ASPECT_RATIO,
+    aspect_ratio: falAspectFor(size),
     num_images: 1,
     seed,
     // PNG because `select` writes a contact sheet a human looks at and then
@@ -419,7 +476,7 @@ export function falVideoBody({ prompt, imagePath, seconds, seed, size, nativeAud
     prompt,
     image_url: dataUriImpl(imagePath),
     resolution: falResolutionFor(size),
-    aspect_ratio: FAL_ASPECT_RATIO,
+    aspect_ratio: falAspectFor(size),
     // A STRING enum -- "15", not 15. fal's schema page spells the values out
     // as string literals and an integer here is a 422 that costs a round trip.
     duration: String(Math.round(seconds)),
@@ -469,7 +526,7 @@ export function falReferenceVideoBody({
     prompt,
     [referencesParam]: references.map((ref) => dataUriImpl(ref.path)),
     resolution: falResolutionFor(size),
-    aspect_ratio: FAL_ASPECT_RATIO,
+    aspect_ratio: falAspectFor(size),
     // A STRING enum here exactly as on image-to-video.
     duration: String(Math.round(seconds)),
     // LAYER 1 ON THE WIRE. config/models.json records this endpoint as having

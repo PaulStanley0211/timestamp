@@ -54,7 +54,10 @@ import {
   FIRST_INDEX,
   CURRENCY,
   PAID_PROVIDER_IDS,
+  SHIPPED_ASPECTS,
+  aspectOf,
   assertProvider,
+  assertStillRequest,
   assertStillResult,
   assertVideoResult,
   assertVideoRequest,
@@ -545,6 +548,63 @@ test('the registry refuses an unknown provider rather than falling back', () => 
     return true;
   });
   assert.deepEqual(PROVIDER_IDS, ['fixture', 'fal']);
+});
+
+test('the shapes the contract accepts are the shapes the tape stage has a frame for', () => {
+  // `requireShippedAspect` used to be `requireFourThree`, and its reasoning --
+  // "the tape raster is 720x576, i.e. DAR 4:3" -- was true when written and
+  // went stale the day section 13 gave every shape its own tape raster. The
+  // check is still doing the same job: a still arriving at an aspect nobody
+  // planned gets cropped or pillared downstream without anyone deciding where.
+  // It just has to know which shapes ARE planned.
+  //
+  // config/render.json is the authority, so this is the cross-check that stops
+  // the two drifting. Adding a shape there without pricing and planning it is
+  // exactly the sort of half-landing this repo has been bitten by.
+  const shipped = [cfg.defaultAspect, ...Object.keys(cfg.aspects ?? {}).filter((k) => !k.startsWith('_'))];
+  assert.deepEqual([...SHIPPED_ASPECTS].sort(), shipped.sort(),
+    'the provider contract and config/render.json disagree about which shapes exist');
+
+  // The rule is a tolerance, because 854x480 -- the standard 480p widescreen
+  // raster -- is 0.08% off exact 16:9 and no integer width fixes that at a
+  // height of 480. It must still refuse a shape that is genuinely not ours.
+  assert.equal(aspectOf({ width: 854, height: 480 }), '16:9');
+  assert.equal(aspectOf({ width: 640, height: 480 }), '4:3');
+  assert.equal(aspectOf({ width: 480, height: 854 }), '9:16');
+  for (const bad of [{ width: 480, height: 480 }, { width: 1024, height: 430 }, { width: 100, height: 3 }]) {
+    assert.equal(aspectOf(bad), null, `${bad.width}x${bad.height} is not a shape this product ships`);
+  }
+
+  // AND THE REFUSAL IS ACTUALLY WIRED, which nothing asserted until a sabotage
+  // walked straight through it: disabling the check in `requireShippedAspect`
+  // left every test green. `aspectOf` returning null is only useful if
+  // something acts on it, and this is the something.
+  const wellFormed = {
+    prompt: 'a person by a fence',
+    negativePrompt: 'text, watermark',
+    references: [{ role: 'face', path: path.join(REPO_ROOT, 'face.png') }],
+    seed: 4242,
+    count: 1,
+    idempotencyKey: 'shape-check',
+  };
+  for (const size of [{ width: 480, height: 480 }, { width: 1024, height: 430 }]) {
+    assert.throws(() => assertStillRequest({ ...wellFormed, size }), (err) => {
+      assert.equal(err.code, 'invalid_request');
+      assert.match(err.message, /4:3, 16:9, 9:16/);
+      return true;
+    }, `${size.width}x${size.height} was accepted as a still request`);
+  }
+  // An ODD edge is refused too: yuv420p subsamples chroma by two, so it is a
+  // filtergraph failure at the far end of a paid render rather than here.
+  assert.throws(() => assertStillRequest({ ...wellFormed, size: { width: 641, height: 480 } }), (err) => {
+    assert.equal(err.code, 'invalid_request');
+    assert.match(err.message, /even/);
+    return true;
+  });
+  // The three real shapes still pass, so this cannot go green by refusing all.
+  for (const size of [{ width: 640, height: 480 }, { width: 854, height: 480 }, { width: 720, height: 1280 }]) {
+    assert.doesNotThrow(() => assertStillRequest({ ...wellFormed, size }));
+  }
 });
 
 test('the paid-provider list agrees with what the providers themselves say', () => {

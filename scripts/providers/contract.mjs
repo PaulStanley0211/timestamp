@@ -158,12 +158,54 @@ function requireAbsolutePath(obj, key, where) {
   return v;
 }
 
-/** 4:3 is not decoration. The tape raster is 720x576 with SAR 16/15, i.e. DAR
- *  4:3, and a still that arrives at any other aspect gets cropped or pillared
- *  somewhere downstream without anyone deciding where. Checked here so the
- *  decision is a loud failure at request time rather than a quiet crop at
- *  assemble time. */
-function requireFourThree(size, where) {
+/**
+ * The shapes the tape stage has geometry for.
+ *
+ * THIS USED TO BE THE SINGLE VALUE 4:3, and its reasoning -- "the tape raster
+ * is 720x576 with SAR 16/15, i.e. DAR 4:3" -- was true when it was written and
+ * stopped being true when section 13 gave every shape its own tape raster:
+ * 720x576, 1024x576 and 576x1024, each holding the short edge at 576. The
+ * check was right and its premise went stale.
+ *
+ * WHAT IT IS STILL FOR, unchanged: a still that arrives at an aspect nobody
+ * planned gets cropped or pillared somewhere downstream without anyone
+ * deciding where. So the rule is not "4:3" and it is not "anything" -- it is
+ * "a shape this product has a tape frame for", and a test cross-checks this
+ * list against `config/render.json`, which is the authority.
+ */
+export const SHIPPED_ASPECTS = Object.freeze(['4:3', '16:9', '9:16']);
+
+const RATIOS = SHIPPED_ASPECTS.map((a) => {
+  const [w, h] = a.split(':').map(Number);
+  return { aspect: a, w, h };
+});
+
+/**
+ * The shape id for a raster, or null when it is not one this product ships.
+ *
+ * WHY THIS IS A TOLERANCE AND NOT AN EXACT CROSS-MULTIPLICATION, which was the
+ * first attempt and was wrong. There is NO integer width that makes 16:9 exact
+ * at a height of 480 -- 480 is not divisible by 9 -- which is precisely why
+ * 854x480 is the industry-standard 480p widescreen raster and is itself 0.08%
+ * off. Demanding exactness would reject the only raster anybody actually uses.
+ * yuv420p forces both edges even on top of that, so the rounding is not
+ * optional either.
+ *
+ * 1% is safe rather than arbitrary: the shapes this product ships are 1.333,
+ * 1.778 and 0.5625, and the closest pair is 33% apart. The widest real error is
+ * 854x480 at 0.078%, so there is more than two orders of magnitude of headroom
+ * before two shapes could be confused.
+ */
+const ASPECT_TOLERANCE = 0.01;
+
+export function aspectOf(size) {
+  if (!Number.isFinite(size?.width) || !Number.isFinite(size?.height) || size.height <= 0) return null;
+  const actual = size.width / size.height;
+  const hit = RATIOS.find(({ w, h }) => Math.abs(actual - w / h) / (w / h) <= ASPECT_TOLERANCE);
+  return hit ? hit.aspect : null;
+}
+
+function requireShippedAspect(size, where) {
   if (!isPlainObject(size)) {
     throw bad('invalid_request', `${where}.size must be {width,height}, got ${JSON.stringify(size)}`);
   }
@@ -173,8 +215,19 @@ function requireFourThree(size, where) {
       throw bad('invalid_request', `${where}.size.${k} must be a positive integer, got ${JSON.stringify(v)}`, { size });
     }
   }
-  if (width * 3 !== height * 4) {
-    throw bad('invalid_request', `${where}.size must be 4:3 -- the tape raster is DAR 4:3 -- got ${width}x${height}`, { size });
+  // yuv420p subsamples chroma by two, so an odd edge is a filtergraph failure
+  // at the far end of a paid render rather than a rejected request here.
+  for (const [k, v] of [['width', width], ['height', height]]) {
+    if (v % 2 !== 0) {
+      throw bad('invalid_request', `${where}.size.${k} must be even -- yuv420p subsamples chroma by two -- got ${v}`, { size });
+    }
+  }
+  if (aspectOf(size) === null) {
+    throw bad(
+      'invalid_request',
+      `${where}.size must be one of ${SHIPPED_ASPECTS.join(', ')} -- the tape stage has no frame for anything else -- got ${width}x${height}`,
+      { size, shipped: SHIPPED_ASPECTS },
+    );
   }
   return size;
 }
@@ -212,7 +265,7 @@ export function assertStillRequest(req) {
   requireString(req, 'negativePrompt', 'StillRequest', { allowEmpty: true });
   requireSeed(req, 'StillRequest');
   requireString(req, 'idempotencyKey', 'StillRequest');
-  requireFourThree(req.size, 'StillRequest');
+  requireShippedAspect(req.size, 'StillRequest');
 
   if (!Number.isInteger(req.count) || req.count < 1 || req.count > MAX_STILL_COUNT) {
     throw bad('invalid_request', `StillRequest.count must be an integer in 1..${MAX_STILL_COUNT}, got ${JSON.stringify(req.count)}`, { count: req.count });
@@ -382,7 +435,7 @@ export function assertProvider(p) {
   if (!Array.isArray(c.stillSizes) || c.stillSizes.length === 0) {
     throw bad('invalid_provider', 'provider.capabilities.stillSizes must be a non-empty array', { id: p.id });
   }
-  c.stillSizes.forEach((s, i) => requireFourThree(s, `provider.capabilities.stillSizes[${i}]`));
+  c.stillSizes.forEach((s, i) => requireShippedAspect(s, `provider.capabilities.stillSizes[${i}]`));
 
   if (typeof c.supportsPlaceReference !== 'boolean') {
     throw bad('invalid_provider', `provider.capabilities.supportsPlaceReference must be a boolean, got ${JSON.stringify(c.supportsPlaceReference)}`, { id: p.id });

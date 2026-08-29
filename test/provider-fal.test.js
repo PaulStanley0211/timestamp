@@ -49,6 +49,7 @@ import {
   falReferenceVideoBody,
   falRequestId,
   falResolutionFor,
+  falAspectFor,
   falMimeType,
   falDataUri,
   falClipName,
@@ -521,13 +522,32 @@ test('[fal] duration is a STRING enum and the aspect ratio is always 4:3', () =>
 test('[fal] the resolution the customer paid for is the resolution on the wire', () => {
   assert.equal(falResolutionFor({ width: 640, height: 480 }), '480p');
   assert.equal(falResolutionFor({ width: 960, height: 720 }), '720p');
-  // No nearest-match: substituting 480p for a 720p order bills for one thing
-  // and renders another, and nobody downstream can see it.
-  assert.throws(() => falResolutionFor({ width: 1280, height: 720 }), (err) => {
+
+  // THE EXAMPLE IN THE REFUSAL BELOW CHANGED AND THE RULE DID NOT, so this is
+  // written out rather than quietly edited. It used to be 1280x720, chosen as
+  // "the 16:9 shape 720p usually names, which this provider does NOT offer" --
+  // and offering it is the entire point of the change that touched this file.
+  // Using it as the unsupported example would now assert the opposite of the
+  // feature.
+  //
+  // 1024x768 replaces it and is a STRONGER example, not a weaker one: it is a
+  // legitimate 4:3 shape and simply not a tier on offer, so it proves the check
+  // is on the RASTER rather than merely on the aspect -- and it is the
+  // fixture's own size, i.e. exactly the raster a careless substitution would
+  // reach for. It sits 1.14x from 960x720, which is the kind of near miss a
+  // nearest-match would swallow.
+  assert.throws(() => falResolutionFor({ width: 1024, height: 768 }), (err) => {
     assert.ok(err instanceof CapabilityError);
     assert.equal(err.code, 'unsupported_size');
     return true;
   });
+
+  // And the shape that used to be the counter-example is now a real offer, so
+  // the test covers more than it did rather than less.
+  assert.equal(falResolutionFor({ width: 1280, height: 720 }), '720p');
+  assert.equal(falAspectFor({ width: 1280, height: 720 }), '16:9');
+  assert.equal(falAspectFor({ width: 960, height: 720 }), '4:3');
+  assert.equal(falAspectFor({ width: 720, height: 1280 }), '9:16');
 });
 
 test('[fal] the still body carries the references, the seed and the raster', () => {
@@ -703,6 +723,55 @@ test('[fal] a redirect that stays on the allow-list is still followed', async ()
   const { provider, ctx } = falUnderTest({ transport: { ...base, fetchImpl: platformish } });
   await provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('redirect-ok') }));
   assert.equal(servedFinal, true, 'a legitimate redirect within the allow-list was not followed');
+});
+
+test('[fal] the shape that was ordered is the shape that goes on the wire', async () => {
+  // THE HARDCODED CONSTANT WAS THE WHOLE BUG. `aspect_ratio: FAL_ASPECT_RATIO`
+  // was sent on every call, so a 9:16 order fetched a 4:3 source and the tape
+  // stage built a 9:16 frame around it -- and nothing downstream would notice,
+  // because every check reads the same resolved config the filtergraph does.
+  // That is why `resolveRaster` refused the shape outright rather than trusting
+  // this.
+  //
+  // Asserted on the REQUEST BODY, because a provider that parses a response
+  // perfectly while asking for the wrong shape is exactly the failure this
+  // file was written for.
+  for (const [aspect, expected] of [['4:3', '4:3'], ['16:9', '16:9'], ['9:16', '9:16']]) {
+    const { provider, transport, ctx } = falUnderTest();
+    const size = resolutionRaster('720p', aspect);
+    await provider.generateVideo(videoRequest({ size }), ctx({ outDir: tmpDir(`aspect-${aspect.replace(':', '-')}`) }));
+    const body = transport.posts()[0].body;
+    assert.equal(body.aspect_ratio, expected,
+      `ordered ${aspect} and asked fal for ${body.aspect_ratio}`);
+    assert.equal(body.resolution, '720p',
+      `ordered ${aspect} at 720p and asked fal for ${body.resolution}`);
+  }
+});
+
+test('[fal] every shape at every tier is on offer, and nothing else is', () => {
+  // `stillSizes` is what `resolveRaster` checks an order against, so a shape
+  // missing here is a shape the pipeline refuses however well the rest works.
+  const offered = new Set(FAL_CAPABILITIES.stillSizes.map((s) => `${s.width}x${s.height}`));
+  for (const id of AVAILABLE_RESOLUTIONS) {
+    for (const aspect of ['4:3', '16:9', '9:16']) {
+      const r = resolutionRaster(id, aspect);
+      assert.ok(offered.has(`${r.width}x${r.height}`),
+        `${id} at ${aspect} (${r.width}x${r.height}) is not offered, so the pipeline will refuse it`);
+    }
+  }
+  // The first offer is still 4:3 at the cheapest tier: `resolveRaster` hands
+  // `stillSizes[0]` to any caller with no order behind it, and a CLI render
+  // suddenly defaulting to portrait would be a surprise nobody asked for.
+  assert.deepEqual(
+    { width: FAL_CAPABILITIES.stillSizes[0].width, height: FAL_CAPABILITIES.stillSizes[0].height },
+    { width: 640, height: 480 },
+  );
+  // A raster nobody offers is still refused by name rather than rounded to the
+  // nearest, which would bill for one size and deliver another.
+  assert.throws(() => falResolutionFor({ width: 1234, height: 567 }), (err) => {
+    assert.equal(err.code, 'unsupported_size');
+    return true;
+  });
 });
 
 test('[fal] an idempotency key is sent with the submit', async () => {
