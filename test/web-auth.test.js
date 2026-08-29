@@ -748,6 +748,54 @@ test('the login window closes, and a genuine sign-in works again', async () => {
   }, { nowImpl: () => new Date(nowMs) });
 });
 
+/** A login attempt wearing a forwarded-for identity, for the proxy tests. */
+const loginAs = (base, pair, xff) =>
+  fetch(`${base}/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      accept: 'application/json',
+      cookie: pair.cookie,
+      'x-forwarded-for': xff,
+    },
+    body: new URLSearchParams({ email: 'a@example.com', password: 'wrong', csrf: pair.csrf }),
+    redirect: 'manual',
+  });
+
+test('behind the proxy this deployment will have, the limiter tells visitors apart', async () => {
+  // Every connection behind a TLS-terminating proxy arrives on the proxy's
+  // own socket, so a limiter keyed on the socket address collapses the whole
+  // internet into ONE bucket: ten sign-ins a minute for everybody, and any
+  // single visitor can lock out every other one. The same trust switch that
+  // already governs `x-forwarded-proto` and the Supabase attribution header
+  // governs this: with TIMESTAMP_TRUST_PROXY=1 the operator is asserting the
+  // proxy overwrites `x-forwarded-for`, so the limiter may key on it.
+  await withApp(async ({ base }) => {
+    const pair = await csrfPair(base);
+    for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) {
+      assert.equal((await loginAs(base, pair, '203.0.113.9')).status, 401, `attempt ${i + 1} is ordinary`);
+    }
+    assert.equal((await loginAs(base, pair, '203.0.113.9')).status, 429,
+      'the exhausted visitor is refused');
+    assert.equal((await loginAs(base, pair, '198.51.100.7')).status, 401,
+      'a DIFFERENT visitor behind the same proxy socket must not inherit the refusal');
+  }, { trustProxy: true });
+});
+
+test('without the trust switch, the forwarded header buys nobody a fresh bucket', async () => {
+  // The other half, and the half that keeps this from being a bypass: with no
+  // trusted proxy, `x-forwarded-for` is whatever the client typed, and typing
+  // a new one per request must not hand a script its own unlimited lane.
+  await withApp(async ({ base }) => {
+    const pair = await csrfPair(base);
+    for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) {
+      await loginAs(base, pair, `203.0.113.${i}`);
+    }
+    assert.equal((await loginAs(base, pair, '198.51.100.200')).status, 429,
+      'a typed header must not open a fresh bucket when no proxy is trusted');
+  });
+});
+
 /**
  * Since task 8, signup never creates a local account at all -- the account is
  * born at `/verify`, minutes or days later. What "the refusal happens before

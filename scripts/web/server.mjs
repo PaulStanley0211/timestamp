@@ -817,19 +817,27 @@ export function createServer({
   }
 
   /**
-   * One limiter per credential route, keyed by the SOCKET address and never by
-   * a header. `x-forwarded-for` is whatever the client typed, so keying on it
-   * hands every script its own unlimited lane. Behind a proxy the socket
-   * address collapses every visitor into one key, which throttles everybody
-   * together -- the failure direction that costs patience rather than the
-   * giveaway budget, until a proxy is actually part of the deployment.
+   * One limiter per credential route, keyed on the same trust decision as
+   * everything else: the socket address, unless the operator has said a proxy
+   * rewrites the forwarded header.
    *
-   * NOTE THAT THIS DOES NOT USE `clientIpOf` EVEN WHEN A PROXY IS TRUSTED.
-   * The two answer different questions: `clientIpOf` says who to attribute a
-   * request to upstream, and this says which socket is allowed to keep asking.
-   * A limiter keyed on a value the client can influence is a limiter with a
-   * bypass, and "the operator trusts the proxy" is a weaker claim than "this
-   * is the connection the bytes arrived on".
+   * Without `TIMESTAMP_TRUST_PROXY=1`, `x-forwarded-for` is whatever the
+   * client typed, so keying on it would hand every script its own unlimited
+   * lane -- the socket it arrived on is the only honest key. WITH the switch,
+   * every connection arrives on the proxy's own socket, and a socket-keyed
+   * limiter collapses the whole internet into ONE bucket: ten sign-ins a
+   * minute for everybody, and any single visitor locks out every other one --
+   * a security control flipped into a trivially-triggered outage on day one.
+   *
+   * The earlier version of this comment argued the limiter must never use
+   * `clientIpOf` because a header is client-influenced. That is true exactly
+   * until the operator asserts otherwise, and `TIMESTAMP_TRUST_PROXY=1` IS
+   * that assertion -- the same one `x-forwarded-proto` and the Supabase
+   * `Sb-Forwarded-For` attribution already rest on. One switch, one trust
+   * decision, made once in `clientIpOf` so it cannot be made twice and
+   * differently. The deployment runbook's side of the bargain: the proxy must
+   * overwrite inbound `x-forwarded-for` (Caddy's default for untrusted
+   * peers), or the leftmost entry is client-typed on every route that reads it.
    */
   /**
    * WHEN THIS SERVER LAST FAILED TO GET A MAIL OUT, or null if it never has.
@@ -1075,6 +1083,20 @@ export function createServer({
   }
 
   /**
+   * The 403 for a money post that did not prove it came from this site. The
+   * auth routes answer a forgery with their own form re-armed
+   * (`refuseForgery`); the two credit-spending API routes have no form of
+   * their own to re-arm, so the answer is the refusal itself. Decided on the
+   * HEADERS, before any body is read -- a forged upload must not land bytes,
+   * and a forged checkout must not reach the pack table.
+   */
+  function refuseCrossSite(req, res) {
+    const message = 'We could not confirm that came from this site. Please go back and try again.';
+    if (wantsHtml(req)) return sendHtml(req, res, 403, errorPage({ status: 403, title: 'Not from this site' }));
+    return sendJson(req, res, 403, { error: { status: 403, message, code: 'NOT_FROM_THIS_SITE' } });
+  }
+
+  /**
    * The 403 for a credential post that did not prove it came from this site's
    * own form. The HTML answer is the form again, carrying a fresh pair, so the
    * person a stale tab belongs to is one submit away from signed in -- the
@@ -1110,7 +1132,7 @@ export function createServer({
    *  the body is read: the refusal must not depend on -- or reveal -- anything
    *  about what was being attempted. */
   function refuseOverLimit(req, res, which, page) {
-    const key = req.socket?.remoteAddress ?? 'unknown';
+    const key = (trustProxy ? clientIpOf(req) : req.socket?.remoteAddress) ?? 'unknown';
     const { allowed, retryAfterS } = limiters[which].check(key);
     if (allowed) return false;
     const message = OVER_LIMIT_MESSAGES[which] ?? OVER_LIMIT_MESSAGES.login;
@@ -2945,6 +2967,12 @@ export function createServer({
      * thing in this application that adds credits is `stripeWebhook` below.
      */
     async checkout(req, res, { account }) {
+      // Section 28 item 4's gate, on the route that opens a payment. The
+      // double-submit token is deliberately not required here: this is an
+      // API route with SameSite=Lax on the session cookie, and the browser's
+      // own Sec-Fetch-Site/Origin account is checked instead -- absence
+      // passes for non-browser clients, a foreign origin never does.
+      if (!sameOriginPost(req)) return refuseCrossSite(req, res);
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
 
       let pack;
@@ -3135,6 +3163,10 @@ export function createServer({
      * this handler is reading the bytes the client is already sending.
      */
     async createJob(req, res, { account }) {
+      // The same gate as checkout, on the route that debits credits --
+      // decided before the multipart body streams, so a forged post lands no
+      // photograph and moves no money.
+      if (!sameOriginPost(req)) return refuseCrossSite(req, res);
       const boundary = boundaryFromContentType(req.headers['content-type']);
       if (!boundary) {
         throw new HttpError(415, 'Send the form as multipart/form-data.', { code: 'NOT_MULTIPART' });

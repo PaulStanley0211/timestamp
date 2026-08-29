@@ -1355,6 +1355,26 @@ test('a web job is direct exactly when its provider spends money', async () => {
   }, { provider: 'fal' });
 });
 
+test('a job post naming a foreign origin is refused before any money moves', async () => {
+  // POST /api/jobs debits the account, and it was the only credit-spending
+  // route without the same-origin gate every auth route carries. The refusal
+  // fires on the headers, before the body is parsed -- and therefore before
+  // a photograph lands or a credit moves.
+  await withServer(async ({ base, root, cookieA, accountA }) => {
+    const before = accountA.credits;
+    const forged = await post(base, '/api/jobs', multipart(goodParts()), cookieA,
+      { origin: 'https://evil.example', accept: 'application/json' });
+    assert.equal(forged.status, 403, 'a cross-site job post must be refused');
+    assert.equal((await forged.json()).error.code, 'NOT_FROM_THIS_SITE');
+    assert.equal(accountA.credits, before, 'a refused forgery must not touch the balance');
+    assert.deepEqual(jobDirs(root), [], 'a refused forgery must leave nothing on disk');
+
+    const genuine = await post(base, '/api/jobs', multipart(goodParts()), cookieA,
+      { 'sec-fetch-site': 'same-origin', accept: 'application/json' });
+    assert.equal(genuine.status, 201, 'the browser submission this gate exists to keep working');
+  });
+});
+
 test('a card beats the describe-it box when somebody fills in both', async () => {
   await withServer(async ({ base, root, cookieA }) => {
     const res = await post(base, '/api/jobs', multipart([

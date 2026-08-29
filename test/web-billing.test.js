@@ -628,6 +628,45 @@ test('a pack with no Stripe Price cannot be bought, and no request is attempted'
   });
 });
 
+test('a checkout post naming a foreign origin is refused before anything else is looked at', async () => {
+  // The auth routes have carried this gate since section 28 item 4; the two
+  // money routes were the only state-changing posts without it, resting on
+  // SameSite=Lax alone. The pattern is the same one, five lines away.
+  await withApp(async ({ base, root, app }) => {
+    const account = await makeAccount(root);
+    const cookie = await signIn(app, account.accountId);
+
+    const forged = await fetch(`${base}/api/billing/checkout`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+        cookie,
+        origin: 'https://evil.example',
+      },
+      body: new URLSearchParams({ pack: PACK_ID }),
+    });
+    assert.equal(forged.status, 403, 'a cross-site checkout post must be refused');
+    assert.equal((await forged.json()).error.code, 'NOT_FROM_THIS_SITE');
+
+    // The browser's own account of a same-origin submission still passes the
+    // gate -- whatever the checkout then answers, it is not the 403.
+    const genuine = await fetch(`${base}/api/billing/checkout`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+        cookie,
+        'sec-fetch-site': 'same-origin',
+      },
+      body: new URLSearchParams({ pack: PACK_ID }),
+    });
+    assert.notEqual(genuine.status, 403, 'a same-origin submission must pass the gate');
+  });
+});
+
 test('a priced pack sends the account id to Stripe and nothing a browser chose', async () => {
   let sent = null;
   const fetchImpl = async (url, init) => {
