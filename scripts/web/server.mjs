@@ -715,6 +715,10 @@ export function createServer({
   limits = LIMITS,
   consentText = CONSENT_TEXT,
   ffprobeImpl = runFfprobe,
+  /** How the health endpoint reads free space under `root`. A seam for the
+   *  same reason `ffprobeImpl` is one: the test that proves "low disk pages"
+   *  must not need a full disk to run. */
+  statfsImpl = fs.statfsSync,
   auth = null,
   sessions = null,
   /**
@@ -1710,6 +1714,39 @@ export function createServer({
 
     const value = { stats, lastSeen };
     queueCache = { at: now, value };
+    return value;
+  }
+
+  /**
+   * The disk, on the same 30 s window as everything beside it. This root holds
+   * the accounts, the ledger, the queue and every photograph -- a full disk is
+   * the one infrastructure failure this deployment can see COMING, and the
+   * uptime monitor on this endpoint is the only thing that will be looking.
+   *
+   * THE FLOOR IS 1 GiB, not a percentage. A render writes ~65 MB and a ledger
+   * append must never meet ENOSPC, so the question is "how many more orders
+   * fit", which is absolute -- 2% of a 4 TB volume is plenty and 10% of a
+   * 10 GB one is not.
+   *
+   * An UNREADABLE figure is reported and is neither low nor healthy:
+   * "I cannot see the disk" is a different claim from "the disk is full", and
+   * paging on it would have health crying wolf on any platform quirk.
+   */
+  const DISK_FLOOR_BYTES = 1_073_741_824;
+  let diskCache = { at: -Infinity, value: null };
+  function diskHealth() {
+    const now = nowImpl().getTime();
+    if (diskCache.value && now - diskCache.at < 30_000) return diskCache.value;
+    let value;
+    try {
+      const s = statfsImpl(root);
+      const availableBytes = Number(s.bavail) * Number(s.bsize);
+      const totalBytes = Number(s.blocks) * Number(s.bsize);
+      value = { availableBytes, totalBytes, low: availableBytes < DISK_FLOOR_BYTES };
+    } catch (err) {
+      value = { availableBytes: null, totalBytes: null, low: null, error: err?.code ?? 'unreadable' };
+    }
+    diskCache = { at: now, value };
     return value;
   }
 
@@ -3307,12 +3344,16 @@ export function createServer({
     async health(req, res) {
       const ffmpeg = await ffmpegHealth();
       const { stats, lastSeen } = queueHealth();
+      const disk = diskHealth();
 
       sendJson(req, res, 200, {
-        ok: ffmpeg.available && stats !== null,
+        // `disk.low !== true` and not `!disk.low`, deliberately: an unreadable
+        // figure (low: null) must not take ok down while orders still land.
+        ok: ffmpeg.available && stats !== null && disk.low !== true,
         ffmpeg,
         queue: stats,
         worker: { lastSeen, inFlight: stats?.claimed ?? null },
+        disk,
         provider,
       });
     },

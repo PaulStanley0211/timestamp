@@ -1,0 +1,84 @@
+# Timestamp, deployed: two processes over one volume, behind one TLS door.
+#
+# This is the topology the Dockerfile encodes and the image test proves --
+# `queue.mjs` claims jobs with `linkSync`, so web and worker MUST share one
+# block filesystem, which is the `data` volume mounted into both. The worker
+# is the same image with the command replaced, exactly as the Dockerfile's
+# final comment prescribes.
+#
+# CADDY IS THE ONLY DOORWAY, and that is load-bearing three ways: it is what
+# terminates TLS (automatic, from the site address in the Caddyfile); it is
+# the proxy whose X-Forwarded-* headers TIMESTAMP_TRUST_PROXY=1 vouches for
+# (Caddy replaces client-typed values from untrusted peers, which is the
+# property .env.example demands); and the rate limiters key on the address it
+# reports. Publishing web:3000 on the host would reopen every one of those --
+# a direct hit with a typed X-Forwarded-For, no TLS, one shared limiter
+# bucket. test/deploy-topology.test.js fails if a ports: line grows anywhere
+# but caddy.
+#
+# SECRETS COME FROM `.env` ON THE SERVER, never from this file -- it is
+# committed. The server's .env carries the same keys .env.example documents,
+# plus the three production lines the runbook lists: TIMESTAMP_PROVIDER=fal,
+# TIMESTAMP_PUBLIC_URL=https://timestamptapes.com, TIMESTAMP_TRUST_PROXY=1.
+#
+# LOG ROTATION IS NOT OPTIONAL. Without max-size, json-file logs grow without
+# bound on the same disk that holds every balance -- the health endpoint's
+# low-disk page would eventually be caused by the logs of the process
+# reporting it.
+
+services:
+  web:
+    build: .
+    image: timestamp
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - data:/data
+    healthcheck:
+      # node is the only runtime in the image; curl and wget are not installed.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((r)=>r.json()).then((b)=>process.exit(b.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    build: .
+    image: timestamp
+    restart: unless-stopped
+    command: ["node", "scripts/worker/worker-cli.mjs", "--root=/data", "--provider=fal"]
+    env_file: .env
+    volumes:
+      - data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:
+  caddy_data:
+  caddy_config:

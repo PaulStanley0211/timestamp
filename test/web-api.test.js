@@ -2204,6 +2204,81 @@ test('health says so honestly when ffmpeg is missing', async () => {
   }
 });
 
+test('health reports the disk, because the disk is where every balance lives', async () => {
+  // The queue, the accounts, the ledger and every photograph are files under
+  // one root; a full disk is the one infrastructure failure this deployment
+  // can see coming, and the uptime monitor watching /api/health is the only
+  // thing that will be looking.
+  await withServer(async ({ base }) => {
+    const body = await (await fetch(`${base}/api/health`)).json();
+    assert.ok(Number.isFinite(body.disk?.availableBytes) && body.disk.availableBytes > 0,
+      `health carries no usable disk figure: ${JSON.stringify(body.disk)}`);
+    assert.ok(Number.isFinite(body.disk?.totalBytes) && body.disk.totalBytes >= body.disk.availableBytes);
+    assert.equal(body.disk.low, false, 'a dev machine with free space must not read as low');
+  });
+});
+
+test('low disk flips ok, and the disk is read on the cache window, not per hit', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  let statted = 0;
+  let now = new Date('2026-08-28T12:00:00Z');
+  const app = createServer({
+    root,
+    cfg: CFG,
+    queue: fakeQueue(),
+    port: 0,
+    auth: fakeAuth(),
+    nowImpl: () => now,
+    // 512 MiB free of 40 GB: under any sane floor -- a single render writes
+    // ~65 MB and the accounts must never hit ENOSPC mid-ledger-append.
+    statfsImpl: () => { statted += 1; return { bavail: 131_072, blocks: 9_765_625, bsize: 4096 }; },
+  });
+  const port = await app.listen();
+  try {
+    const hit = () => fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.json());
+    const body = await hit();
+    assert.equal(body.disk.low, true, `512 MiB free must read as low: ${JSON.stringify(body.disk)}`);
+    assert.equal(body.ok, false, 'low disk must page the uptime monitor -- ok stays true only while orders can land');
+    assert.equal(body.disk.availableBytes, 131_072 * 4096);
+
+    // Same rule as ffmpeg and the queue beside it: an unauthenticated
+    // endpoint must not do per-hit filesystem work somebody else schedules.
+    for (let i = 0; i < 9; i += 1) await hit();
+    assert.equal(statted, 1, `ten hits read the disk ${statted} times`);
+    now = new Date(now.getTime() + 31_000);
+    await hit();
+    assert.equal(statted, 2, 'a cache that never refreshes is a fossil, not a health check');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an unreadable disk figure is reported, not fatal and not low', async () => {
+  // statfs failing is "I cannot see the disk", which is not the same claim as
+  // "the disk is full" -- paging on it would make health cry wolf on any
+  // platform quirk, and the boy who cried wolf is how real pages get ignored.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const app = createServer({
+    root,
+    cfg: CFG,
+    queue: fakeQueue(),
+    port: 0,
+    auth: fakeAuth(),
+    statfsImpl: () => { const e = new Error('nope'); e.code = 'ENOSYS'; throw e; },
+  });
+  const port = await app.listen();
+  try {
+    const body = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
+    assert.equal(body.disk.low, null);
+    assert.equal(body.disk.error, 'ENOSYS');
+    assert.equal(body.ok, true, 'an unreadable statfs must not take ok down while everything else works');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('the wrong method on a real path is 405 with Allow, not 404', async () => {
   await withServer(async ({ base, root, app, accountA, cookieA }) => {
     const job = seedJob(app, root, { owner: accountA });

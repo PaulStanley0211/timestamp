@@ -42,6 +42,7 @@ import { createQueue } from '../queue/queue.mjs';
 import { createServer } from './server.mjs';
 import { createBilling } from '../billing/billing.mjs';
 import { createSupabaseAuth } from '../auth/supabase-auth.mjs';
+import { installCrashHandlers } from '../ops/crash.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
   .split(path.sep).join('/');
@@ -341,8 +342,11 @@ export async function main(argv = process.argv.slice(2), { log = console.log } =
 }
 
 // Only when run directly, so a test can import `parseArgs` without starting a
-// listener on somebody's port 3000.
+// listener on somebody's port 3000. The crash handlers live HERE and not in
+// main() for the same reason: a test that drives main() must not have real
+// process-wide handlers installed under it.
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  installCrashHandlers({ name: 'web' });
   main().catch((err) => {
     process.stderr.write(`${err?.message ?? err}\n`);
     process.exit(1);

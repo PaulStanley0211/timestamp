@@ -37,6 +37,7 @@ import { createQueue, REPO_ROOT } from '../queue/queue.mjs';
 import { createOwnerRefunds } from '../web/session-middleware.mjs';
 import { createWorker, WorkerError } from './worker.mjs';
 import { STEPS } from '../render/job.mjs';
+import { installCrashHandlers } from '../ops/crash.mjs';
 
 export function parseArgs(argv) {
   const flags = new Set();
@@ -331,6 +332,9 @@ const invokedDirectly = process.argv[1] &&
   pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
 
 if (invokedDirectly) {
+  // Direct invocation only, never on import -- a test that imports
+  // renderEvent must not gain process-wide crash handlers.
+  installCrashHandlers({ name: 'worker' });
   main()
     .then((code) => { process.exitCode = code ?? 0; })
     .catch((err) => {

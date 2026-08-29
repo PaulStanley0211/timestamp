@@ -1,0 +1,129 @@
+# Deploy runbook — Hetzner CX23, docker compose, Caddy
+
+The topology is `compose.yaml`: one image, two processes (web + worker) over
+one `data` volume, behind Caddy terminating TLS. The host was chosen on
+2026-08-29 (CLAUDE.md §34A has the comparison): **Hetzner CX23** — 2 vCPU,
+4 GB, 40 GB NVMe, the exact machine shape the image was proven on (full
+fixture render in 97 s).
+
+**Why this document exists:** every Google sign-in failure this project has
+had was dashboard-shaped and invisible to the test suite (CLAUDE.md §A).
+Going live repeats that risk across five consoles at once. Work through this
+top to bottom; nothing here is optional.
+
+---
+
+## 1. The server, once
+
+1. Hetzner console → new server: **CX23**, Ubuntu 24.04, Falkenstein, your
+   SSH key. Enable **Backups** on the server (the 20%-of-price toggle) — that
+   is the whole-disk safety net under the app-level backup in §5.
+2. On the box:
+
+   ```bash
+   apt-get update && apt-get install -y docker.io docker-compose-v2 git
+   git clone https://github.com/PaulStanley0211/timestamp /opt/timestamp
+   cd /opt/timestamp
+   ```
+
+3. Write `/opt/timestamp/.env`. Start from `.env.example`; every key it
+   documents, plus the three production lines it explains:
+
+   ```
+   TIMESTAMP_PROVIDER=fal
+   TIMESTAMP_PUBLIC_URL=https://timestamptapes.com
+   TIMESTAMP_TRUST_PROXY=1
+   ```
+
+   `chmod 600 .env`. The compose file never carries a secret; this file is
+   the only place they live on the box.
+
+4. `docker compose up -d --build` — the image build runs the preflight
+   (36 filters + the font) and refuses to produce an image on a bad ffmpeg,
+   so a successful build IS the preflight.
+
+## 2. DNS (Cloudflare)
+
+- `A  timestamptapes.com      <server IPv4>` — **DNS only (grey cloud)**.
+- `A  www.timestamptapes.com  <server IPv4>` — DNS only.
+- Leave the `send.timestamptapes.com` records (Resend mail) untouched.
+
+Grey cloud matters at first boot: Caddy proves domain control over port 80 to
+issue its certificates, and the proxy in front complicates that on day one.
+The Cloudflare proxy/CDN can be revisited later; it is an optimisation, not a
+prerequisite.
+
+## 3. The five consoles
+
+| Console | Change |
+|---|---|
+| **Supabase** (Auth → URL Configuration) | Site URL → `https://timestamptapes.com`; add `https://timestamptapes.com/**` to Redirect URLs. KEEP the `http://localhost:3000/**` entry — local dev still signs in. |
+| **Google** Cloud Console | Verify only, change nothing: the authorized redirect URI is Supabase's callback (`https://<ref>.supabase.co/auth/v1/callback`), and in this architecture Google never sees our URL at all. |
+| **Stripe** | New webhook endpoint `https://timestamptapes.com/api/stripe/webhook` (event: `checkout.session.completed`); paste its signing secret into the server `.env` as `STRIPE_WEBHOOK_SECRET`. Going LIVE additionally needs the business-verified own account and new live Prices — §27's record; test mode proves the path without either. |
+| **TIMESTAMP_PUBLIC_URL** | `https://timestamptapes.com` in the server `.env` — it is where Stripe sends the buyer back and what the OAuth state cookie lives on; the bound address is wrong here in ways that only fail at the callback. |
+| **DNS** | §2 above, plus: mail to the apex still bounces until a mailbox exists (no MX record) — support@ needs Email Routing before it goes in a footer. |
+
+## 4. Smoke, in order, before anyone is told the URL
+
+1. `https://timestamptapes.com/api/health` → `"ok":true`, `disk.low:false`.
+2. Sign up with a real address → the six-digit code arrives → account opens.
+3. Google sign-in round trip.
+4. Order one 480p 4:3 tape (~21 CR, ~$2 of fal) and watch it to the result
+   page. This is also the §38E direct-path proof if it has not run yet.
+5. Test-mode Stripe purchase end to end; confirm the grant in the ledger.
+6. `docker compose logs web worker` — no `FATAL` lines.
+
+## 5. Backups
+
+Hetzner's server backups (enabled in §1) are the disk-level net. The
+app-level backup copies the three directories that cannot be regenerated —
+accounts, owners, refunds — and deliberately nothing else (no photographs
+travel; see `scripts/ops/backup.mjs`). Nightly, on the host:
+
+```bash
+crontab -e
+# 03:10 nightly; keep two weeks
+10 3 * * * cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14 >> /var/log/timestamp-backup.log 2>&1
+```
+
+`/var/backups/timestamp` is on the host filesystem, outside the volume —
+`backup-cli` refuses a destination inside the root it protects. For offsite,
+rsync that directory anywhere; it contains no media and no faces.
+
+### Restore
+
+There is deliberately no restore command — a restore that can run against a
+live root is a foot-gun. The procedure:
+
+1. `docker compose stop web worker`
+2. Copy the chosen `timestamp-backup-<stamp>/{accounts,owners,refunds}` back
+   over `out/` inside the volume:
+
+   ```bash
+   docker compose run --rm -v /var/backups/timestamp:/backups web \
+     sh -c 'cp -a /backups/timestamp-backup-<stamp>/accounts /backups/timestamp-backup-<stamp>/owners /backups/timestamp-backup-<stamp>/refunds /data/out/'
+   ```
+
+3. `docker compose start web worker`, then check `/api/health` and one
+   account's balance against the backup's `backup.json` date.
+
+## 6. Updating the app
+
+```bash
+cd /opt/timestamp && git pull && docker compose up -d --build
+```
+
+State lives on the volume; the image is disposable. A failed build leaves the
+old containers running.
+
+## 7. Watching it
+
+- Point an uptime monitor (UptimeRobot or similar, free tier) at
+  `https://timestamptapes.com/api/health`, alerting when the body stops
+  containing `"ok":true`. Low disk flips `ok` on purpose — that page is the
+  disk alarm.
+- Crashes: the CLIs print one `[web] FATAL …` / `[worker] FATAL …` line and
+  exit 1; `restart: unless-stopped` brings them back. A crash LOOP is
+  `docker compose ps` showing restarts climbing — read the last FATAL line,
+  that is what it is for.
+- `docker compose logs --tail=200 -f web worker` is the day-to-day view.

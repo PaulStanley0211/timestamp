@@ -18,3 +18,8 @@
 # image is a thinner guarantee than not needing it.
 Dockerfile      text eol=lf
 .dockerignore   text eol=lf
+# The deploy topology, pinned for the weaker `.dockerignore` reason: YAML and
+# Caddy both tolerate CRLF today, and depending on that tolerance is a thinner
+# guarantee than not needing it.
+compose.yaml    text eol=lf
+Caddyfile       text eol=lf

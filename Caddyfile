@@ -1,0 +1,18 @@
+# TLS, automatically, from the site address -- Caddy provisions and renews
+# Let's Encrypt certificates for any hostname it serves, which is the whole
+# reason it is here. The prerequisites are only that DNS points at this box
+# and ports 80/443 are reachable (the compose file publishes both).
+#
+# X-Forwarded-For: Caddy REPLACES a client-supplied value rather than
+# appending to it (untrusted peers get no say), which is the exact property
+# TIMESTAMP_TRUST_PROXY=1 vouches for in .env.example. Do not add
+# trusted_proxies here unless another proxy really does sit in front.
+
+timestamptapes.com {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+www.timestamptapes.com {
+	redir https://timestamptapes.com{uri} permanent
+}
