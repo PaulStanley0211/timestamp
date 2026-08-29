@@ -739,7 +739,7 @@ export function saveJob(job, { root } = {}) {
  * One unreadable job must not be able to hide the other two hundred from the
  * status page; `loadJob` on that id still reports exactly what is wrong.
  */
-export function listJobs({ root }) {
+export function listJobs({ root, includeUnreadable = false }) {
   if (typeof root !== 'string' || root.length === 0) {
     throw new JobError('root must be a non-empty string', { code: 'BAD_ROOT' });
   }
@@ -758,7 +758,28 @@ export function listJobs({ root }) {
     let manifest;
     try {
       manifest = readJsonWithRetry(`${dir}/${entry.name}/manifest.json`, entry.name, { missingOk: true });
-    } catch {
+    } catch (err) {
+      // SWALLOWING IS RIGHT FOR A LISTING AND WRONG FOR A PROMISE.
+      //
+      // The status page must not let one unreadable job hide the other two
+      // hundred, which is why this catch exists. But `planPurge` enumerates
+      // jobs through this same function, and a job it cannot see is a job whose
+      // photograph outlives the seven-day promise indefinitely -- with `errors`
+      // empty, so the worker's `purged` event is suppressed and no operator
+      // line is ever printed. A silent unkept promise is precisely what
+      // purge.mjs exists to prevent, one layer below where it was prevented.
+      //
+      // Opt-in rather than always-on, so the listing keeps the behaviour it
+      // needs and the caller that keeps a promise asks for the truth.
+      if (includeUnreadable) {
+        out.push({
+          jobId: entry.name,
+          status: null,
+          createdAt: null,
+          updatedAt: null,
+          unreadable: { message: err.message, code: err.code ?? null },
+        });
+      }
       continue;
     }
     if (!manifest) continue;

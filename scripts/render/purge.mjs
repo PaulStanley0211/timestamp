@@ -97,9 +97,17 @@ export function planPurge({ root, olderThan, photosOnly = false, nowImpl = defau
   const now = nowImpl();
   const action = photosOnly ? 'photo' : 'job';
 
-  const rows = listJobs({ root });
+  // THE UNREADABLE ONES ARE ASKED FOR, because this function keeps a promise
+  // and the ones it cannot read are exactly the ones that would quietly outlive
+  // it. `listJobs` swallows a parse failure for the status page, where one bad
+  // job must not hide two hundred good ones; here that swallow means a
+  // photograph stays on disk past its window with `errors` empty, so nothing is
+  // ever printed.
+  const rows = listJobs({ root, includeUnreadable: true });
+  const unreadable = rows.filter((r) => r.unreadable);
   const entries = [];
   for (const row of rows) {
+    if (row.unreadable) continue;
     const ageDays = ageInDays(row.createdAt, now);
     // A manifest with no readable `createdAt` has no age, and a job with no age
     // is not something to delete on a guess. It is reported instead.
@@ -121,6 +129,11 @@ export function planPurge({ root, olderThan, photosOnly = false, nowImpl = defau
     photosOnly,
     scanned: rows.length,
     entries,
+    // Reported, never deleted on a guess. A job whose manifest will not parse
+    // has no readable `createdAt`, so nothing here knows whether its window has
+    // passed -- and deleting somebody's photograph on a guess is the one
+    // failure this module refuses. The operator gets the id and the reason.
+    unreadable,
   };
 }
 
@@ -156,7 +169,17 @@ export function executePurge(plan, { dryRun = true, fsImpl = fs } = {}) {
   }
 
   const removed = [];
-  const errors = [];
+  // A JOB THE PLAN COULD NOT READ IS AN ERROR, NOT AN ABSENCE. It is carried
+  // into `errors` so it reaches the worker's `purged` event -- which is
+  // suppressed entirely when nothing was deleted and `errors` is empty, so
+  // without this the operator's only signal that a photograph is stranded past
+  // its window is silence.
+  const errors = (plan.unreadable ?? []).map((row) => ({
+    jobId: row.jobId,
+    action: 'read',
+    message: `manifest.json will not parse, so this job has no readable age and was not considered: ${row.unreadable?.message ?? 'unknown'}`,
+    code: row.unreadable?.code ?? 'CORRUPT',
+  }));
   let photosDeleted = 0;
   let jobsDeleted = 0;
   let filesRemoved = 0;

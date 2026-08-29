@@ -514,3 +514,54 @@ test('the flags the command really has are all still accepted', () => {
   const run = runCli(root, ['--photo-days=7', '--job-days=30', '--json', '--apply']);
   assert.equal(run.status, 0, run.stderr);
 });
+
+/**
+ * A JOB WHOSE MANIFEST WILL NOT PARSE IS REPORTED, NOT INVISIBLE.
+ *
+ * `listJobs` swallows a parse failure with `catch { continue }`. That is right
+ * for the status page -- its own comment says one unreadable job must not hide
+ * the other two hundred -- and wrong for the module that keeps a deletion
+ * promise, which enumerates jobs through the same function.
+ *
+ * The consequence: the job is absent from the plan on every pass, forever, so
+ * `input/photo.jpg` outlives both the seven-day and thirty-day promises
+ * indefinitely. And because `errors` stays empty the worker suppresses its
+ * `purged` event entirely, so no operator line is ever printed. A silent
+ * unkept promise is exactly what this module exists to prevent.
+ *
+ * It is not hypothetical: the queue's own header advertises that these files
+ * are repaired with a text editor, and a half-copied backup or a disk fault
+ * produces the same thing.
+ *
+ * REPORTED, NEVER DELETED ON A GUESS. An unparseable manifest has no readable
+ * createdAt, so nothing knows whether its window has passed, and deleting
+ * somebody's photograph on a guess is the one failure this module refuses.
+ */
+test('a corrupt manifest is surfaced by the sweep instead of hiding a photograph', () => {
+  const root = tmpRoot();
+  const { jobId: healthy } = seedJob(root, { ageDays: 8 });
+  const { jobId: broken } = seedJob(root, { ageDays: 8 });
+
+  // A half-written manifest, which is what a killed copy or a bad sector leaves.
+  fs.writeFileSync(`${jobPaths(root, broken).dir}/manifest.json`, '{"jobId":"' + broken + '","stat');
+
+  const plan = planPurge({ root, olderThan: 7, photosOnly: true, nowImpl: NOW });
+
+  assert.deepEqual(plan.entries.map((e) => e.jobId), [healthy],
+    'the readable job is still planned exactly as before');
+  assert.deepEqual(plan.unreadable.map((r) => r.jobId), [broken],
+    'the corrupt job vanished from the plan instead of being reported');
+
+  const result = executePurge(plan, { dryRun: false });
+  const reported = result.errors.filter((e) => e.jobId === broken);
+  assert.equal(reported.length, 1,
+    'the sweep reported no error, so the worker prints nothing and the photograph is stranded silently');
+  assert.match(reported[0].message, /will not parse/);
+
+  // And the promise is still kept for the job that could be read.
+  assert.equal(result.photosDeleted, 1);
+  // The corrupt job's photograph is deliberately still there: it was reported,
+  // not guessed at.
+  assert.ok(fs.existsSync(jobPaths(root, broken).input),
+    'a job with no readable age must not be deleted on a guess');
+});
