@@ -154,6 +154,7 @@ export function creditCost({
   resolution = CREDIT_DEFAULTS.resolution,
   seconds = CREDIT_DEFAULTS.seconds,
   tier = CREDIT_DEFAULTS.tier,
+  aspect = null,
 } = {}) {
   const cfg = creditConfig();
   const res = cfg.resolutions[resolution];
@@ -191,7 +192,30 @@ export function creditCost({
       userMessage: 'That length is not available.',
     });
   }
-  return creditsFor(res, seconds, tierEntry.multiplier);
+  // THE SHAPE IS PART OF THE PRICE, because it is part of the cost.
+  //
+  // A resolution label names the SHORT edge, so 16:9 and 9:16 are exactly 4/3
+  // the pixels of 4:3 at the same tier, and fal bills tokens as pixels x
+  // seconds. Charging the 4:3 price for a wide tape sells it a third below
+  // cost -- and 9:16 is the phone format on a product that delivers to phones,
+  // so that would be the MODAL order, not an edge case.
+  //
+  // REFUSED RATHER THAN DEFAULTED, exactly like an unknown resolution above. A
+  // shape nobody priced must not be quietly charged at the cheapest rate: that
+  // is the failure where the button, the ledger and the manifest all agree on
+  // a number that is not what the render cost.
+  const shape = aspect ?? cfg.defaultAspect;
+  const known = [cfg.defaultAspect, ...Object.keys(cfg.aspects ?? {})];
+  const aspectMultiplier = shape === cfg.defaultAspect ? 1 : cfg.aspects?.[shape];
+  if (!Number.isFinite(aspectMultiplier) || aspectMultiplier <= 0) {
+    throw new AuthError(`unknown aspect ${JSON.stringify(aspect)}`, {
+      code: 'UNKNOWN_ASPECT',
+      userMessage: 'That frame shape is not available.',
+      detail: { aspect, known },
+    });
+  }
+
+  return creditsFor(res, seconds, tierEntry.multiplier * aspectMultiplier);
 }
 
 /** The estimated provider spend behind a credit figure. For the ledger CLI and

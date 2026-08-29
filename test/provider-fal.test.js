@@ -1033,11 +1033,16 @@ test('a resolution label holds the SHORT edge, so a shape changes the long one',
   // whole area exists to prevent: a render that quietly delivers a different
   // thing from the one ordered, with the button, the ledger and the manifest
   // all agreeing on the wrong answer.
-  // `undefined` is NOT in this list and must not be: a default parameter cannot
-  // tell "not passed" from "passed undefined", and a bare call has to keep
-  // meaning 4:3 for every existing caller. `null` is in the list, because that
-  // is somebody passing a value they failed to compute.
-  for (const bad of ['16x9', 'square', '', null, '0:1', '4:0', '16:9:1']) {
+  // NEITHER `null` NOR `undefined` IS IN THIS LIST, and that is deliberate
+  // rather than an oversight. Both mean UNSPECIFIED here, exactly as they do
+  // everywhere else in this codebase -- `resolveRaster` declares `aspect =
+  // null` and hands it straight through, and `resolution: null` has always
+  // meant "no order behind this render". Refusing null would crash the
+  // ordinary path. `creditCost` treats them the same way, and the two agreeing
+  // is the point: a shape must not be priced by one rule and rendered by
+  // another.
+  assert.deepEqual(resolutionRaster('480p', null), { id: '480p', width: 640, height: 480 });
+  for (const bad of ['16x9', 'square', '', '0:1', '4:0', '16:9:1']) {
     assert.throws(() => resolutionRaster('480p', bad), (err) => {
       assert.equal(err.code, 'UNKNOWN_ASPECT', `${JSON.stringify(bad)} was not refused as an aspect`);
       return true;

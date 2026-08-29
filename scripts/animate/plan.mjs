@@ -100,7 +100,14 @@ export const DEFAULT_ASPECT = '4:3';
  * what was ordered.
  */
 function aspectRatio(aspect) {
-  const m = /^(\d+):(\d+)$/.exec(String(aspect ?? ''));
+  // `null` and `undefined` both mean UNSPECIFIED, not malformed, and take the
+  // default -- because that is what they already mean everywhere else here:
+  // `resolveRaster` declares `aspect = null`, and `resolution: null` has always
+  // meant "no order behind this render". Refusing null while `resolveRaster`
+  // hands it to us by default would be a crash on the ordinary path.
+  // Everything that is not nullish must be a shape we know.
+  if (aspect === null || aspect === undefined) return aspectRatio(DEFAULT_ASPECT);
+  const m = /^(\d+):(\d+)$/.exec(String(aspect));
   if (!m) {
     throw new PlanError(
       `unknown aspect ${JSON.stringify(aspect)} -- expected a "w:h" ratio like 4:3, 16:9 or 9:16`,

@@ -163,6 +163,55 @@ test('the numbers: 21 credits at 480p, 46 at 720p, measured', async () => {
   assert.equal(creditCost({ resolution: '480p' }), 21);
   assert.equal(creditCost({ resolution: '720p' }), 46);
   assert.equal(TAPE, 21, 'the default is 480p, the cheap tier');
+
+  // A SHAPE THAT IS NOT 4:3 COSTS 4/3, AND THE PRICE SAYS SO.
+  //
+  // 4:3 is the squarest shape this product ships and a resolution label holds
+  // the SHORT edge, so 16:9 and 9:16 are exactly 4/3 the pixels at the same
+  // tier -- 854x480 against 640x480. fal bills tokens as pixels x seconds, so
+  // that is 4/3 the provider cost, and charging the 4:3 price for it would
+  // sell every wide tape a third below cost.
+  //
+  // THIS IS NOT A HYPOTHETICAL FAILURE MODE. 480p sat at 16 CR against a real
+  // 21 for weeks, invisible from both ends, because the button, the ledger and
+  // the manifest all agreed on the same wrong number. The only thing that
+  // catches it is an assertion tying the price to the pixels.
+  // 61 AND NOT 62, AND THE DIFFERENCE IS WHERE THE ROUNDING HAPPENS. The
+  // multiplier applies to the DOLLAR figure and the ceiling is taken once, at
+  // the end: $4.5646 x 4/3 / $0.10 = 60.86 -> 61. Multiplying the already-
+  // rounded 46 CR instead gives 61.33 -> 62, which charges a credit for a
+  // rounding step rather than for pixels. Rounding twice always inflates, and
+  // `creditsFor` has taken the ceiling once since it was written.
+  assert.equal(creditCost({ resolution: '480p', aspect: '16:9' }), 28);
+  assert.equal(creditCost({ resolution: '480p', aspect: '9:16' }), 28);
+  assert.equal(creditCost({ resolution: '720p', aspect: '16:9' }), 61);
+  assert.equal(creditCost({ resolution: '720p', aspect: '9:16' }), 61);
+  assert.equal(creditCost({ resolution: '480p', aspect: '4:3' }), 21,
+    'naming the default shape must cost the same as not naming it');
+
+  // The two non-default shapes cost the same as each other: a portrait tape and
+  // a landscape one are the same pixels turned ninety degrees.
+  for (const id of ['480p', '720p']) {
+    assert.equal(creditCost({ resolution: id, aspect: '16:9' }), creditCost({ resolution: id, aspect: '9:16' }),
+      `${id}: a shape and its rotation are priced differently`);
+  }
+
+  // An unknown shape is REFUSED, never quietly charged at the 4:3 price. Same
+  // reasoning as an unknown resolution directly below: a silent fallback bills
+  // for one thing and renders another.
+  // `1:1` is in this list on purpose. It is not a nonsense string -- it is a
+  // shape somebody could plausibly add to config/render.json tomorrow -- and it
+  // must be refused until it is PRICED, because holding the short edge makes a
+  // square tape 0.75x the pixels of 4:3, not 4/3. That is why the multiplier is
+  // per shape rather than one number for "not the default".
+  for (const bad of ['16x9', 'square', '1:1']) {
+    const e = grab(() => creditCost({ resolution: '480p', aspect: bad }));
+    assert.equal(e.code, 'UNKNOWN_ASPECT', `${JSON.stringify(bad)} was priced instead of refused`);
+  }
+  // null means UNSPECIFIED, not malformed, and takes the default -- matching
+  // `resolutionRaster`, so a shape cannot be priced by one rule and rendered
+  // by another.
+  assert.equal(creditCost({ resolution: '480p', aspect: null }), 21);
   assert.deepEqual(CREDIT_DEFAULTS, { resolution: '480p', seconds: 15, tier: 'standard' });
 
   const cr = (id) => CREDIT_COSTS[id].creditsPerReference;
