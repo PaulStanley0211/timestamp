@@ -183,6 +183,26 @@ export function resolveRaster({ resolution, provider, aspect = null, defaultAspe
   // the provider's first offer -- the same shape this file had before there
   // was a resolution to honour.
   if (id === null) {
+    // A SHAPE WITH NO TIER HAS NO RASTER. The first offer is the cheapest 4:3
+    // one, so taking it while a non-default shape was asked for fetched a 4:3
+    // SOURCE and let the tape stage build a portrait frame around it -- the
+    // exact failure the raster check below exists to prevent, arriving through
+    // the one door that skips it. The documented paid command carries no
+    // `--resolution`, so this was the likely way to meet it.
+    //
+    // Refused rather than guessing a tier, for the reason `creditCost` refuses
+    // an unpriced shape: a number nobody chose must not be rendered or charged
+    // just because it is the cheapest one to hand.
+    const shape = aspect ?? defaultAspect;
+    if (shape !== defaultAspect) {
+      throw new PipelineError(
+        `${shape} was ordered with no resolution, and a shape has no raster without a tier -- ` +
+        'a resolution label names the SHORT edge, so the long one comes from the shape.\n' +
+        `Name a resolution (--resolution=480p or 720p) alongside --aspect=${shape}, ` +
+        `or drop --aspect to render ${defaultAspect} at the provider's first offer.`,
+        { code: 'ASPECT_NEEDS_RESOLUTION', detail: { aspect: shape, defaultAspect } },
+      );
+    }
     const size = provider.capabilities.stillSizes[0];
     return { id: null, size: { width: size.width, height: size.height }, honoured: true };
   }

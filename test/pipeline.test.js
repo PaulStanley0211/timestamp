@@ -837,6 +837,49 @@ test('a paid provider refuses a shape it cannot be asked for, rather than render
   );
 });
 
+/**
+ * A SHAPE WITH NO TIER HAS NO RASTER, so it is refused rather than defaulted.
+ *
+ * The `resolution === null` branch takes the provider's first offer, which is
+ * the cheapest 4:3 raster -- and it did that while ignoring `aspect` entirely.
+ * The documented paid command in CLAUDE.md carries no `--resolution`, so
+ * `--aspect=9:16` on it fetched a 4:3 SOURCE and let the tape stage build a
+ * portrait frame around it: verbatim the failure `falAspectFor`'s own header
+ * says it was written to eliminate, arriving through the one door that skipped
+ * the raster check.
+ *
+ * Refusing rather than guessing a tier is the same ruling `creditCost` makes
+ * about an unpriced shape: a number nobody chose must not be charged or
+ * rendered just because it is the cheapest one to hand.
+ */
+test('a non-default shape with no resolution ordered is refused, not silently made 4:3', () => {
+  const full = { id: 'fal', paid: true, capabilities: { stillSizes: FAL_CAPABILITIES.stillSizes } };
+
+  for (const aspect of ['16:9', '9:16']) {
+    assert.throws(
+      () => resolveRaster({ resolution: null, provider: full, aspect, defaultAspect: '4:3' }),
+      (err) => {
+        assert.equal(err.code, 'ASPECT_NEEDS_RESOLUTION');
+        assert.match(err.message, new RegExp(aspect.replace(':', ':')));
+        return true;
+      },
+      `${aspect} with no resolution must refuse rather than fetch a 4:3 source`,
+    );
+  }
+
+  // The default shape with no resolution is the pre-existing CLI behaviour and
+  // must not move: a plain `npm run render` still takes the first offer.
+  assert.deepEqual(
+    resolveRaster({ resolution: null, provider: full, aspect: '4:3', defaultAspect: '4:3' }),
+    { id: null, size: { width: 640, height: 480 }, honoured: true },
+  );
+  // and so must an unstated shape
+  assert.deepEqual(
+    resolveRaster({ resolution: null, provider: full, aspect: null, defaultAspect: '4:3' }),
+    { id: null, size: { width: 640, height: 480 }, honoured: true },
+  );
+});
+
 // ---------------------------------------------------------------------------
 // direct mode: four choices and a tape
 //
