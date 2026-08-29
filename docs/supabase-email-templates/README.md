@@ -2,8 +2,39 @@
 
 The dashboard is the only place these live. This directory is the source of
 truth for what was pasted there, because the dashboard has no history and no
-export, and because **the one template that matters cannot be verified from
+export, and because **the templates that matter cannot be verified from
 inside the app.**
+
+**There are TWO, and only one has ever been applied.** Confirm signup was
+pasted and proved on 2026-08-27. **Reset password has not been touched, which
+means it is still Supabase's default — a magic link — and the reset flow
+cannot survive one.** See its section below; it is item 4 on the owner's list.
+
+## Paste the whole file, comments included — and why that is now safe
+
+Both files carry a long HTML comment, and the instruction below is to paste
+each one whole. **Until 2026-08-30 that instruction was unsafe**, and the
+reason is worth stating because it is not obvious:
+
+Supabase substitutes its variables by scanning the template as text. **An HTML
+comment is not a hiding place from a template engine — it is just more text.**
+Both comments named `ConfirmationURL` in its real `{{ }}` syntax, because they
+were the comments explaining that it is forbidden. Pasted whole, that comment
+would mint a **working magic link** and bury it in the source of every email:
+invisible when rendered, and a live credential to anyone who reads the source
+or is forwarded the message.
+
+Both comments now name the variables **in words**, so the only real action left
+in either file is the code itself. `test/email-templates.test.js` fails if any
+other action appears anywhere in either file, comments included.
+
+**CONSEQUENCE FOR THE ALREADY-APPLIED TEMPLATE: re-paste `confirm-signup.html`.**
+The version sitting in the dashboard is the 2026-08-27 one with the old
+comment. Whether it actually minted a link depends on which Go template package
+GoTrue uses — one of the two strips HTML comments — and that is not a thing to
+reason about when replacing it costs thirty seconds. To check rather than
+assume, open any confirmation email you have received, use **Show original**,
+and search the source for `ConfirmationURL` or for a `/auth/v1/verify` link.
 
 ## Confirm signup — `confirm-signup.html`
 
@@ -32,6 +63,47 @@ be tested from the repo.
 
 **How to know it worked:** sign up with a real address and read the mail. Six
 digits and no button means it took.
+
+## Reset password — `recovery.html`
+
+**NOT YET APPLIED. This is the open half of the owner's item 4.**
+
+**Where:** Supabase dashboard → your project → Authentication → Emails →
+**Reset password**. (Supabase calls the underlying type `recovery`, which is
+why the file is named for it; the dashboard tab says "Reset password".)
+
+**Subject:**
+
+```
+Your Timestamp password reset code
+```
+
+Distinct from the signup subject on purpose — a person who has both mails in
+their inbox must be able to tell which is which without opening either. The
+code stays out of the subject for the same lock-screen reason as above.
+
+**Body:** paste `recovery.html` whole.
+
+**The same one rule, and the same undetectability.** The body must contain
+`{{ .Token }}` and must not contain `{{ .ConfirmationURL }}`, a button, or any
+link. `/auth/reset/complete` asks for six digits and a new password —
+`verifyCode` sends them to Supabase as `type: 'recovery'`. Supabase's default
+recovery template is a **"Reset password" link**, and a person who receives one
+is stranded exactly as they would be on signup.
+
+**What to check while you are on that screen**, because both are console state
+the code cannot see:
+
+1. The body shows six digits and no link when previewed.
+2. `Email OTP length` is still **6** (Authentication → Sign In / Providers →
+   Email). It applies to recovery codes as well as signup codes, and at 8 the
+   form truncates and Supabase answers `otp_expired` — the same code it uses
+   for a genuinely expired one, so the page blames the clock.
+
+**How to know it worked:** ask for a reset on an account you control and read
+the mail. Six digits and no button means it took. Then complete it — and
+expect to be signed out of every device, because that is what completing a
+reset does.
 
 ## Before any of this works: the editor is LOCKED
 

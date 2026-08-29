@@ -1,12 +1,24 @@
 <!--
   Timestamp - Supabase "Confirm signup" template.
 
-  THE ONE RULE: this template must contain {{ .Token }} and must NOT contain
-  {{ .ConfirmationURL }}, a button, or any link that signs somebody in. The app
-  asks for six digits on /verify. A template that mails a link instead strands
-  the person in front of a field they have nothing to type into, and NOTHING IN
-  THE APP CAN DETECT THAT THE TEMPLATE IS WRONG - no request arrives to be
-  wrong about. Supabase's default template is exactly that wrong template.
+  THE ONE RULE: this template must contain the Token variable and must NOT
+  contain the ConfirmationURL variable, a button, or any link that signs
+  somebody in. The app asks for six digits on /verify. A template that mails a
+  link instead strands the person in front of a field they have nothing to type
+  into, and NOTHING IN THE APP CAN DETECT THAT THE TEMPLATE IS WRONG - no
+  request arrives to be wrong about. Supabase's default template is exactly
+  that wrong template.
+
+  NO TEMPLATE SYNTAX IN THIS COMMENT, AND THAT IS DELIBERATE. The whole file is
+  pasted into the dashboard, and Supabase substitutes its variables by scanning
+  text -- an HTML comment is not a hiding place, it is just more text. A comment
+  naming ConfirmationURL in its real syntax would therefore MINT A WORKING
+  MAGIC LINK and bury it in the source of every confirmation email: invisible
+  when rendered, extractable by anyone who reads the source or receives a
+  forward. THIS COMMENT USED TO DO EXACTLY THAT (fixed 2026-08-30), so the
+  version pasted into the dashboard on 2026-08-27 must be replaced with this
+  one. The one variable this file may spell literally is the code itself, once,
+  in the box below. Say the others in words.
 
   Paste into: Supabase dashboard -> Authentication -> Emails -> Confirm signup.
   Subject line for that same screen is in README.md next to this file.
