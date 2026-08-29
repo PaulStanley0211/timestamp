@@ -210,6 +210,19 @@ const STATUS_SCRIPT = `
       if (rows[i]) rows[i].className = 'step step-' + s.status + (s.name === v.step ? ' step-current' : '');
     });
 
+    // The failure copy and the money line, painted from the same view the
+    // server rendered -- textContent only, so nothing here can become markup.
+    var alertEl = document.getElementById('alert');
+    if (alertEl) {
+      if (v.error && v.error.message) { alertEl.hidden = false; alertEl.textContent = v.error.message; }
+      else { alertEl.hidden = true; alertEl.textContent = ''; }
+    }
+    var noteEl = document.getElementById('creditnote');
+    if (noteEl) {
+      if (v.creditNote) { noteEl.hidden = false; noteEl.textContent = v.creditNote; }
+      else { noteEl.hidden = true; noteEl.textContent = ''; }
+    }
+
     if (v.status === 'awaiting-selection') location.href = '/j/' + id + '/select';
     if (v.status === 'done') location.href = '/j/' + id + '/result';
   }
@@ -1214,7 +1227,13 @@ export function statusPage({ view, account = null, labels = {} }) {
   </ol>
   <p class="counter" id="counter">${h(`${Math.min(done + 1, view.steps.length)} of ${view.steps.length}`)} &middot; <span id="statusword">${h(STATUS_COPY[view.status] ?? view.status)}</span></p>
 
-  ${view.error ? `<p class="alert" role="alert">${h(view.error.message ?? 'Something went wrong.')}</p>` : ''}
+  ${''/* Both surfaces ALWAYS exist, hidden while empty: the poller repaints
+        them, and a job that fails MID-POLL would otherwise never show its
+        failure copy or its refund line until a manual reload. The message is
+        already customer copy -- jobView ships the authored userMessage or one
+        generic sentence, never the operator's exception text. */}
+  <p class="alert" role="alert" id="alert"${view.error ? '' : ' hidden'}>${h(view.error?.message ?? '')}</p>
+  <p class="hint creditnote" id="creditnote"${view.creditNote ? '' : ' hidden'}>${h(view.creditNote ?? '')}</p>
 
   <ol class="steps" id="steps">
     ${view.steps.map((s) => stepRow(s, s.name === view.step)).join('')}

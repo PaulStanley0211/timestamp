@@ -1300,7 +1300,47 @@ export function createServer({
       : null;
   }
 
-  function jobView(job) {
+  /**
+   * The failure sentence a customer sees. The raw `error.message` is written
+   * for the operator -- a provider HTTP body, an ffmpeg stderr line, a guard
+   * name -- and it stays in the manifest; what ships to a page or the status
+   * poller is the authored `userMessage` when the thrown error carried one
+   * (pipeline.mjs stores it on job.error for exactly this reader), and one
+   * generic sentence otherwise. The CODE ships either way: it is how a
+   * support conversation finds the manifest without the customer reading
+   * internals.
+   */
+  const GENERIC_FAILURE = 'Something went wrong while making this tape.';
+  function customerError(error, userMessage) {
+    if (!error) return null;
+    return { code: error.code ?? null, message: userMessage ?? GENERIC_FAILURE };
+  }
+
+  /**
+   * Where this tape's credits went, computed from the account's own ledger
+   * rows for the job -- the same arithmetic `refundCredits` uses -- and never
+   * asserted from hope. Rows summing to zero with a positive row means the
+   * refund landed; a negative sum means a paid step had already started and
+   * the money is genuinely gone; no rows means this job was never charged
+   * through the web (a CLI render) and no money sentence belongs on it.
+   * Null says nothing, which is the only honest default.
+   */
+  function creditNoteFor(account, job) {
+    if (job.status !== 'failed' && job.status !== 'cancelled') return null;
+    const rows = Array.isArray(account?.ledger)
+      ? account.ledger.filter((e) => e?.jobId === job.jobId)
+      : [];
+    if (rows.length === 0) return null;
+    const net = rows.reduce((n, e) => n + (Number(e?.delta) || 0), 0);
+    if (net === 0) {
+      const returned = rows.reduce((n, e) => n + Math.max(0, Number(e?.delta) || 0), 0);
+      return returned > 0 ? `The ${returned} credits for this tape went back to your balance.` : null;
+    }
+    if (net < 0) return `The ${-net} credits for this tape were already spent with the video provider when it stopped.`;
+    return null;
+  }
+
+  function jobView(job, { account = null } = {}) {
     const step = nextStep(job);
     const finished = job.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length;
     return {
@@ -1314,9 +1354,9 @@ export function createServer({
         attempts: s.attempts,
         startedAt: s.startedAt,
         endedAt: s.endedAt,
-        // The message only; a provider stack trace is not the user's business
-        // and `detail` can carry a request id we do not want echoed.
-        error: s.error ? { code: s.error.code ?? null, message: s.error.message ?? null } : null,
+        // The code only; the raw message is operator wording (a provider
+        // stack line, a request id) and lives in the manifest, not here.
+        error: s.error ? customerError(s.error, null) : null,
       })),
       cost: job.cost,
       result: {
@@ -1330,7 +1370,10 @@ export function createServer({
         videoUrl: job.result?.videoPath ? `/api/jobs/${job.jobId}/video` : null,
         posterUrl: job.result?.posterPath ? `/api/jobs/${job.jobId}/poster` : null,
       },
-      error: job.error ? { code: job.error.code ?? null, message: job.error.message ?? null } : null,
+      error: customerError(job.error, job.error?.userMessage ?? null),
+      // A composed sentence or null, never a flag the page words itself --
+      // one author for money copy, and the poller paints the same text.
+      creditNote: account ? creditNoteFor(account, job) : null,
       input: {
         place: job.input?.place?.value ?? null,
         placeKind: job.input?.place?.kind ?? null,
@@ -1763,7 +1806,7 @@ export function createServer({
       const job = ownedJob(account, params.id);
       if (job.status === 'done') return redirect(res, `/j/${job.jobId}/result`);
       if (job.status === 'awaiting-selection') return redirect(res, `/j/${job.jobId}/select`);
-      return sendHtml(req, res, 200, statusPage({ view: jobView(job), account, labels: labelsOf(job) }));
+      return sendHtml(req, res, 200, statusPage({ view: jobView(job, { account }), account, labels: labelsOf(job) }));
     },
 
     selectPage(req, res, { params, account }) {
@@ -3341,7 +3384,7 @@ export function createServer({
     },
 
     getJob(req, res, { params, account }) {
-      sendJson(req, res, 200, jobView(ownedJob(account, params.id)));
+      sendJson(req, res, 200, jobView(ownedJob(account, params.id), { account }));
     },
 
     listStills(req, res, { params, account }) {

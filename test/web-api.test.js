@@ -30,7 +30,7 @@ import { resolveRaster } from '../scripts/render/pipeline.mjs';
 import { FAL_CAPABILITIES } from '../scripts/providers/fal.mjs';
 import {
   JOB_ID_RE, createJob, loadJob, saveJob, jobPaths,
-  setJobStatus, completeJob,
+  setJobStatus, completeJob, failStep, beginStep,
 } from '../scripts/render/job.mjs';
 
 const CFG = JSON.parse(fs.readFileSync(new URL('../config/render.json', import.meta.url), 'utf8'));
@@ -1222,6 +1222,113 @@ test('the page offers no still-count control at all', async () => {
     assert.ok(html.includes('Record the tape'), 'the form is still there to be checked');
     assert.ok(!/stillCount/.test(html), 'the still-count control is back on the page');
     assert.ok(!/How many looks/.test(html), 'the superseded still-picker copy is back on the page');
+  });
+});
+
+/** A failed job on disk, the way a worker leaves one: a real failStep record,
+ *  optionally with the authored user-facing wording the pipeline attaches. */
+function seedFailedJob(app, root, { owner, error, userMessage = null } = {}) {
+  const job = createJob({
+    root,
+    input: {
+      photo: { path: 'input/upload-photo', sha256: 'x'.repeat(64) },
+      place: { kind: 'text', value: 'a beach' },
+      outfit: { kind: 'text', value: 'a t-shirt' },
+      stillCount: 1,
+      consent: { granted: true, at: new Date().toISOString(), text: 'the wording' },
+    },
+    provider: 'fixture',
+    cfg: CFG,
+  });
+  setJobStatus(job, 'running');
+  beginStep(job, 'animate');
+  failStep(job, 'animate', error);
+  if (userMessage) job.error.userMessage = userMessage;
+  saveJob(job);
+  if (owner) app.sessions.claimJob({ accountId: owner.accountId, jobId: job.jobId });
+  return job;
+}
+
+test('a failed render shows authored or generic copy, never the exception text', async () => {
+  // pipeline.mjs stores the raw error.message for the operator and, when the
+  // thrown error carried one, the authored `userMessage` for the customer.
+  // jobView shipped the raw message and dropped the authored one -- so a
+  // provider HTTP body, an ffmpeg stderr line or a guard name like
+  // DIRECT_NEEDS_ONE_CALL was rendered into the status page's alert, verbatim,
+  // to a person who paid.
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    const raw = seedFailedJob(app, root, {
+      owner: accountA,
+      error: Object.assign(new Error('ECONNRESET at fal.mjs:123 (request 9f3a)'), { code: 'empty_download' }),
+    });
+    const page = await (await get(base, `/j/${raw.jobId}`, cookieA)).text();
+    // PRESENT FIRST: the alert renders, or the absence below proves nothing.
+    assert.match(page, /role="alert"/, 'a failed job must show an alert at all');
+    assert.match(page, /Something went wrong while making this tape\./,
+      'an error nobody wrote customer copy for gets the generic sentence');
+    assert.ok(!page.includes('ECONNRESET'), 'raw exception text reached a customer');
+    assert.ok(!page.includes('fal.mjs'), 'an internal filename reached a customer');
+
+    const api = await (await get(base, `/api/jobs/${raw.jobId}`, cookieA)).json();
+    assert.ok(!String(api.error.message).includes('ECONNRESET'),
+      'the API feeds the status poller the same page and must be as clean');
+    assert.equal(api.error.code, 'empty_download', 'the code stays: it is how support finds the manifest');
+
+    const authored = seedFailedJob(app, root, {
+      owner: accountA,
+      error: Object.assign(new Error('face gate: confidence below floor'), { code: 'NO_FACE' }),
+      userMessage: 'That photo does not look like a photo of a person. Please choose one where a face is clearly visible.',
+    });
+    const page2 = await (await get(base, `/j/${authored.jobId}`, cookieA)).text();
+    assert.match(page2, /choose one where a face is clearly visible/,
+      'wording somebody wrote for the customer must win over the generic sentence');
+    assert.ok(!page2.includes('confidence below floor'), 'the operator wording must not ride along');
+  });
+});
+
+test('a failed tape says where the credits went, from the ledger and never from hope', async () => {
+  // The refund is real (worker-side, section 28 item 6) and no page ever said
+  // so; worse, saying "your credits came back" unconditionally would lie
+  // whenever a paid step had already started, which is exactly when a customer
+  // most wants the truth. The sentence is computed from the account's own
+  // ledger rows for this job -- the same arithmetic refundCredits uses.
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    const err = () => Object.assign(new Error('boom'), { code: 'ERROR' });
+    const at = new Date().toISOString();
+
+    const refunded = seedFailedJob(app, root, { owner: accountA, error: err() });
+    accountA.ledger.push({ at, delta: -21, jobId: refunded.jobId, reason: 'debit:job' });
+    accountA.ledger.push({ at, delta: 21, jobId: refunded.jobId, reason: 'refund:failed-before-provider' });
+    const refundedPage = await (await get(base, `/j/${refunded.jobId}`, cookieA)).text();
+    assert.match(refundedPage, /21 credits for this tape went back to your balance/,
+      'a refunded job must say so, with the number');
+
+    const spent = seedFailedJob(app, root, { owner: accountA, error: err() });
+    accountA.ledger.push({ at, delta: -28, jobId: spent.jobId, reason: 'debit:job' });
+    const spentPage = await (await get(base, `/j/${spent.jobId}`, cookieA)).text();
+    assert.ok(!/went back to your balance/.test(spentPage),
+      'a job whose money is gone must not claim a refund');
+    assert.match(spentPage, /credits for this tape were already spent/,
+      'the spent case is stated plainly rather than left blank');
+
+    const uncharged = seedFailedJob(app, root, { owner: accountA, error: err() });
+    const unchargedPage = await (await get(base, `/j/${uncharged.jobId}`, cookieA)).text();
+    assert.ok(!/went back to your balance|already spent/.test(unchargedPage),
+      'a job the ledger never saw gets no money sentence at all');
+  });
+});
+
+test('the status page keeps its alert and credit-note surfaces for the poller', async () => {
+  // The poller repaints the headline and the steps but the SSR page rendered
+  // the alert only when an error already existed -- so a job that failed
+  // MID-POLL never showed its failure copy or its refund line until a manual
+  // reload. The two surfaces now always exist, hidden while empty, and the
+  // poller fills them from the same view the server rendered.
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    const job = seedJob(app, root, { status: 'running', owner: accountA });
+    const page = await (await get(base, `/j/${job.jobId}`, cookieA)).text();
+    assert.match(page, /id="alert"[^>]*hidden/, 'the alert surface must exist, hidden, on a healthy job');
+    assert.match(page, /id="creditnote"[^>]*hidden/, 'the credit-note surface must exist, hidden, on a healthy job');
   });
 });
 
