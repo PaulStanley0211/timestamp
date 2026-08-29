@@ -136,6 +136,59 @@ test('deleteAccount on a missing account throws NO_ACCOUNT rather than reporting
   );
 });
 
+test('a corrupt email index entry does not wedge the deletion, and the address can sign up again', async (t) => {
+  // Review finding 2026-08-29: an entry that will not parse points at nobody,
+  // so removing it is safe and healing -- refusing to would leave an address
+  // that can neither sign in (dangling entry resolves to null) nor sign up
+  // (createAccount reads bare entry existence as taken), forever.
+  const root = makeRoot(t);
+  const account = await signUp(root, { email: 'corrupt@example.com', supabaseUserId: 'uuid-corrupt-1' });
+  fs.writeFileSync(emailIndexPath(root, 'corrupt@example.com'), '{ not json');
+
+  deleteAccount({ root, accountId: account.accountId });
+
+  assert.equal(fs.existsSync(emailIndexPath(root, 'corrupt@example.com')), false,
+    'the unparseable entry must go with the account');
+  const again = await signUp(root, { email: 'corrupt@example.com', supabaseUserId: 'uuid-corrupt-2' });
+  assert.notEqual(again.accountId, account.accountId);
+});
+
+test('a refused index removal keeps the RECORD, so the retry converges and the address is never wedged', async (t) => {
+  // Review finding 2026-08-29: the first version removed the record FIRST, so
+  // an EBUSY on the index entry -- a Tuesday on Windows -- left a dangling
+  // entry with no account behind it: sign-in resolved to null, signup read
+  // the bare entry file as "address taken", and the retry path could not
+  // reach it because loadAccount answered NO_ACCOUNT. The record must be the
+  // LAST local thing to go, because it is the retry's only entry point.
+  const root = makeRoot(t);
+  const account = await signUp(root, { email: 'busy@example.com', supabaseUserId: 'uuid-busy-1' });
+  const entry = emailIndexPath(root, 'busy@example.com');
+
+  const fsImpl = {
+    ...fs,
+    rmSync: (p, ...rest) => {
+      if (String(p).split(path.sep).join('/') === entry) {
+        const err = new Error(`EBUSY: resource busy or locked, rm '${p}'`);
+        err.code = 'EBUSY';
+        throw err;
+      }
+      return fs.rmSync(p, ...rest);
+    },
+  };
+
+  assert.throws(() => deleteAccount({ root, accountId: account.accountId, fsImpl }),
+    (err) => err.code === 'EBUSY', 'a refused removal must be loud, never swallowed');
+
+  assert.ok(loadAccount({ root, accountId: account.accountId }),
+    'the record must survive a failed deletion -- it is the only thing a retry can start from');
+
+  // The retry, with the handle released, finishes the job.
+  deleteAccount({ root, accountId: account.accountId });
+  assert.equal(fs.existsSync(entry), false);
+  const again = await signUp(root, { email: 'busy@example.com', supabaseUserId: 'uuid-busy-2' });
+  assert.notEqual(again.accountId, account.accountId, 'the address must be reusable after the retry');
+});
+
 // ---------------------------------------------------------------------------
 // deleteAccountEverywhere -- the whole spec §1 order
 // ---------------------------------------------------------------------------
@@ -311,6 +364,25 @@ test('an upstream refusal aborts before any local deletion', async (t) => {
   assert.ok(loadAccount({ root, accountId: account.accountId }), 'local deletion ran beside a live upstream identity');
   assert.ok(fs.existsSync(jobPaths(root, job.jobId).dir));
   assert.equal(listSessions({ root }).some((s) => s.accountId === account.accountId), true);
+});
+
+test('an unreadable refund record is reported as unreadable, never silently dropped from the deletion report', async (t) => {
+  // Review suggestion 2026-08-29: the report is the operator's courtesy copy
+  // (out/refunds/ itself is never deleted and `npm run refunds` stays
+  // canonical), but a courtesy that under-reports money is the F2 shape in
+  // miniature. Unreadable means "go look", not "nothing here".
+  const root = makeRoot(t);
+  const account = await signUp(root, { email: 'unread@example.com', supabaseUserId: 'uuid-unread-1' });
+  const job = seedOwnedJob(root, account.accountId);
+  fs.mkdirSync(`${root}/out/refunds`, { recursive: true });
+  fs.writeFileSync(`${root}/out/refunds/${job.jobId}.json`, '{ half a record');
+
+  const result = await deleteAccountEverywhere({
+    root, accountId: account.accountId, api, supabase: fakeSupabase(null), isClaimed: () => false,
+  });
+
+  assert.deepEqual(result.pendingRefunds, [{ jobId: job.jobId, unreadable: true }],
+    'a record that will not parse might be pending money and must reach the operator as a name');
 });
 
 test('an account WITH an upstream identity refuses to delete when no Supabase client is configured', async (t) => {

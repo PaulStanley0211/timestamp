@@ -1514,50 +1514,80 @@ export function updateAccount({ root = REPO_ROOT, accountId, nowImpl = defaultNo
 }
 
 /**
- * Erases one account from the local store: the record, the email index entry,
- * the supabase index entry, and the directory. Deletion spec §1 step 5 -- the
- * LAST local step, after jobs and sessions, because everything before it
- * needs this record to find what else to delete.
+ * Erases one account from the local store: both index entries, the record,
+ * and the directory. Deletion spec §1 step 5 -- the LAST local step, after
+ * jobs and sessions, because everything before it needs this record to find
+ * what else to delete.
  *
- * THE RECORD GOES FIRST, INSIDE THE LOCK. A concurrent `updateAccount` -- an
- * operator grant landing mid-deletion -- then fails loudly with `NO_ACCOUNT`
- * instead of resurrecting the record after this function has finished. The
- * index entries follow while the lock is still held; both lookups already
- * tolerate a dangling entry (`findAccountByEmail`'s crashed-signup branch), so
- * even a crash between the two rms leaves an address that resolves to null and
- * a fresh signup that gets a NEW account -- never the `4f53dc6` rebind trap.
- * The directory itself is removed after the lock is released, because the lock
- * file lives inside it.
+ * THE ACCOUNT IS LOADED INSIDE THE LOCK, like `updateAccount` and for the
+ * same reason: a snapshot taken outside it can be stale by the time the lock
+ * is won. The concrete stale read (review finding, 2026-08-29): a person
+ * clicks "Sign in with Google" while the operator deletes their account, and
+ * `claimAccount` -- which holds this same lock -- binds a supabase id and
+ * writes its index entry between the snapshot and the deletion. A snapshot
+ * that still says `supabaseUserId: null` then skips that entry, and the
+ * dangling file makes the Google identity permanently unable to open an
+ * account (`createAccount`'s exclusive create reads bare existence as
+ * `SUPABASE_ID_TAKEN`). Loaded under the lock, the claim either finished
+ * first (and is seen) or arrives second (and finds `NO_ACCOUNT`).
  *
- * EACH INDEX ENTRY IS REMOVED ONLY IF IT POINTS AT THIS ACCOUNT. The entries
- * are exclusive-created and should always agree, but "should" is not a reason
- * to let a crossed index turn one person's deletion into another person's
- * unreachable account.
+ * THE INDEX ENTRIES GO FIRST AND THE RECORD GOES LAST, because the record is
+ * the RETRY'S ONLY ENTRY POINT. The first version removed the record first,
+ * and a refused entry removal -- an EBUSY is a Tuesday on Windows -- then
+ * left a dangling entry with no account behind it: sign-in resolved to null,
+ * signup read the bare entry file as "address taken", and no retry could
+ * reach it because `loadAccount` answered `NO_ACCOUNT`. The address was
+ * wedged forever, silently. Entries-first inverts every partial state into a
+ * recoverable one: whatever fails, the record survives, and running the
+ * deletion again converges (`adminDeleteUser` upstream is already
+ * retry-proof, 404 being success). A concurrent `updateAccount` cannot
+ * resurrect anything either way -- it reloads under this same lock and fails
+ * `NO_ACCOUNT` once the record is gone.
+ *
+ * EACH INDEX ENTRY IS REMOVED ONLY IF IT POINTS AT THIS ACCOUNT -- OR AT
+ * NOTHING LEGIBLE. The entries are exclusive-created and should always
+ * agree, but "should" is not a reason to let a crossed index turn one
+ * person's deletion into another person's unreachable account. An entry that
+ * will not parse points at nobody, so it is removed rather than left to
+ * wedge the address (an unreadable entry blocks signup exactly like a real
+ * one).
  *
  * WHAT THIS NEVER TOUCHES: the free-tape register. Its ceiling counts grants
  * across every account that has EVER existed -- decrementing it here is the
  * create-delete-create farm the ceiling exists to bound.
+ *
+ * `fsImpl` covers only the removals -- it exists so a test can refuse one
+ * `rmSync` and prove the retry converges.
  */
-export function deleteAccount({ root = REPO_ROOT, accountId }) {
-  const account = loadAccount({ root, accountId });
+export function deleteAccount({ root = REPO_ROOT, accountId, fsImpl = fs }) {
   const paths = accountPaths(root, accountId);
 
-  withAccountLock({ root, accountId }, () => {
-    fs.rmSync(paths.record, { force: true });
+  const account = withAccountLock({ root, accountId }, () => {
+    const fresh = loadAccount({ root, accountId });
 
-    const emailEntry = indexPath(root, account.emailHash ?? emailHash(account.email));
-    const entry = readJson(emailEntry, { missingOk: true });
-    if (entry?.accountId === accountId) fs.rmSync(emailEntry, { force: true });
+    const emailEntry = indexPath(root, fresh.emailHash ?? emailHash(fresh.email));
+    let entry = null;
+    let entryReadable = true;
+    try { entry = readJson(emailEntry, { missingOk: true }); } catch { entryReadable = false; }
+    if (!entryReadable || entry?.accountId === accountId) fsImpl.rmSync(emailEntry, { force: true });
 
-    const sbEntry = account.supabaseUserId ? supabaseIndexPath(root, account.supabaseUserId) : null;
+    const sbEntry = fresh.supabaseUserId ? supabaseIndexPath(root, fresh.supabaseUserId) : null;
     if (sbEntry) {
-      let pointsHere = false;
-      try { pointsHere = fs.readFileSync(sbEntry, 'utf8').trim() === accountId; } catch { /* already gone */ }
-      if (pointsHere) fs.rmSync(sbEntry, { force: true });
+      let remove = false;
+      try {
+        remove = fs.readFileSync(sbEntry, 'utf8').trim() === accountId;
+      } catch (err) {
+        // Already gone is done; unreadable points at nobody and must go.
+        remove = err.code !== 'ENOENT';
+      }
+      if (remove) fsImpl.rmSync(sbEntry, { force: true });
     }
+
+    fsImpl.rmSync(paths.record, { force: true });
+    return fresh;
   });
 
-  fs.rmSync(paths.dir, { recursive: true, force: true });
+  fsImpl.rmSync(paths.dir, { recursive: true, force: true });
   return { accountId, email: account.email };
 }
 

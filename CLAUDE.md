@@ -4376,6 +4376,35 @@ removed, owners-vanish tolerance removed, publishable key on the admin call.
   worktree branch onto `origin/supabase-identity-slice` before starting is
   what made the spec (and everything it names) exist at all.
 
+#### The post-landing review pass, and the two real holes it found
+
+A code review of the landed diff (the house discipline that keeps finding F2
+shapes inside fixes for F2) confirmed the gates and the export allow-list and
+found **two verified durability holes in `deleteAccount`, both fixed
+test-first the same day:**
+
+- **Record-first removal wedged the address on partial failure.** An EBUSY on
+  the email-index rm after the record was gone left a dangling entry no code
+  path could ever clear: sign-in resolved null, signup read bare entry
+  existence as taken, and the retry died at `loadAccount` → `NO_ACCOUNT`.
+  Now the INDEX ENTRIES GO FIRST AND THE RECORD LAST -- the record is the
+  retry's only entry point -- and an entry that will not parse is removed
+  (it points at nobody and blocks signup exactly like a real one).
+  `deleteAccount` gained an `fsImpl` seam so the refused-rm retry is a test.
+- **The pre-lock snapshot could miss a mid-flight Google claim.** The account
+  is now loaded INSIDE `withAccountLock` (the `updateAccount` pattern): a
+  concurrent `claimAccount` either finished first and is seen, or arrives
+  second and finds `NO_ACCOUNT` -- never a dangling `_index-supabase/` entry
+  that makes the identity permanently unable to open an account.
+
+Plus one honesty fix (an unreadable pending-refund record reaches the
+deletion report as `{ jobId, unreadable: true }` instead of vanishing) and
+two trade-offs now STATED in `deletion.mjs` instead of discovered: the
+lease-to-removal window spans the upstream await (sentinels-after was chosen
+because a deletion refused upstream must change nothing), and a
+deleted-while-queued job mints one spurious `failed/` queue entry (the worker
+handles it loudly; accepted noise). After the pass: **1888 / 1890, 0 fail.**
+
 ---
 
 ## Not in scope

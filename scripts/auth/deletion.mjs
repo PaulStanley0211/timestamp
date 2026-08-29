@@ -70,12 +70,18 @@ function ownedJobIds(fsImpl, root, accountId) {
  *  owned by `scripts/web/session-middleware.mjs` (`recordMissedRefund`); read
  *  here rather than imported because auth must not depend on the web layer,
  *  and the agreement is pinned by a web-level test that seeds through the real
- *  writer. `settled: null` is the one state that is money rather than trail. */
+ *  writer. `settled: null` is the one state that is money rather than trail.
+ *  A record that EXISTS but will not parse might be pending money, so it is
+ *  reported as unreadable rather than dropped -- the report is the operator's
+ *  courtesy copy, and a courtesy that under-reports money is the F2 shape in
+ *  miniature. A missing file is the common case and means nothing. */
 function pendingRefundsFor(fsImpl, root, jobIds) {
   const pending = [];
   for (const jobId of jobIds) {
+    let raw;
+    try { raw = fsImpl.readFileSync(`${root}/out/refunds/${jobId}.json`, 'utf8'); } catch { continue; }
     let record;
-    try { record = JSON.parse(fsImpl.readFileSync(`${root}/out/refunds/${jobId}.json`, 'utf8')); } catch { continue; }
+    try { record = JSON.parse(raw); } catch { pending.push({ jobId, unreadable: true }); continue; }
     if (record && record.settled == null) {
       pending.push({ jobId, credits: record.credits ?? null, reason: record.reason ?? null, at: record.at ?? null });
     }
@@ -155,6 +161,20 @@ export async function deleteAccountEverywhere({
   // a worker that claims in the race window stops at its next step boundary,
   // then the media purge with its per-file failure reporting -- and then the
   // whole directory, which the API route keeps and deletion does not.
+  //
+  // TWO ACCEPTED TRADE-OFFS, stated rather than discovered (review,
+  // 2026-08-29). First: the lease check above ran before the upstream await,
+  // so a worker can claim a pending job during that round trip; the sentinel
+  // written here stops it at its next step boundary, and a file it still
+  // holds open surfaces in `errors` and waits for the retention sweep.
+  // Writing sentinels BEFORE the upstream call would narrow that window, at
+  // the price that an upstream refusal leaves the person's queued tapes
+  // cancelled -- a deletion that failed must change nothing, and that rule
+  // wins. Second: a queued job's pending queue entry outlives its directory;
+  // the worker that later claims it takes the terminal missing-manifest path
+  // loudly and refunds nothing (there is no ledger left to refund into), and
+  // that one spurious failed/ entry per deleted-while-queued job is accepted
+  // noise, not a leak.
   const errors = [];
   let jobsDeleted = 0;
   for (const jobId of jobIds) {
