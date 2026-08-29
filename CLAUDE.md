@@ -7,19 +7,27 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-28, evening) — THE DOMAIN IS BOUGHT AND EMAIL REACHES ANYBODY.
+## START HERE (2026-08-29) — THERE IS AN IMAGE, AND THREE FRAME SHAPES ARE REAL.
 
-**1679 tests / 1677 pass / 0 fail / 2 skipped.** The skips are the
+**1712 tests / 1710 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 
-**THE CREAM WORK IS COMMITTED LOCALLY AND NOT PUSHED.** Section 31 is what it
-did. `origin/main` is still `b6f64a3` and no PR exists; the push is the
+**EVERYTHING IS COMMITTED LOCALLY AND NOTHING IS PUSHED.** `origin/main` is
+still `b6f64a3`, now **141 commits behind**, and no PR exists; the push is the
 irreversible line and it is Paul's, not Claude's.
 
-**WHAT IS LEFT IS SECTION 32; WHAT JUST HAPPENED IS SECTION 33.** Read 33
-first — it strikes items 1, 2, 6, 10 and 12 off 32 and records two items that
-32 listed as open and were already done. **Re-verify any item before working
-it.** Read both before planning a day.
+**WHAT IS LEFT IS SECTION 32; WHAT JUST HAPPENED IS SECTION 34.** Read 34
+first — it closes half of item 3 and most of item 9, turns item 11 from a
+decision into shipped work, and corrects item 14. Section 33 is the day before.
+**Re-verify any item before working it: three items across the last two
+sessions turned out to be already done, and one turned out to be a live defect
+rather than the decision the list called it.**
+
+**THE ONE DECISION BLOCKING THE MOST WORK: PAUL HAS NOT PICKED A DEPLOY HOST.**
+The Dockerfile is built, tested and proven; the topology file after it is
+shaped by the answer, so nothing further is worth building until he chooses.
+The options with real prices measured on 2026-08-29 are in §34A. **It is a
+thirty-second decision.**
 
 ### The three sentences that matter
 
@@ -213,29 +221,36 @@ section 24.
 
 ### PICK UP HERE
 
-> **READ SECTION 33 FIRST (2026-08-28 evening), THEN SECTION 32.** §33 is what
-> the last session did and what it corrected; §32 is the inventory, now with
-> items 1, 2, 6, 10 and 12 struck.
+> **READ SECTION 34 FIRST (2026-08-29), THEN SECTION 32.** §34 is what the last
+> session did and what it corrected; §32 is the inventory, now with items 1, 2,
+> 6, 10, 11 and 12 struck and 3, 9 and 14 rewritten.
 >
-> **PAUL'S FIRST ACTION IS ITEM 5: THE BLIND CHECK.** It is free, it takes ten
-> minutes, the packet is built and unsent at `out/blind-check/`, and it is now
-> **the only thing on the critical path that needs nobody but Paul**. It has
-> been open for days while infrastructure got built around it. It still decides
-> whether any of the rest matters: Paul has proved the tape looks good TO PAUL,
-> and nothing has yet proved a stranger recognises him.
+> **PAUL HAS TWO ACTIONS AND BOTH ARE SHORT.**
 >
-> **THE DOMAIN IS BOUGHT AND EMAIL WORKS.** `timestamptapes.com`. Anyone can
-> sign up and receive a six-digit code — proved against a real non-owner
-> address. That was the project's oldest blocker and it is closed. §33.
+> **ONE — THE BLIND CHECK (item 5).** Free, ten minutes, packet built and
+> unsent at `out/blind-check/`. Still the only thing on the critical path that
+> needs nobody but Paul, and it still decides whether any of the rest matters:
+> he has proved the tape looks good TO PAUL, and nothing has yet proved a
+> stranger recognises him. It now gates more work than it did a day ago.
 >
-> **CLAUDE'S ITEMS 6, 10 AND 12 ARE ALL DONE**, one commit each, test-first,
-> plus a security fix and a design fix. **Nothing is pushed.** The obvious next
-> pieces are: the free-tape ceiling (§32 item 14 — now that strangers can
-> actually sign up), a Dockerfile for the deploy, and the rest of the security
-> review.
+> **TWO — PICK A DEPLOY HOST (item 3).** The Dockerfile is built, proven by
+> building and running it, and names no host on purpose. The next artefact —
+> compose file or fly.toml plus a supervisor — is shaped entirely by the
+> answer, so **the whole rest of the deploy is blocked on one choice.** Real
+> prices, measured 2026-08-29, are in §34A: Hetzner CX23 ~€5/mo is cheapest by
+> four times; Fly is dearest AND needs both processes in one Machine, because
+> its volumes are strictly single-attach.
 >
-> **BEFORE WORKING ANY ITEM ON §32, RE-VERIFY IT.** Two items on that list
-> turned out to be already done when checked this session. A stale list costs an
+> **CLAUDE'S HALF OF ITEMS 3, 9 AND 11 IS DONE**, twelve commits, test-first,
+> every assertion sabotage-verified. **Nothing is pushed.** What is left that
+> needs nobody: the deploy runbook (once a host exists), the three tape-quality
+> items in §34G, and the last three security items — all of which are Paul's
+> decisions or LOW.
+>
+> **BEFORE WORKING ANY ITEM ON §32, RE-VERIFY IT.** Across the last two
+> sessions THREE items were already done and ONE — item 11 — was not the
+> decision the list called it but a live defect that would have failed every
+> wide render the day a real provider was configured. A stale list costs an
 > afternoon; checking costs a minute.
 
 ~~**PICK UP AT SECTION 27: ONE COMMAND FINISHES THE PAYMENT DEMO.**~~ **DONE
@@ -447,6 +462,30 @@ review's section 3 FIRST, same rule as before.
 
 ### Things that will bite you
 
+- **THE FRAME SHAPE IS PART OF THE PRICE NOW** (2026-08-29). `creditCost` takes
+  an `aspect`, and a non-default shape costs 4/3 — 28 CR at 480p, 61 at 720p.
+  **A call site that forgets to hand it on charges the 4:3 price and sells a
+  third below cost, silently**, which is the §26 pass-through shape and the
+  exact bug that had to be fixed to open the menu. `costOf`, the session seam
+  and `creditCost` all take it; grep before adding a fourth. An UNPRICED shape
+  is refused rather than defaulted — a 1:1 tape would be 0.75x, not 4/3, so the
+  multiplier is per shape and not one constant for "not the default".
+- **THE DOCKERFILE AND `.dockerignore` MUST STAY LF.** `core.autocrlf` is true
+  here, and a CRLF Dockerfile does not parse — a `\` continuation followed by
+  CR stops being a continuation, and there are four in the ffmpeg layer.
+  `.gitattributes` pins both; a test asserts the bytes so it goes red on the
+  machine where the problem exists. Measured: a CRLF `.dockerignore` still
+  works because BuildKit strips the CR, but it is pinned anyway.
+- **`MSYS_NO_PATHCONV=1` before any `docker run` that passes `/data`.** Git
+  Bash rewrites it to `C:/Program Files/Git/data`, and the resulting `EACCES`
+  looks exactly like a volume-permissions bug. The Dockerfile's own `CMD` is a
+  JSON array and is unaffected.
+- **A JS `String.replace` hits the FIRST match, which in these files is
+  usually a COMMENT.** A sabotage sweep reported a working guard as broken
+  because the harness had only edited prose. Anchor mutations to the real line,
+  and **treat an uncaught sabotage as suspect until you have proved the
+  mutation changed the code** — and note `\n` will not match a tracked file's
+  CRLF, so use `\s*`.
 - **THE PASSWORD FUNCTIONS ARE ASYNC NOW** (2026-08-26). `hashPassword`,
   `verifyPassword`, `authenticate` and `createAccount` all return Promises. A
   forgotten `await` does not throw — it yields a truthy Promise where a boolean
@@ -1186,16 +1225,22 @@ cannot move while somebody adds a shape. Verified by rendering all three and
 probing the files: edge luma 79-84 on the new shapes (picture) against 24 on
 4:3 (surround).
 
-**THE PAID PATH REFUSES THE NEW SHAPES, DELIBERATELY.** `fal.mjs` still sends a
-hardcoded `aspect_ratio`, so a paid 9:16 render would fetch a 4:3 source and
-build a 9:16 frame around it -- and every check downstream would agree, because
-they all read the same resolved config. `resolveRaster` now throws
-`ASPECT_UNSUPPORTED` for a paid provider on any non-default aspect. **Fixture
-does all three; paid does 4:3 and refuses the rest.** Lift it when
-`FAL_RESOLUTIONS` gains the aspect dimension -- which reopens pricing, because
-16:9 at 1024x576 is FEWER pixels than 4:3 720p. **2026-08-24: fal's enum was
-read and it accepts 16:9 and 9:16 on both video endpoints**, so the only thing
-in the way is this repo. Section 18's closing paragraph carries the full cost.
+~~**THE PAID PATH REFUSES THE NEW SHAPES, DELIBERATELY.**~~ **LIFTED
+2026-08-29 -- SECTION 34D. THE PAID PATH DOES ALL THREE.** The refusal was
+right while `fal.mjs` sent a hardcoded `aspect_ratio`: a paid 9:16 render would
+have fetched a 4:3 source and built a 9:16 frame around it, with every check
+downstream agreeing because they all read the same resolved config.
+`falAspectFor` reads the shape off the requested raster now, so that is fixed
+at the source, and what guards it is the RASTER check -- derived from
+(resolution, aspect) and matched against the provider's own offers, which asks
+"can you render THIS order" rather than "do you do shapes at all".
+
+**AND THE PRICING NOTE THAT USED TO SIT HERE WAS WRONG.** It said 16:9 at
+1024x576 is FEWER pixels than 4:3 at 720p -- that compares the TAPE raster
+against the SOURCE raster ordered from fal, which are different things, and fal
+bills the second. A label holds the SHORT edge, so a non-4:3 shape is exactly
+**4/3** the pixels at the same tier and costs 4/3 as much: **28 CR at 480p, 61
+at 720p**, which `creditCost` now charges.
 
 ### 14. THE MOTION PROMPT WAS REWRITTEN (2026-08-24)
 
@@ -1478,22 +1523,31 @@ and `config/models.json` still carries the open question in its own words:
 **That question is unanswered and only a paid call answers it.** The old path is
 untouched and still the default precisely because of that.
 
-**ASPECT RATIOS: THE ENDPOINT SAYS YES, WE STILL SAY NO (checked 2026-08-24).**
-Both of fal's pages give the same enum for `aspect_ratio` — `auto, 21:9, 16:9,
-4:3, 1:1, 3:4, 9:16` — on reference-to-video and on image-to-video. **So 16:9
-and 9:16 would be ORDERED natively, not cropped**, and section 13's refusal is
-this repo's, not the vendor's. `config/models.json` still records
-`aspectRatios: ["4:3"]` because that field says what the PRODUCT offers, the
-way `resolutions` already does; the enum is recorded in that entry's comment.
+~~**ASPECT RATIOS: THE ENDPOINT SAYS YES, WE STILL SAY NO (checked
+2026-08-24).**~~ **WE SAY YES TOO, AS OF 2026-08-29 — SECTION 34D.** Both of
+fal's pages give the same enum for `aspect_ratio` — `auto, 21:9, 16:9, 4:3,
+1:1, 3:4, 9:16` — on reference-to-video and on image-to-video, so 16:9 and 9:16
+are ORDERED natively rather than cropped. `config/models.json` now records all
+three, because that field says what the PRODUCT offers and the product offers
+three.
 
-**What lifting it actually costs**, so nobody starts it thinking it is a config
-edit: `FAL_RESOLUTIONS` is a 4:3 table by construction — the label is the height
-and 4:3 supplies the width — `animate/plan.mjs` derives the same rasters from the
-same rule and there is a test that the two agree, `fal.mjs` sends the
-`FAL_ASPECT_RATIO` constant on every call, and `resolveRaster` throws
-`ASPECT_UNSUPPORTED`. Four places, one rule. **And it reopens pricing**: 16:9 at
-1024x576 is fewer pixels than 4:3 at 720p, and every price in this repo is still
-an unmetered estimate, which is why METER A RUN is item 1 and this is item 4.
+**What it actually cost, since this paragraph used to warn nobody should start
+it thinking it was a config edit — it was not, and it was FIVE places rather
+than the four listed here.** `animate/plan.mjs` gained the shape dimension
+(a label names the SHORT edge); `fal.mjs` derives the cross product and
+`falAspectFor` puts the ordered shape on the wire; `resolveRaster` stopped
+refusing and checks the derived raster instead; `creditCost` charges for the
+shape; and **the fifth, which this list missed: `contract.mjs` ASSERTED 4:3 on
+every offered raster**, on a premise that died when section 13 gave each shape
+its own tape frame.
+
+**AND THE PRICING CLAIM HERE WAS WRONG IN THE DANGEROUS DIRECTION.** It said
+16:9 at 1024x576 is fewer pixels than 4:3 at 720p; that compares the TAPE
+raster against the SOURCE raster ordered from fal, which are different things,
+and fal bills the second. Holding the short edge, a non-4:3 shape is **exactly
+4/3 the pixels** and costs 4/3 as much — so lifting this without pricing it
+would have sold every wide tape a third below cost, which is the 480p mistake
+repeating. **28 CR at 480p and 61 at 720p**, Paul's call.
 
 **The harder half is not the enum, and as of 2026-08-24 it has a price.** This
 endpoint ordered at 640x480 and returned **752x560** — a size nobody asked for,
@@ -2932,10 +2986,21 @@ which is why two items other sections still call open are struck below. Twenty
 items, grouped by who can actually do them. Numbers are stable — say "do 6 and
 12" and they mean these.
 
-**THE ORDER THAT MATTERS IS NOT THE IMPORTANCE ORDER.** Item 5 is the most
-important thing in the project and item 1 is the one to start, because **item 1
-is the only one with a WAIT attached**. DNS propagation and Resend domain
-verification run on their own clock. Start 1, then do 5 while it propagates.
+**MAINTAINED THROUGH 2026-08-29.** Struck: 1, 2, 6, 10, 11, 12. Rewritten
+because the entry was wrong or half-done: **3** (image built, host not chosen),
+**9** (five more closed, three left), **14** (not the attack surface it
+claimed). **§34 is the record.**
+
+**THE ORDER THAT MATTERS IS NOT THE IMPORTANCE ORDER.** Item 5 is still the
+most important thing in the project. **Item 3 is the one to start**, because
+picking a host is a thirty-second decision that unblocks every remaining piece
+of the deploy — and 5 costs Paul ten minutes and needs nobody. Both are his,
+neither blocks the other, and doing both takes one coffee.
+
+**AND THE LESSON THIS LIST KEEPS TEACHING: RE-VERIFY BEFORE WORKING AN ITEM.**
+Three entries across two sessions were already done, and item 11 was not the
+open decision it claimed but a live defect that would have failed every wide
+render the day a real provider was configured.
 
 #### A — Blocked on Paul or on an outside party. The critical path.
 
@@ -2958,8 +3023,21 @@ verification run on their own clock. Start 1, then do 5 while it propagates.
    and Supabase answers an invalid token with `otp_expired`, the same code it
    uses for a genuinely expired one — so the page blames the clock. Nothing in
    the app can detect it.
-3. **Deploy.** No host chosen and **NO DEPLOY CONFIG OF ANY KIND EXISTS** --
-   checked: no Dockerfile, no fly.toml, no vercel.json, no Procfile.
+3. **Deploy. THE IMAGE HALF IS DONE (2026-08-29, §34A); THE HOST IS NOT
+   CHOSEN AND IT BLOCKS EVERYTHING AFTER IT.** `Dockerfile`, `.dockerignore`,
+   `.gitattributes` and 13 tests exist, and the image was built, run, and
+   proved: two containers on one volume, `ln` exclusive across them, no `.env`
+   or key anywhere in its filesystem, preflight green at build time. **A full
+   fixture render on 2 vCPU / 4 GB is 97 seconds**, so a ~€5/mo box is enough.
+   §34A has four hosts with prices read on 2026-08-29 — and the note that Fly
+   volumes are single-attach, so it alone needs both processes in one Machine
+   behind a supervisor this Dockerfile does not have.
+   **Still to do after the host is picked:** the topology file, TLS (which is
+   also what makes `TIMESTAMP_TRUST_PROXY=1` correct and unlocks the `__Host-`
+   cookie prefix), and a runbook for the five consoles — Supabase, Google
+   OAuth, Stripe webhook, `TIMESTAMP_PUBLIC_URL`, DNS. **None of that is
+   testable from `node --test`, and every Google sign-in failure this project
+   has had was dashboard-shaped.**
    `TIMESTAMP_PUBLIC_URL` is still commented out in `.env.example`.
    **Consequence worth stating plainly: this app has never been reachable by
    anyone not sitting at this machine.**
@@ -3006,12 +3084,25 @@ verification run on their own clock. Start 1, then do 5 while it propagates.
    **Verified already closed, so the review is stale on both:** the signup
    limiter exists (10/hour per IP), and `/auth/reset` + `/auth/reset/complete`
    exist with their own limiter, so a leaked credential CAN be revoked.
-   **Still open:** the structural half of the cookie finding (there are still
-   two parsers; deleting the duplicate is a dependency-shape decision, since
-   `session-middleware.mjs` imports only node builtins today), plus a handful of
-   MEDIUMs and LOWs. **The one that ARMS ON THE NEXT `config/models.json` EDIT
-   is still open** — whoever fills in the still model reads §3 of the review
-   FIRST.
+   **FIVE MORE CLOSED 2026-08-29 — §34C**, one commit each, test-first, every
+   assertion sabotage-verified: the billing page's prototype reflection
+   (`7d267ae`), the uncached public health endpoint whose per-hit cost grew
+   without bound (`9cefcae`), redirects followed without re-checking the
+   allow-list — which reached the cloud metadata address (`8a325fd`), an
+   over-cap body answering `ECONNRESET` instead of a readable 413 (`ea806e9`),
+   and an account error carrying the submitted address into the logs
+   (`f487b4d`). Every one was re-verified against current code before being
+   worked, and one item the review still lists as open was already closed.
+   **THREE ARE LEFT AND ALL THREE ARE DELIBERATE:** the multipart
+   write-amplification item (LOW, bounded by `maxBytes`, needs an authenticated
+   account with credits); the structural half of the cookie finding (there are
+   still two parsers; deleting the duplicate is a dependency-shape decision,
+   since `session-middleware.mjs` imports only node builtins today); and
+   `stillCount`, which is client-chosen and unpriced. **THE ONE THAT ARMS ON
+   THE NEXT `config/models.json` STILL-MODEL EDIT IS STILL OPEN** — whoever
+   fills in the still model reads §3 of the review FIRST. **The 2026-08-29
+   `aspectRatios` edit to that same file did NOT arm it**, because the still
+   model is untouched and the web path still refuses at compose.
 10. ~~**The shared-path test race.**~~ **DONE 2026-08-28 — `5be6c1f`. FOUR
     DIRECTORIES, NOT THREE.** This list named `test-intake`,
     `provider-contract` and `fal-smoke`; §4 named `provider-fixture` instead of
@@ -3020,11 +3111,17 @@ verification run on their own clock. Start 1, then do 5 while it propagates.
     went from 6 paths all shared to 12 across two pid directories with none
     shared; `build/provider-fixture` from 22 leaf names claimed by both — the
     exact number §4 recorded — to 44 disjoint paths.
-11. **16:9 and 9:16 refuse on the paid path.** Fixture does all three;
-    `resolveRaster` throws `ASPECT_UNSUPPORTED` (`pipeline.mjs:182`) for a paid
-    provider on any non-default aspect. **fal's own enum accepts them** -- the
-    refusal is this repo's, not the vendor's. §18 has the four places that must
-    move together, and lifting it reopens pricing.
+11. ~~**16:9 and 9:16 refuse on the paid path.**~~ **DONE 2026-08-29 — §34D,
+    five commits.** And it was NOT the decision this entry called it: the page
+    was OFFERING both shapes while the pipeline refused them, so every wide
+    order would have failed at compose the day a real provider was configured,
+    after the credits were debited. Invisible locally because the web app
+    defaults to the fixture. **All three shapes now render on the paid path and
+    are priced at what they cost: 28 CR at 480p and 61 at 720p**, because
+    holding the short edge makes a non-4:3 shape exactly 4/3 the pixels and fal
+    bills tokens as pixels x seconds. Proved end to end by rendering a 9:16
+    tape and measuring edge luma — a matted 4:3 and a full-bleed 9:16 are both
+    1080x1920, so dimensions alone prove nothing.
 12. ~~**`npm run doctor` does not load `.env`.**~~ **DONE 2026-08-28 —
     `493989b`.** `npm run doctor` now prints `all three present` against the
     real `.env`. The test is BEHAVIOURAL, not a string match on the manifest: it
@@ -3040,10 +3137,16 @@ verification run on their own clock. Start 1, then do 5 while it propagates.
     of them at frames 12, 37, 62 ... **exactly one every 25**. Periodic judder is
     the most visible kind. Three ways out in §26 -- interpolate, scatter the
     duplicates from the job seed, or leave it. **The call has never been made.**
-14. **The free-tape exposure.** 21 CR at signup is **$2.07 of real provider
-    spend per account**, ~$207 against the global ceiling of 100. Harmless at
-    seven local accounts; it is the first thing that matters the hour a public
-    URL exists.
+14. **The free-tape exposure — SMALLER THAN THIS ENTRY SAID; corrected
+    2026-08-29 by checking (§34E).** 21 CR at signup is **$2.07 of real
+    provider spend per account**, ~$207 against the global ceiling of 100.
+    **What is NOT true is that a script can drain it.** The grant happens only
+    inside `createAccount`, reached solely through `resolveIdentity` — so it
+    costs a confirmed six-digit code, a password login against a confirmed
+    account, or a real Google round trip. An attacker needs 100 confirmable
+    mailboxes, not 100 POSTs. **It is a pricing question for Paul, not an
+    attack surface**, and the security review's note to the contrary predates
+    the identity slice.
 15. **The pack ladder, before real money touches it.** A Stripe Price is
     IMMUTABLE. Starter $12/92 CR and Standard $19/138 CR are live in test mode;
     changing a rung later means a new Price object.
@@ -3203,22 +3306,285 @@ on that page that reads templated.
 
 #### What is left, in the order it is worth doing
 
+> **SUPERSEDED BY §34G — this list is the state on the evening of 2026-08-28
+> and two of its four entries have moved. Item 3's Dockerfile now exists, and
+> item 14 turned out not to be the exposure this entry describes.** Kept as the
+> record of what the day handed on; act on §34G.
+
 1. **THE BLIND CHECK (§32 item 5).** Free, ten minutes, still unsent at
    `out/blind-check/`. **It is now the only thing on the critical path that
    needs nobody but Paul**, and it still decides whether any of the rest
-   matters.
+   matters. *(Still true, and still the most important item.)*
 2. **The free-tape ceiling (§32 item 14).** 21 CR at signup is $2.07 of real fal
    spend per account, ~$207 against a ceiling of 100. **Strangers can create
-   accounts as of tonight**, so this stopped being theoretical.
+   accounts as of tonight**, so this stopped being theoretical. *(Half wrong —
+   the grant needs a CONFIRMED identity, so a script cannot drain it. §34E.)*
 3. **Deploy (§32 item 3).** Newly possible — there is a domain. **No host
    chosen and no config exists.** The binding constraint is that the queue
    claims jobs with `linkSync`, so web and worker need ONE shared block
    filesystem: that rules out Render and Railway (a disk attaches to one
    service) and every serverless runtime. One small VM, or one Fly machine with
    both processes in it. A Dockerfile is host-agnostic and was offered but not
-   written.
+   written. *(Written and proved 2026-08-29 — §34A. The constraint above is
+   confirmed by measurement, and Fly's volumes are single-attach, so it needs
+   both processes in ONE Machine. The host is still unchosen.)*
 4. **Open the PR (§32 item 7).** Item 6 was the gate and it is closed.
 
+
+---
+
+### 34. THE APP CAN BE CONTAINERISED, AND THREE FRAME SHAPES ARE REAL (2026-08-29)
+
+**Suite 1712 / 1710 pass / 0 fail / 2 skipped**, from a 1679 / 1677 baseline —
+the +33 are all new tests, nothing was dropped or weakened. **Twelve commits,
+`4f49ee4..9c4f16d`, NONE PUSHED.** `origin/main` is still `b6f64a3`, now **141
+commits behind**, no PR. Tree clean. All five `guards.yml` checks pass locally,
+`dependencies` is still `{}`, and no commit message or added line names a
+security finding.
+
+Two items were worked: **§32 item 3** (deploy — the Dockerfile half) and **§32
+item 9** (the rest of the security review). The frame-shape work came out of
+re-verifying item 11 and finding it was a live defect rather than a decision.
+
+#### A — THE IMAGE EXISTS. THE HOST IS STILL PAUL'S CALL AND IS THE ONE THING BLOCKING DEPLOY.
+
+`Dockerfile`, `.dockerignore`, `.gitattributes`, `test/deploy-image.test.js`
+(13 tests). It names **no host on purpose** — what it encodes is the constraint
+that picks one: the queue claims with `linkSync`, so `/data` is a VOLUME and
+the two commands are one image with different arguments.
+
+**PROVEN BY BUILDING AND RUNNING IT, not by reading it.** The image builds; the
+preflight gates it at build time with all 36 filters green; **nothing named
+`.env` or `*.pem` exists anywhere in its filesystem**; web and worker
+containers on one volume see one filesystem, both run as uid 1000, and `ln` —
+the exact primitive `queue.mjs` claims jobs with — is genuinely exclusive
+across them, the second attempt refused.
+
+**Three things are pinned and each for its own reason.** The base image **by
+digest** (`node:22-bookworm-slim@sha256:83f487e0…`), because a tag moves and
+"rebuild it" has to mean the same thing twice. ffmpeg **by MAJOR version**
+rather than an exact apt pin — pinning the patch would refuse security updates
+to the thing that parses strangers' uploads, while a major bump is what would
+silently change filter behaviour. And **the preflight runs AT BUILD TIME**, so
+an ffmpeg without `chromashift` produces no image instead of a container that
+fails after the provider has been paid.
+
+**MEASURED, FOR SIZING A HOST:** a full fixture render on **2 vCPU / 4 GB took
+97 seconds** (conservative — the fixture generates the source clip locally,
+which fal does remotely). Image is **989 MB**, mostly ffmpeg's codec libraries.
+A job directory is **44–65 MB**; `out/` here is 954 MB for ~26 jobs.
+
+**THE HOST OPTIONS, WITH REAL PRICES READ ON 2026-08-29** (not from memory):
+
+| | spec | cost | notes |
+|---|---|---|---|
+| Hetzner CX23 | 2 vCPU x86, 4 GB, 40 GB, 20 TB | **€4.49–5.49/mo** | Cheapest by ~4x. Two containers, one volume — the shape that was proved. Needs Caddy for TLS. Two sources disagree ~€1 over IPv4/VAT. |
+| Hetzner CAX11 | 2 vCPU ARM, 4 GB, 40 GB | **€4.99–5.99/mo** | Same shape. Debian has arm64 ffmpeg and the digest is a manifest list, so it should work — **verified on amd64 ONLY.** |
+| DigitalOcean | 2 vCPU, 4 GB, 80 GB | **$24/mo** | Same topology, ~4x the price; you pay for docs and tooling, not machine. |
+| Fly.io | shared-cpu-2x, 4 GB | **~$21.6/mo + $6 volume** | TLS is automatic. **But volumes are STRICTLY single-attach** — "a volume can be attached to only one Machine" — so web and worker must share ONE Machine behind a supervisor this Dockerfile does not have. |
+
+**Paul was asked and did not pick. Nothing else in the deploy is worth building
+until he does**, because the topology file (compose vs fly.toml + supervisor)
+is the next artefact and it is shaped by the answer.
+
+**WHAT ELSE THE DEPLOY STILL NEEDS, and none of it is testable from
+`node --test`:** TLS termination (which is also what finally makes
+`TIMESTAMP_TRUST_PROXY=1` correct, and unlocks the `__Host-` cookie prefix),
+plus a runbook for the five consoles — Supabase redirect URLs and Site URL, the
+Google OAuth authorized redirect, a new Stripe webhook endpoint and signing
+secret, `TIMESTAMP_PUBLIC_URL`, DNS. **Every one of the three Google sign-in
+failures was dashboard-shaped and invisible to the suite (§A of START HERE).
+Going live repeats that risk across five consoles at once.**
+
+#### B — TWO BUGS THAT ONLY RUNNING THE IMAGE COULD FIND
+
+1. **A fresh named volume is root-owned.** Docker takes the volume's ownership
+   from whatever the image has at that path; with nothing there, `USER node`
+   could not write. The container started, printed nothing but
+   `EACCES: permission denied, mkdir '/data/out/queue/pending'`, and refused
+   every connection from outside. The mkdir and chown now run **while the build
+   is still root**, and the test asserts the ORDERING — after the USER switch
+   it would no longer have the privilege.
+2. **A FRESH CLONE ON THIS MACHINE COULD NOT HAVE BUILT THE IMAGE.**
+   `core.autocrlf` is true here, so a clone rewrites LF to CRLF, and a CRLF
+   Dockerfile does not parse: `dockerfile parse error on line 3: unknown
+   instruction: echo`, because a `\` continuation followed by CR is not a
+   continuation. Four of them, all in the ffmpeg layer. Fixed with
+   `.gitattributes`; **verified with a real clone at `autocrlf=true` that then
+   built**, with `CLAUDE.md` (unpinned) still showing CR as the control.
+
+**AND THE TWO FILES BEHAVE DIFFERENTLY, WHICH IS WHY ONLY ONE IS A BUG.**
+Measured against real builds: a CRLF **Dockerfile** fails to parse; a CRLF
+**`.dockerignore`** still works, because BuildKit strips the CR — a probe image
+built with `.env\r\n` in it genuinely excluded `.env`. That second result is
+also what makes the test's ignore matcher honest, since it `.trim()`s each
+line; had BuildKit behaved the other way that would have been a hole big enough
+to ship seven secrets through. `.dockerignore` is pinned to LF anyway.
+
+#### C — THE SECURITY REVIEW: FIVE CLOSED, THREE LEFT AND ALL THREE ARE PAUL'S OR LOW
+
+**`docs/security-review-2026-08-25.md` is still local and still gitignored, and
+must stay both.** What each commit DOES is below; what it CLOSED is in the
+review and is not restated here, in a commit message, or in a PR description.
+
+Each was **re-verified against current code before being worked** — and one
+item the review still lists as open (the signup limiter) was already closed.
+
+| Commit | What it does |
+|---|---|
+| `7d267ae` | The billing page can only render the two notices this app wrote — `?checkout=constructor` used to print `function Object() { [native code] }` into a `<p class="notice">`. Not XSS (`h()` escapes it, checked); a money page that can be made to say something else at all. |
+| `9cefcae` | `GET /api/health` stops doing two synchronous filesystem walks per hit. Cost grew **without bound** — `out/queue/done` and `failed` accumulate one file per job forever. Now on the same 30 s timer as the ffmpeg check beside it, which had been cached since it was written for exactly this reason. |
+| `8a325fd` | The provider allow-list gates **every hop**, not just the first. Node's fetch follows up to 20 redirects, so an allowlisted host answering `302 → 169.254.169.254` was followed — the cloud metadata service, which this project is about to have one of. |
+| `ea806e9` | An over-cap body gets a readable **413** instead of `ECONNRESET`. |
+| `f487b4d` | An account error names the code, never the address a person typed. |
+
+**TWO THINGS WORTH KEEPING FROM THOSE FIVE:**
+
+- **The 413 took TWO changes and the second is the interesting one.** Pausing
+  instead of destroying was not enough: `fail`'s own teardown then called
+  `socket.destroy()`, and a destroy with unread inbound data sends a RESET,
+  which discards the response just written. So the branch that exists to
+  deliver a refusal mid-upload was destroying that refusal whenever it ran. It
+  is a FIN now plus an unref'd 1 s grace timer — the timer keeps the original
+  guarantee, because FIN only *asks* the peer to stop. **The existing 13 MB
+  upload 413 test still passes**; that path had been getting away with the same
+  latent race because its sender finishes writing first.
+- **The PII fix went in at the SOURCE, not at the five log sites.** A log site
+  is added by whoever adds the next route and careful handling does not travel
+  with it. An error that never carries the address cannot leak it through a
+  call site nobody has written yet.
+
+**STILL OPEN, and all three are deliberately left:** the multipart
+write-amplification item (LOW, bounded by `maxBytes`, needs an authenticated
+account with credits); `stillCount` client-chosen and unpriced (**still arms on
+the `config/models.json` still-model edit** — that warning stands, and the
+aspect edit below did NOT arm it); and the second cookie parser, whose deletion
+is a dependency-shape decision for Paul since `session-middleware.mjs` imports
+only node builtins.
+
+#### D — THE FRAME-SHAPE MENU WAS A LIVE DEFECT, AND NOW IT IS A FEATURE
+
+**Found by re-verifying §32 item 11 rather than trusting it.**
+`config/render.json` marked 16:9 and 9:16 available and the form rendered all
+three, while `resolveRaster` refused every non-default shape on a **paid**
+provider. Invisible locally because the web app defaults to the fixture — and a
+guaranteed compose failure, after the credits are debited, the moment a real
+provider is configured. **Which is what deploying means.**
+
+`03b1f13` made the menu honest first (no pricing decision needed). Then four
+commits made it real, at **Paul's direction on the price**:
+
+| Commit | What it does |
+|---|---|
+| `8390672` | A resolution label names the **short edge**, so a shape changes the long one — §13's tape rule one layer down. |
+| `760d968` | The price follows the shape: **28 CR at 480p, 61 at 720p** for 16:9 and 9:16, against 21 and 46 for 4:3. |
+| `81d3e6e` | The ordered shape goes on the wire; the contract's stale 4:3 rule becomes a list. |
+| `9c4f16d` | The refusal lifts, the menu opens, and the shape reaches the charge. |
+
+**THE PRICE IS 4/3 AND THE DERIVATION IS THE JUSTIFICATION.** 4:3 is the
+squarest shape shipped and a label holds the short edge, so 16:9 and 9:16 are
+**exactly 4/3 the pixels** at the same tier — 854x480 against 640x480, 1280x720
+against 960x720. fal bills tokens as pixels x seconds. **Paul chose to charge
+it rather than flat-price**, on the argument that 9:16 is the phone format on a
+product that delivers to phones, so a flat price would subsidise the *modal*
+order at ~47% gross instead of 60% — and that 60% is already spent, since the
+credit-packs spec sets it to absorb the free retries direct mode made
+inevitable when it deleted the cheap rejection gate.
+
+**61 AND NOT 62.** The multiplier applies to the DOLLAR figure with the ceiling
+taken once: $4.5646 x 4/3 / $0.10 = 60.86 → 61. Multiplying the already-rounded
+46 CR gives 62, which charges a credit for a rounding step. **A number quoted
+as 62 mid-session was double-rounded arithmetic, not the code.**
+
+**THE MULTIPLIER IS PER SHAPE, NOT ONE NUMBER FOR "NOT THE DEFAULT."** Holding
+the short edge makes a **1:1 tape 0.75x** the pixels of 4:3, not 4/3 — so a
+single constant would be wrong the day somebody adds a square shape, and wrong
+in the direction that overcharges. An unpriced shape is REFUSED, and there is a
+test that `1:1` specifically is.
+
+**THE MONEY WIRING WAS THE DANGEROUS PART AND HAD THREE PLACES TO GO WRONG.**
+The handler read `aspect`, validated it, then computed credits from the
+resolution alone — the exact pass-through shape §26 records three times in one
+morning. Opening the menu without fixing that would have sold every wide tape a
+third below cost, invisibly, exactly as 480p was for weeks. `costOf`, the
+session seam and `creditCost` all take the shape now, with a sabotage for each.
+
+**PROVEN END TO END.** A 9:16 tape through the fixture: 375 frames, 15s,
+-26.9 LUFS. The file is 1080x1920 — **but so is a MATTED 4:3, so dimensions
+prove nothing alone.** Edge luma does: top 68.3, bottom 83.6, centre 109.4, all
+picture, against ~24 for a 4:3 surround. Genuinely full-bleed portrait.
+
+**A CLAIM THAT WAS WRONG AND IS CORRECTED IN THREE PLACES** (`fal.mjs`'s
+header, `config/models.json`, and §18's closing paragraph): "16:9 at 1024x576
+is FEWER pixels than 4:3 at 720p" compared the **TAPE** raster against the
+**SOURCE** raster ordered from fal. Those are different things and fal bills
+the second. Wide shapes cost **more**, not less, which is why the pricing had
+to land before the menu opened.
+
+**STILL UNMEASURED, and it is the one number that could move:** no non-4:3
+shape has ever been ORDERED from fal, and the endpoint picks its own delivered
+raster — 752x560 for an ordered 640x480. If that upscale differs by SHAPE
+rather than by tier, the 4/3 multiplier moves. One metered wide render settles
+it and `npm run ledger` will name the gap.
+
+#### E — A CORRECTION TO §32 ITEM 14, FOUND BY CHECKING
+
+**The free-tape exposure is smaller than that item says.** The grant happens
+only inside `createAccount`, which is reached solely through `resolveIdentity`
+— i.e. after a confirmed six-digit code, a password login against a confirmed
+account, or a real Google round trip. So "100 scripted signups exhaust the
+lifetime budget" is **not reachable**; an attacker needs 100 confirmable
+mailboxes. It remains a real pricing question ($2.07 a signup, ~$207 against
+the ceiling) but it is **not an attack surface**, and it moves out of the
+urgent column into Paul's.
+
+#### F — THINGS THAT WILL BITE THE NEXT READER
+
+- **The Bash tool eats backslashes and it bit again.** A `node -e` one-liner
+  with `\\/` in a regex became a syntax error. This file has warned about it
+  since §31; the rule is unchanged — **use Write/Edit for anything containing
+  regex escapes**, never a shell heredoc or a `-e` string.
+- **Git Bash mangles `/data` into `C:/Program Files/Git/data`** when passed as
+  a docker argument. It cost one confusing `EACCES` that looked like the volume
+  bug and was not. `MSYS_NO_PATHCONV=1` before `docker run`. The Dockerfile's
+  own `CMD` is a JSON array and is unaffected — only command-line overrides.
+- **A JS `String.replace` hits the FIRST occurrence**, and in these files the
+  first occurrence is usually in a comment. One sabotage sweep reported a
+  guard as broken when the harness had merely edited prose. Anchor mutations to
+  the real line (`/^CMD .*$/m`), and **treat an uncaught sabotage as suspect
+  until you have proved the mutation actually changed the code.**
+- **`core.autocrlf` is true, so a `String.replace` with `\n` in a multi-line
+  match silently fails on tracked files.** Use a regex with `\s*`.
+- **Three sabotages escaped their first sweep this session and every one
+  revealed a MISSING TEST rather than working code**: a malformed aspect
+  falling back to 4:3, the contract's shape refusal disabled outright, and the
+  loopback bind. Two of the three were things where the *positive* case was
+  asserted and the *refusal* never was. **Sabotage every assertion, and when
+  one escapes, the test is the thing to fix.**
+- **`npm test` now reaches `contract.mjs` from the web layer**, and that is
+  fine and guarded: a new test walks `server.mjs`'s static import graph and
+  fails if a paid provider appears in it. It deliberately does not follow
+  `import()`, because the dynamic import is the sanctioned escape hatch. It
+  names the two provider modules that ARE allowed, so a third is a decision.
+
+#### G — WHAT IS LEFT, in the order it is worth doing
+
+1. **THE BLIND CHECK (§32 item 5).** Free, ten minutes, still unsent at
+   `out/blind-check/`. Still the only thing on the critical path that needs
+   nobody but Paul, and it now decides the fate of noticeably more work than it
+   did a day ago.
+2. **PICK A HOST (§A above).** It is the single gate on the whole remaining
+   deploy, and it is a thirty-second decision with the table above.
+3. **Then the deploy**, in this order: topology file, TLS + `__Host-` +
+   `TIMESTAMP_TRUST_PROXY`, then the five-console runbook.
+4. **Open the PR (§32 item 7).** Its gate closed on 2026-08-28.
+
+**NOT PROPOSED NEXT, deliberately:** the rest of the Supabase migration
+(accounts, credits and sessions are still files — that migration was decided
+*for identity*, which is done, and files are fine on one VM with one volume),
+and the three tape-quality items (punch-in zoom, ambience tones, audible cuts
+at shot boundaries). The tape items feed the blind check and are worth doing —
+but judging them needs Paul's paid runs.
 
 ## Not in scope
 
