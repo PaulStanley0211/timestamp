@@ -393,10 +393,14 @@ test('GET / renders the fourteen presets as cards, from the preset files', async
     assert.match(res.headers.get('content-type'), /text\/html/);
     const html = await res.text();
 
+    // DE-NATIONALISED 2026-08-29. The places were named for German landmarks
+    // -- Ostsee, Autobahn, Schrebergarten -- on a product that is not for
+    // Germany. The photographs and the ids are unchanged; only what a person
+    // reads moved, to plain names that describe a memory rather than a country.
     for (const label of [
-      'Allotment garden, late August', 'Autobahn rest stop at dusk', 'Balcony, washing on the line',
-      'Indoor swimming pool', 'Tiled kitchen at breakfast', 'Baltic beach, out of season',
-      'Concrete stairwell', 'Living room, television on',
+      'The garden, in summer', 'The car park, at dusk', 'The balcony',
+      'The swimming pool', 'The kitchen table', 'The beach, out of season',
+      'The stairwell', 'The living room, evening',
       'Half-zip fleece', 'Checked shirt and jeans', 'Cotton summer dress',
       'Knitted cardigan', 'Tracksuit jacket', 'Padded winter jacket',
     ]) {
@@ -1033,7 +1037,7 @@ test('a card posts its preset id and the describe-it box posts free text', async
     // And the label still resolves, so an older client does not break.
     const labelled = await post(base, '/api/jobs', multipart([
       { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
-      { name: 'place', body: 'Allotment garden, late August' },
+      { name: 'place', body: 'The garden, in summer' },
       { name: 'outfit', body: 'Tracksuit jacket' },
       { name: 'consent', body: 'yes' },
     ]), cookieA);

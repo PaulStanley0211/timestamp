@@ -1,18 +1,18 @@
 {
   "_comment": "The only preset with mixed artificial and natural light, and the only one where something in the background is genuinely moving fast. Both are on purpose: it is the hardest test in the menu for a video model's temporal stability, and the cheapest one to look at and know whether the provider is good enough.",
   "id": "autobahn-raststaette",
-  "label": "Autobahn rest stop at dusk",
+  "label": "The car park, at dusk",
   "climate": "cool",
   "timeOfDay": "dusk",
   "prompt": {
     "_comment": "Sodium lamps just coming on against the last blue in the sky is the specific ten minutes this preset is about. Say 'just coming on' -- fully lit reads as night, and the blue is the whole point.",
-    "scene": "an Autobahn rest stop at dusk, a half-empty car park of estate cars, a small kiosk with a red and white striped awning, a picnic table on a strip of grass, the carriageway just beyond a low barrier",
+    "scene": "a roadside rest stop at dusk, a half-empty car park of estate cars, a small kiosk with a red and white striped awning, a picnic table on a strip of grass, the carriageway just beyond a low barrier",
     "light": "the last blue in the sky above, orange sodium lamps just coming on over the car park, headlights sweeping past behind",
     "lens": "wide, the kiosk sign the brightest thing in frame, the lamps drawing hard points of light",
     "framing": "chest-up beside the picnic table, the car park and the kiosk behind",
     "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
     "moment": "a paper cup just set down on the table, half turned at the sound of something pulling in behind",
-    "eraProps": "an Opel estate with a roof box, a payphone on a post, a folded route map, a red and white striped awning"
+    "eraProps": "an estate car with a roof box, a payphone on a post, a folded route map, a red and white striped awning"
   },
   "negatives": [
     "modern cars",

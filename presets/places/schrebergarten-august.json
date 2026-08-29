@@ -1,12 +1,12 @@
 {
   "_comment": "The anchor of the whole menu. If only one place ever worked, it should be this one: a Schrebergarten in late August is the exact register the product is aiming at -- warm, ordinary, nothing happening, and gone. It is also the easiest scene for a model to get right, which makes it the sensible first thing to point at a new provider.",
   "id": "schrebergarten-august",
-  "label": "Allotment garden, late August",
+  "label": "The garden, in summer",
   "climate": "warm",
   "timeOfDay": "late afternoon",
   "prompt": {
     "_comment": "Named props beat adjectives. 'A glass bottle of mineral water with a foil label' places the decade on its own; 'nostalgic summer atmosphere' places nothing and costs a generation to find that out.",
-    "scene": "a small German allotment garden behind a clipped privet hedge, a folding table with a patterned plastic tablecloth, four white plastic chairs, a watering can and a coiled green hose beside a wooden shed",
+    "scene": "a small garden behind a clipped hedge, a folding table with a patterned plastic tablecloth, four white plastic chairs, a watering can and a coiled green hose beside a wooden shed",
     "light": "low late-August sun coming through the hedge from the left, long shadows across uneven grass, warm and completely ordinary",
     "lens": "a consumer zoom near its wide end, sharp on the table with the shed behind it already going soft, a little barrel bend at the edges",
     "framing": "waist-up, three-quarters to the camera, standing at the end of the table with the shed behind",

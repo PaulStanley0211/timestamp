@@ -1,7 +1,7 @@
 {
   "_comment": "A municipal indoor pool is the loudest quiet place in the menu: constant water movement, constant reflected light on the ceiling, and absolutely nothing happening. It gives the animate stage the most to work with of any preset here.",
   "id": "hallenbad-nachmittag",
-  "label": "Indoor swimming pool",
+  "label": "The swimming pool",
   "climate": "indoor",
   "timeOfDay": "afternoon",
   "prompt": {

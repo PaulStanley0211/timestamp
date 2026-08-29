@@ -1,7 +1,7 @@
 {
   "_comment": "Laundry on a line is the single best motion cue in the menu -- it moves constantly, it moves softly, and it moves in a way no viewer reads as camera work. That is why this place exists even though it is the least dramatic scene here.",
   "id": "balkon-waesche",
-  "label": "Balcony, washing on the line",
+  "label": "The balcony",
   "climate": "mild",
   "timeOfDay": "midday",
   "prompt": {

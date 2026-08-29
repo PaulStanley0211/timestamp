@@ -1,7 +1,7 @@
 {
   "_comment": "The darkest preset in the menu, and the reason lookOverride is part of the schema rather than a later idea. A living room lit mostly by a CRT is where a consumer camcorder's gain ran hardest, so it wants markedly more grain and more amber than anything else here -- see the override at the bottom, which is the largest departure from base.json in the catalog.",
   "id": "wohnzimmer-abend",
-  "label": "Living room, television on",
+  "label": "The living room, evening",
   "climate": "indoor",
   "timeOfDay": "night",
   "prompt": {

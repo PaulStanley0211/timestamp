@@ -288,8 +288,11 @@ test('a borrowed clause that repeats the user\'s own noun phrase is dropped', ()
   const carpark = place('a car park at night');
   assert.equal(carpark.prompt.scene.match(/car park/g).length, 1);
   // the one-word case is deliberately NOT dropped: it would throw away the best
-  // clause in the beach preset
-  assert.ok(place('a beach in winter').prompt.scene.includes('roofed wicker beach chairs'));
+  // clause in the beach preset. The clause carrying the user's own word used to
+  // be "roofed wicker beach chairs"; the preset was de-nationalised on
+  // 2026-08-29 (a Strandkorb is a German object on a product that is not for
+  // Germany) and the loungers carry that job now.
+  assert.ok(place('a beach in winter').prompt.scene.includes('stacked plastic beach loungers'));
 });
 
 test('a skeleton whose climate contradicts the request keeps its lens and loses its dressing', () => {
@@ -308,7 +311,13 @@ test('a skeleton whose climate contradicts the request keeps its lens and loses 
   assert.deepEqual(summer.lookOverride, {});
   // "sunshine" is one of ostsee's negatives and would fight the request outright
   assert.ok(!summer.negatives.includes('sunshine'));
-  assert.ok(!/wicker|groyne|marram/.test(summer.prompt.scene));
+  // Named against the dressing the preset ACTUALLY carries. These were
+  // `wicker|groyne|marram` until the de-nationalisation removed those words
+  // from the repository entirely -- at which point the assertion could no
+  // longer fail for any reason, which is the vacuous-absence trap this file's
+  // own siblings have been caught by. The words below are present in the
+  // preset and must be absent from THIS expansion.
+  assert.ok(!/kiosk|loungers|tarpaulin/.test(summer.prompt.scene));
 
   // the lens is not dressing -- a focal length has no season
   assert.equal(summer.prompt.lens, catalog.places.get('ostsee-strand').prompt.lens);

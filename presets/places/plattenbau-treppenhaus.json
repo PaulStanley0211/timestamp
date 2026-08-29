@@ -1,7 +1,7 @@
 {
   "_comment": "The one place in the menu that is not somewhere you stay. A stairwell is a place you are passing through, which is why the motion hint is a door closing somewhere else in the building -- the shot should feel like thirty seconds of someone's day rather than a location.",
   "id": "plattenbau-treppenhaus",
-  "label": "Concrete stairwell",
+  "label": "The stairwell",
   "climate": "cool",
   "timeOfDay": "midday",
   "prompt": {
