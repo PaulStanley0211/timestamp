@@ -1442,3 +1442,114 @@ test('[fal] a reference video request with no references is refused before it is
     }),
     /at least one reference/i);
 });
+
+/**
+ * THE HOP CAP, which nothing proved until now.
+ *
+ * The two tests above cover the allow-list decision on a redirect: off the
+ * list is refused, on the list is still followed. Neither reaches the OTHER
+ * refusal in that loop. An allowlisted host that redirects to another
+ * allowlisted host passes the list check every time, so the only thing
+ * standing between this provider and an endless chase is `hop >= 3` -- and an
+ * off-by-one there, or a deleted line, would be invisible: the visible
+ * behaviour of the two tests above does not change at all.
+ *
+ * FOUR REQUESTS AND NOT THREE, and the number is the assertion rather than a
+ * detail. The loop dials, reads the Location, and only then checks the hop
+ * count, so hops 0, 1 and 2 each dial and continue, and hop 3 dials and
+ * throws. Asserting the count is what distinguishes a cap that fires from a
+ * loop that happened to end because the fake ran out of patience.
+ */
+test('[fal] a redirect loop inside the allow-list is capped, not chased', async () => {
+  const base = makeFalTransport();
+  const LOOP = 'https://v3.fal.media/going-in-circles';
+  const dialled = [];
+
+  const platformish = async (url, init = {}) => {
+    if (String(url).startsWith('https://v3.fal.media/')) {
+      dialled.push(String(url));
+      // Always somewhere else on the allow-list, so the list check can never
+      // be the thing that stops this. Only the cap can.
+      return {
+        ok: false,
+        status: 302,
+        redirected: false,
+        headers: { get: (h) => (h.toLowerCase() === 'location' ? LOOP : null) },
+        async text() { return ''; },
+        async arrayBuffer() { return new ArrayBuffer(0); },
+      };
+    }
+    return base.fetchImpl(url, init);
+  };
+
+  const { provider, ctx } = falUnderTest({ transport: { ...base, fetchImpl: platformish } });
+
+  await assert.rejects(
+    () => provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('redirect-loop') })),
+    (err) => {
+      assert.equal(err.code, 'too_many_redirects',
+        `refused for the wrong reason: ${err.code} -- ${err.message}`);
+      return true;
+    },
+  );
+
+  assert.equal(dialled.length, 4,
+    `the cap let ${dialled.length} requests out; three hops plus the one that trips it is four, `
+    + 'and any other number means the bound moved');
+});
+
+/**
+ * A REDIRECT IS THE OTHER WAY TO STEER AN AUTHORIZED REQUEST, and the existing
+ * test does not cover it.
+ *
+ * "a status url steered off the queue host" covers the sibling path: a
+ * `status_url` out of a RESPONSE BODY. This is the same attack one layer down
+ * -- the queue host itself answering `302 Location:` with a host that is on
+ * the allow-list but is not the queue. The list check passes, because
+ * storage.googleapis.com is genuinely allowlisted for downloads; what must
+ * refuse it is the narrower rule that hosts we merely download from are not
+ * hosts we authenticate to.
+ *
+ * THE ASSERTION IS THAT THE HOST IS NEVER DIALLED AT ALL, not merely that the
+ * header was absent. The fetch spec strips Authorization across an origin, so
+ * checking the header would pass even with the guard deleted; checking that no
+ * request was made is what actually fails without it.
+ */
+test('[fal] a redirect to an allowlisted non-queue host is refused on an authorized call', async () => {
+  const base = makeFalTransport();
+  const OFF_QUEUE = 'https://storage.googleapis.com/somebody-elses-bucket/status';
+  const seen = [];
+
+  const platformish = async (url, init = {}) => {
+    seen.push({ url: String(url), auth: (init.headers ?? {}).Authorization ?? null });
+    if (String(url).startsWith(FAL_QUEUE_BASE) && (init.method ?? 'GET').toUpperCase() === 'POST') {
+      return {
+        ok: false,
+        status: 302,
+        redirected: false,
+        headers: { get: (h) => (h.toLowerCase() === 'location' ? OFF_QUEUE : null) },
+        async text() { return ''; },
+        async arrayBuffer() { return new ArrayBuffer(0); },
+      };
+    }
+    return base.fetchImpl(url, init);
+  };
+
+  const { provider, ctx } = falUnderTest({ transport: { ...base, fetchImpl: platformish } });
+
+  await assert.rejects(
+    () => provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('redirect-scope') })),
+    (err) => {
+      assert.equal(err.code, 'credential_scope',
+        `refused for the wrong reason: ${err.code} -- ${err.message}`);
+      return true;
+    },
+  );
+
+  // PRESENT FIRST: the submit really was attempted, so the absence below is a
+  // refusal rather than a test that never got started.
+  assert.ok(seen.some((r) => r.url.startsWith(FAL_QUEUE_BASE)),
+    'the submit never happened, so nothing was refused');
+  assert.deepEqual(seen.filter((r) => r.url.startsWith('https://storage.googleapis.com/')), [],
+    'the redirect was followed onto a host this provider authenticates nothing to');
+});
