@@ -551,3 +551,100 @@ test('the cathode orange has left the chrome and kept the date stamp', () => {
   assert.deepEqual(offenders.map(([n, l]) => `${n}: ${l.trim()}`), [],
     'the cathode orange is still painting something on the paper pages');
 });
+
+/** The `.nav .who` block, from its selector to its closing brace. */
+function navWhoRule(css) {
+  const start = css.indexOf('.nav .who {');
+  assert.notEqual(start, -1, 'the .nav .who rule has disappeared from the stylesheet');
+  const end = css.indexOf('}', start);
+  assert.notEqual(end, -1, 'the .nav .who rule is not closed');
+  return css.slice(start, end + 1);
+}
+
+/**
+ * THE SIGN-OUT CONTROL WENT OFF THE SCREEN, and the cause was an email address.
+ *
+ * `.nav` is a flex row -- email, credit ring, Plans, Sign out -- and a flex
+ * item's default `min-width: auto` refuses to shrink below its content. The
+ * email is the only item in that row whose width is chosen by the customer,
+ * so a long address does not wrap or truncate: it widens the whole nav past
+ * the viewport and pushes everything after it out of the frame.
+ *
+ * MEASURED IN A REAL BROWSER, on `/pricing`, signed in, document scrollWidth
+ * minus clientWidth:
+ *
+ *   viewport   dev@example.com (15)   ...@gmail.com (33)   ...@gmail.com (40)
+ *   320px               5px                  106px                155px
+ *   375px               0px                   51px                100px
+ *   414px               0px                   12px                 61px
+ *
+ * At 375px -- the commonest phone width, and one of the six this project tests
+ * at -- an ordinary 33-character Gmail address put `Sign out` past the right
+ * edge with nothing on screen to say it was there. Two of the six accounts in
+ * this application's own store are over 32 characters.
+ *
+ * WHY A STRING CHECK AND NOT A LAYOUT CHECK. Same reasoning as the `.statehook`
+ * block at the top of this file: `node --test` has no layout engine, and the
+ * failure is a flexbox behaviour. What a string CAN hold is that the one item
+ * in the row with customer-controlled width is allowed to shrink and told what
+ * to do when it does. Without `min-width: 0` the ellipsis never fires, because
+ * the box never gets smaller than its text.
+ */
+test('a long email truncates instead of pushing the nav off the screen', () => {
+  const rule = navWhoRule(createStylesheet().css);
+
+  assert.match(rule, /min-width:\s*0/,
+    '.nav .who needs min-width:0 or the flex item will not shrink below its '
+    + 'text, and a 33-character address pushes Sign out off a 375px screen');
+
+  assert.match(rule, /text-overflow:\s*ellipsis/,
+    '.nav .who needs text-overflow:ellipsis -- once it can shrink, the address '
+    + 'must say it has been cut rather than simply stopping');
+
+  assert.match(rule, /overflow:\s*hidden/,
+    '.nav .who needs overflow:hidden, or text-overflow has nothing to clip');
+
+  assert.match(rule, /white-space:\s*nowrap/,
+    '.nav .who must stay on one line -- wrapping the address grows the nav '
+    + 'downward through the wordmark instead of sideways off the screen');
+});
+
+/**
+ * THE TEST ABOVE WENT GREEN WHILE THE PAGE WAS STILL BROKEN, and that is the
+ * reason this second one exists rather than a third assertion in the first.
+ *
+ * min-width: 0 on .who is necessary and not sufficient. The nav is ITSELF a
+ * flex item, inside .masthead, and it carries the same min-width: auto default
+ * -- so with the fix on .who alone the nav is still handed its full content
+ * width, .who is never squeezed, and the ellipsis never fires. Re-measured in
+ * a real browser with only .who fixed: 44px of page overflow at 375px, sign-out
+ * still off the frame. Unchanged. The chain gives way at every link or at none.
+ *
+ * So this asserts the OUTER link. A future edit that keeps the ellipsis and
+ * drops this one restores the bug in full while leaving the first test green,
+ * which is exactly what happened once already.
+ */
+test('the nav itself can shrink, or the ellipsis below it never fires', () => {
+  const { css } = createStylesheet();
+
+  const start = css.indexOf('.nav {');
+  assert.notEqual(start, -1, 'the .nav rule has disappeared from the stylesheet');
+  const rule = css.slice(start, css.indexOf('}', start) + 1);
+
+  assert.match(rule, /min-width:\s*0/,
+    '.nav needs min-width:0 as well as .nav .who -- it is a flex item in '
+    + '.masthead and defaults to min-width:auto, so without this the nav takes '
+    + 'its full content width and .who is never asked to give way');
+});
+
+test('the controls beside the email keep their full width', () => {
+  // The email is the only thing in the nav that may shrink. Plans and Sign out
+  // are controls and Sign out is the only way out of the account, so shrinking
+  // THEM to fit a long address would trade a scrollbar for an unreadable
+  // button. The ring already carries `flex: none` for the same reason.
+  const { css } = createStylesheet();
+
+  const navItems = css.slice(css.indexOf('.nav a, .nav button'));
+  assert.match(navItems.slice(0, 400), /flex:\s*none/,
+    '.nav a and .nav button must not shrink -- only .who gives way');
+});

@@ -818,15 +818,31 @@ body {
   clip-path: inset(50%); white-space: nowrap;
 }
 
-.nav { display: flex; align-items: center; gap: 1.1rem; }
+/* min-width: 0 IS NEEDED ON BOTH LEVELS OR IT IS NEEDED ON NEITHER. The nav is
+   itself a flex item inside .masthead, and a flex item defaults to
+   min-width: auto -- so without the 0 here the nav is handed its full content
+   width, .who is never squeezed, and the ellipsis it was given below never
+   fires. Measured with the fix on .who alone: still 44px of page overflow at
+   375px. The chain has to give way at every link. */
+.nav { display: flex; align-items: center; gap: 1.1rem; min-width: 0; }
 .nav a, .nav button {
   background: none; border: 0; padding: 0; cursor: pointer;
   font: inherit; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--faint); text-decoration: none;
+  color: var(--faint); text-decoration: none; flex: none;
 }
 .nav a:hover, .nav button:hover { color: var(--accent); }
-.nav-form { display: inline; margin: 0; }
-.nav .who { color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 13px; }
+.nav-form { display: inline; margin: 0; flex: none; }
+/* THE EMAIL IS THE ONLY ITEM IN THIS ROW WHOSE WIDTH THE CUSTOMER CHOOSES, so
+   it is the only one allowed to give way. A flex item defaults to
+   min-width: auto and refuses to shrink below its text, so without the 0 here
+   a long address widens the whole nav past the viewport and carries Sign out
+   off the right-hand edge -- measured at 375px, an ordinary 33-character
+   address put the only way out of the account outside the frame. Everything
+   else in the row is a control and holds its size (flex: none above). */
+.nav .who {
+  color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 13px;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* --- the credit meter -------------------------------------------------- */
 /* A ring that empties as credits are spent. The FRACTION is carried on the
