@@ -39,6 +39,7 @@ import fs from 'node:fs';
 import { createStylesheet } from '../scripts/web/static.mjs';
 import {
   creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, errorPage,
+  privacyPage, termsPage, impressumPage,
 } from '../scripts/web/views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
@@ -267,6 +268,13 @@ function renderedPages() {
     ['error', errorPage({ status: 404, title: 'Not found' })],
     ['auth-unavailable', authUnavailablePage()],
     ['identity-unavailable', identityUnavailablePage()],
+    // Both entity states, because the placeholder page is the one that ships
+    // first and a page missing from this list is invisible to every sweep.
+    ['privacy', privacyPage({ entity: null, retention: { photoDays: 7, jobDays: 30 } })],
+    ['terms', termsPage({ entity: null })],
+    ['impressum', impressumPage({
+      entity: { name: 'Example UG', addressLines: ['Musterstrasse 1', '12345 Berlin'], email: 'support@example.com', vatId: null },
+    })],
   ];
 }
 

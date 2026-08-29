@@ -74,6 +74,14 @@ export const ROUTES = Object.freeze([
   { method: 'POST', pattern: '/logout', name: 'logout' },
   { method: 'GET', pattern: '/pricing', name: 'pricingPage' },
 
+  // --- the legal pages -----------------------------------------------------
+  // Static prose from config/legal.json's entity (null renders an honest
+  // operator placeholder -- the stripePriceId:null shape). Public, because a
+  // privacy policy behind a login is not a privacy policy.
+  { method: 'GET', pattern: '/privacy', name: 'privacyPage' },
+  { method: 'GET', pattern: '/terms', name: 'termsPage' },
+  { method: 'GET', pattern: '/impressum', name: 'impressumPage' },
+
   // --- where a new account first lands (spec §10, task 12) ----------------
   // BEHIND A SESSION, unlike everything else in this block: every route that
   // opens an account -- the code confirmation, Google -- redirects here once
@@ -190,6 +198,9 @@ export const PUBLIC_ROUTES = Object.freeze(new Set([
   // one would make the flow unreachable rather than safe.
   'resetPage', 'reset', 'resetCompletePage', 'resetComplete',
   'pricingPage',
+  // A privacy policy behind a login is not a privacy policy, and an Impressum
+  // exists precisely for people who are not customers yet.
+  'privacyPage', 'termsPage', 'impressumPage',
   // PUBLIC SINCE 2026-08-21, AND IT IS THE ONE ENTRY HERE THAT SERVES TWO
   // DIFFERENT PAGES. `/` used to 303 a signed-out visitor to `/login`, which
   // made the entire product a password box: there was nowhere to say what this

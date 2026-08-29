@@ -1,0 +1,10 @@
+{
+  "_comment": "Who is selling. `entity: null` is the DESIGNED state until the owner decides the selling entity (CLAUDE.md §37G) -- the three legal pages render with an operator placeholder and the product must not go live that way: docs/deploy-runbook.md's smoke list includes checking these pages show the entity. FILLING THIS IN IS ALSO SIGN-OFF on the page text in views.mjs -- the pages render whatever stands here, escaped, and nothing else reads this file. addressLines render one per line on /impressum and /privacy; email becomes the contact address on all three pages and must actually receive mail (the domain has no MX until Email Routing exists -- §37G). vatId may stay null until one exists.",
+  "entity": null,
+  "_entityShape": {
+    "name": "Full legal name or company name",
+    "addressLines": ["Street and number", "Postcode City", "Country"],
+    "email": "support@timestamptapes.com",
+    "vatId": null
+  }
+}

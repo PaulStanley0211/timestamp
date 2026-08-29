@@ -88,6 +88,7 @@ import { createStylesheet, sendFile } from './static.mjs';
 import { aspectIds } from '../tapedeck/frame.mjs';
 import {
   homePage, landingPage, statusPage, selectPage, resultPage, errorPage, INLINE_SCRIPT_HASHES,
+  privacyPage, termsPage, impressumPage,
 } from './views.mjs';
 // The ONE fact the web layer takes from the provider layer: whether a provider
 // spends money. `contract.mjs` is a leaf -- no transport, no credential -- and
@@ -164,7 +165,11 @@ const NO_SESSION_ROUTES = new Set([
  *  not load is a worse answer than showing it signed-out. `/login` deliberately
  *  is NOT here -- a sign-in form that cannot possibly work should say so before
  *  somebody types a password into it, not after. */
-const AUTH_OPTIONAL_ROUTES = new Set(['pricingPage', 'homePage']);
+const AUTH_OPTIONAL_ROUTES = new Set([
+  'pricingPage', 'homePage',
+  // Public prose, but the nav should still say who is signed in.
+  'privacyPage', 'termsPage', 'impressumPage',
+]);
 
 /**
  * How often one address may knock on the public credential routes.
@@ -719,6 +724,12 @@ export function createServer({
    *  same reason `ffprobeImpl` is one: the test that proves "low disk pages"
    *  must not need a full disk to run. */
   statfsImpl = fs.statfsSync,
+  /** Who is selling, for the legal pages. Defaults to config/legal.json,
+   *  whose `entity: null` is the designed state until the owner decides the
+   *  selling entity -- the pages render an operator placeholder rather than
+   *  the routes not existing, because a privacy policy is owed before the
+   *  entity question is settled. A seam so tests can pin both states. */
+  legal = null,
   auth = null,
   sessions = null,
   /**
@@ -1648,6 +1659,26 @@ export function createServer({
     } catch (err) {
       logImpl(`[web] the packs could not be read: ${err?.message ?? err}`);
       return [];
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // who is selling (the legal pages)
+  // -------------------------------------------------------------------------
+
+  // Resolved once at construction. The file is committed and tiny; a missing
+  // or unreadable one degrades to the placeholder state rather than a boot
+  // failure -- the same manners as the packs above. The `legal` option wins so
+  // tests can pin both states without touching the repo's own config.
+  let legalEntity = legal?.entity ?? null;
+  if (legal === null) {
+    try {
+      legalEntity = JSON.parse(
+        fs.readFileSync(new URL('../../config/legal.json', import.meta.url), 'utf8'),
+      ).entity ?? null;
+    } catch (err) {
+      logImpl(`[web] config/legal.json could not be read (${err?.code ?? err?.message}); the legal pages show the operator placeholder`);
+      legalEntity = null;
     }
   }
 
@@ -3151,6 +3182,26 @@ export function createServer({
         // a signature on it.
         checkout: query?.get('checkout') ?? null,
       }));
+    },
+
+    // --- the legal pages ---------------------------------------------------
+    // Static prose over one config value. The retention numbers on /privacy
+    // come from the same config the purge sweep reads, for the same reason the
+    // pricing page reads its retention line from it: a promise and its
+    // enforcement must not be able to drift apart in a later edit.
+
+    async privacyPage(req, res, { account }) {
+      sendHtml(req, res, 200, privacyPage({
+        entity: legalEntity, retention: cfg?.retention ?? {}, account: account ?? null,
+      }));
+    },
+
+    async termsPage(req, res, { account }) {
+      sendHtml(req, res, 200, termsPage({ entity: legalEntity, account: account ?? null }));
+    },
+
+    async impressumPage(req, res, { account }) {
+      sendHtml(req, res, 200, impressumPage({ entity: legalEntity, account: account ?? null }));
     },
 
     /**
