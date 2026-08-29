@@ -790,13 +790,35 @@ async function stepCompose(ctx) {
   const modelsFile = await (await dep('loadModels'))();
   // A copy, because the override rewrites `still` and the frozen `resolved`
   // block downstream must record the model that was ACTUALLY used -- a bake-off
-  // whose manifests all name the default proves nothing.
-  const models = { ...defaultModels(modelsFile, provider.id) };
+  // whose manifests all name the default proves nothing. Built as the explicit
+  // pair rather than a spread, so `videoDirect` stays a DEFAULTS key and never
+  // drifts into the frozen manifest shape.
+  const providerDefaults = defaultModels(modelsFile, provider.id);
+  const models = { still: providerDefaults.still, video: providerDefaults.video };
   if (ctx.stillModelOverride) models.still = ctx.stillModelOverride;
   // Same copy, same reason, for the video half: the provider resolves its own
   // model at construction time, so a manifest that froze the default would name
   // one endpoint while the call went to another.
-  if (ctx.videoModelOverride) models.video = ctx.videoModelOverride;
+  if (ctx.videoModelOverride) {
+    models.video = ctx.videoModelOverride;
+  } else if (direct) {
+    // A direct job animates from REFERENCES, and an image-to-video endpoint
+    // cannot take them: freezing `defaults.<provider>.video` here recorded one
+    // model while the call had to go to another, which is the section-26 split
+    // one layer down. The worker path hits this on every web job, because a
+    // worker constructs its provider once and passes no --video-model.
+    // Missing means REFUSED, not downgraded -- a silent fall back to the
+    // start-frame model is the 422-after-debit this branch exists to prevent.
+    if (!providerDefaults.videoDirect) {
+      throw new PipelineError(
+        `direct mode has no default video model for provider ${provider.id}: `
+        + 'defaults.'
+        + `${provider.id}.videoDirect in config/models.json is the key to fill in.`,
+        { code: 'NO_DIRECT_DEFAULT', step: 'compose' },
+      );
+    }
+    models.video = providerDefaults.videoDirect;
+  }
   // THE STILL GATE APPLIES TO THE STILL STAGE, AND A DIRECT JOB HAS NONE.
   // `fal/UNVERIFIED-identity-still` is unverified deliberately, so that an
   // unconfigured fal render stops before it spends -- but applying it to a job
@@ -1841,11 +1863,27 @@ export async function dryRun({
     cfg: renderCfg, capabilities: provider.capabilities, mode: segmentMode, size: resolution.size,
   });
   const modelsFile = await (await dep('loadModels'))();
-  const models = { ...defaultModels(modelsFile, provider.id) };
+  const dryDefaults = defaultModels(modelsFile, provider.id);
+  const models = { still: dryDefaults.still, video: dryDefaults.video };
   if (stillModelOverride) models.still = stillModelOverride;
   // A copy, for the reason stepCompose keeps one: a bake-off whose dry runs all
   // name the default is quoting a price for a call nobody is going to make.
-  if (videoModelOverride) models.video = videoModelOverride;
+  if (videoModelOverride) {
+    models.video = videoModelOverride;
+  } else if (direct) {
+    // The same resolution stepCompose performs, because a quote whose model is
+    // not the one the render would call authorises the wrong spend. Missing
+    // means refused, same code, same reason.
+    if (!dryDefaults.videoDirect) {
+      throw new PipelineError(
+        `direct mode has no default video model for provider ${provider.id}: `
+        + 'defaults.'
+        + `${provider.id}.videoDirect in config/models.json is the key to fill in.`,
+        { code: 'NO_DIRECT_DEFAULT', step: 'compose' },
+      );
+    }
+    models.video = dryDefaults.videoDirect;
+  }
   if (!direct) modelEntry(modelsFile, models.still, { requireVerified: !allowUnverifiedModel });
   modelEntry(modelsFile, models.video, { requireVerified: !allowUnverifiedModel });
   const pricing = await (await dep('loadPricing'))();

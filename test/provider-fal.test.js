@@ -224,7 +224,14 @@ export function testModels() {
     endpoint: 'test-ai/identity-still',
     capabilities: { stillSizes: [...FAL_CAPABILITIES.stillSizes], maxReferences: 2, supportsPlaceReference: true },
   };
-  models.defaults[FAL_ID] = { still: 'test/identity-still', video: models.defaults[FAL_ID].video };
+  models.defaults[FAL_ID] = {
+    still: 'test/identity-still',
+    video: models.defaults[FAL_ID].video,
+    // Carried through, not invented here: dropping it would make every direct
+    // request in this file fail with no_default_model instead of exercising
+    // the shape-follows-request rule against the real config.
+    videoDirect: models.defaults[FAL_ID].videoDirect,
+  };
   return models;
 }
 
@@ -544,6 +551,58 @@ test('[fal] a token-billed model prices 720p above 480p', async () => {
   const cheap = await quote(FAL_RESOLUTIONS['480p']);
   const dear = await quote(FAL_RESOLUTIONS['720p']);
   assert.ok(dear > cheap, `720p (${dear}) must cost more than 480p (${cheap}) on a token-billed model`);
+});
+
+test('[fal] the endpoint follows the request shape: references go to reference-to-video, a start frame to image-to-video', async () => {
+  // The 2026-08-26 resume defect (CLAUDE.md section 26), one layer down and
+  // still live in the worker path until this test existed: `generateVideo`
+  // builds the BODY from the request's shape (`references` present means
+  // `falReferenceVideoBody`) while the ENDPOINT came from construction-time
+  // state (`opts.videoModel ?? defaults.fal.video`, which is image-to-video).
+  // A worker constructs its provider once with no override, so a direct job's
+  // reference body was posted to the image-to-video endpoint -- fal answers
+  // 422, AFTER credits were debited. Body and endpoint must derive from the
+  // same fact: what the request carries.
+  const direct = falUnderTest({});
+  await direct.provider.generateVideo(
+    videoRequest({
+      imagePath: undefined,
+      references: [{ role: 'face', path: writeImage(tmpDir('shape-ref'), 'face.png') }],
+    }),
+    direct.ctx({ outDir: tmpDir('shape-direct') }),
+  );
+  const directSubmit = direct.transport.posts().find((r) => r.url.startsWith(FAL_QUEUE_BASE));
+  assert.ok(directSubmit, 'the direct request never reached the transport');
+  assert.match(directSubmit.url, /reference-to-video/,
+    `a references request must submit to the reference endpoint, not ${directSubmit.url}`);
+  assert.ok(!/(^|\/)image-to-video/.test(new URL(directSubmit.url).pathname.replace(/^.*seedance-2\.0/, '')),
+    `a reference body posted to the image-to-video endpoint is the 422 this test exists for: ${directSubmit.url}`);
+
+  const still = falUnderTest({});
+  await still.provider.generateVideo(
+    videoRequest({}),
+    still.ctx({ outDir: tmpDir('shape-start') }),
+  );
+  const startSubmit = still.transport.posts().find((r) => r.url.startsWith(FAL_QUEUE_BASE));
+  assert.ok(startSubmit, 'the start-frame request never reached the transport');
+  assert.match(startSubmit.url, /image-to-video/,
+    `a start-frame request must still submit to image-to-video, not ${startSubmit.url}`);
+});
+
+test('[fal] an explicit --video-model override still wins on a references request', async () => {
+  // The bake-off seam: a NAMED override is a human having chosen, and it beats
+  // the shape-derived default on both request shapes -- otherwise the CLI flag
+  // silently stops meaning what it says on direct runs.
+  const { provider, transport, ctx } = falUnderTest({ videoModel: 'bytedance/seedance-2.0/reference-to-video' });
+  await provider.generateVideo(
+    videoRequest({
+      imagePath: undefined,
+      references: [{ role: 'face', path: writeImage(tmpDir('ovr-ref'), 'face.png') }],
+    }),
+    ctx({ outDir: tmpDir('ovr-direct') }),
+  );
+  const submit = transport.posts().find((r) => r.url.startsWith(FAL_QUEUE_BASE));
+  assert.match(submit.url, /reference-to-video/);
 });
 
 // ---------------------------------------------------------------------------

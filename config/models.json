@@ -7,14 +7,16 @@
     "layer3": "scripts/render/pipeline.mjs, step 'assemble' -- ffprobe must report zero audio streams"
   },
   "defaults": {
-    "_comment": "What each provider uses when nothing else is asked for. The fal STILL default is deliberately the entry whose id says UNVERIFIED: a default is what somebody gets when they did not choose, and what they must get here is a refusal naming the decision, not a silent paid call against a model nobody has read the schema of. Fill it in with one of the candidates below -- in the same edit that marks that candidate verified -- and not before.",
+    "_comment": "What each provider uses when nothing else is asked for. The fal STILL default is deliberately the entry whose id says UNVERIFIED: a default is what somebody gets when they did not choose, and what they must get here is a refusal naming the decision, not a silent paid call against a model nobody has read the schema of. Fill it in with one of the candidates below -- in the same edit that marks that candidate verified -- and not before. `videoDirect` (added 2026-08-29) is the video model a DIRECT job uses when nothing else is asked for: a direct request carries references rather than a start frame, and an image-to-video endpoint cannot take them -- posting a reference body to `video`'s endpoint is the 422 CLAUDE.md section 26 records. The request's shape picks between `video` and `videoDirect`; an explicit --video-model override still beats both.",
     "fixture": {
       "still": "fixture/still-v1",
-      "video": "fixture/video-v1"
+      "video": "fixture/video-v1",
+      "videoDirect": "fixture/video-v1"
     },
     "fal": {
       "still": "fal/UNVERIFIED-identity-still",
-      "video": "bytedance/seedance-2.0/image-to-video"
+      "video": "bytedance/seedance-2.0/image-to-video",
+      "videoDirect": "bytedance/seedance-2.0/reference-to-video"
     }
   },
   "models": {

@@ -702,8 +702,17 @@ export function createFalProvider(opts = {}) {
   async function resolveModel(kind) {
     const table = await models();
     const { modelEntry, defaultModels } = await registry();
+    // `videoDirect` is still the VIDEO override's territory: a named
+    // --video-model is a human having chosen, and it wins on both request
+    // shapes -- the shape only picks which DEFAULT applies when nobody chose.
     const override = kind === 'still' ? opts.stillModel : opts.videoModel;
     const id = override ?? defaultModels(table, FAL_ID)[kind];
+    if (!isNonEmptyString(id)) {
+      throw new CapabilityError(
+        `${FAL_ID}: no default model recorded for ${JSON.stringify(kind)} -- defaults.${FAL_ID}.${kind} in config/models.json is the key to fill in`,
+        { provider: FAL_ID, code: 'no_default_model', detail: { kind } },
+      );
+    }
     // `allowUnverifiedModel` lowers the verified gate for a NAMED override and
     // nothing else -- Phase 0's bake-off needs to call candidates whose schema
     // pages nobody has read yet, and the alternative was editing
@@ -1098,7 +1107,14 @@ export function createFalProvider(opts = {}) {
         throw fail('missing_image', `${FAL_ID}: ${direct ? 'reference' : 'start'} image not found: ${missing}`, { path: missing });
       }
 
-      const { id: model, endpoint, entry: videoEntry } = await resolveModel('video');
+      // THE ENDPOINT FOLLOWS THE REQUEST'S SHAPE, exactly as the body below
+      // does. Resolving `video` unconditionally posted a reference body to the
+      // image-to-video endpoint whenever nobody passed --video-model -- which
+      // is every worker-rendered job, since a worker constructs its provider
+      // once with no override. fal answers that mismatch with a 422, after the
+      // customer's credits were debited (CLAUDE.md section 26 records the CLI
+      // flavour of the same defect).
+      const { id: model, endpoint, entry: videoEntry } = await resolveModel(direct ? 'videoDirect' : 'video');
       const key = credential();
 
       const report = progressReporter(ctx);

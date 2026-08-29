@@ -1024,6 +1024,83 @@ test('a direct job freezes the video model it was actually told to use', async (
   assert.equal(job.resolved.models.video, 'bytedance/seedance-2.0/reference-to-video');
 });
 
+test('a direct job with no override freezes the direct default, never the start-frame one', async () => {
+  // The worker path: a web job arrives with `direct: true` and NOBODY passes
+  // --video-model, because the worker constructs one provider for every job.
+  // Freezing `defaults.<provider>.video` there records image-to-video in the
+  // manifest while the call must go to a model that can take references --
+  // which is the exact frozen-one-called-another split section 26 records.
+  // `defaults.<provider>.videoDirect` is the model a direct job actually uses.
+  const deps = {
+    loadModels: () => {
+      const models = readJson(path.join(REPO_ROOT, 'config', 'models.json'));
+      models.defaults.fake = {
+        ...models.defaults.fixture,
+        // Distinct from `video` on purpose: with the two equal, this test
+        // passes against a compose that never learned the new key.
+        videoDirect: 'bytedance/seedance-2.0/reference-to-video',
+      };
+      return models;
+    },
+  };
+
+  const { job } = await runFake({ input: { direct: true }, provider: { maxClipSeconds: 15 }, deps });
+  assert.equal(job.resolved.models.video, 'bytedance/seedance-2.0/reference-to-video',
+    'a direct job must freeze the videoDirect default');
+
+  // And the still path is untouched by the new key: same table, no `direct`.
+  const { job: stillJob } = await runFake({ deps });
+  assert.equal(stillJob.resolved.models.video, 'fixture/video-v1',
+    'a still-path job must keep freezing the start-frame default');
+});
+
+test('a direct dry run with no override quotes the direct default, not the start-frame one', async () => {
+  // The same rule on the quoting path: --dry-run exists to authorise a spend,
+  // and a quote naming a model the call will not go to authorises nothing.
+  const { provider } = makeProvider({ maxClipSeconds: 15 });
+  const plan = await dryRun({
+    provider,
+    input: {
+      place: { kind: 'preset', value: 'schrebergarten-august' },
+      outfit: { kind: 'preset', value: 'trainingsjacke' },
+      direct: true,
+    },
+    deps: makeDeps({
+      overrides: {
+        loadModels: () => {
+          const models = readJson(path.join(REPO_ROOT, 'config', 'models.json'));
+          models.defaults.fake = {
+            ...models.defaults.fixture,
+            videoDirect: 'bytedance/seedance-2.0/reference-to-video',
+          };
+          return models;
+        },
+      },
+    }),
+  });
+  const animate = plan.calls.find((c) => c.step === 'animate');
+  assert.equal(animate.model, 'bytedance/seedance-2.0/reference-to-video',
+    'the dry run must name the model a direct render would actually call');
+});
+
+test('a provider with no direct default is refused by name, never downgraded to the start-frame model', async () => {
+  // Falling back to `defaults.<provider>.video` would quietly reintroduce the
+  // reference-body-to-image-endpoint 422 for the next provider somebody adds
+  // -- the silent-downgrade shape this codebase refuses everywhere else.
+  const deps = {
+    loadModels: () => {
+      const models = readJson(path.join(REPO_ROOT, 'config', 'models.json'));
+      const { videoDirect, ...withoutDirect } = models.defaults.fixture;
+      models.defaults.fake = withoutDirect;
+      return models;
+    },
+  };
+  await assert.rejects(
+    runFake({ input: { direct: true }, provider: { maxClipSeconds: 15 }, deps }),
+    /NO_DIRECT_DEFAULT|videoDirect/,
+  );
+});
+
 // ---------------------------------------------------------------------------
 // the assemble warning, and why a false one is worse than none
 // ---------------------------------------------------------------------------
