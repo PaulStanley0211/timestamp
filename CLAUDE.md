@@ -4407,6 +4407,77 @@ handles it loudly; accepted noise). After the pass: **1888 / 1890, 0 fail.**
 
 ---
 
+### 40. THE QUEUE CAN DOUBLE-CLAIM UNDER MULTI-WORKER CONTENTION — DIAGNOSED, REPRODUCED, NOT YET FIXED (2026-08-29, night)
+
+**CI went red twice today on `test/queue-race.test.js:334` — "24 workers start
+at once -- reap then claim -- and nothing is lost or doubled" — with seven
+`won` reports over six jobs: one job claimed by two workers.** Once on node 22
+ubuntu, once on node 24 ubuntu, never on Windows; a rerun of the same commit
+went green. **The test is RIGHT to fail. Do not weaken, retry, or skip it** —
+it caught a real race, which is the whole reason that file exists.
+
+#### The mechanism, traced and then reproduced
+
+1. `dropLockIfUnchanged` (queue.mjs:649) is **check-then-act**: `readLock`,
+   fingerprint compare, `unlinkIfPresent`. Its own comment says the
+   fingerprint check catches a slow reaper deleting a live worker's lock — it
+   NARROWS that window; nothing closes it, because no unlink on any platform
+   here is conditional-exclusive.
+2. A reaper descheduled between the read and the unlink wakes to delete
+   **the successor's live lock at the same path** — in the window, another
+   reaper dropped the dead lock and a worker claimed the job.
+3. With the live lock gone, a third stale reaper's exclusive-create of the
+   pending entry SURVIVES, because the undo guard at queue.mjs:1081
+   deliberately keeps the entry when `readLock` returns null ("may be its
+   only home" — correct for the reaper-crashed case, wrong here and
+   indistinguishable from it by state alone).
+4. A second worker claims the resurrected entry. One job, two claims, reaps
+   still reported exactly once, every count plausible. On the paid path that
+   is one render billed twice.
+
+**Reproduced on Linux at 1 failure in 40 rounds** (0 in 12 three-way-parallel
+runs on this Windows machine — the window needs Linux scheduling under
+oversubscription, which is what a 4-vCPU CI runner under full-suite load is):
+
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm --cpus=2 -v "/c/Users/pauls/Timestamp:/src:ro" node:22-bookworm-slim bash -c 'mkdir -p /repo && cd /repo && cp -r /src/scripts /src/test /src/package.json /repo/ && for i in $(seq 1 40); do node --test test/queue-race.test.js >/tmp/qr.log 2>&1 || { echo FAIL $i; grep -A12 "not ok" /tmp/qr.log; }; done; echo done'
+```
+
+#### Two fixes analyzed and REFUSED — do not ship either
+
+- **Undo-on-null** (extend queue.mjs:1081 to also undo when the lock is
+  absent): loses the job outright in the reaper-crashed-mid-repair case that
+  branch exists to protect, because entry-with-no-lock is ALSO the normal
+  state of a freshly reaped job.
+- **Rename-the-lock-away, verify, restore**: the rename creates exactly the
+  transient no-lock moment that admits the spurious entry, and the restore
+  can clobber a claim that landed in the window. It widens the hole.
+
+#### The direction that survives analysis
+
+**Generation-scoped lock files**: `claimed/<jobId>.<generation>.lock`.
+Claiming a reaped job means exclusively creating the NEXT generation;
+`readLock` reads the highest; deleting an old-generation file is always safe
+because a strictly higher generation proves it dead — a uniquely-named
+deletion races nothing. That is a lock-LIFECYCLE redesign (claim, readLock,
+requireHolder, heartbeat, enqueue, stats all touch it), on the module whose
+header documents that only `openSync 'wx'` and `linkSync` are exclusive on
+Windows. It needs the repo's measurement discipline: a pre-fix baseline from
+the reproducer above, then ~200 clean rounds after, plus the 120-round
+barrier style for any new primitive.
+
+#### What bounds the urgency
+
+**The shipped single-worker topology cannot hit this.** One worker process,
+synchronous fs calls, no concurrent reaper — the race needs two or more
+worker processes reaping and claiming at once, which is a scale-out that has
+not happened. Until then its only symptom is intermittent CI red on loaded
+ubuntu legs (~2 of 3 full-suite runs today); a re-run goes green. **A fix
+session was spun off the night this was diagnosed** — check `git branch -a`
+for its work before starting over.
+
+---
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT
