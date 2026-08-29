@@ -36,6 +36,7 @@ import {
   bedHashArgs, muxedHashArgs, parseIntegratedLufs, lufsVerdict,
 } from '../scripts/audio/mix.mjs';
 import { loadLookProfile, buildVideoFilter } from '../scripts/tapedeck/look.mjs';
+import { gradeArgs } from '../scripts/tapedeck/grade.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/render.json'), 'utf8'));
@@ -192,6 +193,49 @@ test('omitting the bed leaves the silent render byte-for-byte unchanged', () => 
   assert.ok(withAudio.includes('-an'), 'no bed means the existing -an default still applies');
   assert.equal(withAudio[withAudio.indexOf('-filter_complex') + 1], videoFilter,
     'a flag that is off must not perturb the graph it is not part of');
+});
+
+test('the delivered tape declares its synthetic origin -- and only the delivered tape', () => {
+  // EU AI Act Art. 50: the file itself must be marked machine-readably. The
+  // marking rides `muxedArgs` because that builder produces exactly the
+  // delivered artifact; `npm run look` and the place loops build their own
+  // argv against footage that can be REAL, and tagging real footage
+  // "AI-generated" would be a false claim baked into a file.
+  const videoFilter = '[0:v]null[vout]';
+  for (const audioFilter of [bedFor(), '']) {
+    const render = muxedArgs({ input: 'in.mp4', output: 'out.mp4', videoFilter, audioFilter, cfg });
+    const metaValues = render.filter((a, i) => render[i - 1] === '-metadata');
+    const comment = metaValues.find((v) => v.startsWith('comment='));
+    const marker = metaValues.find((v) => v.startsWith('description='));
+
+    assert.ok(comment, 'the tape must carry a human-readable disclosure in its comment tag');
+    assert.match(comment, /AI-generated/);
+    assert.match(comment, /timestamptapes\.com/);
+
+    assert.ok(marker, 'the tape must carry the machine-readable digital-source-type marker');
+    // The IPTC controlled-vocabulary term and its URI, so a scanner grepping
+    // for the standard vocabulary finds it without knowing this product.
+    assert.match(marker, /trainedAlgorithmicMedia/);
+    assert.match(marker, /cv\.iptc\.org\/newscodes\/digitalsourcetype/);
+
+    // Output options, not input options: every -metadata sits after the graph
+    // and before the destination, or ffmpeg applies it to the wrong file.
+    assert.equal(render.at(-1), 'out.mp4');
+    for (const [i, a] of render.entries()) {
+      if (a === '-metadata') assert.ok(i > render.indexOf('-filter_complex'));
+    }
+
+    // Nothing time-dependent may ride along: a creation date would make two
+    // renders of one job differ, and reproducibility is a property here.
+    assert.ok(!metaValues.some((v) => /creation_time|date=/.test(v)),
+      'provenance tags must be static strings, never a clock');
+  }
+
+  // The negative half. Bare gradeArgs is what the look CLI's real-footage
+  // renders go through; it must stay untagged unless a caller opts in.
+  const look = gradeArgs({ input: 'in.mp4', output: 'out.mp4', filterComplex: videoFilter, cfg });
+  assert.ok(!look.includes('-metadata'),
+    'gradeArgs alone processes footage that can be real; it must not claim AI origin');
 });
 
 test('graphs splice with a semicolon and blanks disappear', () => {

@@ -40,8 +40,13 @@ function inputArgs(input) {
  * @param {object}   args.cfg            config/render.json
  * @param {string}   [args.outLabel]     the graph's video out label
  * @param {string[]} [args.audioArgs]    M2 replaces the default -an
+ * @param {string[]} [args.metadataArgs] container tags; default NONE, because
+ *   this builder also renders real footage (the look CLI takes any clip in
+ *   assets/stock) and a tag is a claim about the content. The delivered tape's
+ *   AI-provenance tags come in through here from muxedArgs, which is the one
+ *   caller whose output is always synthetic.
  */
-export function gradeArgs({ input, output, filterComplex, cfg, outLabel = 'vout', audioArgs = ['-an'] }) {
+export function gradeArgs({ input, output, filterComplex, cfg, outLabel = 'vout', audioArgs = ['-an'], metadataArgs = [] }) {
   const { encode } = cfg;
   return [
     '-y', '-hide_banner', '-loglevel', 'error',
@@ -58,6 +63,7 @@ export function gradeArgs({ input, output, filterComplex, cfg, outLabel = 'vout'
     '-crf', String(encode.crf),
     '-preset', encode.preset,
     '-x264-params', encode.x264Params,
+    ...metadataArgs,
     '-movflags', '+faststart',
     output,
   ];

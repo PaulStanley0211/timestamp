@@ -45,7 +45,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runFfmpeg, findFfmpeg, probe, REPO_ROOT } from '../scripts/ffmpeg/run.mjs';
+import { runFfmpeg, runFfprobe, findFfmpeg, probe, REPO_ROOT } from '../scripts/ffmpeg/run.mjs';
 import { assertDeliveryContract } from '../scripts/ffmpeg/assert.mjs';
 import { deliveryGeometry, tapeGeometry } from '../scripts/tapedeck/frame.mjs';
 import { loadLookProfile, buildVideoFilter } from '../scripts/tapedeck/look.mjs';
@@ -161,6 +161,22 @@ test('the muxed output carries exactly one mono 48 kHz audio stream', { skip }, 
   assert.equal(audio[0].channels, 1);
   assert.equal(Number(audio[0].sample_rate), 48000);
   assert.equal(audio[0].codec_name, 'aac');
+});
+
+test('the finished file carries AI-provenance tags a scanner can read back', { skip }, async () => {
+  // The argv test in audio-bed.test.js proves the flags are SENT; this proves
+  // the mp4 muxer actually kept them under keys ffprobe reports -- mov drops
+  // metadata keys it does not map, silently, so sending is not shipping.
+  const file = await fullRender();
+  const { stdout } = await runFfprobe([
+    '-v', 'error', '-show_entries', 'format_tags', '-of', 'json', file,
+  ]);
+  const raw = JSON.parse(stdout).format?.tags ?? {};
+  const tags = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k.toLowerCase(), v]));
+  assert.match(tags.comment ?? '', /AI-generated/,
+    `the delivered file must carry the human-readable disclosure; format tags were ${JSON.stringify(raw)}`);
+  assert.match(tags.description ?? '', /trainedAlgorithmicMedia/,
+    'the delivered file must carry the machine-readable digital-source-type marker');
 });
 
 test('adding the bed does not move a single video frame', { skip }, async () => {

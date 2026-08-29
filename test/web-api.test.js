@@ -1859,6 +1859,19 @@ test('the result page offers the video, a download and a way to start again', as
   });
 });
 
+test('the result page says the tape is AI-generated', async () => {
+  // EU AI Act Art. 50: the person meeting the content must be told it is
+  // synthetic, on the page where they meet it -- not only in file metadata a
+  // browser never shows. The file-side half lives in audio-bed/audio-output.
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA });
+    fs.writeFileSync(jobPaths(root, job.jobId).video, Buffer.alloc(2048, 7));
+    const html = await (await get(base, `/j/${job.jobId}/result`, cookieA)).text();
+    assert.ok(html.includes('Made with AI'),
+      'the result page must carry the AI disclosure line');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // media
 // ---------------------------------------------------------------------------

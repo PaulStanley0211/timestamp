@@ -1354,6 +1354,11 @@ export function resultPage({ view, account = null, labels = {} }) {
     <span class="k">Wearing</span> <span class="v">${h(labels.outfit ?? view.input.outfit)}</span>
   </p>
 
+  <!-- EU AI Act Art. 50: the disclosure lives on the page where a person
+       meets the content, not only in file metadata a browser never shows.
+       The file-side half is the provenance tags in scripts/audio/mix.mjs. -->
+  <p class="fine">Made with AI &mdash; a generative model built this scene from your photograph. It did not happen.</p>
+
   <p class="actions">
     <!-- Both halves on purpose: the download attribute is what a same-origin
          click uses, and ?download=1 makes the server send Content-Disposition,
