@@ -452,11 +452,36 @@ export function pricingPage({
    * instead of the number.
    */
   const tapeLines = (credits) => offered.map((r) => {
-    const n = Math.floor(credits / r.credits);
+    // THE SHAPE IS PART OF THE PRICE AND THIS COUNTED AT ONE SHAPE'S. `credits`
+    // is the un-shaped figure, i.e. the 4:3 one. A non-default shape holds the
+    // short edge and is exactly 4/3 the pixels, so it is charged 4/3 -- 28 CR
+    // at 480p against 21, 61 at 720p against 46. The same 92 credits buy three
+    // 480p tapes in 16:9 or 9:16 and not four, and the free rung buys none at
+    // all in the phone shape it is most likely to be wanted for.
+    //
+    // A PARENTHETICAL RATHER THAN A RANGE, because this page is public and has
+    // no frame picker: unlike the tape form it cannot switch a number to match
+    // a selection, since nothing is selected. "3-4 tapes" would be honest and
+    // would also make the reader work out which is which.
+    const base = r.creditsByAspect?.['4:3'] ?? r.credits;
+    const n = Math.floor(credits / base);
     const line = n === 0
       ? `not enough for a ${r.id} tape`
       : `${n} ${n === 1 ? 'tape' : 'tapes'} at ${r.id}`;
-    return `<li>${h(line)}</li>`;
+
+    // Both wide shapes cost the same 4/3, but the number is READ rather than
+    // assumed: a shape the pricing refuses has no entry, and a shape priced
+    // differently one day would be reported as it is rather than as 4/3.
+    const wide = ['16:9', '9:16']
+      .map((a) => r.creditsByAspect?.[a])
+      .filter((c) => Number.isFinite(c) && c > 0);
+    const suffix = wide.length && n > 0
+      ? ` (${(() => {
+        const m = Math.floor(credits / Math.max(...wide));
+        return m === 0 ? 'none' : String(m);
+      })()} in 16:9 or 9:16)`
+      : '';
+    return `<li>${h(line + suffix)}</li>`;
   }).join('');
 
   /**
@@ -528,14 +553,24 @@ export function pricingPage({
       <ul>
         <li>${h(`${rung.credits} credits`)}</li>
         ${tapeLines(rung.credits)}
-        <li>15 seconds, 4:3, PAL, 25 fps</li>
+        <li>15 seconds, 25 fps, in 4:3, 16:9 or 9:16</li>
         ${shelfLine ? `<li>${h(shelfLine)}</li>` : ''}
       </ul>
       ${buy}
     </section>`;
   }).join('');
 
-  const costs = offered.map((r) => h(`${r.id} — ~${r.credits} CR`)).join(' &middot; ');
+  // A RANGE HERE, a parenthetical in the rungs, and for a reason. This line is
+  // a summary of what sizes cost; the rungs are a count of what a reader gets,
+  // and a range there would leave them working out which end applies to them.
+  // Both ends are read from the same map the charge is computed from, so a
+  // shape priced differently one day widens this by itself.
+  const costs = offered.map((r) => {
+    const quotes = Object.values(r.creditsByAspect ?? {}).filter((c) => Number.isFinite(c) && c > 0);
+    const low = quotes.length ? Math.min(...quotes) : r.credits;
+    const high = quotes.length ? Math.max(...quotes) : r.credits;
+    return h(low === high ? `${r.id} — ~${low} CR` : `${r.id} — ~${low}-${high} CR`);
+  }).join(' &middot; ');
 
   /**
    * Coming back from Stripe.
@@ -567,7 +602,7 @@ export function pricingPage({
     <h1 class="headline">What a tape costs</h1>
     <p class="sub">A tape is fifteen seconds of generated video put through the tape deck.
     You spend credits, and how many depends on the size the video is generated at before
-    the tape gets hold of it.</p>
+    the tape gets hold of it, and on the frame you choose.</p>
     <p class="hint">${costs || 'Costs are unavailable right now.'}</p>
     <p class="hint">There is no payment form here and there is not one anywhere else either.
     Checkout is hosted by the payment provider on their own domain, and this application

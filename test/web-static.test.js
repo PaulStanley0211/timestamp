@@ -814,3 +814,66 @@ test('a job that froze no raster says nothing rather than guessing one', () => {
   assert.match(meta, /375 frames/, 'the facts it does have still print');
   assert.doesNotMatch(meta, /\d+x\d+/, 'no raster is invented when none was frozen');
 });
+
+/**
+ * THE PAGE THAT TAKES THE MONEY COUNTED TAPES AT ONE SHAPE'S PRICE.
+ *
+ * Every rung listed what its credits buy -- "4 tapes at 480p" for the $12
+ * Starter -- computed from the un-shaped `credits` field, which is the 4:3
+ * price. A non-default shape holds the short edge and is therefore exactly 4/3
+ * the pixels, so it is charged 4/3: 28 CR at 480p against 21, and 61 at 720p
+ * against 46. The same 92 credits buy THREE 480p tapes in 16:9 or 9:16, not
+ * four, and the free rung's 21 credits buy one 4:3 tape and none at all in the
+ * phone shape it is most likely to be wanted for.
+ *
+ * The bullet below those counts made the same claim outright: "15 seconds, 4:3,
+ * PAL, 25 fps", on a product that has offered three shapes since the frame menu
+ * opened.
+ *
+ * WHY A PARENTHETICAL AND NOT A RANGE. This page is public and has no frame
+ * picker on it, so unlike the signed-in tape form it cannot switch a number to
+ * match a selection -- there is nothing selected. "3-4 tapes" would be honest
+ * and would also make the reader do arithmetic to find out which; naming the
+ * default and then naming the exception states both numbers outright.
+ */
+test('a rung counts tapes in every shape it sells, not just the default', () => {
+  const plans = [{ id: 'free', label: 'Free', monthlyUSD: 0, creditsPerPeriod: 21 }];
+  const resolutions = [
+    { id: '480p', credits: 21, available: true,
+      creditsByAspect: { '4:3': 21, '16:9': 28, '9:16': 28 } },
+    { id: '720p', credits: 46, available: true,
+      creditsByAspect: { '4:3': 46, '16:9': 61, '9:16': 61 } },
+  ];
+  const packs = [{ id: 'starter', label: 'Starter', priceUSD: 12, credits: 92, buyable: true }];
+
+  const html = pricingPage({ plans, resolutions, packs, currentPlan: null });
+
+  // PRESENT FIRST: a page that rendered no rungs satisfies every absence below.
+  assert.match(html, /4 tapes at 480p/, 'the default-shape count is gone entirely');
+
+  assert.match(html, /4 tapes at 480p \(3 in 16:9 or 9:16\)/,
+    '92 credits buy four 4:3 tapes and three wide ones -- the page must say both');
+  assert.match(html, /2 tapes at 720p \(1 in 16:9 or 9:16\)/,
+    'the 720p count needs the same treatment; 92 credits buy one wide 720p tape');
+  assert.match(html, /1 tape at 480p \(none in 16:9 or 9:16\)/,
+    'the free rung buys no wide tape at all, which is the number most worth saying');
+
+  assert.ok(!html.includes('15 seconds, 4:3, PAL, 25 fps'),
+    'the rung still claims 4:3 is the shape, on a product selling three');
+});
+
+test('a rung with no per-shape prices states the plain count and invents nothing', () => {
+  // `resolutionRows` builds creditsByAspect by asking the same function that
+  // charges, and skips a pair the pricing refuses. A row that came back without
+  // the map at all -- an older seam, or auth unavailable -- must degrade to the
+  // count it can defend rather than guessing a multiplier.
+  const html = pricingPage({
+    plans: [{ id: 'free', label: 'Free', monthlyUSD: 0, creditsPerPeriod: 21 }],
+    resolutions: [{ id: '480p', credits: 21, available: true }],
+    currentPlan: null,
+  });
+
+  assert.match(html, /1 tape at 480p/, 'the count it can defend still prints');
+  assert.ok(!/\(\s*(?:none|\d+) in 16:9 or 9:16\s*\)/.test(html),
+    'a shape price that was never supplied must not be inferred');
+});
