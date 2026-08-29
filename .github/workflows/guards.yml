@@ -26,7 +26,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # FULL HISTORY, BECAUSE ONE OF THE GUARDS BELOW WALKS IT. checkout
+      # defaults to fetch-depth: 1, and in a depth-1 clone `origin/main` does
+      # not exist at all -- so the commit-message guard's
+      # `git rev-list origin/main..HEAD` fails, its fallback
+      # `git rev-list -n 50 HEAD` returns exactly ONE commit, and on a
+      # pull_request that one commit is GitHub's own generated merge commit
+      # ("Merge <sha> into <sha>"). The guard written to read every commit
+      # message would have read none of them, on every PR, silently.
+      #
+      # Measured, not assumed: cloned at --depth 1 and ran the guard's loop
+      # verbatim -- 1 commit scanned. With full history, 165.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # `npm test` must not be able to spend money. CLAUDE.md names four
       # independent guards; this is the one a well-meaning edit can undo in a
