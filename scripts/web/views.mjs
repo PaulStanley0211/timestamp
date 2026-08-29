@@ -1322,10 +1322,28 @@ export function resultPage({ view, account = null, labels = {} }) {
   // fragments with raw entities between them -- that pattern is where a
   // double-escape or a missed escape hides.
   const seconds = view.result?.durationSeconds;
+  // THE RASTER IS THIS JOB'S, not a constant. This was the literal
+  // '720x576 PAL' -- the 4:3 contract, which is the base rather than an entry
+  // in the aspects map, so it kept reading correctly while two shapes were
+  // added around it. A 16:9 tape works at 1024x576 and a 9:16 one at 576x1024,
+  // and the page was captioning both of them 720x576.
+  //
+  // It comes off the job's own frozen block, so it describes the file being
+  // shown rather than what today's config would produce for a new order. A job
+  // that froze nothing gets no raster line at all: printing the default would
+  // be the same bug with a fallback in front of it.
+  //
+  // PAL IS KEPT ONLY FOR THE SHAPE THAT IS PAL. 720x576 at SAR 16/15 is the
+  // format; the other two are square-pixel rasters that merely share its 25fps
+  // line rate, and calling them PAL replaces one wrong fact with another.
+  const tape = view.result?.tape;
+  const raster = Number.isFinite(tape?.width) && Number.isFinite(tape?.height)
+    ? `${tape.width}x${tape.height}${(view.input?.aspect ?? '4:3') === '4:3' ? ' PAL' : ''}`
+    : null;
   const metaLine = [
     seconds ? `${Number(seconds).toFixed(3)} seconds` : null,
     view.result?.frames ? `${view.result.frames} frames` : null,
-    '720x576 PAL',
+    raster,
   ].filter(Boolean).join(' · ');
   const body = `
 <main>

@@ -1277,6 +1277,27 @@ export function createServer({
    * easing curve. It can sit at the same number for four minutes, and it should:
    * that is what is actually happening.
    */
+  /**
+   * The tape raster this job froze, or null if it never froze one.
+   *
+   * 4:3 IS THE BASE AND DELIBERATELY NOT AN ENTRY IN `cfg.aspects` -- that is
+   * what makes it structurally impossible for the default path to drift while
+   * a shape is added -- so the default reads `cfg.tape` and a chosen shape
+   * reads its own block. Both are inside the frozen `resolved`, which is
+   * written exactly once by compose.
+   */
+  function frozenTape(job) {
+    const cfg = job.resolved?.cfg;
+    if (!cfg) return null;
+    const aspect = job.input?.aspect ?? null;
+    const t = (aspect && aspect !== (cfg.defaultAspect ?? '4:3')
+      ? cfg.aspects?.[aspect]?.tape
+      : cfg.tape) ?? null;
+    return Number.isFinite(t?.width) && Number.isFinite(t?.height)
+      ? { width: t.width, height: t.height }
+      : null;
+  }
+
   function jobView(job) {
     const step = nextStep(job);
     const finished = job.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length;
@@ -1298,6 +1319,12 @@ export function createServer({
       cost: job.cost,
       result: {
         ...job.result,
+        // The tape raster this job FROZE, so the result page can caption the
+        // file it is showing instead of a constant. Read from `resolved`
+        // because that block is the only thing that can answer for a job that
+        // already ran; today's config answers for a job somebody might start
+        // now. Null when nothing was frozen, and the page then says nothing.
+        tape: frozenTape(job),
         videoUrl: job.result?.videoPath ? `/api/jobs/${job.jobId}/video` : null,
         posterUrl: job.result?.posterPath ? `/api/jobs/${job.jobId}/poster` : null,
       },
@@ -1308,6 +1335,9 @@ export function createServer({
         outfit: job.input?.outfit?.value ?? null,
         outfitKind: job.input?.outfit?.kind ?? null,
         stillCount: job.input?.stillCount ?? null,
+        // The shape is what decides whether the raster above is PAL or merely
+        // shares its line rate, so the page needs it alongside the numbers.
+        aspect: job.input?.aspect ?? null,
       },
       selection: job.selection,
       createdAt: job.createdAt,

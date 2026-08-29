@@ -721,3 +721,96 @@ test('the quality card price is hidden until a shape is chosen for it', () => {
       `no rule reveals the quality card price for ${slug}`);
   }
 });
+
+/**
+ * THE RESULT PAGE TOLD EVERY TAPE IT WAS 720x576.
+ *
+ * The caption under the player was assembled with the raster as a literal:
+ *
+ *   [ seconds, frames, '720x576 PAL' ]
+ *
+ * That is the 4:3 contract, and it is the base rather than an entry in the
+ * `aspects` map, so it stayed correct-looking while two more shapes were added
+ * around it. Measured on a real 16:9 render -- job 20260829-032416-884be4 --
+ * the tape raster is 1024x576 and the delivered file is 1920x1080, and the page
+ * showing that very file said 720x576 PAL underneath it.
+ *
+ * The raster comes off the job's OWN frozen `resolved` block rather than from
+ * config read at render time. A manifest that froze a shape is the only thing
+ * that can say what the file on disk actually is; re-deriving it from today's
+ * config would answer for a job somebody might run now, not the one being
+ * looked at.
+ *
+ * AND PAL IS KEPT ONLY WHERE IT IS PAL. 720x576 at SAR 16/15 is the format; the
+ * wide shapes are square-pixel rasters that merely share its 25fps line rate.
+ * Calling 1024x576 "PAL" would be a second wrong fact replacing the first.
+ */
+function metaLineOf(html) {
+  const m = html.match(/<p class="meta">([^<]*)<\/p>/);
+  assert.ok(m, 'the result page renders no meta line at all');
+  return m[1];
+}
+
+test('the result page names the raster of the shape it is showing', () => {
+  const base = {
+    jobId: '20260829-032416-884be4',
+    status: 'done',
+    result: { durationSeconds: 15, frames: 375, videoUrl: '/v', posterUrl: '/p' },
+    input: { place: 'ostsee-strand', outfit: 'hemd-jeans' },
+  };
+
+  const wide = resultPage({
+    view: {
+      ...base,
+      input: { ...base.input, aspect: '16:9' },
+      result: { ...base.result, tape: { width: 1024, height: 576 } },
+    },
+  });
+  const wideMeta = metaLineOf(wide);
+  assert.match(wideMeta, /1024x576/,
+    'a 16:9 tape works at 1024x576 and the page must say so');
+  assert.doesNotMatch(wideMeta, /720x576/,
+    'the 4:3 raster is being reported for a 16:9 tape');
+  assert.doesNotMatch(wideMeta, /PAL/,
+    'PAL is 720x576 at SAR 16/15 -- a square-pixel 1024x576 raster is not it');
+
+  const tall = resultPage({
+    view: {
+      ...base,
+      input: { ...base.input, aspect: '9:16' },
+      result: { ...base.result, tape: { width: 576, height: 1024 } },
+    },
+  });
+  assert.match(metaLineOf(tall), /576x1024/, 'a 9:16 tape works at 576x1024');
+});
+
+test('the default shape keeps the words it has always had', () => {
+  // 4:3 IS THE ONE SHAPE THAT IS ACTUALLY PAL, and the product's identity rests
+  // on saying so. This fix must not cost the default path its wording.
+  const html = resultPage({
+    view: {
+      jobId: '20260829-032416-884be4',
+      status: 'done',
+      result: { durationSeconds: 15, frames: 375, tape: { width: 720, height: 576 } },
+      input: { place: 'ostsee-strand', aspect: '4:3' },
+    },
+  });
+  assert.match(metaLineOf(html), /720x576 PAL/, 'the 4:3 caption is unchanged');
+});
+
+test('a job that froze no raster says nothing rather than guessing one', () => {
+  // A manifest with no `resolved` block cannot say what shape it is, and the
+  // honest answer to that is silence. Printing the 4:3 default would be the
+  // original bug with a fallback in front of it.
+  const html = resultPage({
+    view: {
+      jobId: '20260829-032416-884be4',
+      status: 'done',
+      result: { durationSeconds: 15, frames: 375 },
+      input: { place: 'ostsee-strand' },
+    },
+  });
+  const meta = metaLineOf(html);
+  assert.match(meta, /375 frames/, 'the facts it does have still print');
+  assert.doesNotMatch(meta, /\d+x\d+/, 'no raster is invented when none was frozen');
+});
