@@ -54,7 +54,7 @@
       }
     },
     "bytedance/seedance-2.0/image-to-video": {
-      "_comment": "VERIFIED 2026-08-20 against fal's own schema page for this endpoint. THE ONE THAT MATTERS: `generate_audio` DEFAULTS TO TRUE, so not sending it ships every video with the model's idea of what the scene sounds like underneath the bed from audio/bed.mjs -- two ambiences arguing, in a product whose entire audio spec is the word 'quiet'. `duration` is a STRING enum ('4'..'15', plus 'auto'), so fifteen seconds is ONE call: no last-frame chaining, no seam, and phase-0 criterion 5 is simply not asked of this model. `aspect_ratio` includes '4:3', which is the tape's native frame, so nothing is cropped away. READ AGAIN 2026-08-24: the full enum is auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 -- so the endpoint does NOT refuse the other two shapes this product wants to sell. `aspectRatios` below still records 4:3 alone because it is what this product OFFERS: fal.mjs sends the FAL_ASPECT_RATIO constant on every call and resolveRaster refuses a paid job at any other shape. Offered here at 480p and 720p only -- fal's enum also lists 1080p and 4k, and 1080p is DEFERRED for the reasons config/credits.json records.",
+      "_comment": "VERIFIED 2026-08-20 against fal's own schema page for this endpoint. THE ONE THAT MATTERS: `generate_audio` DEFAULTS TO TRUE, so not sending it ships every video with the model's idea of what the scene sounds like underneath the bed from audio/bed.mjs -- two ambiences arguing, in a product whose entire audio spec is the word 'quiet'. `duration` is a STRING enum ('4'..'15', plus 'auto'), so fifteen seconds is ONE call: no last-frame chaining, no seam, and phase-0 criterion 5 is simply not asked of this model. `aspect_ratio` includes '4:3', which is the tape's native frame, so nothing is cropped away. READ AGAIN 2026-08-24: the full enum is auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 -- so the endpoint does NOT refuse the other two shapes this product wants to sell. `aspectRatios` below now records all three, and 2026-08-29 is when that became true: falAspectFor reads the shape off the requested raster instead of sending a constant, resolveRaster checks the derived raster against the offer list rather than refusing shapes wholesale, and creditCost charges 4/3 for the two non-default shapes. Offered here at 480p and 720p only -- fal's enum also lists 1080p and 4k, and 1080p is DEFERRED for the reasons config/credits.json records.",
       "verified": true,
       "verifiedOn": "2026-08-20",
       "verifiedFrom": "fal.ai/models/bytedance/seedance-2.0/image-to-video/api and fal.ai/docs/model-api-reference/video-generation-api/bytedance-seedance-2.0-image-to-video",
@@ -73,7 +73,9 @@
         "minClipSeconds": 4,
         "supportsNativeAudioOff": true,
         "aspectRatios": [
-          "4:3"
+          "4:3",
+          "16:9",
+          "9:16"
         ],
         "resolutions": [
           "480p",
@@ -88,7 +90,7 @@
       ]
     },
     "bytedance/seedance-2.0/reference-to-video": {
-      "_comment": "VERIFIED 2026-08-20 against fal's schema page. The TWO-REFERENCE path, and the strongest version of this product: `image_urls` takes up to 9 images, referenced from the prompt as @Image1, @Image2 -- so the face photo AND the uploaded photo of the actual place can go into one generation, and no preset-menu competitor can match 'your actual childhood garden'. WIRED IN 2026-08-24 as DIRECT MODE -- the earlier note here saying it was not is superseded; the still stage is skipped outright and CLAUDE.md section 18 carries the whole decision including what it costs. ASPECT RATIOS READ 2026-08-24, which was the open item: the enum is auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 on BOTH of fal's pages, so 16:9 and 9:16 are NOT refused by the endpoint. `aspectRatios` below still records 4:3 alone because it is what this product OFFERS: fal.mjs sends the FAL_ASPECT_RATIO constant on every call and resolveRaster refuses a paid job at any other shape. Lifting that needs FAL_RESOLUTIONS to gain the aspect dimension -- and animate/plan.mjs derives the same rasters from the same rule, so both move together -- and it reopens pricing, because 16:9 at 1024x576 is fewer pixels than 4:3 at 720p. Read the raster question below first. Offered at 480p and 720p; the model page's enum also lists 1080p and 4k while the model-api-reference page lists only 480p and 720p.",
+      "_comment": "VERIFIED 2026-08-20 against fal's schema page. The TWO-REFERENCE path, and the strongest version of this product: `image_urls` takes up to 9 images, referenced from the prompt as @Image1, @Image2 -- so the face photo AND the uploaded photo of the actual place can go into one generation, and no preset-menu competitor can match 'your actual childhood garden'. WIRED IN 2026-08-24 as DIRECT MODE -- the earlier note here saying it was not is superseded; the still stage is skipped outright and CLAUDE.md section 18 carries the whole decision including what it costs. ASPECT RATIOS READ 2026-08-24, which was the open item: the enum is auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 on BOTH of fal's pages, so 16:9 and 9:16 are NOT refused by the endpoint. `aspectRatios` below now records all three, and 2026-08-29 is when that became true: falAspectFor reads the shape off the requested raster instead of sending a constant, resolveRaster checks the derived raster against the offer list rather than refusing shapes wholesale, and creditCost charges 4/3 for the two non-default shapes. THE PRICING CLAIM THAT USED TO SIT HERE WAS WRONG AND IS CORRECTED: it said 16:9 at 1024x576 is fewer pixels than 4:3 at 720p, which compared the TAPE raster against the SOURCE raster ordered here. Those are different things and fal bills the second. A label holds the SHORT edge, so 16:9 and 9:16 are exactly 4/3 the pixels of 4:3 at the same tier and cost 4/3 as much. Read the raster question below first: no non-4:3 shape has ever been ORDERED, and this endpoint picks its own delivered raster. Offered at 480p and 720p; the model page's enum also lists 1080p and 4k while the model-api-reference page lists only 480p and 720p.",
       "verified": true,
       "verifiedOn": "2026-08-20",
       "verifiedFrom": "fal.ai/models/bytedance/seedance-2.0/reference-to-video/api and fal.ai/docs/model-api-reference/video-generation-api/bytedance-seedance-2.0-reference-to-video (aspect ratios re-read on both, 2026-08-24)",
@@ -108,7 +110,9 @@
         "supportsNativeAudioOff": true,
         "maxReferences": 9,
         "aspectRatios": [
-          "4:3"
+          "4:3",
+          "16:9",
+          "9:16"
         ],
         "resolutions": [
           "480p",

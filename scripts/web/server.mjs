@@ -96,12 +96,6 @@ import {
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
 import { createBilling } from '../billing/billing.mjs';
-// A LEAF IMPORT, AND THAT IS THE WHOLE POINT. `contract.mjs` pulls in node
-// builtins, `seed.mjs` and `errors.mjs` -- no provider module. Importing
-// `providers/index.mjs` here instead would statically load `fal.mjs` into the
-// web process, which is exactly what the money guards exist to prevent, and
-// which `server-cli.mjs` already takes a lazy import to avoid.
-import { isPaidProviderId } from '../providers/contract.mjs';
 
 /** Anything a handler throws that has a status. Everything else becomes a 500
  *  with a generic message, because a filesystem error message contains an
@@ -1455,14 +1449,14 @@ export function createServer({
     // what three of the four money guards are for. `PAID_PROVIDER_IDS` is a
     // leaf constant and a contract test keeps it honest.
     //
-    // Lift this the day the paid path gains the aspect dimension -- and price
-    // it first: holding the short edge, a 16:9 or 9:16 source is 4/3 the pixels
-    // of 4:3 at the same tier, and fal bills tokens as pixels x seconds.
-    const paidRenderer = isPaidProviderId(provider);
+    // BOTH CONDITIONS ARE CLOSED NOW, so the gate is gone. `falAspectFor` puts
+    // the ordered shape on the wire, and `creditCost` charges 4/3 for it --
+    // holding the short edge, a 16:9 or 9:16 source is 4/3 the pixels of 4:3 at
+    // the same tier and fal bills tokens as pixels x seconds. The page can
+    // offer what the renderer will build and the ledger will charge for.
     return aspectIds(cfg).map((id) => ({
       id,
-      available: id === cfg.defaultAspect
-        || (!paidRenderer && cfg.aspects?.[id]?.available === true),
+      available: id === cfg.defaultAspect || cfg.aspects?.[id]?.available === true,
     }));
   }
 
@@ -1490,10 +1484,17 @@ export function createServer({
     return offered[0]?.id ?? null;
   }
 
-  /** The cost of one tape at this resolution, in credits. Fifteen seconds is not
-   *  a default so much as the contract -- 375 frames at 25fps. */
-  async function costOf(resolution) {
-    return auths.cost({ resolution, seconds: TAPE_SECONDS });
+  /** The cost of one tape at this resolution AND SHAPE, in credits. Fifteen
+   *  seconds is not a default so much as the contract -- 375 frames at 25fps.
+   *
+   *  THE SHAPE IS A PARAMETER AND NOT AN OPTION. A label holds the short edge,
+   *  so 16:9 and 9:16 are 4/3 the pixels of 4:3 at the same tier and fal bills
+   *  tokens as pixels x seconds. Quoting without it charges every wide tape the
+   *  4:3 price -- and 9:16 is the phone format, so that is the modal order, not
+   *  an edge case. It is the same pass-through shape as the three defects in
+   *  section 26: a value that is present, correct, and simply not handed on. */
+  async function costOf(resolution, aspect = null) {
+    return auths.cost({ resolution, seconds: TAPE_SECONDS, aspect });
   }
 
   // -------------------------------------------------------------------------
@@ -3138,7 +3139,7 @@ export function createServer({
           });
         }
 
-        const credits = await costOf(resolution);
+        const credits = await costOf(resolution, aspect);
         if (before.credits < credits) {
           throw new HttpError(402,
             `Not enough credits — a ${resolution} tape costs ~${credits} CR and you have ${before.credits} CR.`,

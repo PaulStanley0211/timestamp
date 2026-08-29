@@ -165,28 +165,19 @@ const stepOutput = (job, name) => job.steps.find((s) => s.name === name)?.output
  * behind a local ffmpeg call to be wrong about.
  */
 export function resolveRaster({ resolution, provider, aspect = null, defaultAspect = '4:3', log = noop }) {
-  // THE PAID PATH ONLY RENDERS THE DEFAULT SHAPE SO FAR. `fal.mjs` sends a
-  // hardcoded `aspect_ratio` on every call, so a job ordered at 9:16 would get
-  // a 4:3 source rendered into a 9:16 tape frame -- and nothing downstream
-  // would notice, because every assertion reads the same resolved config the
-  // filtergraph does. Refused here, at the same boundary and for the same
-  // reason an unavailable raster is: a paid render that delivers a different
-  // thing from the one ordered is invisible to the customer AND the ledger.
-  // Lift this when FAL_RESOLUTIONS gains the aspect dimension.
-  if (provider.paid && aspect && aspect !== defaultAspect) {
-    throw new PipelineError(
-      `this job was ordered at ${aspect} and ${provider.id} only renders ${defaultAspect} so far.\n`
-      + `  Refusing rather than substituting: the tape stage would build the ordered frame around a`
-      + ` ${defaultAspect} source and every check downstream would agree with it.`,
-      {
-        code: 'ASPECT_UNSUPPORTED',
-        step: 'compose',
-        userMessage: 'That frame shape is not available from this renderer yet.',
-        detail: { aspect, supported: [defaultAspect], provider: provider.id },
-      },
-    );
-  }
-
+  // THE SHAPE IS ORDERED NOW, NOT REFUSED. This branch used to throw
+  // `ASPECT_UNSUPPORTED` for any non-default shape on a paid provider, because
+  // `fal.mjs` sent a hardcoded `aspect_ratio` -- so a 9:16 job would have
+  // fetched a 4:3 source and let the tape stage build a portrait frame around
+  // it, with nothing downstream able to notice because every assertion reads
+  // the same resolved config the filtergraph does.
+  //
+  // `falAspectFor` reads the shape off the requested raster, so that is fixed
+  // at the source. WHAT STILL GUARDS IT IS THE RASTER CHECK BELOW, which is
+  // stronger than the shape check ever was: the raster is derived from
+  // (resolution, aspect) and must appear in the provider's own offers, so a
+  // provider that does not do portrait refuses the exact order rather than
+  // being trusted about shapes in the abstract.
   const id = resolution ?? null;
   // A CLI render has no order behind it and no account to charge, so it takes
   // the provider's first offer -- the same shape this file had before there
@@ -196,7 +187,7 @@ export function resolveRaster({ resolution, provider, aspect = null, defaultAspe
     return { id: null, size: { width: size.width, height: size.height }, honoured: true };
   }
 
-  const raster = resolutionRaster(id);
+  const raster = resolutionRaster(id, aspect ?? defaultAspect);
   const offered = provider.capabilities.stillSizes
     .some((s) => s.width === raster.width && s.height === raster.height);
   if (offered) {
@@ -206,7 +197,7 @@ export function resolveRaster({ resolution, provider, aspect = null, defaultAspe
   const offers = provider.capabilities.stillSizes.map((s) => `${s.width}x${s.height}`).join(', ');
   if (provider.paid) {
     throw new PipelineError(
-      `this job was ordered at ${id} (${raster.width}x${raster.height}, 4:3) and ${provider.id} offers ${offers}.\n` +
+      `this job was ordered at ${id} (${raster.width}x${raster.height}, ${aspect ?? defaultAspect}) and ${provider.id} offers ${offers}.\n` +
       '  Refusing rather than substituting: a paid render that bills for one size and delivers another is\n' +
       '  invisible to the customer and to the ledger, which is the one failure neither of them can catch.',
       {

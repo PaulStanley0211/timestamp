@@ -31,6 +31,9 @@ import path from 'node:path';
 
 import { REPO_ROOT } from '../scripts/ffmpeg/run.mjs';
 import { resolveRaster } from '../scripts/render/pipeline.mjs';
+// The real offer list, so "a provider that does offer the raster" is the actual
+// provider rather than a hand-written stand-in that could drift from it.
+import { FAL_CAPABILITIES } from '../scripts/providers/fal.mjs';
 import { createJob, loadJob, jobPaths, STEPS, stepStatus } from '../scripts/render/job.mjs';
 import { runPipeline, dryRun, renderSummary, assembleFrameWarnings } from '../scripts/render/pipeline.mjs';
 
@@ -796,18 +799,42 @@ test('progress phases stay inside the closed set the status page renders', async
 });
 
 test('a paid provider refuses a shape it cannot be asked for, rather than rendering the wrong one', () => {
-  // fal.mjs still sends a hardcoded `aspect_ratio: '4:3'` on every call. The
-  // TAPE stage would happily render a 9:16 frame around a 4:3 source, and every
-  // assertion downstream would pass, because they all read the same resolved
-  // config. Nobody would see it until the file came out with the wrong picture
-  // in it -- after it had been billed. Refuse at the money boundary instead.
-  const paid = { id: 'fal', paid: true, capabilities: { stillSizes: [{ width: 960, height: 720 }] } };
+  // THE RULE IS UNCHANGED AND THE MECHANISM MOVED, so this is rewritten rather
+  // than deleted. It used to assert `ASPECT_UNSUPPORTED`, a blanket refusal of
+  // every non-default shape on a paid provider, which was right while `fal.mjs`
+  // sent a hardcoded `aspect_ratio` -- the tape stage would have rendered a
+  // 9:16 frame around a 4:3 source and every assertion downstream would have
+  // agreed, because they all read the same resolved config.
+  //
+  // The provider orders the shape now, so the blanket refusal would refuse a
+  // thing that works. What still guards it is the RASTER check, and it is
+  // strictly more precise: the raster is derived from (resolution, aspect) and
+  // must be one the provider actually offers, so the question asked is "can you
+  // render THIS order" rather than "do you do shapes in general".
+  //
+  // A provider that offers only the 4:3 raster still refuses 9:16, which is the
+  // property this test was written for and is what it still asserts.
+  const narrow = { id: 'fal', paid: true, capabilities: { stillSizes: [{ width: 960, height: 720 }] } };
   assert.throws(
-    () => resolveRaster({ resolution: '720p', provider: paid, aspect: '9:16', defaultAspect: '4:3' }),
-    /ASPECT_UNSUPPORTED|only renders 4:3/,
+    () => resolveRaster({ resolution: '720p', provider: narrow, aspect: '9:16', defaultAspect: '4:3' }),
+    (err) => {
+      assert.equal(err.code, 'RESOLUTION_UNAVAILABLE');
+      // The message must name the shape that was ordered, not a hardcoded 4:3
+      // -- it used to say "(720x1280, 4:3)", which is its own small lie.
+      assert.match(err.message, /720x1280, 9:16/);
+      return true;
+    },
   );
   // and the shape it CAN do is untouched
-  assert.doesNotThrow(() => resolveRaster({ resolution: '720p', provider: paid, aspect: '4:3', defaultAspect: '4:3' }));
+  assert.doesNotThrow(() => resolveRaster({ resolution: '720p', provider: narrow, aspect: '4:3', defaultAspect: '4:3' }));
+
+  // A provider that DOES offer the raster renders it, which is the half that
+  // stops this test pinning the old refusal in place.
+  const full = { id: 'fal', paid: true, capabilities: { stillSizes: FAL_CAPABILITIES.stillSizes } };
+  assert.deepEqual(
+    resolveRaster({ resolution: '720p', provider: full, aspect: '9:16', defaultAspect: '4:3' }),
+    { id: '720p', size: { width: 720, height: 1280 }, honoured: true },
+  );
 });
 
 // ---------------------------------------------------------------------------

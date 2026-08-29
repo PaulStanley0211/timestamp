@@ -539,8 +539,8 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
   /** What one tape costs, in credits. Computed the same way the debit is,
    *  because a quote computed differently from the charge is a quote that will
    *  one day differ from the charge. */
-  async function cost({ resolution, seconds, tier } = {}) {
-    return (await api()).creditCost({ resolution, seconds, tier });
+  async function cost({ resolution, seconds, tier, aspect } = {}) {
+    return (await api()).creditCost({ resolution, seconds, tier, aspect });
   }
 
   /**

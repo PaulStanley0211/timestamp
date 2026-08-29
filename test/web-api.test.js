@@ -24,6 +24,10 @@ import crypto from 'node:crypto';
 
 import { createServer } from '../scripts/web/server.mjs';
 import { SESSION_COOKIE } from '../scripts/web/session-middleware.mjs';
+// Imported so the page's offer can be checked against the thing that would
+// actually render it, rather than against a list written down twice.
+import { resolveRaster } from '../scripts/render/pipeline.mjs';
+import { FAL_CAPABILITIES } from '../scripts/providers/fal.mjs';
 import {
   JOB_ID_RE, createJob, loadJob, saveJob, jobPaths,
   setJobStatus, completeJob,
@@ -85,6 +89,17 @@ const CREDIT_COSTS = Object.freeze({
 });
 
 const TIERS = Object.freeze({ standard: { multiplier: 1 } });
+
+/** `config/credits.json`'s shape block, as this fake sees it. Read from the
+ *  real file rather than retyped: the multiplier is arithmetic (4:3 is the
+ *  squarest shape, a label holds the short edge, so the others are 4/3 the
+ *  pixels) and a fake that invented its own number would pass while the
+ *  product overcharged or undercharged. */
+const REAL_CREDITS = JSON.parse(fs.readFileSync(new URL('../config/credits.json', import.meta.url), 'utf8'));
+const ASPECTS = Object.freeze({
+  defaultAspect: REAL_CREDITS.defaultAspect,
+  aspects: REAL_CREDITS.aspects,
+});
 
 /**
  * `scripts/auth/` as documented in docs/interfaces-app.md A, in memory.
@@ -166,7 +181,11 @@ function fakeAuth() {
     // nothing can bill for one size and render another. That is why the quality
     // row is built from CREDIT_COSTS and this is called only for the one the
     // person actually picked.
-    creditCost({ resolution = '480p', seconds = 15, tier = 'standard' } = {}) {
+    // `aspect` is modelled here for the same reason `resolution` is: this fake
+    // is what the web layer is tested against, so a dimension it ignores is a
+    // dimension the web layer can silently fail to hand on. That is exactly the
+    // pass-through defect that put a 4:3 price on a wide tape.
+    creditCost({ resolution = '480p', seconds = 15, tier = 'standard', aspect = null } = {}) {
       const row = CREDIT_COSTS[resolution];
       if (!row) {
         const err = new Error(`unknown resolution ${resolution}`);
@@ -186,7 +205,15 @@ function fakeAuth() {
         err.code = 'UNKNOWN_TIER';
         throw err;
       }
-      return Math.ceil((row.creditsPerReference * (seconds / 15)) * multiplier);
+      const shape = aspect ?? ASPECTS.defaultAspect;
+      const aspectMultiplier = shape === ASPECTS.defaultAspect ? 1 : ASPECTS.aspects[shape];
+      if (!Number.isFinite(aspectMultiplier)) {
+        const err = new Error(`unknown aspect ${aspect}`);
+        err.code = 'UNKNOWN_ASPECT';
+        err.userMessage = 'That frame shape is not available.';
+        throw err;
+      }
+      return Math.ceil((row.creditsPerReference * (seconds / 15)) * multiplier * aspectMultiplier);
     },
     /** One error, one sentence, one duration for both failures. */
     authenticate({ email, password }) {
@@ -1652,6 +1679,51 @@ test('GET /api/health reports ffmpeg, the queue and the worker, without a sessio
   });
 });
 
+test('a job ordered at a wide shape is charged the wide price', async () => {
+  // THE PASS-THROUGH DEFECT THIS EXISTS TO PREVENT, and it is the shape section
+  // 26 records three times in one morning: a value that is present, correct,
+  // and simply not handed on. The handler reads `aspect` and validates it, then
+  // computed credits from the resolution alone -- so opening the menu without
+  // this would have charged every wide tape the 4:3 price and sold it a third
+  // below cost, invisibly, exactly as 480p was for weeks.
+  //
+  // Asserted on the DEBIT, not on the quote: a quote computed one way and a
+  // charge computed another is the failure the seam's own comment warns about.
+  await withServer(async ({ base, cookieA, auth, accountA }) => {
+    const order = async (aspect) => {
+      const before = auth.balanceOf(auth.loadAccount({ accountId: accountA.accountId })).credits;
+      const res = await post(base, '/api/jobs', multipart([
+        { name: 'photo', filename: 'p.png', type: 'image/png', body: fakePhoto(4_000, aspect) },
+        { name: 'place', body: 'a beach' },
+        { name: 'outfit', body: 'a shirt' },
+        { name: 'consent', body: 'yes' },
+        { name: 'resolution', body: '480p' },
+        { name: 'aspect', body: aspect },
+      ]), cookieA);
+      const body = await res.json();
+      assert.equal(res.status, 201, `ordering ${aspect} failed: ${JSON.stringify(body)}`);
+      const after = auth.balanceOf(auth.loadAccount({ accountId: accountA.accountId })).credits;
+      return { quoted: body.credits, charged: before - after };
+    };
+
+    // Asserted as a RATIO against the 4:3 order rather than as absolute credit
+    // figures, because this harness prices from its own fixture table. The
+    // ratio is the thing that must hold: it is arithmetic, and it is what goes
+    // wrong when the shape is not handed on.
+    const expected = REAL_CREDITS.aspects['16:9'];
+
+    const flat = await order('4:3');
+    assert.equal(flat.charged, flat.quoted, 'the 4:3 tape was not charged what it was quoted');
+
+    for (const aspect of ['16:9', '9:16']) {
+      const wide = await order(aspect);
+      assert.equal(wide.charged, wide.quoted, `the ${aspect} tape was not charged what it was quoted`);
+      assert.equal(wide.quoted, Math.ceil(flat.quoted * expected),
+        `a ${aspect} tape was quoted ${wide.quoted} against a 4:3 price of ${flat.quoted} -- the shape was not handed on`);
+    }
+  }, { provider: 'fixture' });
+});
+
 test('the frame-shape menu never offers a shape the configured renderer will refuse', async () => {
   // THE PAGE AND THE PIPELINE DISAGREED, AND THE PAGE WAS THE OPTIMISTIC ONE.
   // `config/render.json` marks 16:9 and 9:16 available, so the form rendered
@@ -1671,14 +1743,33 @@ test('the frame-shape menu never offers a shape the configured renderer will ref
   const offered = (html) => [...html.matchAll(/name="aspect"[^>]*value="([^"]+)"/g)].map((m) => m[1]).sort();
   const page = async (base, cookie) => (await fetch(base, { headers: { cookie, accept: 'text/html' } })).text();
 
-  await withServer(async ({ base, cookieA }) => {
-    assert.deepEqual(offered(await page(base, cookieA)), ['16:9', '4:3', '9:16'],
-      'the free renderer does all three, so the menu should still offer all three');
-  }, { provider: 'fixture' });
+  // THIS ASSERTION CHANGED SHAPE AND GOT STRONGER, which is worth writing down.
+  // It used to say "under a paid renderer the page offers only 4:3", which was
+  // the right answer while `resolveRaster` refused every other shape. The paid
+  // path orders shapes now, so that expectation would pin the old defect in
+  // place -- the page would be hiding a feature that works.
+  //
+  // What it asserts instead is the INVARIANT the old version was an instance
+  // of: every shape on the page is one the pipeline would actually accept.
+  // That is tied to `resolveRaster` directly rather than to a hardcoded list,
+  // so it stays true whichever way the answer moves next.
+  const paidLike = {
+    id: 'fal', paid: true,
+    capabilities: { stillSizes: FAL_CAPABILITIES.stillSizes },
+  };
 
   await withServer(async ({ base, cookieA }) => {
-    assert.deepEqual(offered(await page(base, cookieA)), ['4:3'],
-      'the page offers a frame shape that this renderer refuses at compose');
+    const shapes = offered(await page(base, cookieA));
+    assert.ok(shapes.length > 0, 'the page offers no frame shape at all');
+    for (const aspect of shapes) {
+      assert.doesNotThrow(
+        () => resolveRaster({ resolution: '480p', provider: paidLike, aspect, defaultAspect: CFG.defaultAspect }),
+        `the page offers ${aspect} and a paid render of it is refused at compose`,
+      );
+    }
+    // And it is not passing by offering only the default: the shapes that
+    // config marks available are all there.
+    assert.deepEqual(shapes, ['16:9', '4:3', '9:16']);
   }, { provider: 'fal' });
 });
 
