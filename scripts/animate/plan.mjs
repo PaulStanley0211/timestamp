@@ -82,7 +82,62 @@ export const AVAILABLE_RESOLUTIONS = Object.freeze(
 export const DEFAULT_RESOLUTION = '480p';
 
 /**
- * The 4:3 raster for a resolution label.
+ * The default shape, and the one a label means when nobody names another.
+ *
+ * Every existing caller, the whole of `config/credits.json` and the frozen
+ * `resolved` block of every manifest ever written assume a bare label means
+ * 4:3, so that stays true rather than becoming a parameter everyone must pass.
+ */
+export const DEFAULT_ASPECT = '4:3';
+
+/**
+ * The width:height ratio an aspect id names, from the id itself.
+ *
+ * The id IS the ratio -- '16:9' is sixteen by nine -- so parsing it is one
+ * source of truth rather than a second table to keep in step with
+ * `config/render.json`. A malformed one throws instead of defaulting, because
+ * a silently-substituted shape is a render that delivers something other than
+ * what was ordered.
+ */
+function aspectRatio(aspect) {
+  const m = /^(\d+):(\d+)$/.exec(String(aspect ?? ''));
+  if (!m) {
+    throw new PlanError(
+      `unknown aspect ${JSON.stringify(aspect)} -- expected a "w:h" ratio like 4:3, 16:9 or 9:16`,
+      { code: 'UNKNOWN_ASPECT', detail: { aspect } },
+    );
+  }
+  const [w, h] = [Number(m[1]), Number(m[2])];
+  if (w <= 0 || h <= 0) {
+    throw new PlanError(`aspect ${JSON.stringify(aspect)} has a zero side`, {
+      code: 'UNKNOWN_ASPECT', detail: { aspect },
+    });
+  }
+  return w / h;
+}
+
+/** yuv420p subsamples chroma by two, so an odd edge is a filtergraph failure
+ *  at the far end of a paid render. Rounded to even at the point the number is
+ *  invented rather than checked for later. */
+const even = (n) => 2 * Math.round(n / 2);
+
+/**
+ * The raster for a resolution label at a given shape.
+ *
+ * THE LABEL NAMES THE SHORT EDGE, WHICH IS SECTION 13'S RULE ONE LAYER DOWN.
+ * The tape rasters already hold their short edge at 576 and vary only the long
+ * one, and that is what keeps a single set of filtergraph constants correct in
+ * all three shapes -- a 14px head-switch band is 14px of a 576-high picture
+ * whichever shape it sits in. Deriving the SOURCE raster the same way means
+ * "720p" means the same thing to the customer, to the renderer and to the
+ * invoice, in every shape.
+ *
+ * THE COST CONSEQUENCE, BECAUSE IT IS NOT OBVIOUS AND IT IS LOAD-BEARING. 4:3
+ * is the squarest shape this product ships, so holding the short edge makes
+ * every other shape EXACTLY 4/3 THE PIXELS. fal bills tokens as
+ * pixels x seconds, so a 16:9 or 9:16 tape costs 4/3 of a 4:3 one at the same
+ * tier. `creditCost` charges for that; if it ever stops, the shapes are being
+ * sold a third below cost, which is precisely what happened to 480p once.
  *
  * Throws rather than falling back, and the deferred row gets its own message:
  * a silent substitution would bill for one thing and render another, with the
@@ -90,9 +145,10 @@ export const DEFAULT_RESOLUTION = '480p';
  * what arrived. That is the one failure the customer cannot see.
  *
  * @param {string} id
+ * @param {string} [aspect]  a "w:h" ratio; defaults to 4:3
  * @returns {{id:string,width:number,height:number}}
  */
-export function resolutionRaster(id) {
+export function resolutionRaster(id, aspect = DEFAULT_ASPECT) {
   const row = RESOLUTIONS[id];
   if (!row) {
     throw new PlanError(
@@ -107,7 +163,12 @@ export function resolutionRaster(id) {
       { code: 'RESOLUTION_UNAVAILABLE', detail: { id, available: AVAILABLE_RESOLUTIONS } },
     );
   }
-  return { id: row.id, width: row.width, height: row.height };
+  // The stored raster is the 4:3 one, so its short edge is the label's meaning.
+  const shortEdge = Math.min(row.width, row.height);
+  const ratio = aspectRatio(aspect);
+  return ratio >= 1
+    ? { id: row.id, width: even(shortEdge * ratio), height: shortEdge }
+    : { id: row.id, width: shortEdge, height: even(shortEdge / ratio) };
 }
 
 /**

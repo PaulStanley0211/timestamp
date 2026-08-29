@@ -998,6 +998,76 @@ test('a resolution label means its 4:3 raster, everywhere it is written down', (
   assert.equal(DEFAULT_RESOLUTION, credits.defaults.resolution);
 });
 
+test('a resolution label holds the SHORT edge, so a shape changes the long one', () => {
+  // THE RULE IS SECTION 13'S, APPLIED ONE LAYER DOWN. The tape rasters already
+  // hold their short edge at 576 and vary only the long edge, which is what
+  // keeps ONE set of filtergraph constants correct in all three shapes -- a
+  // 14px head-switch band is 14px of a 576-high picture whichever shape it is
+  // in. The SOURCE raster ordered from the provider now follows the same rule,
+  // so "480p" means "the short edge is 480" rather than "640x480".
+  //
+  // Called with no aspect it still means 4:3, because every existing caller
+  // and the whole of config/credits.json depend on that.
+  assert.deepEqual(resolutionRaster('480p'), { id: '480p', width: 640, height: 480 });
+
+  const EXPECTED = {
+    '480p': { '4:3': [640, 480], '16:9': [854, 480], '9:16': [480, 854] },
+    '720p': { '4:3': [960, 720], '16:9': [1280, 720], '9:16': [720, 1280] },
+  };
+  for (const [id, shapes] of Object.entries(EXPECTED)) {
+    for (const [aspect, [width, height]] of Object.entries(shapes)) {
+      assert.deepEqual(resolutionRaster(id, aspect), { id, width, height },
+        `${id} at ${aspect}`);
+      // yuv420p subsamples chroma by two; an odd edge is a filtergraph error
+      // at the far end of a paid render.
+      assert.equal(width % 2, 0, `${id} ${aspect} width is odd`);
+      assert.equal(height % 2, 0, `${id} ${aspect} height is odd`);
+      assert.equal(Math.min(width, height), Math.min(...EXPECTED[id]['4:3']),
+        `${id} ${aspect} does not hold the short edge`);
+    }
+  }
+
+  // AN UNKNOWN SHAPE IS REFUSED, NEVER DEFAULTED. This assertion was missing
+  // on the first pass and a deliberate sabotage -- making a malformed aspect
+  // fall back to 4:3 -- went completely undetected, which is the failure this
+  // whole area exists to prevent: a render that quietly delivers a different
+  // thing from the one ordered, with the button, the ledger and the manifest
+  // all agreeing on the wrong answer.
+  // `undefined` is NOT in this list and must not be: a default parameter cannot
+  // tell "not passed" from "passed undefined", and a bare call has to keep
+  // meaning 4:3 for every existing caller. `null` is in the list, because that
+  // is somebody passing a value they failed to compute.
+  for (const bad of ['16x9', 'square', '', null, '0:1', '4:0', '16:9:1']) {
+    assert.throws(() => resolutionRaster('480p', bad), (err) => {
+      assert.equal(err.code, 'UNKNOWN_ASPECT', `${JSON.stringify(bad)} was not refused as an aspect`);
+      return true;
+    }, `${JSON.stringify(bad)} should not be renderable`);
+  }
+});
+
+test('a wide or tall shape is exactly 4/3 the pixels of a 4:3 one', () => {
+  // THE NUMBER THE PRICING DECISION RESTS ON, PINNED SO IT CANNOT DRIFT.
+  //
+  // 4:3 is the squarest shape this product ships, so holding the short edge
+  // makes every other shape exactly 4/3 the pixels. fal bills tokens as
+  // pixels x seconds -- config/credits.json carries the formula and it
+  // reproduces the invoice to seven figures -- so 4/3 the pixels is 4/3 the
+  // cost, at every tier, for both non-default shapes.
+  //
+  // This is the arithmetic the price rests on. What charges for it lives in
+  // `creditCost`, and `auth-credits.test.js` holds it to this same number.
+  for (const id of AVAILABLE_RESOLUTIONS) {
+    const base = resolutionRaster(id, '4:3');
+    const basePx = base.width * base.height;
+    for (const aspect of ['16:9', '9:16']) {
+      const r = resolutionRaster(id, aspect);
+      const ratio = (r.width * r.height) / basePx;
+      assert.ok(Math.abs(ratio - 4 / 3) < 0.005,
+        `${id} ${aspect} is ${ratio.toFixed(3)}x the pixels of 4:3, not 4/3`);
+    }
+  }
+});
+
 test('the endpoints named in fal.mjs are the ones recorded as VERIFIED in config/models.json', () => {
   // fal.mjs's header documents FAL_ENDPOINTS as mirroring the config. Two
   // copies of a route id is exactly the drift that produces an afternoon of
