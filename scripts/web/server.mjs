@@ -88,6 +88,10 @@ import { createStylesheet, sendFile } from './static.mjs';
 import { aspectIds } from '../tapedeck/frame.mjs';
 import {
   homePage, landingPage, statusPage, selectPage, resultPage, errorPage, INLINE_SCRIPT_HASHES,
+  // The still-count options the page renders. Imported so the validator below
+  // refuses exactly what the form does not offer, rather than a range written
+  // down twice.
+  STILL_COUNTS, STILL_COUNT_DEFAULT,
 } from './views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
@@ -3484,11 +3488,31 @@ export function createServer({
 
   /** 1..8 is the provider contract's range. A manifest asking for twelve is a
    *  bill that fails after the first eight have been generated. */
+  /**
+   * How many looks to generate, validated against what the page OFFERS.
+   *
+   * This was any integer 1..8, and it is not a cosmetic range. `fal.mjs`
+   * generates one BILLED image per still, while `costOf` takes only
+   * (resolution, aspect) -- there is no stillCount term in `creditCost` at all.
+   * `/api/jobs` takes a hand-written multipart POST, so `stillCount=8` bought
+   * seven extra generations at exactly the price of one: $0.28 to $0.70 of
+   * unpriced provider spend per tape at the rates in config/pricing.json, which
+   * takes the Starter pack from 31% gross margin to 4%.
+   *
+   * WHAT IS FIXED HERE IS THE AMPLIFICATION, NOT THE PRICE. Charging for stills
+   * changes what a customer pays, and config/credits.json says in its own words
+   * that this is Paul's call. Refusing a value the page never offered needs
+   * nobody's decision.
+   *
+   * `STILL_COUNTS` is imported rather than written down again, so the form and
+   * this refusal cannot drift into a dead option or an accepted value nobody
+   * can pick.
+   */
   function cleanStillCount(value) {
-    if (value === undefined || value === null || String(value).trim() === '') return 3;
+    if (value === undefined || value === null || String(value).trim() === '') return STILL_COUNT_DEFAULT;
     const n = Number(String(value).trim());
-    if (!Number.isInteger(n) || n < 1 || n > 8) {
-      throw new HttpError(400, 'Choose between 1 and 8 frames.', { code: 'BAD_STILL_COUNT' });
+    if (!STILL_COUNTS.includes(n)) {
+      throw new HttpError(400, `Choose ${STILL_COUNTS.join(', ')} frames.`, { code: 'BAD_STILL_COUNT' });
     }
     return n;
   }

@@ -23,6 +23,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import { createServer } from '../scripts/web/server.mjs';
+// The offered still counts, imported so the test compares the page and the
+// validator against ONE list rather than against a copy of it.
+import { STILL_COUNTS } from '../scripts/web/views.mjs';
 import { SESSION_COOKIE } from '../scripts/web/session-middleware.mjs';
 // Imported so the page's offer can be checked against the thing that would
 // actually render it, rather than against a list written down twice.
@@ -1023,6 +1026,62 @@ test('no resolution posted means the default one, and a deferred one is refused'
       assert.equal(res.status, 400, `${resolution} was accepted`);
       assert.equal((await res.json()).error.status, 400);
     }
+  });
+});
+
+/**
+ * `stillCount` MULTIPLIES BILLED PROVIDER CALLS AND CONTRIBUTES NOTHING TO THE
+ * PRICE, so the accepted set must be the set the page actually offers.
+ *
+ * `fal.mjs` makes one billed image generation PER STILL, and `costOf` takes
+ * only (resolution, aspect) -- there is no stillCount term anywhere in
+ * `creditCost`. The form offers 1, 3 and 5; the handler accepted any integer
+ * from 1 to 8, and `/api/jobs` takes a hand-written multipart POST.
+ *
+ * So `stillCount=8` bought seven extra generations at exactly the price of one.
+ * At the per-image rates in config/pricing.json that is $0.28 to $0.70 of
+ * unpriced provider spend per tape, which takes the Starter pack from 31% gross
+ * margin to 4% and, at the dearer rate, sells it below cost.
+ *
+ * WHAT THIS FIXES IS THE AMPLIFICATION, NOT THE PRICE. Pricing stills is a
+ * change to what a customer is charged, and config/credits.json says in its own
+ * words that this is the owner's call. Binding the accepted set to the offered
+ * set is the part that is unambiguously a defect: a value the UI never offers
+ * has no business reaching a paid loop.
+ *
+ * Latent today only because the web still model is deliberately unverified and
+ * refuses at compose. It arms on the config/models.json edit that fills it in.
+ */
+test('stillCount accepts exactly what the page offers, and nothing else', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    for (const n of STILL_COUNTS) {
+      const res = await post(base, '/api/jobs', multipart([...goodParts(), { name: 'stillCount', body: String(n) }]), cookieA);
+      assert.equal(res.status, 201, `stillCount=${n} is on the page and must be accepted`);
+    }
+
+    // 2, 4, 6, 7 and 8 are all inside the old 1..8 range and none is offered.
+    // 8 is the one that costs money: seven extra billed generations, free.
+    for (const n of ['2', '4', '6', '7', '8', '0', '-1', '99', '3.5', 'three', '']) {
+      const res = await post(base, '/api/jobs', multipart([...goodParts(), { name: 'stillCount', body: n }]), cookieA);
+      if (n === '') {
+        assert.equal(res.status, 201, 'an empty field is "did not choose", which is the default');
+        continue;
+      }
+      assert.equal(res.status, 400, `stillCount=${JSON.stringify(n)} was accepted and multiplies paid calls`);
+      assert.equal((await res.json()).error.code, 'BAD_STILL_COUNT');
+    }
+  });
+});
+
+/** And the page must offer exactly that set, so the two cannot drift into
+ *  either a dead option or an accepted value nobody can pick. */
+test('the still-count options on the page are the ones the API accepts', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    const block = html.match(/<select id="stillCount"[\s\S]*?<\/select>/)?.[0] ?? '';
+    const offered = [...block.matchAll(/value="(\d+)"/g)].map((m) => Number(m[1]));
+    assert.deepEqual(offered, [...STILL_COUNTS],
+      'the form and the handler disagree about which still counts exist');
   });
 });
 

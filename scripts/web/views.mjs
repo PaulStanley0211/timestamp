@@ -68,6 +68,24 @@ const WORDMARK_SVG = fs
  */
 import { placeSlug, outfitSlug, qualitySlug, aspectSlug } from './static.mjs';
 
+/**
+ * How many looks to choose between, and the ONLY values that exist.
+ *
+ * Exported because `server.mjs` validates against it. `stillCount` multiplies
+ * BILLED provider calls -- fal generates one image per still -- while
+ * contributing nothing to the price, so a value that is not on this page has no
+ * business reaching a paid loop. The handler used to accept any integer 1..8,
+ * and `/api/jobs` takes a hand-written multipart POST, so `stillCount=8` bought
+ * seven extra generations at the price of one.
+ *
+ * One list, read by the form below and by the validator, so the two cannot
+ * drift into a dead option or an accepted value nobody can pick.
+ */
+export const STILL_COUNTS = Object.freeze([1, 3, 5]);
+
+/** Which one is selected when nobody chooses. */
+export const STILL_COUNT_DEFAULT = 3;
+
 // ---------------------------------------------------------------------------
 // escaping
 // ---------------------------------------------------------------------------
@@ -1046,9 +1064,9 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
       favourite &mdash; only then is the video made, so a likeness you do not like
       never costs you a tape.</p>
       <select id="stillCount" name="stillCount">
-        <option value="1">1</option>
-        <option value="3" selected>3</option>
-        <option value="5">5</option>
+        ${STILL_COUNTS.map((n) => (
+    `<option value="${n}"${n === STILL_COUNT_DEFAULT ? ' selected' : ''}>${n}</option>`
+  )).join('')}
       </select>
     </div>
 
