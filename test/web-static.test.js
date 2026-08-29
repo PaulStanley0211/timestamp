@@ -877,3 +877,23 @@ test('a rung with no per-shape prices states the plain count and invents nothing
   assert.ok(!/\(\s*(?:none|\d+) in 16:9 or 9:16\s*\)/.test(html),
     'a shape price that was never supplied must not be inferred');
 });
+
+test('the signup page does not promise a recurring free allowance, because there is none', () => {
+  // views-auth.mjs said "A free credit allowance every month" while the grant
+  // is once-ever: reserveFreeTape runs inside createAccount and nothing in the
+  // codebase reads grant.periodDays or grants on a period. The sentence a
+  // prospective customer reads while deciding to sign up set an expectation
+  // ("this renews") the product never meets -- and there was no support
+  // channel to ask why the balance did not refresh.
+  const html = signupPage({ consentText: 'I am in this photo.' });
+
+  // PRESENT FIRST: the sentence about the free allowance must still exist, or
+  // the absences below pass against a page that dropped the subject entirely.
+  assert.match(html, /free credit allowance/i,
+    'the signup page no longer mentions the free allowance at all');
+  assert.match(html, /granted once/i,
+    'the copy must say the grant happens once -- that is the true cadence');
+
+  assert.ok(!/every month|per month|each month|monthly/i.test(html),
+    'the signup page claims the free allowance recurs, and it never does');
+});

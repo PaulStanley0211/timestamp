@@ -107,8 +107,8 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
   <section class="panel">
     <p class="eyebrow">Create an account</p>
     <h1 class="headline">Start a shelf</h1>
-    <p class="sub">A free credit allowance every month. No card, and nowhere on this
-    site to type one.</p>
+    <p class="sub">A free credit allowance to start, granted once when the account
+    opens. No card, and nowhere on this site to type one.</p>
 
     ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
 
