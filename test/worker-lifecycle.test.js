@@ -351,9 +351,63 @@ test('reapExpired() runs before the first claim, which is what recovers a crashe
 
 test('reap() is not run twice when the CLI has already done it for the banner', async (t) => {
   const rig = makeRig(t, { sleepImpl: async () => { void rig.worker.stop(); } });
-  rig.worker.reap();
+  await rig.worker.reap();
   await rig.worker.start();
   assert.equal(rig.calls.filter((c) => c === 'reapExpired').length, 1);
+});
+
+/**
+ * A JOB REAPED TO DEATH GETS ITS CREDITS BACK.
+ *
+ * The debit lands at enqueue, in the web process. The only refund trigger was
+ * inside `runOne`'s failure path -- but a lease expiring for the last time is
+ * made terminal by `reapExpired` itself, in a module that holds no token and
+ * knows nothing about accounts. So a job killed by four lease expiries (a
+ * worker hard-killed four times, or simply stalled past its lease) left the
+ * customer down 21 CR with no provider ever called, no `refunded` event, and no
+ * `REFUND MISSED` line either. Silence, which is the one outcome this design
+ * says it will not produce.
+ *
+ * Neither module could see it alone: the queue has no accounts, and the worker
+ * was never told which reaped jobs went terminal rather than back to pending.
+ */
+test('a lease reaped for the last time refunds the customer', async (t) => {
+  const refunds = [];
+  const rig = makeRig(t, {
+    refundImpl: async (job, { reason }) => {
+      refunds.push({ jobId: job.jobId, reason });
+      return { refunded: true, credits: 21, accountId: 'acct-1' };
+    },
+  });
+  const jobId = rig.seed();
+
+  // Burn every attempt by letting the lease expire, exactly as a worker being
+  // killed mid-render does. maxAttempts is 4.
+  for (let i = 0; i < CFG.provider.maxAttempts; i += 1) {
+    rig.queue.claim({ workerId: `dead-${i}` });
+    rig.clock.now += LEASE_MS + 1000;
+    await rig.worker.reap();
+  }
+
+  assert.equal(rig.queue.stats().failed, 1, 'the job should be terminal after maxAttempts expiries');
+  assert.deepEqual(refunds.map((r) => r.jobId), [jobId],
+    'the customer was never refunded for a job that never reached a provider');
+  assert.match(refunds[0].reason, /lease/, 'the refund reason should name why');
+  assert.equal(rig.of('refunded').length, 1, 'the refund was not announced');
+});
+
+/** And the announcement must not call a terminal reap "back to pending" -- an
+ *  operator then looks for the job in a directory it is not in. */
+test('a terminal reap is reported separately from one that goes back to pending', async (t) => {
+  const rig = makeRig(t);
+  rig.seed();
+  rig.queue.claim({ workerId: 'dead' });
+  rig.clock.now += LEASE_MS + 1000;
+  await rig.worker.reap();
+
+  const [event] = rig.of('reaped');
+  assert.deepEqual(event.failed, [], 'attempt 1 of 4 goes back to pending, not to failed');
+  assert.deepEqual(event.pending, event.jobIds, 'every job this reap moved went back to pending');
 });
 
 // ---------------------------------------------------------------------------

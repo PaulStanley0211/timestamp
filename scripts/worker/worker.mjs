@@ -674,10 +674,50 @@ export function createWorker({
      * is what recovers jobs stranded by a previous crash -- and its absence
      * looks exactly like "the queue is stuck".
      */
-    reap() {
+    /**
+     * Return every expired lease, and REFUND THE ONES THAT WILL NEVER RUN AGAIN.
+     *
+     * The debit lands at enqueue, in the web process. The only refund trigger
+     * used to be inside `runOne`'s own failure path -- but a lease that expires
+     * for the last time is made terminal by `reapExpired` itself, in a module
+     * that holds no token and knows nothing about accounts. So a job killed by
+     * four lease expiries (a worker hard-killed four times, or simply stalled
+     * past its lease) left the customer down 21 CR with no provider ever
+     * called, no `refunded` event, and no `REFUND MISSED` line either. Silence,
+     * which is the one outcome this design says it will not produce.
+     *
+     * `refundIfUnspent` still decides: it reads the manifest and declines if a
+     * paid step ever ran, so this cannot refund a tape somebody received. And
+     * `refundCredits` is idempotent per job, so asking twice is a no-op rather
+     * than a second payout.
+     *
+     * ASYNC NOW, because refunding is. Both callers await it.
+     */
+    async reap() {
       hasReaped = true;
-      const jobIds = queue.reapExpired();
-      emit('reaped', { jobIds, count: jobIds.length });
+      const failed = [];
+      const jobIds = queue.reapExpired({ onTerminal: (jobId) => failed.push(jobId) });
+      // The split is reported, not just the total: "back to pending" was
+      // printed for jobs that went straight to failed/, and an operator then
+      // looked for them in the wrong directory.
+      emit('reaped', { jobIds, count: jobIds.length, failed, pending: jobIds.filter((id) => !failed.includes(id)) });
+
+      for (const jobId of failed) {
+        if (!refundImpl) break;
+        const reason = 'refund:lease-expired';
+        try {
+          const job = loadJob({ root, jobId, nowImpl });
+          const result = await refundImpl(job, { reason });
+          if (result?.refunded) {
+            emit('refunded', {
+              jobId, reason, credits: result.credits ?? null, accountId: result.accountId ?? null,
+            });
+          }
+        } catch (err) {
+          // The one witness. A missed refund must never be silent.
+          emit('refund-failed', { jobId, reason, error: brief(err) });
+        }
+      }
       return jobIds;
     },
 
@@ -792,7 +832,7 @@ export function createWorker({
       stopSignal = new AbortController();
       stopped = deferred();
 
-      if (!hasReaped) this.reap();
+      if (!hasReaped) await this.reap();
       this.sweepRetention();
       // Unref'd where the runtime supports it: a retention timer must never be
       // the reason a worker asked to stop is still alive.

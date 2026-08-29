@@ -929,7 +929,25 @@ export function createQueue({
      *
      * @returns {string[]} the job ids this call moved
      */
-    reapExpired() {
+    /**
+     * @param {{onTerminal?: (jobId: string) => void}} [opts]
+     *   `onTerminal` is called for each job this reap sent to `failed/` for
+     *   good, rather than back to `pending`.
+     *
+     *   ADDITIVE ON PURPOSE. The return value is unchanged -- a flat array of
+     *   every job moved -- because thirty-odd assertions and a race test depend
+     *   on that shape, and this module's atomicity properties are the last
+     *   place to introduce churn for a signature.
+     *
+     *   IT EXISTS BECAUSE A REAPED-TO-DEATH JOB WAS NEVER REFUNDED. The debit
+     *   lands at enqueue, and the only refund trigger is inside the worker's
+     *   own failure path. This function writes the terminal record itself, in a
+     *   module that holds no token and knows nothing about accounts, so a job
+     *   killed by four lease expiries left the customer down 21 CR with no
+     *   provider ever called, no `refunded` event, and no `REFUND MISSED` line
+     *   either -- the one witness the design relies on. Total silence.
+     */
+    reapExpired({ onTerminal = null } = {}) {
       ensureDirs();
       const t = now();
       const moved = [];
@@ -1075,7 +1093,13 @@ export function createQueue({
         // even when the lease has since moved on. Taking the mark is what
         // reaped this lease; who happened to run the syscalls is not the
         // question `reapExpired` answers.
-        if (mine) moved.push(jobId);
+        if (mine) {
+          moved.push(jobId);
+          // Only the mark holder reports, so a job cannot be refunded twice by
+          // two workers reaping the same lease -- the same rule the line above
+          // already follows for the return value.
+          if (terminal && onTerminal) onTerminal(jobId);
+        }
       }
 
       // THE NET. Everything above is written so that a job is always in at

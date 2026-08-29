@@ -79,9 +79,20 @@ export function renderEvent(event, { verbose = false, t0 = null } = {}) {
   const job = e.jobId ?? '';
 
   switch (e.type) {
-    case 'reaped':
+    case 'reaped': {
       if (e.count === 0) return verbose ? line('reaped     nothing -- every claimed job is inside its lease') : null;
-      return line(`reaped     ${e.count} dead lease(s) back to pending: ${(e.jobIds ?? []).join(', ')}`);
+      // BACK TO PENDING AND GONE TO failed/ ARE DIFFERENT DIRECTORIES, and this
+      // line said "back to pending" for both. An operator then ran `queue-cli
+      // peek`, which defaults to pending, found nothing, and was looking in the
+      // wrong place -- on the one line whose stated job is telling them the
+      // difference between "the queue is stuck" and "a previous run was killed".
+      const failed = e.failed ?? [];
+      const pending = e.pending ?? (e.jobIds ?? []).filter((id) => !failed.includes(id));
+      const parts = [];
+      if (pending.length) parts.push(`${pending.length} back to pending: ${pending.join(', ')}`);
+      if (failed.length) parts.push(`${failed.length} out of attempts -> failed/: ${failed.join(', ')}`);
+      return line(`reaped     ${parts.join(' · ')}`);
+    }
 
     case 'claimed':
       return line(`claimed    ${job}  attempt ${(e.attempts ?? 0) + 1}/${e.maxAttempts ?? '?'}`);
@@ -283,7 +294,7 @@ async function main() {
     },
   });
 
-  const reaped = worker.reap();
+  const reaped = await worker.reap();
   const stats = queue.stats();
 
   if (!json) {
