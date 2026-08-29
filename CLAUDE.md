@@ -7,15 +7,35 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-29, evening) — THE PAID PATH WAS BROKEN IN TWO PLACES AND IS NOT ANY MORE.
+## START HERE (2026-08-29, night) — THE APP WAS DRIVEN AND REVIEWED, AND THE COPY HAD NOT LEARNED ABOUT THE FRAME MENU.
 
-**1739 tests / 1737 pass / 0 fail / 2 skipped.** The skips are the
+**1754 tests / 1752 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
 
-**WHAT JUST HAPPENED IS SECTION 35.** A full gstack `/cso` audit, five parallel
-auditors, then eighteen findings closed across **seventeen commits,
+**WHAT JUST HAPPENED IS SECTION 36, AND IT IS PUSHED.** The first `/qa` and a
+fresh `/review`: twelve findings, eleven fixed across **eleven commits,
+`39e08d1..278bd12`**, every one test-first and sabotage-verified.
+`origin/supabase-identity-slice` is current. **`origin/main` is still `b6f64a3`
+and there is still NO PR** — that is the only thing left between this branch
+and its first CI run, and it is Paul's line to cross.
+
+**THE THEME IS ONE SENTENCE: §34D THREADED THE SHAPE THROUGH THE CODE AND NOT
+THROUGH THE PROSE.** Four user-facing sentences still described a 4:3-only
+product, and one of them put two prices for one tape on one screen — the tier
+card said ~46 CR while the estimate below it said ~61 CR, and the ledger takes
+the second. Measured: an account went 153 → 125 on a 16:9 order while the card
+beside the button said 21. **The free rung told people it buys one 480p tape;
+in the phone shape it buys none.** §36A.
+
+**AND SIGN OUT WAS OFF THE SCREEN AT 375px FOR ANY EMAIL OVER ~30 CHARACTERS,
+INCLUDING PAUL'S OWN.** §36B.
+
+**WHAT JUST BEFORE THAT WAS SECTION 35.** A full gstack `/cso` audit, five
+parallel auditors, then eighteen findings closed across **seventeen commits,
 `4d08ff6..42b3745`**, every one test-first and sabotage-verified. **Read §35
-before working anything**, because it corrects this file in three places.
+before working anything**, because it corrects this file in three places — and
+§36E corrects it in three more, including this banner's own claim about what
+`origin` holds.
 
 **TWO OF THEM WERE CRITICAL AND BOTH WERE ON THE SHIPPED PAID PATH.** Every
 16:9 and 9:16 tape was cropped to 4:3 and stretched — a 9:16 tape discarded 58%
@@ -26,10 +46,11 @@ this file would have failed that way.** Neither was visible to 1712 passing
 tests. §35A.
 
 **~~EVERYTHING IS COMMITTED LOCALLY AND NOTHING IS PUSHED~~ — THAT WAS NEVER
-TRUE AND IT MATTERS.** `origin/main` is still `b6f64a3`, but
-**`origin/supabase-identity-slice` EXISTS at `d1f56e1`** and so does
-`origin/ui-redesign-signed-in-page` at `5c3267e`. Local is 22 commits ahead of
-the first. Verified with `git ls-remote`. §35D.
+TRUE, AND AS OF §36 IT IS NOT EVEN STALE, IT IS BACKWARDS.**
+`origin/supabase-identity-slice` is **CURRENT** — it was 45 commits behind and
+was pushed at the end of §36. `origin/ui-redesign-signed-in-page` is still at
+`5c3267e`. **`origin/main` is still `b6f64a3` and nothing is merged.** Verified
+with `git ls-remote`. §35D, §36E.
 
 **THE ONE DECISION BLOCKING THE MOST WORK: PAUL HAS NOT PICKED A DEPLOY HOST.**
 The Dockerfile is built, tested and proven; the topology file after it is
@@ -239,11 +260,18 @@ section 24.
 
 ### PICK UP HERE
 
-> **READ SECTION 34 FIRST (2026-08-29), THEN SECTION 32.** §34 is what the last
-> session did and what it corrected; §32 is the inventory, now with items 1, 2,
-> 6, 10, 11 and 12 struck and 3, 9 and 14 rewritten.
+> **READ SECTION 36 FIRST (2026-08-29, night), THEN 35, THEN 32.** §36 is the
+> `/qa` and `/review` passes and it corrects this file in three places, one of
+> them this block's own count of Paul's actions; §35 is the audit before it;
+> §32 is the inventory, now with items 1, 2, 6, 10, 11 and 12 struck and 3, 9
+> and 14 rewritten.
 >
-> **PAUL HAS TWO ACTIONS AND BOTH ARE SHORT.**
+> **PAUL HAS THREE ACTIONS NOW, NOT TWO, AND ALL THREE ARE SHORT.** The third
+> is **OPEN THE PR** (item 7). It was gated on the Linux CI reds, which closed
+> on 2026-08-28; the branch is pushed and current as of §36, so a PR is one
+> click and it is the only thing standing between 165 commits and their first
+> CI run. Worth knowing before he clicks: that run executes SEVEN guards, one
+> of which could not fail until §36C fixed it.
 >
 > **ONE — THE BLIND CHECK (item 5).** Free, ten minutes, packet built and
 > unsent at `out/blind-check/`. Still the only thing on the critical path that
@@ -3802,15 +3830,179 @@ note that goes with it: **if it is taken, the narrow form only.** The broader
 form is provider-specific, riskier, and getting address canonicalisation wrong
 in auth means two people colliding on one account.
 
-**NOT RUN THIS SESSION:** `/qa`, `/design-review`, `/devex-review`, `/health`.
-The audit covered security and correctness; the live-app and DX passes are
-still owed.
+~~**NOT RUN THIS SESSION:** `/qa`, `/design-review`, `/devex-review`,
+`/health`.~~ **`/qa` AND `/review` HAVE NOW RUN — SECTION 36.** And this line
+was wrong about `/design-review`: it ran on 2026-08-28 and §33 records what it
+found. What is genuinely never-run is `/devex-review` and `/health`.
 
 **STILL UNMEASURED, and one paid render settles three questions at once:** no
 non-4:3 shape has ever been ORDERED from fal. A single 720p 9:16 render would
 confirm whether the delivered upscale differs by SHAPE (which would move the
 4/3 multiplier), whether the vlog shot list composes in portrait, and — with the
 same file — feed the blind check.
+
+---
+
+### 36. THE FIRST /qa, THEN /review — AND FOUR SENTENCES THAT NEVER LEARNED ABOUT THE FRAME MENU (2026-08-29, night)
+
+**1739 / 1737 → 1754 / 1752, 0 fail throughout, 2 skipped.** The +15 are all new
+tests. **Eleven commits, `39e08d1..278bd12`. Tree clean. PUSHED — see §36E,
+which corrects this file about what `origin` holds.**
+
+Two passes the audit had left owed. `/qa` drove the running app in a real
+browser; `/review` read the 47-file delta since the last clean review at
+`b199919`. Six defects each, eleven fixed in total, every one test-first and
+sabotage-verified.
+
+#### A — THE THEME: THE SHAPE REACHED THE CODE AND NOT THE COPY
+
+§34D threaded `aspect` through the raster, the provider request, the charge,
+the dry run, the crop and the compose log. It did not reach the PROSE, and four
+separate user-facing sentences still described a 4:3-only product:
+
+| Where | Said | True |
+|---|---|---|
+| Quality tier card | 480p ~21 CR · 720p ~46 CR | 28 and 61 in 16:9 or 9:16 |
+| Quality hint | "the same 1080x1920 file ... the tape works at 720x576" | 16:9 delivers 1920x1080 from 1024x576 |
+| Result page caption | "720x576 PAL", on every tape ever made | 1024x576 for 16:9, 576x1024 for 9:16 |
+| Pricing rungs | "4 tapes at 480p", "1 tape at 480p" | 3, and NONE, in the wide shapes |
+
+**THE FIRST ONE PUT TWO PRICES FOR ONE TAPE ON ONE SCREEN.** With 9:16 chosen
+the card said ~46 CR while the estimate two panels below said ~61 CR, and the
+ledger takes the second — measured end to end, an account went 153 → 125 on a
+16:9 480p order while the card beside the button said 21. Nobody was
+overcharged; the card advertised a third under the charge, which is how a
+customer arrives believing they were.
+
+**AND IT WAS ALREADY FIXED FIVE LINES AWAY.** The comment above `costLines` in
+`views.mjs` records this exact defect — "The page said ~21 CR and the ledger
+took 28" — fixed on the estimate line and left behind on the card above it.
+
+**THE FREE RUNG IS THE ONE THAT MATTERS.** 21 credits buy one 4:3 tape and
+nothing at all in 9:16, which is the phone shape most people are here for.
+Somebody could sign up, read "1 tape at 480p", pick the phone frame and be
+refused at the button.
+
+**PROSE IS A CONSUMER OF A NEW DIMENSION TOO.** This file already warns that a
+shape must reach four places and not one. Add a fifth: grep the rendered
+strings and the hardcoded literals, not only the functions that take the value.
+
+#### B — SIGN OUT WAS OFF THE SCREEN, ON THE OWNER'S OWN ACCOUNT
+
+`.nav` is a flex row and the email is the only item in it whose width the
+customer chooses. A flex item defaults to `min-width: auto` and will not shrink
+below its text, so a long address widened the nav past the viewport and carried
+`Sign out` off the right edge with nothing on screen to say it was there.
+
+Measured on `/pricing`, signed in, `scrollWidth − clientWidth`:
+
+| viewport | dev@example.com (15) | 33-char Gmail | 40-char Gmail |
+|---|---|---|---|
+| 320px | 5px | 106px | 155px |
+| 375px | 0px | **51px** | **100px** |
+| 414px | 0px | 12px | 61px |
+
+**375px is the commonest phone width and one of the six this project tests at,
+and two of the six accounts in this app's own store are over 32 characters —
+including Paul's.** The account that shipped this could not reach its own
+sign-out button on a phone.
+
+**THE FIRST FIX WENT GREEN WHILE THE PAGE WAS STILL BROKEN, and that is why
+there are two tests rather than three assertions.** `min-width: 0` on `.who` is
+necessary and not sufficient: the nav is ITSELF a flex item inside `.masthead`
+and carries the same default, so it was still handed its full content width and
+`.who` was never squeezed. Re-measured with only `.who` fixed: still 44px at
+375px, unchanged. **The chain gives way at every link or at none.**
+
+#### C — /review: THE GUARD §35 ADDED COULD NOT SEE A SINGLE COMMIT
+
+**`actions/checkout` defaults to `fetch-depth: 1`.** In a depth-1 clone
+`origin/main` does not exist at all, so the commit-message guard's
+`git rev-list origin/main..HEAD` fails and its fallback `git rev-list -n 50
+HEAD` returns exactly ONE commit — and on a `pull_request` that one commit is
+GitHub's own generated merge commit, whose message is "Merge <sha> into <sha>".
+
+**So the guard written to read every commit message would have read none of
+them, on every PR, and reported green.** Measured rather than reasoned about:
+cloned at `--depth 1` and ran the guard's loop verbatim — 1 commit. With full
+history, 165, all clean. Fixed with `fetch-depth: 0` (`e31a13f`).
+
+**THIS IS §35's OWN LESSON ONE LAYER OVER.** The path check could not see a
+commit message; its replacement could not see the commits. **When auditing a
+control, run it and confirm it can fail** — and for anything that walks history,
+that means checking what CI actually hands it.
+
+#### D — The other five from /review
+
+| Commit | What it does |
+|---|---|
+| `f064f6b` | The aspects comment names 61, which is what the code charges — 62 was the double-rounded figure §34D already corrects |
+| `09202f8` | `isPaidProviderId` was exported and referenced nowhere; the list and its test stay |
+| `6f12d85` | Six raw NUL sentinels made a 320-line test file BINARY to git — `Bin 0 -> 15383 bytes`, invisible in every diff and PR, on the file that guards the deploy artefact |
+| `8a317bc` | A bare `catch {}` in the quote map could not tell a designed refusal from a bug; it rethrows anything that is not `UNKNOWN_ASPECT` or `RESOLUTION_UNAVAILABLE` |
+| `278bd12` | The redirect loop's hop cap and its redirect-path credential check had no tests at all |
+
+**THE BINARY TEST FILE IS WORTH ITS OWN SENTENCE.** It parsed, and twelve of
+twelve tests passed, the whole time — which is exactly why nobody noticed that
+the file could not be reviewed. Git calls a blob binary on a NUL in the first
+8000 bytes, so any other control character is an identical sentinel and none can
+appear in a path. Verified with `git diff --no-index`: old content reports
+`Bin` for a two-line change, new content reports `2 insertions(+)`.
+
+#### E — THREE CORRECTIONS TO THIS FILE
+
+1. **"NOTHING IS PUSHED" IS NO LONGER TRUE, and this section is the push.**
+   `origin/supabase-identity-slice` was 45 commits behind local; it is current
+   as of §36. `origin/main` is still `b6f64a3` and **no PR is open** — that is
+   still Paul's line, and it is now the only thing between this branch and its
+   first CI run.
+2. **§35F said `/design-review` had never run. It ran on 2026-08-28** and §33
+   records what it found. What is genuinely never-run is `/devex-review` and
+   `/health`.
+3. **The landing background is fine and an annotated screenshot will tell you it
+   is not.** `.bgs` is `position: fixed`, so a full-page screenshot paints it
+   only over the viewport and the rest of the canvas comes out flat. Measured
+   before believing it: 1280x800 fixed, z-index −2, video playing,
+   `readyState 4`. Two of this session's own measurements were wrong before they
+   were right — that one, and a contrast probe that flagged 18 failures by
+   ignoring gradient backgrounds and comparing white caption text against an
+   assumed white ground. **Neither became a finding, because both were checked.**
+
+#### F — Things that will bite
+
+- **A CSS FIX READS AS INEFFECTIVE UNTIL THE BROWSER IS RESTARTED.**
+  `/styles.css` is served `max-age=300`, so after editing `static.mjs` a page
+  reload keeps the OLD stylesheet even with the node server restarted. Confirmed
+  by fetching `/styles.css` directly (new rule present) while `getComputedStyle`
+  still returned the old value. Restart the browser, not just the server — and
+  note that drops any injected cookie, so set it again after.
+- **A REGRESSION TEST CAN GO GREEN WHILE THE PAGE IS STILL BROKEN.** §36B. If a
+  fix needs two layers and the test asserts one, it passes and the bug ships.
+  When a fix does not work, check whether the test would have noticed.
+- **THE `_` FILTER IS NOT EVERYWHERE.** `aspectIds()` in `tapedeck/frame.mjs`
+  filters `_`-prefixed config keys; `creditCost` in `auth/credits.mjs` builds
+  its `known` list without filtering. Harmless today because credits.json's
+  `aspects` map carries no `_comment` — but render.json's sibling map does, so
+  it is one config edit away from listing `_comment` as a known shape.
+- **The Bash heredoc ate a control character and the tool refused the command.**
+  Third session running. **Use Write/Edit for any file containing an escape.**
+
+#### G — What is left
+
+**PAUL'S, unchanged and still short:**
+
+1. **THE BLIND CHECK.** Free, ten minutes, unsent at `out/blind-check/`. Top
+   item for four sessions. Nothing in §36 touched it.
+2. **PICK A DEPLOY HOST.** §34A. Thirty seconds, gates the whole deploy.
+3. **OPEN THE PR.** Newly the only thing between this branch and CI. The push
+   in §36E does not open one.
+
+**NOT RUN, and honestly:** the adversarial half of `/review` did not happen.
+Codex is not installed, and the Claude subagent was not dispatched, so the four
+specialist checklists (testing, maintainability, security, performance) were
+applied INLINE by the same context that did the structured pass rather than by
+independent reviewers. Same checklists, weaker independence. `/devex-review`
+and `/health` have still never run.
 
 ## Not in scope
 
