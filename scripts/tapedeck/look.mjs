@@ -156,6 +156,28 @@ export function dropFrameExpr(frames = []) {
 
 /** The radial falloff, evaluated once into a static frame. 0 at centre (keep
  *  sharp), 255 at the corners (take the blurred copy). */
+/**
+ * The tape's DISPLAY aspect as a reduced integer pair.
+ *
+ * Integers rather than a decimal so the filtergraph stays exact and golden:
+ * `4/3` is a repeating decimal, and a rounded one would make the emitted graph
+ * differ from the frozen string for the default shape.
+ *
+ * `sar` is the anamorphic squeeze the 4:3 tape carries (16/15 on 720x576, which
+ * is what PAL 4:3 actually was) and 1/1 on the square-pixel shapes.
+ */
+export function tapeDisplayRatio(tape) {
+  const [sarN, sarD] = String(tape.sar ?? '1/1').split('/').map(Number);
+  if (!Number.isFinite(sarN) || !Number.isFinite(sarD) || sarN <= 0 || sarD <= 0) {
+    throw new Error(`tape.sar must be a positive "n/d" ratio, got ${JSON.stringify(tape.sar)}`);
+  }
+  const w = tape.width * sarN;
+  const h = tape.height * sarD;
+  const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+  const g = gcd(w, h);
+  return [w / g, h / g];
+}
+
 function cornerMaskExpr(amount) {
   return `clip(255*min(1,${n(amount)}*(pow((X-W/2)/(W/2),2)+pow((Y-H/2)/(H/2),2))),0,255)`;
 }
@@ -192,10 +214,23 @@ export function buildVideoFilter(look, cfg, { inLabel = '0:v', outLabel = 'vout'
   // the gap by duplicating the previous frame. Net effect is a visible hitch
   // with no change in duration or frame count -- a tape stutter, not a jump cut.
   const drop = dropFrameExpr(look.transport.droppedFrames);
+  // THE CROP FOLLOWS THE SHAPE, because the scale target already does.
+  //
+  // This was the literal `4/3` sitting one line above a `scale` that reads
+  // cfg.tape, so a 16:9 or 9:16 render cropped its source square to 4:3 and
+  // then let scale stretch it back out. Measured against the raster fal
+  // returns: 9:16 threw away 58% of the frame and stretched the rest 2.33x
+  // vertically, on the shape the customer pays a 4/3 premium for.
+  //
+  // DISPLAY aspect, not pixel aspect. The source has square pixels; the 4:3
+  // tape does not (SAR 16/15), so cropping on width/height would be 1.25 and
+  // would break the one shape that was never wrong. Reduced, 4:3 comes out as
+  // exactly `4/3`, so this emits a byte-identical graph for the default shape.
+  const [cropW, cropH] = tapeDisplayRatio(tape);
   const source = [
     `fps=fps=${fps}`,
     ...(drop ? [`select='if(${drop},0,1)'`, `fps=fps=${fps}`] : []),
-    "crop=w='min(iw,ih*4/3)':h='min(ih,iw*3/4)'",
+    `crop=w='min(iw,ih*${cropW}/${cropH})':h='min(ih,iw*${cropH}/${cropW})'`,
     `scale=${workW}:${workH}:flags=bicubic`,
     'setsar=1',
     'format=gbrp',
