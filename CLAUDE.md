@@ -7,9 +7,9 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-29, later that night) — A LAUNCH-READINESS REVIEW RAN, ITS FIX LIST STARTED LANDING, AND THE PR IS OPEN WITH GREEN CI. READ §38, THEN §37.
+## START HERE (2026-08-29, later that night) — A LAUNCH-READINESS REVIEW RAN, ITS FIX LIST STARTED LANDING, AND THE PR IS OPEN WITH GREEN CI. READ §41, THEN §40, §39, §38, §37.
 
-**1795 tests / 1793 pass / 0 fail / 2 skipped** (§38; on a machine with no
+**1919 tests / 1917 pass / 0 fail / 2 skipped** (§41; on a machine with no
 Chromium-family browser the six browser tests self-skip too). The two standing
 skips are the `*-smoke.test.js` money guards, which self-skip without
 `TIMESTAMP_LIVE=1`.
@@ -279,7 +279,16 @@ section 24.
 
 ### PICK UP HERE
 
-> **READ SECTION 38 FIRST (2026-08-29, second tranche), THEN 37, THEN 36.**
+> **READ SECTION 41 FIRST (2026-08-29, third tranche), THEN 40, 39, 38, 37.**
+> §41 records THREE DECISIONS PAUL TOOK — the deploy host is HETZNER (box
+> not yet created, on purpose), TESTING IS PARKED TO THE END behind his
+> friends-test plan (the blind-check texts fold into it), and Vercel is
+> ruled out — plus the ops minimum, the compose/Caddy topology, the deploy
+> runbook, and the legal pages gated on `config/legal.json`'s `entity`.
+> **Nothing agent-buildable is left ungated.** §40 is the queue double-claim
+> race, FIXED. §39 is deletion/export, LANDED.
+>
+> **READ SECTION 38 NEXT (2026-08-29, second tranche), THEN 37, THEN 36.**
 > §38 closed two more of §37G's agent items — the Art. 50 disclosure (file
 > metadata + result-page line) and real-browser smoke tests — and records that
 > **account deletion/export LANDED the same day (§39, built in the §38A
@@ -4511,6 +4520,107 @@ more worker processes reaping and claiming at once. Its only symptom was
 intermittent CI red on loaded ubuntu legs (~2 of 3 full-suite runs on
 2026-08-29); a re-run went green. The fix session spun off that night
 delivered the fix above.
+
+---
+
+### 41. THE HOST IS CHOSEN, THE OPS MINIMUM AND THE LEGAL SHELLS EXIST (2026-08-29, third tranche)
+
+**1893 / 1891 → 1919 / 1917 pass / 0 fail, 2 skipped.** Two commits,
+`e324f50` (ops + topology) and `bb1c459` (legal pages), both test-first, both
+pushed. This closes every §37G agent item that had a gate, because Paul
+opened the gates:
+
+**PAUL'S DECISIONS THIS SESSION, binding:**
+
+1. **The deploy host is HETZNER (CX23, Falkenstein)** — chosen after a fresh
+   research pass re-confirmed §34A's measured table (4x cheaper than the
+   field at the proven machine shape; German datacenter = the EU-residency
+   line the privacy policy now relies on). **The server is NOT created yet,
+   deliberately** — "we will deploy at the end." Everything buildable
+   without the box exists as of this section; the day it spins up is
+   docs/deploy-runbook.md, top to bottom.
+2. **TESTING IS PARKED TO THE END, including the blind check.** The plan he
+   chose: build everything, then give the finished app to two or three
+   friends who upload THEIR OWN photos, with one "who is this?" text per
+   resulting tape to a third person who knows that friend — which folds the
+   blind check into the end-test and adds the question it could never ask:
+   does identity generalize past Paul. The `out/blind-check/` packet stays
+   built and unsent. **Re-litigating this ordering is done; the record is
+   here so nobody re-argues it.**
+3. **Vercel was asked about and ruled out for the standing reasons** (no
+   ffmpeg, no shared persistent filesystem, no daemon worker) — the answer
+   is in compose.yaml's own header; do not re-open.
+
+#### A — The ops minimum (`e324f50`)
+
+- **Crash handlers** (`scripts/ops/crash.mjs`): both CLIs print one
+  attributed `[web]/[worker] FATAL` line and exit 1 on unhandledRejection /
+  uncaughtException — installed at the direct-invocation entry only, so
+  importing parseArgs/renderEvent in a test gains no process-wide handlers.
+  One exit however many events cascade; a stackless reason still prints; a
+  throwing log sink cannot block the exit. compose's `restart:
+  unless-stopped` is the other half of the contract. A source-reading test
+  pins both call sites (the paidTransport precedent).
+- **`/api/health` reports the disk**, cached on the same 30 s window as its
+  neighbours through a `statfsImpl` seam. `disk.low` (absolute floor:
+  1 GiB — "how many more orders fit" is not a percentage) flips `ok`, which
+  makes the uptime monitor the disk alarm; an UNREADABLE figure reports and
+  flips nothing, because "I cannot see the disk" is not "the disk is full"
+  and paging on it is how real pages get ignored.
+- **`npm run backup`** (`scripts/ops/backup.mjs`) copies the three
+  directories that cannot be regenerated — accounts, owners, refunds — and
+  deliberately nothing else: jobs media is retention-swept and holds faces
+  that must not multiply across disks. Plain per-file copy (everything
+  there is written atomically, so a mid-traffic copy holds only complete
+  files). A destination inside the root is refused; `--keep` prunes only
+  `timestamp-backup-<stamp>` names and never a stranger's directory; flags
+  are a whitelist with the purge CLI's exit-2 manners. **Restore is a
+  runbook procedure, deliberately not a command.**
+
+#### B — The topology (`compose.yaml`, `Caddyfile`, `docs/deploy-runbook.md`)
+
+Two processes from one image over one `data` volume — the Dockerfile's own
+contract — behind **Caddy as the ONLY doorway**: TLS from the site address,
+and the X-Forwarded-* honesty `TIMESTAMP_TRUST_PROXY=1` vouches for.
+`test/deploy-topology.test.js` fails if a `ports:` block grows anywhere but
+caddy — web:3000 published to the host would reopen the header spoof, skip
+TLS, and merge every limiter bucket. Log rotation on all three services,
+because unbounded json-file logs fill the disk that holds every balance.
+Validated against a real `docker compose config` (VALID), and both files are
+LF-pinned in .gitattributes for the Dockerfile's reason. The runbook carries
+the five consoles, the smoke order, the cron backup line and the restore.
+
+**Sabotage record:** publishing web:3000 → doorway test red; deleting one
+CLI's installCrashHandlers → source test red; and the volume-mount count
+assertion was itself caught over-matching `caddy_data:/data` on its first
+real run and anchored — the §36 lesson that a test can go green while wrong.
+
+#### C — The legal pages, gated like the Stripe button (`bb1c459`)
+
+`/privacy`, `/terms`, `/impressum` — public routes ("a privacy policy behind
+a login is not a privacy policy"), linked from every footer. **The entity is
+`config/legal.json`, and `entity: null` is the designed state** — the
+`stripePriceId: null` shape: unconfigured, the pages render everything true
+today (retention read from the config the purge enforces, the real
+processor list, the rights and the /account door) behind an operator
+placeholder, and the runbook's smoke list stops the placeholder reaching
+customers. **Filling the config is also sign-off on the page text — its
+_comment says so.** Escaping is pinned with a hostile entity name. The three
+pages joined `renderedPages()` in both entity states so the texture and
+border sweeps can see them — §23's own lesson, with a test pinning they
+stay listed.
+
+#### D — What is left
+
+**PAUL'S, rewritten after this session's decisions:** the selling entity
+(now literally a paste into `config/legal.json`); Stripe business
+verification; the support mailbox (no MX yet); the Supabase Recovery
+template check; then AT THE END, in his chosen order: create the Hetzner
+box and walk the runbook, the ~$2 direct-path order (§38E), and the
+friends test with the blind-check texts folded in.
+
+**AGENT-BUILDABLE: nothing is left ungated.** The next code work is
+whatever the friends test or the paid order surfaces.
 
 ---
 
