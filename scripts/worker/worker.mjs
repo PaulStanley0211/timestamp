@@ -499,6 +499,13 @@ export function createWorker({
           emit('refunded', {
             jobId, reason, credits: result.credits ?? null, accountId: result.accountId ?? null,
           });
+        } else if (result?.accountId) {
+          // Declined as spent, with a real owner: the seam read a paid attempt
+          // and kept the money. This used to be the SILENT outcome -- and it is
+          // the one where a customer may have been charged for nothing. The
+          // glue records it durably (out/refunds/); this line is the terminal's
+          // half of the same witness.
+          emit('refund-declined', { jobId, reason, accountId: result.accountId });
         }
       } catch (err) {
         emit('refund-failed', { jobId, reason, error: brief(err) });
@@ -712,6 +719,11 @@ export function createWorker({
             emit('refunded', {
               jobId, reason, credits: result.credits ?? null, accountId: result.accountId ?? null,
             });
+          } else if (result?.accountId) {
+            // Same witness as tryRefund's: a spent decline with an owner must
+            // never pass silently, on this path least of all -- a reaped job is
+            // one nobody was watching.
+            emit('refund-declined', { jobId, reason, accountId: result.accountId });
           }
         } catch (err) {
           // The one witness. A missed refund must never be silent.

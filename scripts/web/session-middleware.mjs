@@ -247,6 +247,114 @@ export function missingAuthFunctions(auth) {
 }
 
 // ---------------------------------------------------------------------------
+// the reconciliation ledger: a missed refund is a record, never only a line
+// ---------------------------------------------------------------------------
+
+/**
+ * `out/refunds/<jobId>.json` -- one file per job whose money did not make it
+ * back on its own. Two kinds land here: `declined-spent`, where
+ * `refundIfUnspent` declined because a paid step had attempts (correct and
+ * conservative -- nothing on disk can tell a pre-flight crash from an
+ * in-flight loss, and guessing wrong hands out free provider calls), and
+ * `error`, where the refund machinery itself threw. Until these existed, the
+ * first kind was SILENT -- the worker emits on success and on a throw, and a
+ * quiet decline is precisely the case where a customer was charged for
+ * nothing -- and the second was one stdout line in a terminal nobody watches
+ * once this runs on a server.
+ *
+ * The record is the operator's queue, not the decision: a human reads fal's
+ * dashboard, sees whether the call was actually billed, and settles by hand.
+ * `settleMissedRefund` goes through `refundCredits`, which computes the owed
+ * amount from the ledger itself and is idempotent per job -- a double settle
+ * moves nothing.
+ */
+function refundsDir(root) {
+  return path.resolve(root, 'out', 'refunds').split(path.sep).join('/');
+}
+
+export function recordMissedRefund({
+  root, jobId, accountId = null, reason = null, kind = 'error', credits = null, error = null,
+  nowImpl = () => new Date(), fsImpl = fs,
+} = {}) {
+  const dir = refundsDir(root);
+  fsImpl.mkdirSync(dir, { recursive: true });
+  const record = {
+    jobId,
+    accountId,
+    reason,
+    kind,
+    credits,
+    error: error ? { code: error.code ?? null, message: error.message ?? String(error) } : null,
+    at: nowImpl().toISOString(),
+    settled: null,
+  };
+  // Torn-write safety, not concurrency control: the lease rules already keep
+  // two workers off one job, so last-write-wins is acceptable here.
+  const tmp = `${dir}/${jobId}.json.tmp`;
+  fsImpl.writeFileSync(tmp, JSON.stringify(record, null, 2));
+  fsImpl.renameSync(tmp, `${dir}/${jobId}.json`);
+  return record;
+}
+
+export function clearMissedRefund({ root, jobId, fsImpl = fs } = {}) {
+  try { fsImpl.rmSync(`${refundsDir(root)}/${jobId}.json`); } catch { /* nothing pending */ }
+}
+
+/** The pending queue, oldest first. Settled records are kept on disk as the
+ *  audit trail and filtered here; a file that will not parse is reported as
+ *  its own entry rather than skipped -- invisible is how money gets lost. */
+export function listMissedRefunds({ root, fsImpl = fs } = {}) {
+  let names;
+  try {
+    names = fsImpl.readdirSync(refundsDir(root)).filter((n) => n.endsWith('.json'));
+  } catch {
+    return [];
+  }
+  const records = [];
+  for (const name of names.sort()) {
+    try {
+      const record = JSON.parse(fsImpl.readFileSync(`${refundsDir(root)}/${name}`, 'utf8'));
+      if (record.settled === null || record.settled === undefined) records.push(record);
+    } catch {
+      records.push({
+        jobId: name.replace(/\.json$/, ''), accountId: null, reason: null,
+        kind: 'unreadable', credits: null, error: { code: 'UNREADABLE', message: `could not parse ${name}` },
+        at: null, settled: null,
+      });
+    }
+  }
+  return records;
+}
+
+/**
+ * The human's half of the conservative decline. `refundCredits` is asked with
+ * `spent: false` DELIBERATELY: the operator has checked the provider's own
+ * dashboard and is overriding the machine's caution, which is the one
+ * authority that may. The owed amount comes from the ledger, so nothing here
+ * takes a number from a command line, and asking twice is a no-op.
+ */
+export async function settleMissedRefund({
+  root, jobId, loadAuthImpl = loadAuth, fsImpl = fs, nowImpl = () => new Date(),
+} = {}) {
+  const file = `${refundsDir(root)}/${jobId}.json`;
+  const record = JSON.parse(fsImpl.readFileSync(file, 'utf8'));
+  const mod = await loadAuthImpl();
+  const accountId = record.accountId;
+  if (!accountId) {
+    throw new Error(`missed-refund record for ${jobId} names no account; find the owner in out/owners and settle by hand`);
+  }
+  const account = mod.loadAccount({ root, accountId });
+  const before = mod.balanceOf(account).credits;
+  mod.refundCredits(account, { jobId, reason: 'refund:manual-reconciliation', spent: false, nowImpl });
+  const credits = mod.balanceOf(mod.loadAccount({ root, accountId })).credits - before;
+  const settled = { ...record, settled: { at: nowImpl().toISOString(), credits } };
+  const tmp = `${file}.tmp`;
+  fsImpl.writeFileSync(tmp, JSON.stringify(settled, null, 2));
+  fsImpl.renameSync(tmp, file);
+  return { jobId, accountId, credits };
+}
+
+// ---------------------------------------------------------------------------
 // refunds for a job that ended with no tape, raised by the worker
 // ---------------------------------------------------------------------------
 
@@ -269,7 +377,7 @@ export function missingAuthFunctions(auth) {
  * manifest's steps and declines on its own when a paid step was ever
  * attempted. This function only finds whose money it was.
  */
-export function createOwnerRefunds({ root, loadAuthImpl = loadAuth, fsImpl = fs } = {}) {
+export function createOwnerRefunds({ root, loadAuthImpl = loadAuth, fsImpl = fs, nowImpl = () => new Date() } = {}) {
   if (typeof root !== 'string' || root.length === 0) {
     throw new TypeError('createOwnerRefunds needs a root');
   }
@@ -296,12 +404,43 @@ export function createOwnerRefunds({ root, loadAuthImpl = loadAuth, fsImpl = fs 
     async refund(job, { reason } = {}) {
       const accountId = ownerOf(job?.jobId);
       if (accountId === null) return { refunded: false, accountId: null };
-      const mod = await loadAuthImpl();
-      const account = mod.loadAccount({ root, accountId });
-      const before = mod.balanceOf(account).credits;
-      const refunded = mod.refundIfUnspent(account, job, { reason }) === true;
-      const credits = refunded ? mod.balanceOf(account).credits - before : 0;
-      return { refunded, accountId, ...(refunded ? { credits } : {}) };
+      try {
+        const mod = await loadAuthImpl();
+        const account = mod.loadAccount({ root, accountId });
+        const before = mod.balanceOf(account).credits;
+        const refunded = mod.refundIfUnspent(account, job, { reason }) === true;
+        const credits = refunded ? mod.balanceOf(account).credits - before : 0;
+        if (refunded) {
+          // Money that came back is not a reconciliation item -- including a
+          // revive-and-retry that succeeded after an earlier decline.
+          clearMissedRefund({ root, jobId: job.jobId, fsImpl });
+        } else {
+          // Declined as spent, with a real owner: the exact case that used to
+          // be silent. The owed amount comes off the ledger the same way
+          // refundCredits computes it, so the record names real money.
+          const owed = -mod.ledgerFor(account)
+            .filter((e) => e.jobId === job.jobId)
+            .reduce((n, e) => n + e.delta, 0);
+          if (owed > 0) {
+            recordMissedRefund({
+              root, jobId: job.jobId, accountId, reason,
+              kind: 'declined-spent', credits: owed, nowImpl, fsImpl,
+            });
+          }
+        }
+        return { refunded, accountId, ...(refunded ? { credits } : {}) };
+      } catch (err) {
+        // The throw still travels -- the worker's REFUND MISSED line and this
+        // record are two witnesses, not one. Recording is best-effort: the
+        // bookkeeping must never turn a refund failure into a worker crash.
+        try {
+          recordMissedRefund({
+            root, jobId: job.jobId, accountId, reason,
+            kind: 'error', credits: null, error: err, nowImpl, fsImpl,
+          });
+        } catch { /* the stdout line is the remaining witness */ }
+        throw err;
+      }
     },
   };
 }

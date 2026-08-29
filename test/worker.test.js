@@ -580,6 +580,39 @@ test('a job that fails for good is handed to the refund seam, once', async (t) =
   assert.equal(rig.of('refunded').length, 1, 'the operator can see money moved back');
 });
 
+test('a refund declined as spent is announced, and a job nobody owns stays quiet', async (t) => {
+  // The decline used to be SILENT: the worker emitted on success and on a
+  // throw, and the one outcome where a customer was charged for nothing --
+  // the seam reading a paid attempt and keeping the money -- said nothing at
+  // all. The glue records it durably (out/refunds/); this event is the live
+  // terminal's half of the same witness.
+  const clock = { now: T0 };
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async () => {
+      throw new TerminalError('the provider died mid-flight', { provider: 'fake', code: 'boom' });
+    },
+    refundImpl: async () => ({ refunded: false, accountId: 'acct-somebody' }),
+  });
+  rig.seed();
+  assert.equal(await rig.worker.once(), true);
+  assert.equal(rig.of('refund-declined').length, 1,
+    'a declined refund with a real owner must reach the terminal');
+  assert.equal(rig.of('refunded').length, 0);
+
+  const quiet = makeRig(t, {
+    clock,
+    pipeline: async () => {
+      throw new TerminalError('the compose gate refused', { provider: 'fake', code: 'refused' });
+    },
+    refundImpl: async () => ({ refunded: false, accountId: null }),
+  });
+  quiet.seed();
+  assert.equal(await quiet.worker.once(), true);
+  assert.equal(quiet.of('refund-declined').length, 0,
+    'a CLI job with no ledger is not a decline worth announcing');
+});
+
 test('a failure the queue will retry refunds nothing until the attempt that makes it final', async (t) => {
   const clock = { now: T0 };
   const refunds = [];

@@ -64,7 +64,9 @@ import {
   refundCredits,
   refundIfUnspent,
 } from '../scripts/auth/credits.mjs';
-import { createOwnerRefunds } from '../scripts/web/session-middleware.mjs';
+import {
+  createOwnerRefunds, listMissedRefunds, settleMissedRefund,
+} from '../scripts/web/session-middleware.mjs';
 
 const ACCOUNTS_URL = new URL('../scripts/auth/accounts.mjs', import.meta.url).href;
 const CREDITS_URL = new URL('../scripts/auth/credits.mjs', import.meta.url).href;
@@ -1085,4 +1087,159 @@ test('the glue answers a job with no owner by refunding nothing, not by throwing
   const refunds = createOwnerRefunds({ root });
   const result = await refunds.refund(jobWith([['intake', 1]], JOB(3)), { reason: 'refund:failed-before-provider' });
   assert.equal(result.refunded, false);
+  assert.deepEqual(listMissedRefunds({ root }), [],
+    'a job that was never charged is not a reconciliation item');
+});
+
+// --------------------------------------------------------------------------
+// the reconciliation ledger: a missed refund is a record, never only a line
+// --------------------------------------------------------------------------
+
+/**
+ * The most likely launch-day failure joined up: a fal outage trips
+ * `providerWasCalled` (attempts increment before the request leaves), the
+ * refund is declined -- correctly, because nothing on disk can distinguish a
+ * pre-flight crash from an in-flight loss, and guessing wrong hands out free
+ * provider calls -- and until this existed the decline was SILENT: the worker
+ * emits only on success or on a throw. The operator, who can read fal's
+ * dashboard and knows whether the call was actually billed, had nothing to
+ * reconcile from. Now every declined-as-spent refund with a real owner leaves
+ * a durable record under out/refunds/, naming the job, the account and the
+ * credits, until a human settles it.
+ */
+test('a declined refund leaves a durable reconciliation record naming the money', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(4);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({ root });
+  const result = await refunds.refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+  assert.equal(result.refunded, false);
+
+  const pending = listMissedRefunds({ root });
+  assert.equal(pending.length, 1, 'the decline must be recorded, not only declined');
+  assert.equal(pending[0].jobId, jobId);
+  assert.equal(pending[0].accountId, account.accountId);
+  assert.equal(pending[0].credits, TAPE, 'the record names the money the ledger is still holding');
+  assert.equal(pending[0].kind, 'declined-spent');
+  assert.equal(pending[0].settled, null);
+});
+
+test('a refund that lands clears the record an earlier decline left behind', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(5);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({ root });
+  await refunds.refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+  assert.equal(listMissedRefunds({ root }).length, 1);
+
+  // The same job asked again with steps showing no paid attempt -- the shape a
+  // revive-and-retry leaves. The refund lands and the reconciliation item goes.
+  const again = await refunds.refund(jobWith([['intake', 1]], jobId), { reason: 'refund:failed-before-provider' });
+  assert.equal(again.refunded, true);
+  assert.deepEqual(listMissedRefunds({ root }), [],
+    'money that came back must not stay on the reconciliation list');
+});
+
+test('a glue that cannot even reach the ledger records the miss and still throws', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(6);
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({
+    root,
+    loadAuthImpl: async () => { throw new Error('auth module unreadable'); },
+  });
+  await assert.rejects(
+    refunds.refund(jobWith([['intake', 1]], jobId), { reason: 'refund:failed-before-provider' }),
+    /auth module unreadable/,
+    'the throw still travels: the worker line and the record are two witnesses, not one',
+  );
+  const pending = listMissedRefunds({ root });
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].kind, 'error');
+  assert.equal(pending[0].credits, null, 'an unreachable ledger cannot name a number, and must not invent one');
+});
+
+test('settling a missed refund gives the money back once, and twice settles nothing more', async (t) => {
+  // The human's half: the operator has read fal's dashboard and knows the call
+  // was never billed, so the conservative decline is overridden BY A PERSON.
+  // `refundCredits` computes the owed amount from the ledger itself and is
+  // idempotent per job, so a double settle -- two terminals, one nervous
+  // operator -- is a no-op rather than a second grant.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(7);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({ root });
+  await refunds.refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE - TAPE);
+
+  const settled = await settleMissedRefund({ root, jobId, nowImpl: clock() });
+  assert.equal(settled.credits, TAPE);
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE,
+    'the settle is the refund the decline was holding');
+
+  const again = await settleMissedRefund({ root, jobId, nowImpl: clock() });
+  assert.equal(again.credits, 0, 'a second settle must move nothing');
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE);
+
+  assert.deepEqual(listMissedRefunds({ root }), [],
+    'a settled record leaves the pending list');
+  const rows = ledgerFor(loadAccount({ root, accountId: account.accountId })).filter((e) => e.jobId === jobId);
+  assert.equal(rows.length, 2, 'the settle is its own ledger line against the job, never an edit');
+});
+
+test('the refunds CLI lists the queue with the money named, and settles by job id', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(8);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+  await createOwnerRefunds({ root }).refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+
+  const { main } = await import('../scripts/auth/refunds-cli.mjs');
+
+  const listed = [];
+  assert.equal(await main(['list', `--root=${root}`], { log: (s) => listed.push(s), error: () => {} }), 0);
+  assert.ok(listed.some((l) => l.includes(jobId)), 'the pending job must be on the list');
+  assert.ok(listed.some((l) => l.includes(`${TAPE} CR`)), 'the list must name the money, or the operator reads ledgers by hand');
+
+  const settled = [];
+  assert.equal(await main(['settle', jobId, `--root=${root}`], { log: (s) => settled.push(s), error: () => {} }), 0);
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE,
+    'the settle through the CLI is the same refund as the function');
+
+  const after = [];
+  assert.equal(await main(['list', `--root=${root}`], { log: (s) => after.push(s), error: () => {} }), 0);
+  assert.ok(after.some((l) => l.includes('nothing pending')), 'a settled queue must say it is empty');
+});
+
+test('the refunds CLI refuses what it does not recognise, touching nothing', async (t) => {
+  // The purge accepted `--job` in silence once and swept six uploads
+  // (CLAUDE.md section 30 item 1). Money gets at least the same whitelist:
+  // a near-miss command or flag is exit 2 and no ledger moves.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(9);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+  await createOwnerRefunds({ root }).refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+
+  const { main } = await import('../scripts/auth/refunds-cli.mjs');
+  const silent = { log: () => {}, error: () => {} };
+
+  assert.equal(await main(['settel', jobId, `--root=${root}`], silent), 2, 'a misspelled command must refuse');
+  assert.equal(await main(['settle', jobId, '--force', `--root=${root}`], silent), 2, 'an unknown flag must refuse');
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE - TAPE,
+    'a refusal must move no money');
+  assert.equal(listMissedRefunds({ root }).length, 1, 'a refusal must not touch the record either');
 });

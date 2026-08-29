@@ -23,6 +23,7 @@
     "accounts": "node scripts/auth/accounts-cli.mjs",
     "smoke": "node --env-file-if-exists=.env scripts/providers/smoke-cli.mjs",
     "ledger": "node --env-file-if-exists=.env scripts/render/ledger-cli.mjs",
-    "purge": "node scripts/render/purge-cli.mjs"
+    "purge": "node scripts/render/purge-cli.mjs",
+    "refunds": "node scripts/auth/refunds-cli.mjs"
   }
 }

@@ -137,9 +137,17 @@ export function renderEvent(event, { verbose = false, t0 = null } = {}) {
       return line(`refunded   ${job}  ${e.credits == null ? 'unspent credits returned' : `${e.credits} CR returned`}  (${e.reason})`);
 
     case 'refund-failed':
-      // A person's money missed its way back. This line is the only witness,
-      // so it says what to do, not just what happened.
-      return line(`REFUND MISSED ${job}  [${e.error?.code ?? 'ERROR'}] ${e.error?.message}  -- credit it by hand`);
+      // A person's money missed its way back. The durable record lands in
+      // out/refunds/ (session-middleware writes it); this line is the live
+      // half, and it says what to do, not just what happened.
+      return line(`REFUND MISSED ${job}  [${e.error?.code ?? 'ERROR'}] ${e.error?.message}  -- npm run refunds to reconcile`);
+
+    case 'refund-declined':
+      // Not an error and not nothing: the seam read a paid attempt and kept
+      // the money, conservatively. The operator -- who can read the provider's
+      // own dashboard -- decides whether that was right. out/refunds/ holds
+      // the record either way.
+      return line(`REFUND HELD ${job}  a paid step had started, so the credits stay spent -- npm run refunds to reconcile`);
 
     case 'failed':
       return line(`FAILED     ${job}  ${formatMs(e.ms)}  [${e.error?.code ?? 'ERROR'}] ${e.error?.message}` +
