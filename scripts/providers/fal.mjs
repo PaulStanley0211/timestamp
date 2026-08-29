@@ -1163,7 +1163,14 @@ export function createFalProvider(opts = {}) {
         // is caught downstream where it matters -- `verify` asserts 375 frames
         // against the finished tape, exactly.
         clip: { path: dest, seconds: req.seconds },
-        cost: cost(estimateVideo({ pricing: pricing(), model, seconds: req.seconds }), null),
+        // THE RASTER TRAVELS WITH THE SECONDS, because a token-billed model
+        // prices on pixels x seconds and throws without it. Omitting it was
+        // harmless on a per-second model and fatal on the per-token one --
+        // which is the only video model the direct path uses. The submit
+        // succeeded, the clip downloaded, and THEN this line threw, so fal was
+        // paid for a tape that never shipped and a resume could not adopt the
+        // download because `clip.path` had never been written.
+        cost: cost(estimateVideo({ pricing: pricing(), model, seconds: req.seconds, size }), null),
         meta: {
           model,
           requestId: falRequestId(req.idempotencyKey),

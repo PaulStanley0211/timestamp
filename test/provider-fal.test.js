@@ -489,6 +489,63 @@ test('[fal] the VIDEO model in the real config is verified and names its audio-o
   assert.equal(transport.posts()[0].body.generate_audio, false);
 });
 
+/**
+ * THE TOKEN-BILLED MODEL MUST BE PRICEABLE AFTER THE CALL, NOT ONLY BEFORE IT.
+ *
+ * `generateVideo` resolves `size` and then did not hand it to `estimateVideo`.
+ * That is harmless for a per-SECOND model and fatal for a per-TOKEN one, which
+ * needs the raster and throws without it -- so the submit succeeded, the poll
+ * completed, THE MP4 LANDED ON DISK, and then the cost line threw. fal is paid,
+ * `completeIntent` never runs, no tape ships, and on resume `decideIntent`
+ * cannot adopt the clip because `prior.result.clip.path` was never written: the
+ * job either hard-stops on INTENT_IN_FLIGHT or submits and pays a second time.
+ *
+ * `reference-to-video` is the ONLY video model the direct path uses and it is
+ * the one that is token-billed, so this was the shipped paid path.
+ *
+ * WHY THE SUITE MISSED IT: every provider here is built from
+ * `models.defaults[FAL_ID].video`, which is `image-to-video` -- unit `second`.
+ * The token branch was never reached. The reference-to-video tests all exercise
+ * the pure builder `falReferenceVideoBody`, never `provider.generateVideo`.
+ */
+test('[fal] a token-billed video model still prices itself after the call', async () => {
+  const transport = makeFalTransport();
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+  const provider = createFalProvider({
+    cfg, envImpl: FAKE_ENV, pricing: testPricing(), videoModel: model,
+  });
+
+  const res = await provider.generateVideo(
+    videoRequest({ imagePath: undefined, references: [{ role: 'face', path: writeImage(tmpDir('ref'), 'face.png') }] }),
+    { outDir: tmpDir('token-cost'), fetchImpl: transport.fetchImpl, sleepImpl: async () => {} },
+  );
+
+  assert.equal(res.meta.model, model);
+  assert.ok(Number.isFinite(res.cost.estimated), 'a token-billed model must return a finite estimate');
+  assert.ok(res.cost.estimated > 0, 'a paid provider estimating zero is not estimating');
+  assert.equal(typeof res.clip.path, 'string', 'the clip path is what a resume needs to adopt the download');
+});
+
+/** The raster is what the token formula multiplies by, so two tiers must not
+ *  price the same -- otherwise the assertion above passes on a constant. */
+test('[fal] a token-billed model prices 720p above 480p', async () => {
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+  const quote = async (size) => {
+    const transport = makeFalTransport();
+    const provider = createFalProvider({
+      cfg, envImpl: FAKE_ENV, pricing: testPricing(), videoModel: model,
+    });
+    const res = await provider.generateVideo(
+      videoRequest({ imagePath: undefined, references: [{ role: 'face', path: writeImage(tmpDir('ref2'), 'face.png') }], size }),
+      { outDir: tmpDir('token-tier'), fetchImpl: transport.fetchImpl, sleepImpl: async () => {} },
+    );
+    return res.cost.estimated;
+  };
+  const cheap = await quote(FAL_RESOLUTIONS['480p']);
+  const dear = await quote(FAL_RESOLUTIONS['720p']);
+  assert.ok(dear > cheap, `720p (${dear}) must cost more than 480p (${cheap}) on a token-billed model`);
+});
+
 // ---------------------------------------------------------------------------
 // the wire: what is actually sent
 // ---------------------------------------------------------------------------
