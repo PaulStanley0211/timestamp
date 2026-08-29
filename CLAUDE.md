@@ -7,10 +7,12 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-29, later that night) — A LAUNCH-READINESS REVIEW RAN, ITS FIX LIST STARTED LANDING, AND THE PR IS OPEN WITH GREEN CI. READ §37 FIRST.
+## START HERE (2026-08-29, later that night) — A LAUNCH-READINESS REVIEW RAN, ITS FIX LIST STARTED LANDING, AND THE PR IS OPEN WITH GREEN CI. READ §38, THEN §37.
 
-**1786 tests / 1784 pass / 0 fail / 2 skipped.** The skips are the
-`*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
+**1795 tests / 1793 pass / 0 fail / 2 skipped** (§38; on a machine with no
+Chromium-family browser the six browser tests self-skip too). The two standing
+skips are the `*-smoke.test.js` money guards, which self-skip without
+`TIMESTAMP_LIVE=1`.
 
 **PR #1 IS OPEN AND ITS FIRST CI RUN WAS GREEN.** Paul opened it at 12:23 UTC
 on 2026-08-29 and all five checks passed — guards plus node 22/24 x
@@ -277,7 +279,14 @@ section 24.
 
 ### PICK UP HERE
 
-> **READ SECTION 37 FIRST (2026-08-29, later that night), THEN 36, THEN 35.**
+> **READ SECTION 38 FIRST (2026-08-29, second tranche), THEN 37, THEN 36.**
+> §38 closed two more of §37G's agent items — the Art. 50 disclosure (file
+> metadata + result-page line) and real-browser smoke tests — and records that
+> **account deletion/export is IN FLIGHT in a separate session's worktree
+> (§38A): check whether `claude/determined-knuth-805b98` landed before
+> touching that item.** §38E is the paste-ready paid-order runbook.
+>
+> **READ SECTION 37 NEXT (2026-08-29, later that night), THEN 36, THEN 35.**
 > §37 is the launch-readiness review and the first tranche of its fix list —
 > seven commits, all test-first — plus four corrections to this file's own
 > record, one of them being that **the PR this block kept asking for is OPEN
@@ -4163,6 +4172,141 @@ check on `/api/health`, `unhandledRejection` handlers, a disk-space line in
 health); AI-generation disclosure (metadata provenance + a result-page line —
 EU AI Act Art. 50 has applied since 2 August 2026); browser/e2e smoke tests,
 which every UI bug this project has found by hand argues for.
+
+---
+
+### 38. THE TAPE SAYS WHAT IT IS, AND THE PAGES MET A REAL BROWSER (2026-08-29, second tranche)
+
+**1786 / 1784 → 1795 / 1793 pass / 0 fail, 2 skipped** — +3 disclosure tests,
++6 browser tests. **Two code commits, `b798c2f` and `7112981`, plus this
+documentation pass, pushed as they landed; PR #1 re-ran CI on `b798c2f` and
+all five checks are green.** Worked from §37G's agent-buildable list, in its
+order, with two items skipped because their gates are still closed (§38D) and
+the first item delegated (§38A).
+
+#### A — TWO SESSIONS, ONE BRANCH, NO COLLISION — read this before assuming the checkout is yours
+
+**Account deletion/export (§37G's first agent item) is being built RIGHT NOW
+by a SEPARATE session** — `determined-knuth-805b98-a9`, working strictly from
+the spec, in a git worktree at `.claude/worktrees/determined-knuth-805b98` on
+branch `claude/determined-knuth-805b98`, so the main checkout never saw its
+edits. Division agreed over session messaging: that session owns
+`scripts/auth/*`, `scripts/web/router.mjs`, `server.mjs`, the nav region of
+`views.mjs`, `views-auth.mjs` and its own new test files; this session touched
+none of them except ONE region of `views.mjs` (resultPage), coordinated
+explicitly. **It will rebase onto `origin/supabase-identity-slice` before
+merging back, and it may append its own section here — a trivial conflict in
+this file is the expected shape.** Do not re-start deletion from the spec
+without checking whether that branch landed first.
+
+#### B — EU AI Act Art. 50: the disclosure, both halves (`b798c2f`)
+
+The delivered mp4 now carries two metadata tags — `comment` with the
+human-readable sentence, `description` with the IPTC digital-source-type
+vocabulary (`trainedAlgorithmicMedia` plus its cv.iptc.org URI, so a scanner
+grepping the standard term finds it cold). And the result page says it in
+type: one `.fine` line beside the tape.
+
+Four decisions worth not re-litigating:
+
+- **The tags ride `muxedArgs`, NOT `gradeArgs`.** muxedArgs produces exactly
+  the delivered artifact; `npm run look` runs gradeArgs against any clip in
+  `assets/stock` — REAL footage — and a false "AI-generated" claim baked into
+  a real recording is worse than no tag. gradeArgs gained a `metadataArgs`
+  seam (the audioArgs precedent) defaulting to none, with a test pinning that
+  bare gradeArgs stays untagged.
+- **Known mp4 keys only.** An arbitrary key needs `-movflags
+  use_metadata_tags`, which moves where the muxer stores ALL metadata;
+  gambling every player's ability to read a compliance marking for a nicer
+  key name is the wrong trade.
+- **Nothing clock-shaped may ever join them** — a creation date would make two
+  renders of one job differ, and there is an assertion that nothing matching
+  a date rides the metadata args.
+- **Sending a tag is not shipping it.** The mov muxer silently drops keys it
+  does not map, so beside the argv test there is a behavioral one that
+  ffprobes the finished file. Its RED run recorded what the file used to
+  carry: `major_brand`, `minor_version`, `compatible_brands`, `encoder` —
+  nothing else.
+
+#### C — The pages are tested in a real browser now (`test/browser-smoke.test.js`)
+
+Six tests drive real headless Chromium over the DevTools protocol — **node
+22's own WebSocket client and a spawn; no Playwright, no Puppeteer,
+`dependencies` still `{}`**. The file self-skips with a reason when no
+Chromium-family browser exists (`TIMESTAMP_BROWSER` overrides discovery);
+both CI images ship Chrome, so it runs on every CI leg. ~4s wall clock.
+
+Every asserted class is one this product actually shipped, and **every
+assertion was sabotage-verified — the defect reintroduced, the right test
+watched going red, the sabotage reverted from a backup copy** (never `git
+checkout` while green work is uncommitted — §37F's own rule):
+
+| Guarded class | Sabotage that proved it |
+|---|---|
+| Sideways scroll at 375px/1440px, four pages | one `min-width: 0` removed → 224px overflow named — §36B reproduced |
+| Sign out on screen under a 58-char email | same sabotage, same red |
+| Consent checkbox ≥ 24×24 in the ENGINE (SC 2.5.8, §6b) | shrunk to 1rem → "16x16, under the 24x24 target minimum" |
+| Inline scripts execute under the CSP the server REALLY sends | a fourth unhashed script added → Chrome's refusal quoted verbatim |
+| The status poller runs a full fetch-and-paint cycle | covered by the CSP channel plus a 2.6s settle |
+| The AI disclosure is VISIBLE, not merely present | `hidden` added → red here while every fetch() test stayed green |
+
+**That last row is the point of the whole file:** a `hidden` attribute passes
+every markup test in the suite and fails only in a layout engine.
+
+Things that will bite:
+
+- **Network-level noise is deliberately NOT collected.** The landing's video
+  layer tolerates an absent or undecodable file by design, and the fake job
+  media is garbage bytes on purpose — so the error collector takes page
+  exceptions, `console.error` calls and CSP refusals, and nothing else. Do
+  not "strengthen" it to all Log entries; it will flake on resource loads.
+- **The fakes are COPIED from web-api.test.js, not imported** — importing a
+  test file registers its tests in the importing process (§4's
+  provider-contract lesson). Copy is the house rule; this file follows it.
+- **Chrome holds its Windows profile open for a beat after kill** — teardown
+  uses `rmSync` with retries; an EBUSY there is the browser, not a bug.
+- **`/json/new` demands PUT on current Chrome** — the GET spelling was
+  removed and answers 405; the session cookie goes in through CDP's
+  `Network.setCookie` against the server's base URL.
+
+#### D — Skipped on their gates, exactly as instructed
+
+- **Legal page shells** — still gated on the SELLING-ENTITY decision (§37G):
+  a privacy page naming no controller is not a privacy notice. No code.
+- **Ops minimum** — still gated on the DEPLOY HOST (§34A): backups, the
+  health disk line and crash handlers are all shaped by the topology. No
+  code.
+
+#### E — The paid web order: the exact steps, ready to paste
+
+The direct web path is wired, test-first, and **still unproven against real
+fal** — no web order has ever reached the paid provider. The proof is one
+~$2.10 480p 4:3 order (21 CR), and only the owner can run it:
+
+1. Add `TIMESTAMP_PROVIDER=fal` to `.env` (uncomment the documented line).
+2. Terminal 1: `npm run web` · Terminal 2: `npm run worker -- --provider=fal`
+3. Browser at `http://localhost:3000` (NOT 127.0.0.1 — the §27 cookie-jar
+   trap), sign in, order: photo, outfit, place, **4:3**, **480p**, consent.
+   The button should say ~21 CR.
+4. Watch `/j/<id>` to the tape. Then verify: balance moved by exactly 21;
+   `out/jobs/<id>/manifest.json` says `"direct": true` and freezes
+   `...reference-to-video`; the still and select steps print `skipped`.
+5. Read fal's usage page and record the invoice:
+   `npm run ledger -- record <jobId> --actual=<usd>`.
+6. **Remove `TIMESTAMP_PROVIDER=fal` from `.env` afterwards** — with it set,
+   every local web job is labelled for the paid provider, and the fixture
+   worker refuses direct jobs at compose by design.
+   If the order fails instead: the credits refund automatically, and a
+   refund the worker could not settle lands in `out/refunds/` for
+   `npm run refunds`.
+
+#### F — What is left
+
+**PAUL'S SEVEN (§37G), UNCHANGED** — blind check, selling entity, Stripe
+verification, deploy host, support mailbox + moderation vendor, Recovery
+template check, and the paid order above (§38E has the steps). **AGENT-
+BUILDABLE:** whatever the deletion session leaves unfinished, then the legal
+shells and the ops minimum the moment their gates open.
 
 ---
 
