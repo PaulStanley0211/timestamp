@@ -729,7 +729,12 @@ async function stepCompose(ctx) {
     resolution: job.input.resolution, provider, log,
     aspect: job.input.aspect, defaultAspect: cfg.defaultAspect,
   });
-  log(`  ${resolution.id ?? 'no resolution ordered'} -> ${resolution.size.width}x${resolution.size.height} (4:3)`);
+  // The shape is READ, not asserted. This said `(4:3)` as a literal three lines
+  // below the call that derives the raster from `job.input.aspect`, so a 9:16
+  // render printed `720x1280 (4:3)` -- on a path where the shape is now a
+  // priced dimension and this line is the operator's only confirmation of which
+  // one was frozen.
+  log(`  ${resolution.id ?? 'no resolution ordered'} -> ${resolution.size.width}x${resolution.size.height} (${job.input.aspect ?? cfg.defaultAspect})`);
 
   const direct = job.input.direct === true;
 
