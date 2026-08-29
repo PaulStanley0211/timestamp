@@ -1,6 +1,14 @@
 # Account deletion and data export — design
 
-**Status: SPEC ONLY. No plan and no code exist yet.** Written 2026-08-29,
+**Status: IMPLEMENTED 2026-08-29 (same day, later session), test-first per
+§5, every guard sabotage-verified.** The one deliberate deviation: §1's
+`destroySessionsFor` already existed as `destroySessionsForAccount`
+(`session.mjs:544`), so the existing name is used rather than a duplicate.
+The §1 open question was built as option (a) delete-everything — Paul had
+not answered when the build ran — and the (b) hook is noted in
+`scripts/auth/deletion.mjs` where the one extra write would go.
+
+Originally written 2026-08-29,
 after the launch-readiness review found the product promises deletion on
 every page (`views.mjs` footer, the consent text) while no route, CLI
 command, or function can delete a person — GDPR Art. 17 (erasure) and

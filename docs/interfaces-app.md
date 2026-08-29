@@ -225,10 +225,18 @@ register**, not the specific content.
 /signup         same chrome, plus the consent block.
 /               the four steps + settings panel + the shelf.     Authenticated.
 /pricing        three plans, current one marked.
+/account        email, balance, export link, the deletion form.  Authenticated.
 /j/:id          status (unchanged behaviour, new skin)
 /j/:id/select   contact sheet (new skin)
 /j/:id/result   the tape (new skin)
 ```
+
+Added 2026-08-29 alongside `/account`: `GET /api/account/export` (one JSON
+document -- account record minus internals, ledger rows, per-job order
+metadata; `Content-Disposition: attachment`) and `POST /account/delete`
+(session + same-origin + CSRF pair + the account's own email typed back; runs
+`scripts/auth/deletion.mjs`'s `deleteAccountEverywhere`). Design:
+`docs/superpowers/specs/2026-08-29-account-deletion-export-design.md`.
 
 ### The step flow, top to bottom on one page
 

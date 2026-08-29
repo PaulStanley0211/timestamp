@@ -282,9 +282,9 @@ section 24.
 > **READ SECTION 38 FIRST (2026-08-29, second tranche), THEN 37, THEN 36.**
 > §38 closed two more of §37G's agent items — the Art. 50 disclosure (file
 > metadata + result-page line) and real-browser smoke tests — and records that
-> **account deletion/export is IN FLIGHT in a separate session's worktree
-> (§38A): check whether `claude/determined-knuth-805b98` landed before
-> touching that item.** §38E is the paste-ready paid-order runbook.
+> **account deletion/export LANDED the same day (§39, built in the §38A
+> session's worktree)** — the item is DONE. §38E is the paste-ready
+> paid-order runbook.
 >
 > **READ SECTION 37 NEXT (2026-08-29, later that night), THEN 36, THEN 35.**
 > §37 is the launch-readiness review and the first tranche of its fix list —
@@ -4165,15 +4165,14 @@ seconds); a support mailbox + an image-moderation vendor (accounts and
 money); the Supabase Recovery template check (two minutes in the dashboard);
 and one paid web order to prove the direct path.
 
-**AGENT-BUILDABLE NEXT, in order:** account deletion/export from its spec;
+**AGENT-BUILDABLE NEXT, in order:** ~~account deletion/export from its spec~~
+**(DONE — §39)**;
 the legal page shells the moment the entity text exists; the ops minimum the
 moment a host exists (backups of the volume holding every balance, an uptime
 check on `/api/health`, `unhandledRejection` handlers, a disk-space line in
 health); AI-generation disclosure (metadata provenance + a result-page line —
 EU AI Act Art. 50 has applied since 2 August 2026); browser/e2e smoke tests,
 which every UI bug this project has found by hand argues for.
-
----
 
 ### 38. THE TAPE SAYS WHAT IT IS, AND THE PAGES MET A REAL BROWSER (2026-08-29, second tranche)
 
@@ -4196,8 +4195,9 @@ edits. Division agreed over session messaging: that session owns
 none of them except ONE region of `views.mjs` (resultPage), coordinated
 explicitly. **It will rebase onto `origin/supabase-identity-slice` before
 merging back, and it may append its own section here — a trivial conflict in
-this file is the expected shape.** Do not re-start deletion from the spec
-without checking whether that branch landed first.
+this file is the expected shape.** **IT LANDED: the branch rebased onto this
+section's commits and merged back the same day — deletion/export is DONE,
+recorded as §39.**
 
 #### B — EU AI Act Art. 50: the disclosure, both halves (`b798c2f`)
 
@@ -4307,6 +4307,74 @@ verification, deploy host, support mailbox + moderation vendor, Recovery
 template check, and the paid order above (§38E has the steps). **AGENT-
 BUILDABLE:** whatever the deletion session leaves unfinished, then the legal
 shells and the ops minimum the moment their gates open.
+
+---
+
+### 39. ACCOUNT DELETION AND DATA EXPORT — BUILT FROM ITS SPEC (2026-08-29, the §38A session, landed)
+
+**1876 pass / 0 fail / 2 skipped (1878 total).** Built EXACTLY to
+`docs/superpowers/specs/2026-08-29-account-deletion-export-design.md`,
+test-first throughout (every new test watched failing before its code
+existed), and **seven sabotages each turned a test red and were restored from
+a backup copy** (§37F's rule, followed): local-before-upstream order, lease
+check removed, register decrement on delete, hash in the export, origin gate
+removed, owners-vanish tolerance removed, publishable key on the admin call.
+
+#### What exists now
+
+- **`adminDeleteUser` in `scripts/auth/supabase-auth.mjs`** — `DELETE
+  /auth/v1/admin/users/:id`, secret key on both headers (`call()` gained an
+  `admin` flag), id validated against `SUPABASE_ID_RE` (now exported from
+  `accounts.mjs`) before anything reaches the wire. **A 404 is success with
+  `missing: true`** — a deletion that crashed between the upstream call and
+  the local cleanup must be retryable. Every other refusal throws.
+- **`deleteAccount` in `accounts.mjs`** — record first INSIDE the account
+  lock (a concurrent `updateAccount` fails `NO_ACCOUNT` instead of
+  resurrecting the file), then both index entries (each removed only if it
+  points at this account), directory after the lock (the lock file lives
+  inside it). Both lookups already tolerate a dangling index entry, so even a
+  crash mid-delete cannot recreate the `4f53dc6` rebind trap.
+- **`scripts/auth/deletion.mjs` — `deleteAccountEverywhere`, the ONE place
+  that knows the order**: lease check → Supabase identity FIRST → per job
+  (cancel sentinel, `purgeJobMedia`, directory) → owners dir → sessions →
+  account. `isClaimed` is injected and **defaults to "yes"** — a caller that
+  cannot answer gets a refusal, the careless call being the safe one. Web
+  route and CLI both call this; the order lives nowhere else.
+- **Three routes** (`router.mjs`, gated by default): `GET /account` (page:
+  email, balance, export link, deletion form), `GET /api/account/export`
+  (attachment; account block is an ALLOW-LIST — never a spread, the
+  enumerable record includes the scrypt hash), `POST /account/delete`
+  (`identityUnavailable` without Supabase → `sameOriginPost` before the body
+  → CSRF pair → typed email compared normalised → 409 `JOB_CLAIMED` while a
+  tape renders). Nav gained the Account link (signed-in branch only).
+- **`npm run accounts -- delete --email=<addr> [--yes]`** — spec §6. Without
+  `--yes` it prints the plan and refuses, exit 1. The npm script now loads
+  `.env` (`--env-file-if-exists`) like web/worker/doctor, so the operator's
+  delete can reach Supabase; **`npm test` stays bare and unaffected**.
+- **`destroySessionsFor` was NOT added** — it already existed as
+  `destroySessionsForAccount` (`session.mjs:544`). The spec's name would have
+  been a duplicate; the existing one is used. `REQUIRED_AUTH` was NOT
+  extended (spec §5): the routes feature-detect `deleteAccount` /
+  `destroySessionsForAccount` / `ledgerFor` and 503 when absent, so every
+  existing test fake stays valid.
+
+#### Rulings this session, worth not rediscovering
+
+- **The ledger open question went to option (a) delete-everything** — Paul
+  had not answered, the task said default to (a). The (b) hook (anonymised
+  rows to `out/deleted-ledgers/<accountId>.json`) is one extra write, noted
+  in `deletion.mjs`'s header where it would go.
+- **Pending refund records survive deletion and are announced** — they ARE
+  money; the web handler logs `REFUND HELD` per record and the CLI prints
+  them. Settled ones stay as audit trail. Nothing in `out/refunds/` is
+  deleted.
+- **`test/web-auth-code.test.js`'s harness gained an optional `queue`
+  param** (additive; siblings unchanged) so `web-account.test.js` — its
+  fourth importer — can hold a lease with the web-api-style fake.
+- **A worktree session note:** this session's worktree branched from stale
+  `main`; the work lives on `supabase-identity-slice`. Fast-forwarding the
+  worktree branch onto `origin/supabase-identity-slice` before starting is
+  what made the spec (and everything it names) exist at all.
 
 ---
 
