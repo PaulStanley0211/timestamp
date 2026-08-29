@@ -466,6 +466,36 @@ function decideIntent({ job, step, payload, wasRunning, matches, log }) {
   // a request went out -- and closing it is what lets `recordIntent` rotate it
   // into the receipts and mint a fresh key.
   if (!wasRunning && prior && prior.result === null) {
+    // AND "DELIBERATE" HAS TO MEAN A HUMAN, NOT THE WORKER'S REVIVE.
+    //
+    // `wasRunning` alone could not tell the two apart. `runOne` revives a
+    // failed job by calling `retryStep` on every failed step, which rewrites
+    // `failed -> pending` -- so after a RETRIABLE failure (a submit timeout is
+    // retriable by its own class, precisely because the request may have landed)
+    // this branch ran automatically, closed the open record, minted a fresh key
+    // and bought the same generation again, up to maxAttempts times.
+    //
+    // `retryStep` now records who asked. The worker does not pass the flag, so
+    // its revive falls through to the same refusal a crash gets: a human looks
+    // at the provider's dashboard and decides, which is the invariant this
+    // file's header states and could not previously keep.
+    const deliberate = job.steps?.find((s) => s.name === step)?.deliberateRetry === true;
+    if (!deliberate) {
+      throw new PipelineError(
+        `${step}: an intent was recorded at ${prior.recordedAt} under key ${prior.key} and no result was ever written.\n` +
+        '  This attempt is an AUTOMATIC retry, so nobody has looked at whether that request was charged.\n' +
+        '  A paid request may already have gone out. This pipeline will not silently re-submit it.\n' +
+        `  Look at intent/${step}.json and at the provider's own record of ${prior.key}, then either:\n` +
+        `    npm run render -- --resume=${job.jobId} --retry-step=${step}    (submit again, deliberately)\n` +
+        `    npm run jobs -- show ${job.jobId}                               (read what is on disk first)`,
+        {
+          code: 'INTENT_IN_FLIGHT',
+          step,
+          userMessage: 'This render was interrupted while it was generating. Someone needs to check it before it continues.',
+          detail: { key: prior.key, recordedAt: prior.recordedAt, attempt: prior.attempt, automatic: true },
+        },
+      );
+    }
     log(`  ${step}: superseding the open intent ${prior.key} -- it is being resubmitted deliberately`);
     completeIntent(job, step, {
       unresolved: true,

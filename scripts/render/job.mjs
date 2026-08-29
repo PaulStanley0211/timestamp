@@ -502,6 +502,10 @@ function newStep(name) {
     // `error` -- a skip is a decision, and the UI and ledger key off `error`
     // being null.
     skipReason: null,
+    // Whether the most recent `retryStep` was a human's decision rather than
+    // the worker's automatic revive. `decideIntent` reads it before re-sending
+    // anything paid; see `retryStep`.
+    deliberateRetry: false,
     cost: { estimated: 0, actual: null, currency: 'USD' },
   };
 }
@@ -1046,7 +1050,18 @@ export function skipStep(job, name, reason) {
  * `recordIntent` rotates it and mints a fresh key, which is what a *deliberate*
  * resubmission should look like.
  */
-export function retryStep(job, name) {
+/**
+ * @param {object} job
+ * @param {string} name
+ * @param {{deliberate?: boolean}} [opts]  `deliberate` means a HUMAN asked, via
+ *   `--retry-step`. The worker's automatic revive does NOT pass it, and that
+ *   distinction is load-bearing rather than cosmetic: `decideIntent` may only
+ *   re-send a paid request whose intent record is still open when somebody
+ *   decided to. Without it, the revive rewrote `failed -> pending`, the
+ *   pipeline read that as a deliberate act, and a retriable timeout on a submit
+ *   bought the same generation up to `maxAttempts` times.
+ */
+export function retryStep(job, name, { deliberate = false } = {}) {
   const step = stepOf(job, name);
   if (job.status === 'done' || job.status === 'cancelled') {
     throw new JobError(`cannot retry ${name} on a ${job.status} job`, {
@@ -1057,6 +1072,11 @@ export function retryStep(job, name) {
   step.error = null;
   step.skipReason = null;
   step.endedAt = null;
+  // Set on EVERY retry, true or false, so the flag can never be inherited from
+  // an earlier deliberate one. Same reasoning as `skipReason` living here: the
+  // schema block in docs/interfaces.md does not name it and the behaviour needs
+  // somewhere to live.
+  step.deliberateRetry = deliberate === true;
   if (job.status === 'failed') {
     setJobStatus(job, 'queued');
     job.error = null;
