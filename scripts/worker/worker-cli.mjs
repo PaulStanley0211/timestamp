@@ -36,6 +36,7 @@ import { hostname } from 'node:os';
 import { createQueue, REPO_ROOT } from '../queue/queue.mjs';
 import { createOwnerRefunds } from '../web/session-middleware.mjs';
 import { createWorker, WorkerError } from './worker.mjs';
+import { STEPS } from '../render/job.mjs';
 
 export function parseArgs(argv) {
   const flags = new Set();
@@ -197,6 +198,28 @@ async function main() {
   const verbose = flags.has('verbose');
   const json = flags.has('json');
 
+  // A MISSPELLED --stop-after IS A SPEND, NOT A NO-OP.
+  //
+  // `runPipeline` only ever COMPARES this value (`if (stopAfter === name)`), so
+  // an unmatched one never matches and every claimed job runs straight through
+  // `animate` and is billed -- while the banner below confirms the operator's
+  // intent by printing it back. The comparison is case-sensitive too, so
+  // `--stop-after=Select` fails the same way while looking more correct. This
+  // process holds `paidTransport(provider)`, so on `--provider=fal` that is
+  // real money.
+  //
+  // `render.mjs` has validated this against STEPS since it was written; the
+  // worker simply never learned to. Same ruling as the `purge` CLI's argument
+  // whitelist: an unknown argument is a refusal, never a silent no-op, when the
+  // thing it was meant to prevent costs money.
+  const stopAfter = values['stop-after'] ?? null;
+  if (values['stop-after'] !== undefined && !STEPS.includes(stopAfter)) {
+    console.error(`\n--stop-after must be one of: ${STEPS.join(', ')}\n` +
+      `got ${JSON.stringify(values['stop-after'])}. An unrecognised step never matches, so the\n` +
+      'worker would run every job through the paid step and bill it.\n');
+    return 1;
+  }
+
   if (values.concurrency !== undefined && Number(values.concurrency) !== cfg.provider.maxInflight) {
     console.error(`\n--concurrency=${values.concurrency} disagrees with cfg.provider.maxInflight ` +
       `(${cfg.provider.maxInflight}). That number lives in config/render.json so there is one answer; ` +
@@ -230,7 +253,7 @@ async function main() {
     provider,
     queue,
     pollMs: values['poll-ms'] ? Number(values['poll-ms']) : undefined,
-    stopAfter: values['stop-after'] ?? null,
+    stopAfter,
     workerId: `${hostname()}-${process.pid}`,
     // THE WIRE THAT LETS THIS PROCESS SPEND. `worker.mjs` has always accepted
     // `providerCtx` and this file passed none, so `--provider=fal` died at the

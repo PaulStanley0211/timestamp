@@ -19,6 +19,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -645,6 +647,51 @@ test('a refund seam that throws does not take the worker down with it', async (t
  * as provider-contract.test.js: read the command's source and fail if the
  * seam is not handed the real implementation.
  */
+/**
+ * A MISSPELLED `--stop-after` MUST NOT SILENTLY DISABLE THE PRE-SPEND GATE.
+ *
+ * `render.mjs` validates this argument against STEPS and exits 1. The worker
+ * did not: it passed the string straight through, and `runPipeline` only ever
+ * COMPARES it (`if (stopAfter === name)`), so an unmatched value simply never
+ * matches. The banner then confirms the operator's intent -- it prints
+ * "stopping after selct" -- and every claimed job runs through `animate` and is
+ * billed. The worker holds `paidTransport(provider)`, so on `--provider=fal`
+ * that is real money.
+ *
+ * The comparison is case-sensitive too, so `--stop-after=Select` fails the same
+ * way while looking even more correct.
+ *
+ * Same defect shape as the `purge` CLI accepting a `--job` flag that does not
+ * exist (CLAUDE.md section 30): an unknown argument must be a refusal, never a
+ * silent no-op, when the thing it was meant to prevent costs money.
+ *
+ * Spawned rather than source-read, because what matters is that the process
+ * REFUSES -- a regex can confirm a line exists and not that it runs.
+ */
+test('the worker CLI refuses a --stop-after that is not a step', () => {
+  const cli = fileURLToPath(new URL('../scripts/worker/worker-cli.mjs', import.meta.url));
+
+  for (const bad of ['selct', 'Select', 'animate ', '']) {
+    const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+    const res = spawnSync(process.execPath, [cli, '--provider=fixture', `--stop-after=${bad}`], {
+      cwd: repoRoot, encoding: 'utf8', timeout: 15_000,
+    });
+    assert.equal(res.status, 1,
+      `--stop-after=${JSON.stringify(bad)} should exit 1, got ${res.status}. ` +
+      'An unmatched value never matches a step name, so the worker runs every job through animate and bills it.');
+    assert.match(`${res.stderr}${res.stdout}`, /stop-after/,
+      'the refusal must name the argument it is refusing');
+  }
+});
+
+/** And the steps that ARE real must still be accepted, so the guard above
+ *  cannot be satisfied by refusing everything. */
+test('the worker CLI accepts every real step name', () => {
+  const source = fs.readFileSync(new URL('../scripts/worker/worker-cli.mjs', import.meta.url), 'utf8');
+  assert.match(source, /STEPS/,
+    'worker-cli must validate against the same STEPS list render.mjs uses, not a copy');
+});
+
 test('the worker CLI hands createWorker the owner-refund glue', () => {
   const source = fs.readFileSync(new URL('../scripts/worker/worker-cli.mjs', import.meta.url), 'utf8');
   assert.match(source, /refundImpl:\s*createOwnerRefunds\(\{\s*root\s*\}\)\.refund/,
