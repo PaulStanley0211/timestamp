@@ -1092,9 +1092,9 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
 
     <p class="eyebrow">Quality</p>
     <div class="quality">${qualityCards}</div>
-    <p class="hint">Every option delivers the same 1080&times;1920 file. What changes is how much detail
-    exists before the tape &mdash; and the tape works at 720&times;576, so above that there is
-    nothing left to keep.</p>
+    <p class="hint">Every option delivers the same file &mdash; the frame above decides its size,
+    not this row. What changes is how much detail exists before the tape, and the tape
+    works at 576 lines on its short edge, so above that there is nothing left to keep.</p>
 
     <dl class="facts">
       <dt>Length</dt><dd>15 SEC</dd>

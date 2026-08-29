@@ -547,7 +547,50 @@ test('the quality copy does not sell an upgrade we measured and know is invisibl
     // And it says the true thing instead.
     assert.ok(html.includes('The native fit'), '720p is described as the native fit');
     assert.ok(html.includes('Slightly softer'), '480p says plainly what it costs you');
-    assert.ok(html.includes('1080'), 'the delivered file is 1080x1920 either way, and it says so');
+    // CHANGED BY /qa, 2026-08-29, and worth saying out loud because it pinned a
+    // claim that has since become false. It asserted `html.includes('1080')`
+    // for "the delivered file is 1080x1920 either way" -- true while 4:3 was
+    // the only shape, false since the frame menu opened: a 16:9 order delivers
+    // 1920x1080, measured on the file. It also could not fail, because "1080"
+    // matches the 1080p card name three lines above the sentence it was about.
+    //
+    // The claim the copy actually has to make is the anti-upsell one: the TIER
+    // does not change the file. That is still true in every shape, so it is
+    // what is asserted now.
+    assert.ok(/same file/.test(html),
+      'the quality row must still say the tier does not change the file');
+  });
+});
+
+/**
+ * A SHAPE-SPECIFIC NUMBER IN A ROW THAT IS NOT ABOUT SHAPE.
+ *
+ * The hint under the quality cards read "Every option delivers the same
+ * 1080x1920 file ... the tape works at 720x576". Both numbers are the 4:3
+ * contract. Since the frame menu opened, 16:9 delivers 1920x1080 from a
+ * 1024x576 tape and 9:16 delivers 1080x1920 from 576x1024 -- so the sentence
+ * was wrong for two of the three shapes a customer can pick, in the panel
+ * directly below the picker that chooses between them.
+ *
+ * WHAT SURVIVES IS THE SHORT EDGE. config/render.json holds it at 576 in every
+ * shape on purpose -- that single constraint is why one set of filtergraph
+ * tuning constants is correct in all three -- so "576 lines on its short edge"
+ * is true whatever is chosen, and the discard-above-the-raster argument the
+ * sentence exists to make is unchanged.
+ */
+test('the quality copy states no raster that only one frame shape has', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+
+    // PRESENT FIRST. A negative assertion against a page that failed to render
+    // the panel at all would pass while proving nothing.
+    assert.ok(html.includes('<div class="quality">'), 'the quality panel is not on the page');
+    assert.ok(/576/.test(html), 'the copy no longer names the short edge it argues from');
+
+    assert.ok(!/1080\s*(?:&times;|&#215;|x|×)\s*1920/i.test(html),
+      'the quality copy names a 4:3 delivery raster -- a 16:9 order delivers 1920x1080');
+    assert.ok(!/720\s*(?:&times;|&#215;|x|×)\s*576/i.test(html),
+      'the quality copy names a 4:3 tape raster -- 16:9 works at 1024x576, 9:16 at 576x1024');
   });
 });
 
