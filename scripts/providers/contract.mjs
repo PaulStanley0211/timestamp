@@ -122,10 +122,7 @@ export const CURRENCY = 'USD';
  */
 export const PAID_PROVIDER_IDS = Object.freeze(['fal']);
 
-/** Whether a provider id spends money, by name alone. */
-export const isPaidProviderId = (id) => PAID_PROVIDER_IDS.includes(String(id));
-
-const bad = (code, message, detail = null) => new TerminalError(message, { code, detail, provider: 'contract' });
+const bad =(code, message, detail = null) => new TerminalError(message, { code, detail, provider: 'contract' });
 
 const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNonEmptyString = (v) => typeof v === 'string' && v.length > 0;
