@@ -934,21 +934,44 @@ export function homePage({
   // One cost per resolution, switched by the same `:checked` rule that styles
   // the card. A cost that only updated with JavaScript would be blank on the one
   // page where a number decides whether somebody spends.
-  const costLines = offered.map((r) => (
-    `<span class="cost cost--${h(qualitySlug(r.id))}">${h(`~${r.credits} CR`)}</span>`
-  )).join('');
+  // ONE COST PER (RESOLUTION, SHAPE) PAIR, not per resolution.
+  //
+  // This was keyed on the quality radio alone and its number came from
+  // `creditsPerReference`, computed with an aspect multiplier of 1 -- while the
+  // charge at enqueue applies 4/3 for 16:9 and 9:16. The page said ~21 CR and
+  // the ledger took 28. The page is deliberately zero-JavaScript, so it cannot
+  // recompute on selection: the cross product is rendered and CSS switches it.
+  //
+  // `creditsByAspect` comes from the seam, which asks the same function that
+  // charges. A pair with no quote is a pair the pricing refused, and it gets no
+  // line rather than a fallback number.
+  const costLines = offered.flatMap((r) => offeredAspects.map((a) => {
+    const credits = r.creditsByAspect?.[a.id];
+    if (!Number.isFinite(credits)) return '';
+    return `<span class="cost cost--${h(qualitySlug(r.id))}-${h(aspectSlug(a.id))}">${h(`~${credits} CR`)}</span>`;
+  })).join('');
 
   // Disabled ONLY when the balance cannot afford the cheapest thing on offer,
   // because that is the only refusal that is true whatever gets picked. Anything
   // dearer than the balance gets its own line instead, switched the same way, so
   // the reason names the actual numbers rather than a general apology.
+  // The floor stays the genuinely cheapest thing on offer -- the default shape
+  // at the cheapest tier -- because that is the only refusal true whatever gets
+  // picked, and disabling the button on a dearer combination would refuse an
+  // order somebody has not made yet.
   const cheapest = offered.reduce((min, r) => (min === null || r.credits < min ? r.credits : min), null);
   const brokeEntirely = cheapest !== null && balance.credits < cheapest;
-  const creditWarnings = offered
-    .filter((r) => balance.credits < r.credits)
-    .map((r) => `<span class="why why--${h(qualitySlug(r.id))}">${
-      h(`Not enough credits — a ${r.id} tape costs ~${r.credits} CR and you have ${balance.credits} CR.`)
-    }</span>`).join('');
+  // THE WARNING FOLLOWS THE SHAPE TOO. Keyed on quality alone it used the
+  // un-shaped number, so somebody holding 25 CR saw no warning against a
+  // displayed ~21, uploaded a photograph, and met a 402 for 28 -- which is the
+  // refusal-after-upload the cheap pre-check exists to prevent.
+  const creditWarnings = offered.flatMap((r) => offeredAspects.map((a) => {
+    const credits = r.creditsByAspect?.[a.id];
+    if (!Number.isFinite(credits) || balance.credits >= credits) return '';
+    return `<span class="why why--${h(qualitySlug(r.id))}-${h(aspectSlug(a.id))}">${
+      h(`Not enough credits — a ${r.id} ${a.id} tape costs ~${credits} CR and you have ${balance.credits} CR.`)
+    }</span>`;
+  })).join('');
 
   const body = `
 <main>

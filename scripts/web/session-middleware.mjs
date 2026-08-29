@@ -559,17 +559,42 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
    * measurement attached, and turning it on later has to be that field and
    * nothing else.
    */
-  async function resolutions() {
+  async function resolutions(aspects = [], seconds = undefined) {
     const mod = await api();
-    return Object.values(mod.CREDIT_COSTS ?? {}).map((row) => ({
-      id: row.resolution,
-      width: row.width,
-      height: row.height,
-      // Absent means available: a resolution added without the field is offered
-      // rather than silently swallowed.
-      available: row.available !== false,
-      credits: row.creditsPerReference,
-    }));
+    return Object.values(mod.CREDIT_COSTS ?? {}).map((row) => {
+      // THE SHAPE IS PART OF THE PRICE, so a row that carries one number per
+      // resolution cannot describe what the button will charge.
+      //
+      // `creditsPerReference` is computed with an aspect multiplier of 1, while
+      // the charge at enqueue is `costOf(resolution, aspect)` and applies 4/3
+      // for 16:9 and 9:16. The page quoted ~21 CR and the ledger took 28. This
+      // seam's own header names that hazard -- "a quote computed differently
+      // from the charge is a quote that will one day differ from the charge" --
+      // so the quote is computed HERE by asking the same function the charge
+      // asks, once per shape, rather than by reading a precomputed field.
+      //
+      // A shape the pricing refuses is simply absent from the map rather than
+      // defaulted, exactly as `creditCost` refuses it: the page must not offer
+      // a number for something that cannot be bought.
+      const creditsByAspect = {};
+      for (const aspect of aspects) {
+        try {
+          creditsByAspect[aspect] = mod.creditCost({
+            resolution: row.resolution, seconds, aspect,
+          });
+        } catch { /* an unpriced or unavailable pair simply has no quote */ }
+      }
+      return {
+        id: row.resolution,
+        width: row.width,
+        height: row.height,
+        // Absent means available: a resolution added without the field is offered
+        // rather than silently swallowed.
+        available: row.available !== false,
+        credits: row.creditsPerReference,
+        creditsByAspect,
+      };
+    });
   }
 
   /**

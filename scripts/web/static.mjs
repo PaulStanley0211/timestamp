@@ -387,10 +387,29 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       `#${slug}:checked~.wrap .qualitycard--${slug}{opacity:1;}`,
       `#${slug}:checked~.wrap .qualitycard--${slug} .name{color:var(--accent);}`,
       `#${slug}:checked~.wrap .qualitycard--${slug} .tick{opacity:1;}`,
-      `#${slug}:checked~.wrap .cost--${slug}{display:inline;}`,
-      `#${slug}:checked~.wrap .why--${slug}{display:block;}`,
       focusRing(slug, 'qualitycard'),
     );
+    // THE COST AND THE WARNING NEED BOTH RADIOS, because the shape is part of
+    // the price: a resolution label names the SHORT edge, so 16:9 and 9:16 are
+    // 4/3 the pixels and 4/3 the charge. Keyed on quality alone, the page
+    // quoted the 4:3 number for every shape while the ledger took the real one.
+    //
+    // The selector works because the radios are hoisted siblings of `.wrap` and
+    // the quality ones are emitted BEFORE the aspect ones (views.mjs), so `~`
+    // reaches from the first to the second and then to the wrap.
+    for (const a of aspects) {
+      if (a.available === false) continue;
+      // The SLUG is what has to be a css identifier, not the id -- `4:3` has a
+      // colon in it and `aspectSlug` is what removes it. Testing the raw id
+      // here emitted no rules at all, silently, which is the same failure the
+      // rule was written to prevent one layer up.
+      const aslug = aspectSlug(a.id);
+      if (!CSS_IDENT_RE.test(aslug)) continue;
+      out.push(
+        `#${slug}:checked~#${aslug}:checked~.wrap .cost--${slug}-${aslug}{display:inline;}`,
+        `#${slug}:checked~#${aslug}:checked~.wrap .why--${slug}-${aslug}{display:block;}`,
+      );
+    }
   }
 
   // The frame row. Same mechanism again -- and same rule about unavailable

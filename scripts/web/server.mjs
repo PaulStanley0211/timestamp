@@ -1467,7 +1467,10 @@ export function createServer({
   async function resolutionRows() {
     const now = Date.now();
     if (resolutionCache.rows && now - resolutionCache.at < 60_000) return resolutionCache.rows;
-    const rows = await auths.resolutions();
+    // The shapes and the tape length travel with the request, so the seam can
+    // quote each (resolution, shape) pair by asking the same function that will
+    // charge for it. There is no second copy of the arithmetic anywhere.
+    const rows = await auths.resolutions(aspectIds(cfg), TAPE_SECONDS);
     resolutionCache = { at: now, rows };
     return rows;
   }

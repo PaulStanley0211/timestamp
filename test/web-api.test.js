@@ -582,9 +582,15 @@ test('a balance between the two prices warns about the dear one only', async () 
     const html = await (await get(base, '/', cookieA)).text();
     assert.ok(!/<button[^>]*class="record"[^>]*disabled/.test(html),
       '480p is still affordable, so the button must not be dead');
-    assert.ok(html.includes('why--q-720p'), 'the 720p warning is rendered');
-    assert.ok(!html.includes('why--q-480p'), 'and the 480p one is not, because it is affordable');
-    assert.ok(html.includes('a 720p tape costs ~152 CR and you have 100 CR'));
+    assert.ok(html.includes('why--q-720p-a-4x3'), 'the 720p 4:3 warning is rendered');
+    assert.ok(!html.includes('why--q-480p-a-4x3'), 'and the 480p 4:3 one is not, because it is affordable');
+    assert.ok(html.includes('a 720p 4:3 tape costs ~152 CR and you have 100 CR'));
+    // AND THE WARNING FOLLOWS THE SHAPE. 480p at 4:3 costs 51 and is affordable
+    // at 100 CR; the same tier at 9:16 costs 68 and is also affordable -- but
+    // 720p at 9:16 costs 203, so the warning has to exist for a pair that the
+    // un-shaped number would have called safe.
+    assert.ok(html.includes('why--q-720p-a-9x16'), 'the wide 720p warning must exist too');
+    assert.ok(!html.includes('why--q-480p-a-9x16'), '480p 9:16 is 68 CR and affordable at 100');
   }, { credits: 100 });
 });
 
@@ -724,9 +730,17 @@ test('every place has an image URL and a gradient underneath it in one declarati
       assert.ok(css.includes(`#pl-${p.id}:checked~.bgs .bg--pl-${p.id}{opacity:1;}`),
         `${p.id} does not cross-fade the background when selected`);
     }
-    // The quality row switches its own cost line, with no script involved.
-    assert.ok(css.includes('#q-720p:checked~.wrap .cost--q-720p{display:inline;}'),
-      'the estimated cost must follow the selection without JavaScript');
+    // The cost line switches on BOTH radios, with no script involved -- the
+    // shape is part of the price, so a rule keyed on quality alone would quote
+    // the 4:3 number for a 9:16 order that is charged 4/3 of it.
+    assert.ok(css.includes('#q-720p:checked~#a-4x3:checked~.wrap .cost--q-720p-a-4x3{display:inline;}'),
+      'the estimated cost must follow BOTH the tier and the shape, without JavaScript');
+    assert.ok(css.includes('#q-720p:checked~#a-9x16:checked~.wrap .cost--q-720p-a-9x16{display:inline;}'),
+      'the wide shapes need their own cost rule, or they show the 4:3 price');
+    // And no rule may key the cost on the tier alone, which is the shape of the
+    // bug: it would match whatever the frame row says and quote one number.
+    assert.ok(!/\.cost--q-\d+p\{/.test(css),
+      'a cost rule keyed on the tier alone quotes one price for every shape');
     // CHANGED 2026-08-24 with the STRUCK world. This asserted the selected card
     // gained `border-color:var(--accent)`. DESIGN.md forbids borders outright --
     // grouping is depth and gauze density, never a line -- so selection is now
@@ -1026,6 +1040,48 @@ test('no resolution posted means the default one, and a deferred one is refused'
       assert.equal(res.status, 400, `${resolution} was accepted`);
       assert.equal((await res.json()).error.status, 400);
     }
+  });
+});
+
+/**
+ * THE NUMBER ON THE BUTTON MUST BE THE NUMBER ON THE LEDGER.
+ *
+ * The cost line was keyed on the QUALITY radio alone and its number came from
+ * `CREDIT_COSTS`, which is computed with an aspect multiplier of 1. The charge
+ * at enqueue is `costOf(resolution, aspect)`, which applies 4/3 for 16:9 and
+ * 9:16. So the page said ~21 CR and the ledger took 28 (46 and 61 at 720p).
+ *
+ * Two harms, and the second is the nastier one. A funded customer is debited a
+ * third more than the quote. A customer holding between the two numbers sees no
+ * warning, uploads a photograph, and is refused with a 402 -- which is exactly
+ * what the cheap pre-check exists to prevent.
+ *
+ * The page is deliberately zero-JavaScript, so it cannot recompute on
+ * selection; the cross product has to be rendered and switched in CSS.
+ *
+ * `session-middleware.mjs` names this hazard in its own words: "a quote
+ * computed differently from the charge is a quote that will one day differ from
+ * the charge." It did.
+ */
+test('the quoted price matches the charge for every shape, not just 4:3', async () => {
+  await withServer(async ({ base, cookieA, app }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+
+    // Ask the same seam the charge uses, so this compares against the real
+    // number rather than one written down in the test.
+    for (const resolution of ['480p', '720p']) {
+      for (const aspect of ['4:3', '16:9', '9:16']) {
+        const charged = await app.sessions.cost({ resolution, seconds: 15, aspect });
+        assert.match(html, new RegExp(`~${charged}\\s*CR`),
+          `the page never shows ~${charged} CR, which is what ${resolution} ${aspect} actually costs`);
+      }
+    }
+
+    // And the wide price must be genuinely different from the 4:3 one, so the
+    // assertion above cannot pass because every shape quotes the same number.
+    const square = await app.sessions.cost({ resolution: '480p', seconds: 15, aspect: '4:3' });
+    const wide = await app.sessions.cost({ resolution: '480p', seconds: 15, aspect: '9:16' });
+    assert.notEqual(square, wide, 'a wide shape costs 4/3 and must quote differently');
   });
 });
 
