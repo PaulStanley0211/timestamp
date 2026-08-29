@@ -7,10 +7,27 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-29, night) — THE APP WAS DRIVEN AND REVIEWED, AND THE COPY HAD NOT LEARNED ABOUT THE FRAME MENU.
+## START HERE (2026-08-29, later that night) — A LAUNCH-READINESS REVIEW RAN, ITS FIX LIST STARTED LANDING, AND THE PR IS OPEN WITH GREEN CI. READ §37 FIRST.
 
-**1754 tests / 1752 pass / 0 fail / 2 skipped.** The skips are the
+**1786 tests / 1784 pass / 0 fail / 2 skipped.** The skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`.
+
+**PR #1 IS OPEN AND ITS FIRST CI RUN WAS GREEN.** Paul opened it at 12:23 UTC
+on 2026-08-29 and all five checks passed — guards plus node 22/24 x
+ubuntu/windows, the full 1754-test suite of that moment on every leg. Every
+line below saying "no PR is open" or "CI has never run on this branch" is
+history as of that click; it is kept because the sections it lives in are
+records. §37 landed six fix commits SINCE that run; the branch is pushed, so
+the PR re-runs CI on them.
+
+**THE REVIEW'S VERDICT: NOT READY FOR CUSTOMERS — roughly 55% of the launch
+work is done.** Seven parallel auditors and an adversarial critic, §37A. The
+engine is the strong half. The envelope — legal pages, support channel, image
+moderation, live Stripe, deploy, ops — is the missing half, and most of it is
+Paul's decisions rather than code. The full report is a private artifact
+delivered to Paul in-session; its verdict and every repo-relevant correction
+are in §37, and nothing from the gitignored security reviews is restated in
+either place.
 
 **WHAT JUST HAPPENED IS SECTION 36, AND IT IS PUSHED.** The first `/qa` and a
 fresh `/review`: twelve findings, eleven fixed across **eleven commits,
@@ -260,18 +277,21 @@ section 24.
 
 ### PICK UP HERE
 
-> **READ SECTION 36 FIRST (2026-08-29, night), THEN 35, THEN 32.** §36 is the
-> `/qa` and `/review` passes and it corrects this file in three places, one of
-> them this block's own count of Paul's actions; §35 is the audit before it;
-> §32 is the inventory, now with items 1, 2, 6, 10, 11 and 12 struck and 3, 9
-> and 14 rewritten.
+> **READ SECTION 37 FIRST (2026-08-29, later that night), THEN 36, THEN 35.**
+> §37 is the launch-readiness review and the first tranche of its fix list —
+> seven commits, all test-first — plus four corrections to this file's own
+> record, one of them being that **the PR this block kept asking for is OPEN
+> and its first CI run was GREEN.** That item is done and it was Paul's click.
 >
-> **PAUL HAS THREE ACTIONS NOW, NOT TWO, AND ALL THREE ARE SHORT.** The third
-> is **OPEN THE PR** (item 7). It was gated on the Linux CI reds, which closed
-> on 2026-08-28; the branch is pushed and current as of §36, so a PR is one
-> click and it is the only thing standing between 165 commits and their first
-> CI run. Worth knowing before he clicks: that run executes SEVEN guards, one
-> of which could not fail until §36C fixed it.
+> **PAUL'S LIST IS NOW SEVEN ITEMS AND NONE IS CODE** (§37G): send the blind
+> check; decide the selling entity (one decision that gates the Impressum,
+> the GDPR controller, Stripe verification and VAT at once); file Stripe
+> business verification; pick the deploy host; provision a support mailbox
+> (the domain has NO MX record — mail to it bounces today) and choose an
+> image-moderation vendor; check the Supabase Recovery email template (two
+> minutes — it may still mail a magic link into a six-digit-code field); and
+> paste one paid web order (~$2) to prove the newly wired direct web path
+> against real fal, because no web order has ever reached the paid provider.
 >
 > **ONE — THE BLIND CHECK (item 5).** Free, ten minutes, packet built and
 > unsent at `out/blind-check/`. Still the only thing on the critical path that
@@ -4003,6 +4023,148 @@ specialist checklists (testing, maintainability, security, performance) were
 applied INLINE by the same context that did the structured pass rather than by
 independent reviewers. Same checklists, weaker independence. `/devex-review`
 and `/health` have still never run.
+
+### 37. THE LAUNCH-READINESS REVIEW, AND THE FIRST TRANCHE OF ITS FIX LIST (2026-08-29, later that night)
+
+**1754 / 1752 → 1786 / 1784, 0 fail throughout, 2 skipped.** Seven code
+commits, `474722f..5413199`, plus this documentation pass — every one
+test-first, every guard sabotage-verified, full suite run before each commit.
+**PUSHED**, so PR #1 re-runs CI on them.
+
+#### A — The review, and the verdict
+
+Paul asked for the whole project to be reviewed for customer readiness by an
+orchestrated team. Seven dimension auditors ran in parallel (product, deploy,
+security/legal, money, quality, UX, operations — Opus on the judgment-heavy
+three, Sonnet on the rest) plus an adversarial completeness critic: 8 agents,
+~1.7M tokens, 330 tool calls, every load-bearing claim verified in code, by
+DNS, or against GitHub rather than read from this file. **Verdict: NOT READY
+— 0 of 7 dimensions passed, roughly 55% of the launch work done.** Dimension
+scores 18–58 of 100. The consistent shape: the ENGINE is top-decile (this
+file's own record holds up), and the ENVELOPE barely exists — no legal pages
+among 41 routes, no support channel, no image moderation behind the checkbox,
+no account deletion, test-mode-only Stripe, no host, no backups, no alerting.
+The full report is Paul's private artifact; the security reviews stayed
+counted-not-quoted throughout.
+
+#### B — Four corrections to this file's record, each verified before repeating
+
+1. **PR #1 exists and its first CI run was GREEN.** Opened 2026-08-29
+   12:23:48Z by Paul; guards 10s, all four test legs 2m40s–3m22s, SUCCESS.
+   The banner's "no PR / no CI ever" was true when written and stale within
+   hours — item 7 of §32 is DONE.
+2. **`timestamptapes.com` has NO MX RECORD.** Verified by DNS query, not
+   inference. Five independent auditors prescribed "add a support email" as a
+   one-line footer fix; mail to any address at the domain bounces today. The
+   real fix is a mailbox provider plus DNS records FIRST, then the footer.
+3. **The signup page stated a false product fact** — "A free credit allowance
+   every month" — and the root cause was the config still speaking periodic
+   vocabulary (`grant.periodDays` is read by NOTHING; verified by grep).
+   Fixed, `474722f`, comment and copy together.
+4. **The spent-refund decline was SILENT, which is worse than §35 recorded.**
+   `refundIfUnspent` returns false on a paid attempt (never throws), and the
+   worker emitted only on success or on a throw — so the one outcome where a
+   customer is charged for nothing produced no line, no record, nothing.
+   Fixed, `5413199`, below.
+
+#### C — What landed, one commit each
+
+| Commit | What it does |
+|---|---|
+| `474722f` | The signup page stops promising a monthly allowance nobody grants; the money config stops speaking periodic vocabulary; the plans comment stops claiming rows were deleted that its own file still holds |
+| `476d47d` | `defaults.<provider>.videoDirect` exists, and THREE consumers derive the direct video model from the same fact: fal's `generateVideo` resolves the endpoint by the request's shape, `stepCompose` freezes the direct default, `dryRun` quotes it. A reference body can no longer be posted to the image-to-video endpoint — the §26 split, closed at the layer the worker actually uses |
+| `01f9ddd` | The web app orders the product: `direct: true` on the job input exactly when the provider spends money (`PAID_PROVIDER_IDS`, the leaf constant). The still-count control and its API acceptance are GONE — the accepted set is the offered set, and the offered set is empty. The fixture keeps the still path on purpose: its 8s cap IS the chaining guard, and a direct fixture job refuses at compose |
+| `85e2a7d` | A failed tape speaks to the customer: the authored `userMessage` (which jobView had been DROPPING) or one generic sentence, never raw exception text; and `creditNoteFor` says where the money went, computed from the account's own ledger rows — refunded, spent, or nothing, never hope. Both surfaces always exist on the status page and the poller paints them |
+| `aa72b49` | The auth limiters key on `clientIpOf` when `TIMESTAMP_TRUST_PROXY=1` (one bucket per visitor behind the proxy, not one for the internet) and stay socket-keyed otherwise, with a test that a typed header buys nobody a fresh bucket. `POST /api/billing/checkout` and `POST /api/jobs` join the same-origin gate every auth route has carried since §28 |
+| `5413199` | A missed refund is a durable record (`out/refunds/<jobId>.json`) and an operator command (`npm run refunds`: list, settle), never only a stdout line. The decline is announced (`REFUND HELD`) on both the failure and reap paths. Settle goes through `refundCredits` — ledger-derived amount, idempotent per job, no number in a shell history |
+
+Plus: `TIMESTAMP_PROVIDER` documented in `.env.example` (it now decides direct
+mode, see D), and the account-deletion/export SPEC at
+`docs/superpowers/specs/2026-08-29-account-deletion-export-design.md`.
+
+#### D — The direct-mode design, in the four sentences the next reader needs
+
+The request's SHAPE picks the endpoint: references mean
+`defaults.<provider>.videoDirect` (reference-to-video on fal), a start frame
+means `video`, and an explicit `--video-model` still beats both — body and
+endpoint now derive from the same fact, which is what makes the §26 422
+structurally impossible rather than merely guarded. The WEB decides the mode
+per job: `direct: PAID_PROVIDER_IDS.includes(provider)` rides the manifest,
+the only channel the worker reads — so **`TIMESTAMP_PROVIDER=fal` in the web
+process is LOAD-BEARING in production** (unset means fixture means still-path
+means the unverified-model refusal at compose: loud, refunded, wrong).
+The fixture deliberately keeps the still path — stills forced to 1, select
+auto-continues — so the dev loop still renders; `/j/:id/select` is now an
+OPERATOR surface, reachable only under `--stop-after=select`, and no
+customer meets a still or a count anywhere. **A provider with no
+`videoDirect` default is refused by name (`NO_DIRECT_DEFAULT`), never
+downgraded to a model that cannot take references.**
+
+#### E — Deliberately NOT done, each with its reason
+
+- **Narrowing `providerWasCalled` (the review asked for it).** Unsafe as
+  asked: `beginStep` increments attempts before the request leaves, and
+  nothing on disk can distinguish a pre-flight crash from an in-flight loss —
+  a departed-marker would race process death in the wrong direction, refunding
+  money fal actually billed. The conservative rule stays; the reconciliation
+  ledger (`5413199`) is the honest fix, because the operator reading fal's
+  dashboard is the one party who can resolve a maybe.
+- **Account deletion/export code.** It touches identity, money, and jobs at
+  once — the class this repo specs first. The spec exists and names the one
+  open question (ledger retention basis) as Paul's; the build is a fresh
+  session against it.
+- **Legal pages.** The text needs the selling-entity decision (§37G) — a
+  page naming no controller is not a privacy notice.
+- **Ops minimum (backups, alerting, crash handlers, disk watch).** Shaped by
+  the host choice; building it against an unchosen topology is the §34A
+  lesson again.
+
+#### F — Things that will bite
+
+- **`git checkout -- <file>` during a sabotage check DESTROYS UNCOMMITTED
+  GREEN WORK.** It happened this session: the sabotage was proven, the
+  restore reverted to HEAD, and the just-written fix vanished with it —
+  caught only because the next test run went red again. Restore a sabotage
+  from a backup COPY (`cp` first), never from git, until the fix is
+  committed.
+- **`out/refunds/` exists now and nothing sweeps it.** Pending records are
+  money and must persist; settled ones are audit trail and accumulate at one
+  tiny JSON per failed job — fine for years, but whoever builds the ops
+  runbook should know the directory is append-mostly and deliberate.
+- **A PAID WEB ORDER HAS STILL NEVER BEEN PLACED.** The wiring is new,
+  test-first, and unproven against real fal. One ~$2 480p order through the
+  browser with `TIMESTAMP_PROVIDER=fal` and a fal worker is the proof, and
+  only Paul can paste it.
+- **`STATUS_SCRIPT` changed, so its CSP hash changed.** Automatic —
+  `INLINE_SCRIPT_HASHES` computes from the constants — but anyone diffing
+  CSP headers across deploys will see a new hash and should not read it as
+  an injection.
+- **The e0c0d77 rule inverted, deliberately.** "The still count the API
+  accepts is the one the page offers" survives; the offered set is now
+  EMPTY, so any posted `stillCount` is a 400. A cached pre-§37 page's form
+  cannot hit this (the control is gone from the markup it would have
+  cached), but a hand-written client that sent `stillCount=3` breaks — and
+  should.
+
+#### G — What is left, and whose it is
+
+**PAUL'S SEVEN, none of them code** — the blind check (unsent, four sessions
+running, still gates everything); the selling entity (one decision, four
+doors: Impressum, GDPR controller, Stripe verification, VAT); Stripe business
+verification (file it, let the clock run); the deploy host (§34A, thirty
+seconds); a support mailbox + an image-moderation vendor (accounts and
+money); the Supabase Recovery template check (two minutes in the dashboard);
+and one paid web order to prove the direct path.
+
+**AGENT-BUILDABLE NEXT, in order:** account deletion/export from its spec;
+the legal page shells the moment the entity text exists; the ops minimum the
+moment a host exists (backups of the volume holding every balance, an uptime
+check on `/api/health`, `unhandledRejection` handlers, a disk-space line in
+health); AI-generation disclosure (metadata provenance + a result-page line —
+EU AI Act Art. 50 has applied since 2 August 2026); browser/e2e smoke tests,
+which every UI bug this project has found by hand argues for.
+
+---
 
 ## Not in scope
 
