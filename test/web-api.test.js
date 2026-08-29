@@ -23,9 +23,6 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import { createServer } from '../scripts/web/server.mjs';
-// The offered still counts, imported so the test compares the page and the
-// validator against ONE list rather than against a copy of it.
-import { STILL_COUNTS } from '../scripts/web/views.mjs';
 import { SESSION_COOKIE } from '../scripts/web/session-middleware.mjs';
 // Imported so the page's offer can be checked against the thing that would
 // actually render it, rather than against a list written down twice.
@@ -1184,59 +1181,71 @@ test('the quoted price matches the charge for every shape, not just 4:3', async 
 });
 
 /**
- * `stillCount` MULTIPLIES BILLED PROVIDER CALLS AND CONTRIBUTES NOTHING TO THE
- * PRICE, so the accepted set must be the set the page actually offers.
+ * `stillCount` MULTIPLIED BILLED PROVIDER CALLS AND CONTRIBUTED NOTHING TO THE
+ * PRICE -- and then the choice left the page altogether, 2026-08-29.
  *
- * `fal.mjs` makes one billed image generation PER STILL, and `costOf` takes
- * only (resolution, aspect) -- there is no stillCount term anywhere in
- * `creditCost`. The form offers 1, 3 and 5; the handler accepted any integer
- * from 1 to 8, and `/api/jobs` takes a hand-written multipart POST.
- *
- * So `stillCount=8` bought seven extra generations at exactly the price of one.
- * At the per-image rates in config/pricing.json that is $0.28 to $0.70 of
- * unpriced provider spend per tape, which takes the Starter pack from 31% gross
- * margin to 4% and, at the dearer rate, sells it below cost.
- *
- * WHAT THIS FIXES IS THE AMPLIFICATION, NOT THE PRICE. Pricing stills is a
- * change to what a customer is charged, and config/credits.json says in its own
- * words that this is the owner's call. Binding the accepted set to the offered
- * set is the part that is unambiguously a defect: a value the UI never offers
- * has no business reaching a paid loop.
- *
- * Latent today only because the web still model is deliberately unverified and
- * refuses at compose. It arms on the config/models.json edit that fills it in.
+ * The product is four choices and a tape (PRODUCT.md): the customer never
+ * meets a still, so the form offers no count and the API accepts none. The
+ * predecessor of this test bound the accepted set to the offered set {1,3,5};
+ * the offered set is now empty, and the rule is unchanged -- a value the page
+ * cannot produce is a request for unpriced provider spend and is refused by
+ * name. An empty or absent field says nothing, and the server writes the only
+ * count it uses: one, which the compose step zeroes on a direct job.
  */
-test('stillCount accepts exactly what the page offers, and nothing else', async () => {
-  await withServer(async ({ base, cookieA }) => {
-    for (const n of STILL_COUNTS) {
-      const res = await post(base, '/api/jobs', multipart([...goodParts(), { name: 'stillCount', body: String(n) }]), cookieA);
-      assert.equal(res.status, 201, `stillCount=${n} is on the page and must be accepted`);
-    }
-
-    // 2, 4, 6, 7 and 8 are all inside the old 1..8 range and none is offered.
-    // 8 is the one that costs money: seven extra billed generations, free.
-    for (const n of ['2', '4', '6', '7', '8', '0', '-1', '99', '3.5', 'three', '']) {
+test('a posted stillCount is refused: the page offers no such choice any more', async () => {
+  await withServer(async ({ base, root, cookieA }) => {
+    // 3 was the old default and 1/5 were on the old menu; all three must be
+    // refused now, or a cached page quietly orders unpriced generations.
+    for (const n of ['1', '3', '5', '8', '0', '-1', '3.5', 'three']) {
       const res = await post(base, '/api/jobs', multipart([...goodParts(), { name: 'stillCount', body: n }]), cookieA);
-      if (n === '') {
-        assert.equal(res.status, 201, 'an empty field is "did not choose", which is the default');
-        continue;
-      }
-      assert.equal(res.status, 400, `stillCount=${JSON.stringify(n)} was accepted and multiplies paid calls`);
+      assert.equal(res.status, 400, `stillCount=${JSON.stringify(n)} was accepted, and the page cannot produce one`);
       assert.equal((await res.json()).error.code, 'BAD_STILL_COUNT');
     }
+
+    // An empty field says nothing, exactly like an absent one.
+    const empty = await post(base, '/api/jobs', multipart([...goodParts(), { name: 'stillCount', body: '' }]), cookieA);
+    assert.equal(empty.status, 201, 'an empty field is "did not choose"');
+
+    // PRESENT FIRST: the manifest exists and carries the server's own count --
+    // an absence assertion alone would pass against a job that never wrote one.
+    const { jobId } = await empty.json();
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'out', 'jobs', jobId, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.input.stillCount, 1,
+      'the web writes one still, chosen by nobody: the customer never meets the count');
   });
 });
 
-/** And the page must offer exactly that set, so the two cannot drift into
- *  either a dead option or an accepted value nobody can pick. */
-test('the still-count options on the page are the ones the API accepts', async () => {
+/** And the page must offer nothing, so the control cannot quietly return. */
+test('the page offers no still-count control at all', async () => {
   await withServer(async ({ base, cookieA }) => {
     const html = await (await get(base, '/', cookieA)).text();
-    const block = html.match(/<select id="stillCount"[\s\S]*?<\/select>/)?.[0] ?? '';
-    const offered = [...block.matchAll(/value="(\d+)"/g)].map((m) => Number(m[1]));
-    assert.deepEqual(offered, [...STILL_COUNTS],
-      'the form and the handler disagree about which still counts exist');
+    assert.ok(html.includes('Record the tape'), 'the form is still there to be checked');
+    assert.ok(!/stillCount/.test(html), 'the still-count control is back on the page');
+    assert.ok(!/How many looks/.test(html), 'the superseded still-picker copy is back on the page');
   });
+});
+
+test('a web job is direct exactly when its provider spends money', async () => {
+  // Four choices and a tape: on the paid provider the still stage does not
+  // exist, so the job must say `direct` in the only channel the worker reads
+  // -- the manifest. The fixture keeps the still path, deliberately: its 8s
+  // clip cap IS the segment-chaining guard, so a direct fixture job would be
+  // refused at compose (DIRECT_NEEDS_ONE_CALL) and the dev loop would die.
+  await withServer(async ({ base, root, cookieA }) => {
+    const res = await post(base, '/api/jobs', multipart(goodParts()), cookieA);
+    assert.equal(res.status, 201);
+    const { jobId } = await res.json();
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'out', 'jobs', jobId, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.input.direct, false, 'a fixture job keeps the still path the dev loop renders');
+  });
+
+  await withServer(async ({ base, root, cookieA }) => {
+    const res = await post(base, '/api/jobs', multipart(goodParts()), cookieA);
+    assert.equal(res.status, 201);
+    const { jobId } = await res.json();
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'out', 'jobs', jobId, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.input.direct, true, 'a fal job is the product: photograph in, tape out, no still');
+  }, { provider: 'fal' });
 });
 
 test('a card beats the describe-it box when somebody fills in both', async () => {

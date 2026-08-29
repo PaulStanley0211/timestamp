@@ -88,11 +88,13 @@ import { createStylesheet, sendFile } from './static.mjs';
 import { aspectIds } from '../tapedeck/frame.mjs';
 import {
   homePage, landingPage, statusPage, selectPage, resultPage, errorPage, INLINE_SCRIPT_HASHES,
-  // The still-count options the page renders. Imported so the validator below
-  // refuses exactly what the form does not offer, rather than a range written
-  // down twice.
-  STILL_COUNTS, STILL_COUNT_DEFAULT,
 } from './views.mjs';
+// The ONE fact the web layer takes from the provider layer: whether a provider
+// spends money. `contract.mjs` is a leaf -- no transport, no credential -- and
+// a graph test in provider-contract.test.js pins that this import pulls in
+// nothing more. A paid provider means DIRECT MODE: the customer's four choices
+// become one reference-to-video call, and the still stage does not exist.
+import { PAID_PROVIDER_IDS } from '../providers/contract.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
   resetPage, resetCompletePage, onboardingPage,
@@ -3182,7 +3184,7 @@ export function createServer({
           required: placePhoto === null,
         });
         const outfitText = cleanText(firstFilled(fields.outfit, fields.outfitText), 'outfit', { required: true });
-        const stillCount = cleanStillCount(fields.stillCount);
+        refuseStillCount(fields.stillCount);
 
         const placeId = placeText ? presetLookup.place.get(placeText.toLowerCase()) ?? null : null;
         const outfitId = presetLookup.outfit.get(outfitText.toLowerCase()) ?? null;
@@ -3230,7 +3232,21 @@ export function createServer({
             ? { kind: 'photo', value: placeText, photoPath: UPLOAD_NAMES.placePhoto, photoSha256: hashes.get('placePhoto')?.digest('hex') ?? null }
             : { kind: placeId ? 'preset' : 'text', value: placeId ?? placeText, photoPath: null, photoSha256: null },
           outfit: { kind: outfitId ? 'preset' : 'text', value: outfitId ?? outfitText },
-          stillCount,
+          // ONE, CHOSEN BY NOBODY. The count left the page on 2026-08-29 --
+          // the product is four choices and a tape, and the customer never
+          // meets a still (PRODUCT.md). On the still path (the fixture, i.e.
+          // the dev loop) one still auto-selects and the render continues; on
+          // the direct path compose zeroes it, because no still is bought.
+          stillCount: 1,
+          // THE MODE RIDES THE MANIFEST, because the manifest is the only
+          // channel between this process and the renderer. Paid provider =
+          // direct: the four choices become ONE reference-to-video call, and
+          // the still stage -- which on fal is deliberately gated behind an
+          // unverified model -- never runs. The fixture keeps the still path:
+          // its 8s clip cap is the segment-chaining guard, so a direct fixture
+          // job would refuse at compose (DIRECT_NEEDS_ONE_CALL) and the dev
+          // loop would render nothing.
+          direct: PAID_PROVIDER_IDS.includes(provider),
           aspect,
           // What was charged for, carried where the worker can actually read it.
           // `normalizeInput` used to drop unknown fields, which is why ownership
@@ -3553,35 +3569,22 @@ export function createServer({
     return text;
   }
 
-  /** 1..8 is the provider contract's range. A manifest asking for twelve is a
-   *  bill that fails after the first eight have been generated. */
   /**
-   * How many looks to generate, validated against what the page OFFERS.
+   * The still count is not a choice any more, so a posted one is refused.
    *
-   * This was any integer 1..8, and it is not a cosmetic range. `fal.mjs`
-   * generates one BILLED image per still, while `costOf` takes only
-   * (resolution, aspect) -- there is no stillCount term in `creditCost` at all.
-   * `/api/jobs` takes a hand-written multipart POST, so `stillCount=8` bought
-   * seven extra generations at exactly the price of one: $0.28 to $0.70 of
-   * unpriced provider spend per tape at the rates in config/pricing.json, which
-   * takes the Starter pack from 31% gross margin to 4%.
+   * The page stopped offering "How many looks" on 2026-08-29 -- the product is
+   * four choices and a tape, and the customer never meets a still. The rule
+   * that governed the old validator is unchanged: `fal.mjs` generates one
+   * BILLED image per still while `costOf` takes only (resolution, aspect), so
+   * a count in a hand-written POST is a request for unpriced provider spend.
+   * The accepted set is the offered set, and the offered set is now empty.
    *
-   * WHAT IS FIXED HERE IS THE AMPLIFICATION, NOT THE PRICE. Charging for stills
-   * changes what a customer pays, and config/credits.json says in its own words
-   * that this is Paul's call. Refusing a value the page never offered needs
-   * nobody's decision.
-   *
-   * `STILL_COUNTS` is imported rather than written down again, so the form and
-   * this refusal cannot drift into a dead option or an accepted value nobody
-   * can pick.
+   * An empty or absent field says nothing and passes -- the input block writes
+   * the only count this server uses.
    */
-  function cleanStillCount(value) {
-    if (value === undefined || value === null || String(value).trim() === '') return STILL_COUNT_DEFAULT;
-    const n = Number(String(value).trim());
-    if (!STILL_COUNTS.includes(n)) {
-      throw new HttpError(400, `Choose ${STILL_COUNTS.join(', ')} frames.`, { code: 'BAD_STILL_COUNT' });
-    }
-    return n;
+  function refuseStillCount(value) {
+    if (value === undefined || value === null || String(value).trim() === '') return;
+    throw new HttpError(400, 'How many stills to make is not a choice on this product.', { code: 'BAD_STILL_COUNT' });
   }
 
   // -------------------------------------------------------------------------
