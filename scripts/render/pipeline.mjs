@@ -1770,7 +1770,18 @@ export async function dryRun({
 
   // The same raster resolution the real run will freeze, so `--dry-run` names
   // the size it would actually buy rather than the provider's first offer.
-  const resolution = resolveRaster({ resolution: input.resolution ?? null, provider });
+  //
+  // THE SHAPE TRAVELS WITH THE TIER, and its absence here was the same defect
+  // one dimension later. A label names the SHORT edge, so 16:9 and 9:16 are
+  // exactly 4/3 the pixels of 4:3 at the same tier, and fal bills tokens as
+  // pixels x seconds: without this, the one command whose entire job is
+  // authorising a spend quoted $4.5646 for a render that bills $6.2625.
+  const resolution = resolveRaster({
+    resolution: input.resolution ?? null,
+    provider,
+    aspect: input.aspect ?? null,
+    defaultAspect: renderCfg.defaultAspect,
+  });
   const segments = planSegments({
     cfg: renderCfg, capabilities: provider.capabilities, mode: segmentMode, size: resolution.size,
   });

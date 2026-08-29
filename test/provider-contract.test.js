@@ -1069,6 +1069,15 @@ test('the dry run is given the resolution it was asked for', () => {
     assert.match(call, /resolution/,
       'a dryRun call that does not pass the resolution prices every tier the same, '
       + 'which is exactly the defect --dry-run exists to prevent');
+    // THE SAME GUARD, TAUGHT THE DIMENSION THAT ARRIVED AFTER IT WAS WRITTEN.
+    // The shape became part of the price -- a label names the SHORT edge, so a
+    // non-default shape is 4/3 the pixels and fal bills tokens as pixels x
+    // seconds. This test was the one thing standing between that and a repeat
+    // of the resolution defect, and it only knew the word `resolution`.
+    assert.match(call, /aspect/,
+      'a dryRun call that does not pass the aspect prices every shape as 4:3, '
+      + 'which under-quotes 16:9 and 9:16 by 25% on the one command whose whole '
+      + 'job is authorising a spend');
   }
 });
 
@@ -1097,6 +1106,38 @@ test('a dry run prices 720p above 480p', async () => {
   const cheap = await quote('480p');
   const dear = await quote('720p');
   assert.ok(dear > cheap, `720p quoted $${dear} against 480p at $${cheap}`);
+});
+
+/** And the same seam for the shape. A label holds the SHORT edge, so 16:9 and
+ *  9:16 are exactly 4/3 the pixels at the same tier -- and fal bills tokens as
+ *  pixels x seconds, so the quote has to move with them or --dry-run says
+ *  $4.5646 for a render that bills $6.2625. */
+test('a dry run prices a wide shape above 4:3 at the same tier', async () => {
+  const { dryRun } = await import('../scripts/render/pipeline.mjs');
+  const { createProvider } = await import('../scripts/providers/index.mjs');
+  const provider = createProvider('fal', {
+    videoModel: 'bytedance/seedance-2.0/reference-to-video',
+  });
+
+  const quote = async (aspect) => (await dryRun({
+    provider,
+    input: {
+      place: { kind: 'preset', value: 'schrebergarten-august' },
+      outfit: { kind: 'preset', value: 'trainingsjacke' },
+      stillCount: 0,
+      direct: true,
+      resolution: '720p',
+      aspect,
+    },
+    videoModelOverride: 'bytedance/seedance-2.0/reference-to-video',
+  })).estimate.estimated;
+
+  const square = await quote('4:3');
+  for (const wide of ['16:9', '9:16']) {
+    const quoted = await quote(wide);
+    assert.ok(quoted > square,
+      `${wide} quoted $${quoted} against 4:3 at $${square} -- a wide shape is 4/3 the pixels and must quote above it`);
+  }
 });
 
 /**

@@ -376,12 +376,17 @@ async function main() {
       // first offer. The other half was the pricing table having no raster
       // dimension at all. Fixing either one alone leaves --dry-run quoting one
       // number for two orders that differ by 2.2x.
+      // AND SO DOES THE SHAPE, for the identical reason one dimension later.
+      // `cleanAspect` runs here too rather than being skipped: without it
+      // `--dry-run --aspect=garbage` was silently quoted as 4:3 while the real
+      // render refuses the same argument by name.
       input: {
         place: { ...place, photoPath: placePhoto },
         outfit,
         stillCount,
         direct,
         resolution: cleanResolution(args.resolution),
+        aspect: cleanAspect(args.aspect, cfg),
       },
       stillModelOverride, videoModelOverride, allowUnverifiedModel,
     });
