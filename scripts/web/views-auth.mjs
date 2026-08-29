@@ -381,6 +381,65 @@ export function onboardingPage({ account = null, consentText = '', csrf = '', er
 }
 
 /**
+ * `/account` -- the page where a person reads what this service holds about
+ * them, takes a copy, or ends the whole thing. Deletion spec §3.
+ *
+ * THE DELETION FORM DEMANDS THE ADDRESS TYPED BACK. A checkbox is a click; a
+ * click happens by accident, and this door only opens one way. The server
+ * compares the typed value against the session account's own email, so the
+ * form works with no JavaScript -- the same rule as the contact sheet, and for
+ * the same reason: the screens with a human decision on them are the ones that
+ * must not need a script.
+ *
+ * WHAT THE COPY PROMISES IS EXACTLY WHAT `deleteAccountEverywhere` PERFORMS:
+ * photo, tapes, credit history, sign-in -- gone together; nothing about
+ * payment records, because those live at Stripe under Stripe's own legal
+ * basis and pretending otherwise would be a promise this code cannot keep.
+ */
+export function accountPage({ account, balance = null, csrf = '', error = null } = {}) {
+  const body = `
+<main>
+  <section class="panel">
+    <p class="eyebrow">Your account</p>
+    <h1 class="headline">${h(account?.email ?? '')}</h1>
+    <p class="sub">${balance ? `${h(String(balance.credits))} credits on the ${h(String(balance.planId ?? account?.plan ?? ''))} plan.` : ''}</p>
+
+    ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
+
+    <h2 class="subhead">Your data</h2>
+    <p class="sub">One JSON document: your account record, your credit history, and the
+    order details of every tape on your shelf. The tapes themselves are on the shelf --
+    download any of them there.</p>
+    <p><a class="button" href="/api/account/export" download>Export your data</a></p>
+
+    <h2 class="subhead">Delete this account</h2>
+    <p class="sub">Your photo, your tapes, your credit history and your sign-in are deleted
+    together, immediately, everywhere this service keeps them. There is no undo and nothing
+    to restore from. If a tape is still rendering, cancel it first.</p>
+
+    <form method="post" action="/account/delete">
+      ${csrfField(csrf)}
+      ${field({
+    id: 'confirm', name: 'confirm', label: 'Type your email address to confirm',
+    type: 'email', autocomplete: 'off', required: true,
+  })}
+      <button type="submit" class="record record--danger">Delete my account</button>
+    </form>
+  </section>
+</main>
+`;
+
+  return layout({
+    title: 'Timestamp - your account',
+    body,
+    bodyClass: 'page-account',
+    wrapClass: 'wrap--narrow',
+    account,
+    balance,
+  });
+}
+
+/**
  * Shown when this build has no Supabase configuration.
  *
  * SEPARATE FROM `authUnavailablePage` BECAUSE THE CAUSE IS DIFFERENT AND SO IS

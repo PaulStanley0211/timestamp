@@ -167,6 +167,9 @@ function identityReply({ email = TEST_EMAIL, supabaseUserId = TEST_SUPABASE_ID }
  * @param {boolean} [opts.trustProxy]  whether `x-forwarded-for` is believed
  * @param {object|null} [opts.pendingConsent] consent to park for `email` first
  * @param {string} [opts.email]        the address the fake identity carries
+ * @param {object} [opts.queue]        a queue with more opinions than the
+ *                                     do-nothing default -- the account-deletion
+ *                                     tests hand one whose `peek` can hold a lease
  * @returns {Promise<{base,root,app,csrf,cookie,calls,transport,supabase}>}
  */
 export async function startWithFakeSupabase(t, {
@@ -178,6 +181,7 @@ export async function startWithFakeSupabase(t, {
   pendingConsent = PARKED_CONSENT,
   email = TEST_EMAIL,
   supabaseUserId = TEST_SUPABASE_ID,
+  queue = null,
 } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-code-'));
 
@@ -220,7 +224,7 @@ export async function startWithFakeSupabase(t, {
   const app = createServer({
     root,
     cfg: CFG,
-    queue: fakeQueue(),
+    queue: queue ?? fakeQueue(),
     port: 0,
     supabase,
     trustProxy,

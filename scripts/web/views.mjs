@@ -526,6 +526,7 @@ function nav({ account = null, balance = null } = {}) {
   <span class="who">${h(account.email ?? '')}</span>
   ${left}
   <a href="/pricing">Plans</a>
+  <a href="/account">Account</a>
   <form method="post" action="/logout" class="nav-form"><button type="submit">Sign out</button></form>
 </nav>`;
 }

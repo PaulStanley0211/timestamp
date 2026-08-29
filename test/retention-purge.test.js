@@ -565,3 +565,37 @@ test('a corrupt manifest is surfaced by the sweep instead of hiding a photograph
   assert.ok(fs.existsSync(jobPaths(root, broken).input),
     'a job with no readable age must not be deleted on a guess');
 });
+
+test('the sweep tolerates an owners directory vanishing mid-scan -- account deletion now runs beside it', () => {
+  // Deletion spec §5's last bullet, verified rather than assumed: an account
+  // deletion removes `out/owners/<accountId>` whole while a sweep may be
+  // between its readdir of `out/owners` and its stat of the entry inside.
+  // The overlay stages exactly that: the directory is still listed, and every
+  // later touch of anything under it answers ENOENT.
+  const root = tmpRoot();
+  const { jobId, paths } = seedJob(root, { ageDays: 31 });
+  const accountId = 'a'.repeat(32);
+  fs.mkdirSync(`${root}/${OWNERS_DIR}/${accountId}`, { recursive: true });
+  fs.writeFileSync(`${root}/${OWNERS_DIR}/${accountId}/${jobId}.json`, JSON.stringify({ jobId, accountId }));
+
+  const vanished = `${path.resolve(root).split(path.sep).join('/')}/${OWNERS_DIR}/${accountId}`;
+  const enoent = (p) => {
+    const err = new Error(`ENOENT: no such file or directory, stat '${p}'`);
+    err.code = 'ENOENT';
+    throw err;
+  };
+  const under = (p) => String(p).split(path.sep).join('/').startsWith(vanished);
+  const fsImpl = {
+    ...fs,
+    statSync: (p, ...rest) => (under(p) ? enoent(p) : fs.statSync(p, ...rest)),
+    rmSync: (p, ...rest) => (under(p) ? enoent(p) : fs.rmSync(p, ...rest)),
+  };
+
+  const result = sweepRetention({
+    root, retention: { photoDays: 7, jobDays: 30 }, nowImpl: NOW, dryRun: false, fsImpl,
+  });
+
+  assert.equal(result.jobsDeleted, 1, 'a vanished ownership index must not stop the job deletion');
+  assert.equal(fs.existsSync(paths.dir), false, 'the job directory must still be deleted');
+  assert.deepEqual(result.errors, [], 'a directory that is already gone is the goal state, not a failure');
+});

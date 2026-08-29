@@ -88,6 +88,15 @@ export const ROUTES = Object.freeze([
   // anti-forgery pair as every other state-changing form on the site.
   { method: 'POST', pattern: '/onboarding', name: 'onboardingConsent' },
 
+  // --- the account itself (deletion spec 2026-08-29, §3 and §4) -----------
+  // All three gated by the default (none is in PUBLIC_ROUTES below). The page
+  // and the export need only a session; the deletion POST additionally proves
+  // origin, carries the anti-forgery pair, and demands the account's own email
+  // typed back -- a one-way door gets a typed confirmation, not a checkbox.
+  { method: 'GET', pattern: '/account', name: 'accountPage' },
+  { method: 'GET', pattern: '/api/account/export', name: 'accountExport' },
+  { method: 'POST', pattern: '/account/delete', name: 'accountDelete' },
+
   // --- Google, the PKCE round trip (spec §3, §4.2) ------------------------
   // NOT behind a session, for the same reason `/login` and `/signup` are not:
   // both routes exist precisely to let somebody who has no session yet get

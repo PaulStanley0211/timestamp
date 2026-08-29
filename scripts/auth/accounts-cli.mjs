@@ -42,20 +42,34 @@
  *   npm run accounts -- grant --email=<addr> --period
  *   npm run accounts -- ledger --email=<addr>|--id=<accountId> [--limit=20]
  *   npm run accounts -- plans
+ *   npm run accounts -- delete --email=<addr>|--id=<accountId> [--yes]
  *
  * Options: --json  --root=<dir>
+ *
+ * WHY delete LIVES HERE. The deletion spec's §6: the operator must be able to
+ * honour an emailed erasure request without the person's password. Without
+ * `--yes` it prints what would go and refuses -- the same discipline as
+ * `npm run purge`, because the failure mode of this command is a person's
+ * account being gone. It runs the SAME `deleteAccountEverywhere` the web
+ * route runs (upstream identity first, live-lease refusal, register
+ * untouched); the Supabase half needs SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY /
+ * SUPABASE_SECRET_KEY in the environment, which `npm run accounts` now loads
+ * from `.env` exactly as `npm run web` does.
  */
 
 import process from 'node:process';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 
 import {
   AuthError,
   DEFAULT_PLAN_ID,
+  OWNERS_DIR,
   PLANS,
   PLAN_IDS,
   REPO_ROOT,
   createAccount,
+  deleteAccount,
   findAccountByEmail,
   freeTapeState,
   listAccounts,
@@ -63,6 +77,10 @@ import {
   setPlan,
   updateAccount,
 } from './accounts.mjs';
+import { destroySessionsForAccount } from './session.mjs';
+import { deleteAccountEverywhere, DeletionError } from './deletion.mjs';
+import { createSupabaseAuth } from './supabase-auth.mjs';
+import { createQueue } from '../queue/queue.mjs';
 import { CONSENT_TEXT } from '../safety/consent.mjs';
 import {
   ALL_RESOLUTIONS,
@@ -77,7 +95,7 @@ import {
   ledgerFor,
 } from './credits.mjs';
 
-const COMMANDS = ['list', 'create', 'set-plan', 'grant', 'ledger', 'plans'];
+const COMMANDS = ['list', 'create', 'set-plan', 'grant', 'ledger', 'plans', 'delete'];
 
 function parseArgs(argv) {
   const opts = { command: null, positional: [], flags: new Set(), values: {} };
@@ -155,7 +173,9 @@ function usage() {
   console.log('  grant <accountId> <credits> --reason=..     add credits (negative corrects a mistake)');
   console.log('  grant --email=<addr> --period               grant one period of the account current plan');
   console.log('  ledger --email=<addr> [--limit=20]          every credit in and out, with a running balance');
-  console.log('  plans                                       the plans, and what each grant buys\n');
+  console.log('  plans                                       the plans, and what each grant buys');
+  console.log('  delete --email=<addr> [--yes]               erase an account everywhere; without --yes it');
+  console.log('                                              only prints what would go\n');
   console.log('  --id=<accountId> works anywhere --email= does.');
   console.log('  --json  --root=<dir>\n');
   console.log('  create also takes --password=<pw> (visible in shell history) and --consent,');
@@ -375,6 +395,106 @@ async function main() {
     console.log(`  est. cost  ~$${estimatedUSD(balance.credits).toFixed(2)} of provider spend if it is all used at 480p`);
     console.log('\n  Recorded as one more line on the ledger. Nothing was edited and nothing was');
     console.log('  taken; `ledger` shows how the balance got to where it is.\n');
+    return;
+  }
+
+  if (command === 'delete') {
+    const account = resolveAccount({ root, values, positional });
+    let jobIds = [];
+    try {
+      jobIds = fs.readdirSync(`${root}/${OWNERS_DIR}/${account.accountId}`)
+        .filter((name) => name.endsWith('.json'))
+        .map((name) => name.slice(0, -'.json'.length));
+    } catch { /* no jobs is the common case */ }
+    const env = process.env;
+    const haveSupabase = Boolean(env.SUPABASE_URL && env.SUPABASE_PUBLISHABLE_KEY && env.SUPABASE_SECRET_KEY);
+
+    if (!flags.has('yes')) {
+      // The careless call is the safe one, exactly as `npm run purge` refuses
+      // without --apply: the failure mode here is a person's account gone.
+      if (json) {
+        console.log(JSON.stringify({
+          wouldDelete: {
+            accountId: account.accountId, email: account.email,
+            supabaseUserId: account.supabaseUserId, jobs: jobIds.length,
+          },
+          supabaseConfigured: haveSupabase,
+          apply: false,
+        }, null, 2));
+        process.exitCode = 1;
+        return;
+      }
+      console.log(`\nWOULD delete ${account.email} -- nothing was touched. Add --yes to act.\n`);
+      console.log(`  accountId   ${account.accountId}`);
+      console.log(`  supabase    ${account.supabaseUserId ?? 'none (local-only account)'}`);
+      console.log(`  jobs        ${jobIds.length}`);
+      if (account.supabaseUserId && !haveSupabase) {
+        console.log('\n  The account has a Supabase identity and SUPABASE_* is not in the environment,');
+        console.log('  so --yes would refuse: the upstream identity must go first, never be skipped.');
+      }
+      console.log('');
+      process.exitCode = 1;
+      return;
+    }
+
+    const supabase = haveSupabase
+      ? createSupabaseAuth({
+        url: env.SUPABASE_URL,
+        publishableKey: env.SUPABASE_PUBLISHABLE_KEY,
+        secretKey: env.SUPABASE_SECRET_KEY,
+        fetchImpl: globalThis.fetch.bind(globalThis),
+        logImpl: (line) => console.error(line),
+      })
+      : null;
+    const queue = createQueue({ root });
+    const isClaimed = (jobId) => {
+      try {
+        return queue.peek({ state: 'claimed' }).some((row) => row.jobId === jobId && !row.expired);
+      } catch {
+        return true; // unknown means "assume a worker holds it" -- same rule as the web layer
+      }
+    };
+
+    let result;
+    try {
+      result = await deleteAccountEverywhere({
+        root, accountId: account.accountId,
+        api: { loadAccount, deleteAccount, destroySessionsForAccount },
+        supabase, isClaimed,
+      });
+    } catch (err) {
+      if (err instanceof DeletionError) {
+        console.error(`\n${err.code}: ${err.message}`);
+        if (err.code === 'JOB_CLAIMED') {
+          console.error('  A worker holds a live lease. Wait for the render to finish or cancel it, then rerun.');
+        }
+        if (err.code === 'IDENTITY_UNAVAILABLE') {
+          console.error('  Set SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY and SUPABASE_SECRET_KEY (or put them');
+          console.error('  in .env -- `npm run accounts` loads it) so the upstream identity goes first.');
+        }
+        console.error('');
+        process.exitCode = 1;
+        return;
+      }
+      throw err;
+    }
+
+    if (json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    console.log(`\ndeleted ${result.email}\n`);
+    console.log(`  supabase    ${result.supabase.deleted ? (result.supabase.missing ? 'was already gone' : 'deleted') : 'skipped (local-only account)'}`);
+    console.log(`  jobs        ${result.jobsDeleted} deleted`);
+    console.log(`  sessions    ${result.sessionsDestroyed} destroyed`);
+    for (const held of result.pendingRefunds) {
+      console.log(`  REFUND HELD job ${held.jobId}: ${held.credits ?? '?'} CR still unresolved -- npm run refunds`);
+    }
+    for (const failure of result.errors) {
+      console.log(`  COULD NOT REMOVE ${failure.path ?? failure.jobId}: ${failure.code ?? ''} ${failure.message}`);
+    }
+    console.log('\n  The free-tape register is deliberately untouched: its ceiling counts every');
+    console.log('  account that has ever existed. Stripe’s own records live at Stripe.\n');
     return;
   }
 

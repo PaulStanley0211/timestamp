@@ -146,7 +146,7 @@ export const SUPABASE_INDEX_DIR = '_index-supabase';
  * cannot hand back a multi-megabyte "id" and turn every lookup into a stat on
  * an absurd filename.
  */
-const SUPABASE_ID_RE = /^[0-9a-zA-Z-]{1,64}$/;
+export const SUPABASE_ID_RE = /^[0-9a-zA-Z-]{1,64}$/;
 
 function supabaseIndexPath(root, supabaseUserId) {
   if (!SUPABASE_ID_RE.test(String(supabaseUserId ?? ''))) return null;
@@ -1511,6 +1511,54 @@ export function updateAccount({ root = REPO_ROOT, accountId, nowImpl = defaultNo
     saveAccount(fresh);
     return { account: fresh, outcome };
   });
+}
+
+/**
+ * Erases one account from the local store: the record, the email index entry,
+ * the supabase index entry, and the directory. Deletion spec §1 step 5 -- the
+ * LAST local step, after jobs and sessions, because everything before it
+ * needs this record to find what else to delete.
+ *
+ * THE RECORD GOES FIRST, INSIDE THE LOCK. A concurrent `updateAccount` -- an
+ * operator grant landing mid-deletion -- then fails loudly with `NO_ACCOUNT`
+ * instead of resurrecting the record after this function has finished. The
+ * index entries follow while the lock is still held; both lookups already
+ * tolerate a dangling entry (`findAccountByEmail`'s crashed-signup branch), so
+ * even a crash between the two rms leaves an address that resolves to null and
+ * a fresh signup that gets a NEW account -- never the `4f53dc6` rebind trap.
+ * The directory itself is removed after the lock is released, because the lock
+ * file lives inside it.
+ *
+ * EACH INDEX ENTRY IS REMOVED ONLY IF IT POINTS AT THIS ACCOUNT. The entries
+ * are exclusive-created and should always agree, but "should" is not a reason
+ * to let a crossed index turn one person's deletion into another person's
+ * unreachable account.
+ *
+ * WHAT THIS NEVER TOUCHES: the free-tape register. Its ceiling counts grants
+ * across every account that has EVER existed -- decrementing it here is the
+ * create-delete-create farm the ceiling exists to bound.
+ */
+export function deleteAccount({ root = REPO_ROOT, accountId }) {
+  const account = loadAccount({ root, accountId });
+  const paths = accountPaths(root, accountId);
+
+  withAccountLock({ root, accountId }, () => {
+    fs.rmSync(paths.record, { force: true });
+
+    const emailEntry = indexPath(root, account.emailHash ?? emailHash(account.email));
+    const entry = readJson(emailEntry, { missingOk: true });
+    if (entry?.accountId === accountId) fs.rmSync(emailEntry, { force: true });
+
+    const sbEntry = account.supabaseUserId ? supabaseIndexPath(root, account.supabaseUserId) : null;
+    if (sbEntry) {
+      let pointsHere = false;
+      try { pointsHere = fs.readFileSync(sbEntry, 'utf8').trim() === accountId; } catch { /* already gone */ }
+      if (pointsHere) fs.rmSync(sbEntry, { force: true });
+    }
+  });
+
+  fs.rmSync(paths.dir, { recursive: true, force: true });
+  return { accountId, email: account.email };
 }
 
 /** Copies the persisted fields of `fresh` onto `stale`, so a caller still

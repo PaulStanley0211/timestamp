@@ -16,7 +16,7 @@
  * faces. The upstream words are logged and never returned. Spec §4.3.
  */
 import { requireFetchImpl } from '../providers/contract.mjs';
-import { BAD_CREDENTIALS_MESSAGE } from './accounts.mjs';
+import { BAD_CREDENTIALS_MESSAGE, SUPABASE_ID_RE } from './accounts.mjs';
 
 export class SupabaseAuthError extends Error {
   constructor(detail, { status = 0, code = '' } = {}) {
@@ -37,9 +37,11 @@ export function createSupabaseAuth({ url, publishableKey, secretKey, fetchImpl, 
   const base = url.replace(/\/+$/, '');
 
   // The secret key is used for the calls that carry Sb-Forwarded-For, which
-  // Supabase only honours for an elevated key. Spec §5.
-  async function call(path, { method = 'POST', body = null, accessToken = null, clientIp = null } = {}) {
-    const key = clientIp ? secretKey : publishableKey;
+  // Supabase only honours for an elevated key. Spec §5. `admin` forces it for
+  // the /admin/* endpoints, which answer 403 to a publishable key regardless
+  // of what the request carries.
+  async function call(path, { method = 'POST', body = null, accessToken = null, clientIp = null, admin = false } = {}) {
+    const key = (clientIp || admin) ? secretKey : publishableKey;
     const headers = { apikey: key, 'Content-Type': 'application/json' };
     headers.Authorization = `Bearer ${accessToken ?? key}`;
     if (clientIp) headers['Sb-Forwarded-For'] = clientIp;
@@ -169,6 +171,38 @@ export function createSupabaseAuth({ url, publishableKey, secretKey, fetchImpl, 
     async updatePassword({ accessToken, password }) {
       await call('/user', { method: 'PUT', body: { password }, accessToken });
       return { ok: true };
+    },
+
+    /**
+     * The upstream half of account deletion, and deliberately the FIRST step
+     * of it (deletion spec §1): if this succeeds and a later local step fails,
+     * the person can no longer sign in and the local remains are cleanable
+     * litter; the reverse order leaves a live upstream identity pointing at
+     * deleted local state -- the `4f53dc6` rebind trap.
+     *
+     * A 404 is SUCCESS with `missing: true`: a deletion that crashed between
+     * this call and the local cleanup must be retryable, and on the retry the
+     * upstream user is already gone. Every other refusal throws, because a
+     * local deletion beside a still-live identity is the one outcome worse
+     * than answering "not right now".
+     *
+     * The id is validated against the same bound `accounts.mjs` uses for its
+     * index filenames -- here it is a URL path segment, and the requirement is
+     * identical: nothing that can climb, query, or fragment its way out.
+     */
+    async adminDeleteUser({ supabaseUserId }) {
+      if (typeof supabaseUserId !== 'string' || !SUPABASE_ID_RE.test(supabaseUserId)) {
+        throw new SupabaseAuthError(`adminDeleteUser refused an unsafe id ${JSON.stringify(supabaseUserId ?? null)}`, {
+          code: 'BAD_SUPABASE_ID',
+        });
+      }
+      try {
+        await call(`/admin/users/${supabaseUserId}`, { method: 'DELETE', admin: true });
+      } catch (err) {
+        if (err instanceof SupabaseAuthError && err.status === 404) return { ok: true, missing: true };
+        throw err;
+      }
+      return { ok: true, missing: false };
     },
 
     /** Revoke at the door: after this, the only live credential is ours. A

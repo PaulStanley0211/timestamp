@@ -97,8 +97,9 @@ import {
 import { PAID_PROVIDER_IDS } from '../providers/contract.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
-  resetPage, resetCompletePage, onboardingPage,
+  resetPage, resetCompletePage, onboardingPage, accountPage,
 } from './views-auth.mjs';
+import { deleteAccountEverywhere, DeletionError } from '../auth/deletion.mjs';
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
 import { createBilling } from '../billing/billing.mjs';
@@ -2904,6 +2905,167 @@ export function createServer({
       // difference is that this one is where the person was going.
       if (wantsHtml(req)) return redirect(res, '/', 303);
       return sendJson(req, res, 200, { next: '/' });
+    },
+
+    // --- the account itself (deletion spec 2026-08-29) ---------------------
+
+    /**
+     * `/account`. Gated by the top-level session check like `/onboarding`;
+     * works without Supabase on purpose -- reading what the service holds
+     * about you and taking a copy must not depend on the identity provider
+     * being up. Only the deletion POST below needs the upstream half.
+     */
+    async accountPage(req, res, { account }) {
+      const [{ token, setCookie }, balance] = await Promise.all([
+        auths.csrfIssue(req), balanceOf(account),
+      ]);
+      return sendHtml(req, res, 200, accountPage({ account, balance, csrf: token }),
+        setCookie ? { 'Set-Cookie': setCookie } : {});
+    },
+
+    /**
+     * `GET /api/account/export` -- one JSON document: the account record, the
+     * projected ledger, and per owned job the order metadata. Spec §2.
+     *
+     * THE ACCOUNT BLOCK IS AN ALLOW-LIST, NEVER A SPREAD. `account` non-
+     * enumerably hides `root` and `paths`, but its ENUMERABLE fields include
+     * `password` (the scrypt hash), `rev` and `emailHash` -- a spread-and-
+     * delete here would be one forgotten field away from mailing a person
+     * their own hash, and a rename away from doing it silently. Naming what
+     * ships is the only shape that fails safe.
+     *
+     * NOT THE MEDIA FILES. The person already holds download URLs for every
+     * tape on their shelf; a multi-hundred-MB zip is a different feature.
+     */
+    async accountExport(req, res, { account }) {
+      const mod = await auths.api();
+      // Feature-detected, not REQUIRED_AUTH (spec §5): a fake without the
+      // ledger projection makes this route say so, not the whole app fall.
+      if (typeof mod.ledgerFor !== 'function') {
+        throw new HttpError(503, 'The export is not available right now.', { code: 'AUTH_UNAVAILABLE' });
+      }
+
+      const jobs = [];
+      for (const jobId of auths.jobIdsFor(account.accountId)) {
+        const receipt = auths.claimOf({ accountId: account.accountId, jobId });
+        const row = {
+          jobId,
+          orderedAt: receipt?.at ?? null,
+          resolution: receipt?.resolution ?? null,
+          credits: receipt?.credits ?? null,
+        };
+        try {
+          const job = readJob(jobId);
+          jobs.push({
+            ...row,
+            status: job.status,
+            createdAt: job.createdAt ?? null,
+            updatedAt: job.updatedAt ?? null,
+            place: job.input?.place?.value ?? null,
+            outfit: job.input?.outfit?.value ?? null,
+            aspect: job.input?.aspect ?? null,
+            resolution: row.resolution ?? job.input?.resolution ?? null,
+          });
+        } catch {
+          // The tape is already purged; the ownership receipt is what remains,
+          // and it is still the person's data.
+          jobs.push({ ...row, status: 'deleted' });
+        }
+      }
+
+      return sendJson(req, res, 200, {
+        exportedAt: nowImpl().toISOString(),
+        account: {
+          accountId: account.accountId,
+          email: account.email,
+          plan: account.plan,
+          supabaseUserId: account.supabaseUserId,
+          createdAt: account.createdAt,
+          updatedAt: account.updatedAt,
+          consent: account.consent,
+        },
+        ledger: mod.ledgerFor(account),
+        jobs,
+      }, { 'Content-Disposition': 'attachment; filename="timestamp-export.json"' });
+    },
+
+    /**
+     * `POST /account/delete` -- the one-way door. Spec §1 and §4.
+     *
+     * GATE ORDER, and every refusal must leave everything standing: Supabase
+     * configured (the admin call is step one of the deletion, so without it
+     * this answers 503 like the other identity routes), then proof of origin
+     * BEFORE the body is read, then the anti-forgery pair, then the typed
+     * address -- compared normalised, because ME@EXAMPLE.COM is the same
+     * address `normaliseEmail` already says it is. Only then does
+     * `deleteAccountEverywhere` run the order it owns.
+     */
+    async accountDelete(req, res, { account }) {
+      const reject = async (status, message, code) => {
+        const [{ token, setCookie }, balance] = await Promise.all([
+          auths.csrfIssue(req), balanceOf(account),
+        ]);
+        const headers = setCookie ? { 'Set-Cookie': setCookie } : {};
+        if (wantsHtml(req)) {
+          return sendHtml(req, res, status,
+            accountPage({ account, balance, csrf: token, error: message }), headers);
+        }
+        return sendJson(req, res, status, { error: { status, message, code } }, headers);
+      };
+
+      if (!sb) return identityUnavailable(req, res);
+      if (!sameOriginPost(req)) {
+        return reject(403, 'We could not confirm that came from this site. Please try again below.', 'NOT_FROM_THIS_SITE');
+      }
+      const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
+      if (!(await auths.csrfCheck(req, String(body.csrf ?? '')))) {
+        return reject(403, 'We could not confirm that came from this site. Please try again below.', 'NOT_FROM_THIS_SITE');
+      }
+      const typed = String(body.confirm ?? '').trim().toLowerCase();
+      if (typed === '' || typed !== account.email) {
+        return reject(400, 'Type your account’s email address exactly to confirm the deletion.', 'CONFIRM_MISMATCH');
+      }
+
+      const mod = await auths.api();
+      // Feature-detected, not REQUIRED_AUTH (spec §5) -- an auth module
+      // without the deletion half makes this route unavailable, not the app.
+      if (typeof mod.deleteAccount !== 'function' || typeof mod.destroySessionsForAccount !== 'function') {
+        return reject(503, 'Account deletion is not available right now.', 'AUTH_UNAVAILABLE');
+      }
+
+      let result;
+      try {
+        result = await deleteAccountEverywhere({
+          root, accountId: account.accountId, api: mod, supabase: sb, isClaimed, nowImpl,
+        });
+      } catch (err) {
+        if (err instanceof DeletionError && err.code === 'JOB_CLAIMED') {
+          return reject(409, 'A tape is still rendering. Cancel it first, then delete the account.', 'JOB_CLAIMED');
+        }
+        if (err instanceof DeletionError && err.code === 'IDENTITY_UNAVAILABLE') {
+          return identityUnavailable(req, res);
+        }
+        throw err;
+      }
+
+      // The operator's lines. The person is gone and the page must say
+      // nothing more than "done" -- but a pending refund is money, and a file
+      // that would not delete is the F2 shape, so both are announced where
+      // the operator reads.
+      logImpl(`[web] account ${result.accountId} deleted: supabase ${JSON.stringify(result.supabase)}, `
+        + `${result.jobsDeleted} job(s), ${result.sessionsDestroyed} session(s)`);
+      for (const held of result.pendingRefunds) {
+        logImpl(`[web] REFUND HELD outlives deleted account ${result.accountId}: job ${held.jobId}, `
+          + `${held.credits ?? '?'} CR -- npm run refunds`);
+      }
+      for (const failure of result.errors) {
+        logImpl(`[web] deletion of account ${result.accountId} could not remove ${failure.path ?? failure.jobId}: `
+          + `${failure.code ?? ''} ${failure.message}`);
+      }
+
+      const cookie = await auths.endSession(req);
+      if (wantsHtml(req)) return redirect(res, '/', 303, { 'Set-Cookie': cookie });
+      return sendJson(req, res, 200, { deleted: true }, { 'Set-Cookie': cookie });
     },
 
     /**

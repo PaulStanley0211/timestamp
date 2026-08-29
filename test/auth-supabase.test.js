@@ -349,3 +349,63 @@ test('supabaseBannerLines is prominent and names the missing variables on a part
   const absentLines = mod.supabaseBannerLines(mod.describeSupabaseConfig({}));
   assert.match(absentLines.join('\n'), /NO SUPABASE_\*/);
 });
+
+// ---------------------------------------------------------------------------
+// adminDeleteUser -- the upstream half of account deletion.
+//
+// The deletion spec (docs/superpowers/specs/2026-08-29-account-deletion-export-
+// design.md §1) puts this call FIRST in the deletion order because it is the
+// external, irreversible half: if it succeeds and a later local step fails, the
+// person can no longer sign in and the local remains are cleanable litter. Two
+// consequences are pinned here: a 404 from Supabase is SUCCESS (a crashed
+// half-deletion must be retryable, and on retry the user is already gone), and
+// every other refusal must THROW so the local deletion never runs against a
+// still-live upstream identity.
+// ---------------------------------------------------------------------------
+
+test('adminDeleteUser sends DELETE to the admin endpoint with the secret key on both headers', async () => {
+  const fetchImpl = fakeFetch(() => json(200, {}));
+  const sb = createSupabaseAuth({ ...CFG, fetchImpl });
+  const result = await sb.adminDeleteUser({ supabaseUserId: 'uuid-to-delete-1' });
+  assert.deepEqual(result, { ok: true, missing: false });
+  assert.equal(fetchImpl.calls.length, 1, 'exactly one upstream call');
+  const [call] = fetchImpl.calls;
+  assert.equal(call.url, 'https://example.supabase.co/auth/v1/admin/users/uuid-to-delete-1');
+  assert.equal(call.opts.method, 'DELETE');
+  assert.equal(call.opts.headers.apikey, CFG.secretKey, 'admin endpoints only answer to the secret key, publishable will 403');
+  assert.equal(call.opts.headers.Authorization, `Bearer ${CFG.secretKey}`);
+  assert.equal(call.opts.body, undefined, 'a delete carries no body');
+});
+
+test('adminDeleteUser treats an already-gone upstream user as deleted, so a crashed half-deletion can be retried', async () => {
+  const fetchImpl = fakeFetch(() => json(404, { error_code: 'user_not_found', msg: 'User not found' }));
+  const sb = createSupabaseAuth({ ...CFG, fetchImpl });
+  const result = await sb.adminDeleteUser({ supabaseUserId: 'uuid-already-gone' });
+  assert.deepEqual(result, { ok: true, missing: true },
+    'a retry after a crash between the admin call and the local deletion must not wedge on 404');
+});
+
+test('adminDeleteUser throws on every other upstream refusal -- local deletion must stop, not carry on beside a live identity', async () => {
+  for (const status of [401, 403, 422, 500]) {
+    const fetchImpl = fakeFetch(() => json(status, { msg: 'no' }));
+    const sb = createSupabaseAuth({ ...CFG, fetchImpl });
+    await assert.rejects(
+      () => sb.adminDeleteUser({ supabaseUserId: 'uuid-1' }),
+      (err) => err.name === 'SupabaseAuthError' && err.status === status,
+      `a ${status} must abort the deletion, not read as done`,
+    );
+  }
+});
+
+test('adminDeleteUser refuses an unsafe id before any request leaves -- the id is a URL path segment', async () => {
+  const fetchImpl = fakeFetch(() => json(200, {}));
+  const sb = createSupabaseAuth({ ...CFG, fetchImpl });
+  for (const bad of ['', null, undefined, 'a/b', '..', 'x'.repeat(65), 'uuid?x=1', 'uuid#f', 'uuid%2Fadmin']) {
+    await assert.rejects(
+      () => sb.adminDeleteUser({ supabaseUserId: bad }),
+      (err) => err.name === 'SupabaseAuthError',
+      `${JSON.stringify(bad)} must be refused`,
+    );
+  }
+  assert.equal(fetchImpl.calls.length, 0, 'a refused id must never reach the wire');
+});
