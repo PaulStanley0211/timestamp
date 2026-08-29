@@ -6,9 +6,30 @@ logs/
 assets/stock/*
 !assets/stock/.gitkeep
 !assets/stock/README.md
+# Credentials. `.env` alone matched only the literal name, so `.env.production`
+# and `.env.local` were tracked-able -- and `.dockerignore` was STRICTER than
+# this file, which is backwards: a registry push is optional and a public repo
+# is already published. `.env.example` is negated back because it is the
+# operator's only list of what the seven variables are called.
 .env
+.env.*
+!.env.example
+
+# TLS material. The deploy that is next terminates TLS on a small VM, which is
+# exactly the workflow that writes a key and a certificate into a working copy.
+*.pem
+*.key
+*.p12
+*.pfx
+
 assets/test-photos/*
 !assets/test-photos/README.md
+
+# Local tool state. `.gstack/` writes its own `.gitignore` containing `*`, but
+# that file is untracked and machine-local, so the protection does not survive
+# a fresh clone where a tool recreates the directory before writing it.
+.gstack/
+.superpowers/
 
 # Security reviews stay on this machine. This repo is public, and an accurate
 # list of a live system's open weaknesses is an attack roadmap. Publish a review

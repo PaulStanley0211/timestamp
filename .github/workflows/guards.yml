@@ -51,6 +51,34 @@ jobs:
             exit 1
           fi
 
+      # THE GUARD ABOVE WAS PASSING VACUOUSLY, and this is the one that binds.
+      #
+      # It greps fal.mjs for a default fetchImpl -- but the guard it protects
+      # does not live there. `requireFetchImpl` is in contract.mjs and fal.mjs
+      # only CALLS it, so the regex matched nothing and the check named "the fal
+      # adapter has no default fetch" could not fail. Four independent money
+      # guards were quietly three.
+      #
+      # Asserted BEHAVIOURALLY rather than by regex, because the regex form is
+      # evadable in-file anyway (`fetchImpl ??= fetch`, `globalThis["fetch"]`).
+      # The question is "does this throw when nobody injected a transport", and
+      # that is a question only running it can answer.
+      - name: a paid provider still refuses to invent a transport
+        run: |
+          node -e "
+            import('./scripts/providers/contract.mjs').then(({ requireFetchImpl }) => {
+              try {
+                requireFetchImpl({}, { provider: 'guard' });
+              } catch (err) {
+                if (err instanceof TypeError) { console.log('ok: requireFetchImpl throws with no transport'); return; }
+                throw err;
+              }
+              console.error('::error::requireFetchImpl returned a default instead of throwing.');
+              console.error('::error::Every paid provider can now reach the network from a test that forgot to inject one.');
+              process.exit(1);
+            }).catch((err) => { console.error('::error::' + err.message); process.exit(1); });
+          "
+
       # This repository is public. An accurate list of a live system's open
       # weaknesses is a roadmap; publish a review once its findings are closed.
       - name: no security review in version control
@@ -60,11 +88,59 @@ jobs:
             exit 1
           fi
 
+      # AND NOT IN A COMMIT MESSAGE EITHER, which is the layer the check above
+      # cannot see. The file was kept out of the repo by path; its CONTENTS went
+      # out in a message, and the path check stayed green throughout. A commit
+      # message is published exactly as effectively as a file.
+      #
+      # KNOWN EXCEPTIONS, and it is deliberate that they are loud rather than
+      # silent. THREE commits already carry review detail, and all three are
+      # reachable from pushed branches:
+      #
+      #   18352f4  origin/supabase-identity-slice, origin/ui-redesign-signed-in-page
+      #   190a9ec  origin/supabase-identity-slice
+      #   6efb0e6  origin/supabase-identity-slice, origin/ui-redesign-signed-in-page
+      #
+      # Rewriting published history is the owner's call, not CI's, so they are
+      # named here with their reason and CI stays green on everything else while
+      # that decision is pending. GitHub serves unreachable commits by SHA
+      # indefinitely, so a rewrite reduces discoverability without erasing it --
+      # closing the disclosed findings is the durable answer either way.
+      #
+      # Delete a SHA from this list when its message is rewritten. An empty list
+      # is the goal; a growing one means the rule is being worked around.
+      - name: no security review in a commit message
+        run: |
+          KNOWN='18352f4 190a9ec 6efb0e6'
+          bad=""
+          for sha in $(git rev-list origin/main..HEAD 2>/dev/null || git rev-list -n 50 HEAD); do
+            skip=""
+            for k in $KNOWN; do case "$sha" in "$k"*) skip=1 ;; esac; done
+            [ -n "$skip" ] && continue
+            if git log -1 --format='%B' "$sha" | grep -qiE \
+              '[0-9]+ (CRITICAL|HIGH|MEDIUM)\b|\b(ONE|TWO|THREE|FOUR) (CRITICAL|HIGH)\b|enumeration oracle|\bF[0-9]{1,2}\b (is|are|still|arms)'; then
+              bad="$bad $sha"
+            fi
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::these commit messages reprint security-review detail, and this repo is public:"
+            for sha in $bad; do echo "  $sha $(git log -1 --format='%s' "$sha")"; done
+            echo "::error::Describe a fix by what it DOES, never by the hole it closed."
+            exit 1
+          fi
+
       # Nothing that holds a credential, and nothing from out/ -- which is where
       # photographs of real people's faces live.
       - name: no secrets and no user data tracked
         run: |
-          bad="$(git ls-files | grep -E '(^|/)\.env$|^out/' || true)"
+          # `(^|/)\.env$` matched only the LITERAL name, so `.env.production`
+          # and `.env.local` were tracked-able -- and the deploy that is next
+          # writes exactly those, alongside a TLS key and certificate. The
+          # pattern now covers the family, the key material, and the real faces
+          # in assets/test-photos that had no CI backstop the way out/ does.
+          bad="$(git ls-files \
+            | grep -E '(^|/)\.env($|\.)|\.(pem|key|p12|pfx)$|^out/|^assets/test-photos/' \
+            | grep -vE '^\.env\.example$|^assets/test-photos/README\.md$' || true)"
           if [ -n "$bad" ]; then
             echo "::error::tracked files that must never be committed:"
             echo "$bad"
