@@ -7,9 +7,15 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-30) — THE PLACE STEP LEADS WITH YOUR OWN PLACE AND THE JUDDER IS FIXED. READ §44, THEN §43, §42, §41, §40, §39, §38, §37.
+## START HERE (2026-08-30) — THE DEPLOY MOVES AHEAD OF STRIPE ACTIVATION. READ §45, THEN §44, §43, §42, §41, §40, §39, §38, §37.
 
-**1957 tests / 1955 pass / 0 fail / 2 skipped** (§44; on a machine with no
+**THE ORDER CHANGED AND IT IS PAUL'S CALL: the Hetzner box comes BEFORE Stripe
+verification**, because activation asks for a business website and nothing is
+reachable yet. §41's "deploy at the end" is superseded. **And Timestamp sells
+from its OWN live Stripe account** — the one the test Prices live in is a
+sandbox belonging to another product and cannot be verified. §45.
+
+**1961 tests / 1959 pass / 0 fail / 2 skipped** (§45; on a machine with no
 Chromium-family browser the seven browser tests self-skip too). The two
 standing skips are the `*-smoke.test.js` money guards, which self-skip without
 `TIMESTAMP_LIVE=1`. **PR #1's CI is GREEN on all five checks at `4965c2a`** —
@@ -304,7 +310,13 @@ section 24.
 
 ### PICK UP HERE
 
-> **READ SECTION 44 FIRST (2026-08-30). The judder is fixed — §32 item 13,
+> **READ SECTION 45 FIRST (2026-08-30). The deploy now comes BEFORE Stripe
+> activation, Timestamp gets its own live Stripe account, and buying credits
+> asks the customer for them. §45B is a correction to the deploy runbook you
+> are about to follow; §45D says why a price on a browser-smoke screenshot is
+> not the price this product charges.**
+>
+> **THEN SECTION 44 (2026-08-30). The judder is fixed — §32 item 13,
 > open since 2026-08-25, decided by Paul and shipped. Read §44B before touching
 > the expression: two things there were corrected BY MEASUREMENT after being
 > reasoned wrong, one of which broke the 375-frame delivery contract.**
@@ -5099,6 +5111,110 @@ ballast hum plus a 300 Hz third harmonic). Both carry full derivations.
 `imageModerateImpl` is already a null seam in `safety/moderate.mjs`, honest
 about being one, recording `image-unclassified` warnings in the manifest. Only
 the vendor choice is left, and that is the owner's.
+
+---
+
+### 45. THE STRIPE GROUNDWORK, AND WHAT THE ACCOUNT ACTUALLY SAYS (2026-08-30)
+
+Paul said "we will do the stripe verification now". **Verification itself was
+not done and could not be**, and the reason is the finding: read off the live
+API, the account the test Prices live in is a **sandbox belonging to another
+product**, and a sandbox cannot be verified.
+
+```
+id                   acct_1U4JIj0WJAHtsKz6
+business_profile     name: "ClearCost sandbox", url: null, support_email: null
+country / currency   DE / eur
+business_type        null
+details_submitted    false      charges_enabled false      payouts_enabled false
+capabilities         {}         statement_descriptor null
+```
+
+**§27's warning is confirmed at the source rather than by rendering a page.**
+Checkout prints the ACCOUNT's business name and there is no per-Price override,
+which is why one account cannot serve two product names.
+
+#### A — TWO DECISIONS PAUL TOOK, both binding
+
+1. **Timestamp sells from its OWN live Stripe account.** Consequences, all in
+   `docs/deploy-runbook.md` under "Going live on Stripe": activation happens
+   twice, and **both Price ids in `config/credits.json` are TEST objects that
+   cannot be promoted** — a Price is immutable and lives in one mode on one
+   account, so both rungs get created again and the ids pasted.
+2. **THE DEPLOY MOVES AHEAD OF ACTIVATION, reversing §41's "deploy at the
+   end".** Stripe's activation asks for a business website; `url` is null and
+   nothing is reachable. A consumer AI product with no site invites a manual
+   review. So: Hetzner box, runbook §§1-4, then file.
+
+#### B — A CORRECTION TO THE RUNBOOK, found before it cost an evening
+
+Its DNS row still said mail to the apex bounces and `support@` needs Email
+Routing before it can go in a footer. **§42A closed that the same morning** —
+the mailbox forwards and was proved forwarding. Following the runbook tonight
+would have meant re-doing finished work. Fixed, with what §42A actually
+established (including that catch-all is deliberately OFF).
+
+#### C — Buying credits now asks for the credits (`0a95067`)
+
+`/terms` said *"Credits are not redeemable for money"* and **nothing anywhere
+asked the customer to agree to it.** Credits are supplied the instant a payment
+lands, so a buyer who never expressly asked for immediate supply — and was
+never told what asking costs them — keeps a cancellation right that sentence
+was denying.
+
+**THE OBLIGATION TRAVELS WITH THE SELLER, NOT THE BUYER'S ADDRESS.** The
+operator is a trader established in Germany, so it is the same rule on every
+sale, to anyone, anywhere. **This was first described here as being about "EU
+customers" and Paul corrected it**: the product is worldwide and the copy must
+not read as though it is European. **There is no region branch in any of this
+and there must not be one** — a patchwork of regional clauses satisfies fewer
+regimes than one clear promise, and there is a test that fails if a region name
+appears in the terms.
+
+Three parts: a required checkbox on the buy form in plain words; a server
+refusal by **set membership, not truthiness** (the CONSENT_YES rule — "false"
+and "0" are non-empty strings) placed **before the pack is resolved**, so
+nothing reaches Stripe; and a **Cancelling and refunds** section on `/terms`,
+which doubles as the refund policy activation asks a business to state.
+
+**THE ONE-INPUT GUARD WAS RE-EXPRESSED RATHER THAN DELETED, and it is stronger
+now.** It asserted the checkout form carries exactly ONE field — a proxy for
+the property that matters, which is that nothing in the form can change what is
+charged. A count cannot say that: it would have passed a second hidden field
+that replaced the first. It is now a field-name allow-list plus an explicit
+refusal of anything named like an amount, a credit count or a price. **Seven
+existing checkout tests were updated to send what a browser now sends** — the
+contract changing deliberately, not tests being relaxed.
+
+#### D — Things that will bite
+
+- **A `perl -0pi -e` sabotage silently did nothing** because the pattern
+  contained `${h(rung.id)}` and perl tried to interpolate it. The grep said 0
+  and the guard looked blind. **Same family as §42G: print the mutated line and
+  confirm it changed** — it was redone with the Edit tool and caught
+  immediately. The heredoc also ate `\b` escapes in a test edit, third session
+  running. **Use Write/Edit for anything with an escape.**
+- **THE PRICES ON A BROWSER-SMOKE SCREENSHOT ARE FIXTURE VALUES.** A screenshot
+  of `/pricing` shows 480p at ~51 CR and 720p at ~152 CR, which look like a
+  live pricing bug against the 21/28/46/61 this file documents. They are not:
+  `test/browser-smoke.test.js` fakes `creditCost` in its own harness. Verified
+  against the real `creditCost` before reporting anything — **21/28/46/61 is
+  correct and this file is not stale.**
+- **The acknowledgement renders once per PAID rung**, so the same sentence
+  appears twice on `/pricing`, and in a three-column grid it wraps to about
+  eight short lines. It reads fine and it is not pretty; a shared line above
+  both buttons would need one form to own a field the other posts, which is
+  exactly what the guard above forbids.
+
+#### E — What is left
+
+**PAUL'S, in his chosen order:** create the Hetzner box and walk the runbook;
+then Stripe activation on a NEW account, with the business name and statement
+descriptor chosen deliberately (both reach customers and both are awkward to
+change); then the ~$2 paid web order (§38E) and the friends test.
+
+**AGENT-BUILDABLE:** nothing is ungated again. The punch-in zoom (§34G) is
+buildable but only a paid render can judge it.
 
 ---
 
