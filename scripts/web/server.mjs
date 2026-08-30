@@ -3646,6 +3646,33 @@ export function createServer({
           });
         }
 
+        // A CARD AND A PHOTOGRAPH ARE TWO ANSWERS TO ONE QUESTION, AND THIS
+        // REFUSES RATHER THAN PICKING ONE (2026-08-30).
+        //
+        // A `display:none` file input still submits. So the own-place upload,
+        // once filled, rides along even after the block is hidden by clicking a
+        // preset -- and this handler used to take `placePhoto` as authoritative
+        // for `kind` while reading the caption from `firstFilled(fields.place,
+        // ...)`, which produced `{kind:'photo', value:'ostsee-strand'}`: the
+        // customer's own garden photograph captioned with the beach preset.
+        // Nothing downstream could tell that had happened.
+        //
+        // It was reachable before and it is one click away now that the upload
+        // leads step 3, so it is named. Same rule as the unavailable resolution
+        // and the unavailable shape below: refuse, rather than quietly render
+        // something the person did not ask for. The message has to name BOTH
+        // halves or it reads as "your upload was rejected".
+        //
+        // The test is a NON-EMPTY `place`, not a resolvable preset id. That
+        // field is the card channel and the form can only ever put a preset id
+        // or an empty string in it, so anything else in it came from a
+        // hand-written POST and is ambiguous by construction.
+        if (placePhoto && String(fields.place ?? '').trim()) {
+          throw new HttpError(400,
+            'You chose a place from the row and also uploaded a photo of a place. Pick one — either remove the photo, or choose "Use my own place".',
+            { code: 'PLACE_CONFLICT' });
+        }
+
         // `place` is the card (a preset id, or empty for "use my own place");
         // `placeText` is the "or describe it" box. The card wins, because a
         // person who did both meant the one they clicked.

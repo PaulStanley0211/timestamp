@@ -514,6 +514,53 @@ test('the app form is usable at phone width, and its consent gate is big enough 
     `the consent checkbox measures ${probes.checkW}x${probes.checkH}, under the 24x24 target minimum`);
 });
 
+/**
+ * THE ONE ASSERTION A MARKUP TEST CANNOT MAKE ABOUT THIS CHANGE.
+ *
+ * Step 3 leads with your own place because of TWO layers that have to compose:
+ * the pl-own radio carries `checked`, and the stylesheet reveals `.ownplace`
+ * through `#pl-own:checked ~ .wrap`. A fetch() test can see the attribute and
+ * can see the rule, and neither tells you the block actually paints -- §36B
+ * records a regression test going green while the page was still broken for
+ * exactly that reason, because the fix needed two layers and the test asserted
+ * one.
+ *
+ * So this measures pixels: width, height, and where the thing lands down the
+ * document against the rail. Reading `top` in document space rather than DOM
+ * order is the point -- a CSS `order` or a float could put the markup first and
+ * the paint last, and the customer sees the paint.
+ */
+test('step 3 opens on the own-place upload and text box, painted above the presets', { skip }, async () => {
+  const s = await session();
+  await s.signIn();
+  const page = await visit('/', PHONE);
+  assert.deepEqual(page.errors, [], page.errors.join('; '));
+  const probes = await page.evaluate(`(() => {
+    const box = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { w: r.width, h: r.height, top: r.top + window.scrollY };
+    };
+    return {
+      upload: box('input[name="placePhoto"]'),
+      text: box('input[name="placeText"]'),
+      rail: box('.rail'),
+    };
+  })()`);
+
+  assert.ok(probes.upload, 'no place-photo upload on the signed-in page');
+  assert.ok(probes.text, 'no place free-text box on the signed-in page');
+  assert.ok(probes.rail, 'no preset rail on the signed-in page');
+
+  assert.ok(probes.upload.w > 0 && probes.upload.h > 0,
+    'the place upload is in the markup but paints at zero size -- display:none passes every fetch() test, and that is the whole failure this change is undoing');
+  assert.ok(probes.text.w > 0 && probes.text.h > 0,
+    'the free-text box is in the markup but paints at zero size');
+  assert.ok(probes.upload.top < probes.rail.top,
+    `the upload paints at ${probes.upload.top}px and the rail at ${probes.rail.top}px -- the presets are still the first thing in step 3`);
+});
+
 test('the status page runs its poller under the CSP the server really sends', { skip }, async () => {
   const s = await session();
   await s.signIn();

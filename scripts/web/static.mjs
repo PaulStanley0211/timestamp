@@ -1370,7 +1370,18 @@ body {
 .dots { display: flex; gap: 0.35rem; justify-content: center; margin: 0.2rem 0 0; }
 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--hairline-firm); }
 
+/* THE OWN-PLACE BLOCK LEADS STEP 3 (2026-08-30), and it is shown by the same
+   rule it has always been shown by -- the pl-own radio is simply checked when
+   the page arrives now, so the condition is true on load. Nothing here reveals
+   it; do not add a second mechanism.
+   It still hides when a preset card is clicked, and a hidden file input STILL
+   SUBMITS -- which is why the server refuses a preset card posted together with
+   a place photograph rather than silently picking one. See PLACE_CONFLICT. */
 .ownplace { display: none; margin-top: 1rem; }
+/* A file input, then this line, then the text box. .hint carries a bottom
+   margin only, so without this the prose sits flush against the control above
+   it. */
+.ownplace .or-describe { margin-top: 0.9rem; }
 
 /* The signpost to the two escape hatches. See the comment in views.mjs: both
    the upload and the free-text box already existed and neither could be found,

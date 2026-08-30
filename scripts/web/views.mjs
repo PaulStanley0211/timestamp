@@ -834,7 +834,19 @@ export function homePage({
     // The escape hatch posts an empty `place`, which the server reads as "there
     // is no text, so the photograph had better be there" -- exactly the rule
     // that already governs a place photo.
-    `<input class="statehook" type="radio" form="tape" name="place" id="pl-own" value="">`,
+    //
+    // AND IT IS CHECKED ON LOAD (2026-08-30), which is what makes the eight
+    // presets read as examples rather than as the menu. Two jobs, and only one
+    // of them is new:
+    //  - it reveals the own-place block, through the `#pl-own:checked` rule
+    //    that has always driven it, so the upload and the free text are the
+    //    first things in step 3 rather than the last;
+    //  - it is the ONLY way out of a radio group. A group cannot be cleared
+    //    without JavaScript, so once a preset is clicked this is what "none of
+    //    these" means. That job predates the default and outlives it -- do not
+    //    delete `pl-own` on the grounds that the block no longer needs
+    //    revealing.
+    `<input class="statehook" type="radio" form="tape" name="place" id="pl-own" value="" checked>`,
     // Only the AVAILABLE resolutions get a radio. An unavailable one renders as
     // a span with no control behind it, so it is not merely disabled in the
     // browser -- there is nothing for a hand-written POST to name either.
@@ -884,7 +896,10 @@ export function homePage({
       </span>
     </label>`).join('');
 
-  const dots = [...places.map((p) => `<span class="dot dot--${h(placeSlug(p.id))}"></span>`), '<span class="dot dot--own"></span>'].join('');
+  // The own-place dot leads, because the own-place card leads. The dots are a
+  // position indicator for the rail; if the two orders disagree the indicator
+  // points at the wrong card.
+  const dots = ['<span class="dot dot--own"></span>', ...places.map((p) => `<span class="dot dot--${h(placeSlug(p.id))}"></span>`)].join('');
 
   const frameCards = aspects.map((a) => {
     const slug = aspectSlug(a.id);
@@ -1035,8 +1050,44 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
   </section>
 
   <section class="panel panel--choice">
-    ${stepHead(3, 'The place', 'Somewhere ordinary. That is the whole idea.')}
-    <div class="rail">${placeCards}
+    ${stepHead(3, 'The place', 'Your own place beats any description of one. Start there.')}
+
+    <!-- STEP 3 LEADS WITH YOUR OWN PLACE (2026-08-30).
+         The 2026-08-20 scope change calls the user's own place "the strongest
+         version of this product", and both controls that deliver it used to sit
+         at the BOTTOM of this panel, behind the menu: the upload was revealed
+         only by a card at the far end of a horizontally scrolling rail (§33
+         measured six of eight cards already off-screen at 736px, and the own
+         card was the ninth), and the free text was inside a collapsed
+         <details>. A prose signpost was added to point at both, which helped
+         and did not fix it -- a signpost to the back of the room is still the
+         back of the room.
+         So the block is FIRST and the pl-own radio is checked on load. The rule
+         it rides on is unchanged; what changed is that its condition is now
+         true when the page arrives. No JavaScript, exactly as before. -->
+    <div class="ownplace">
+      <p class="hint">A photograph of the place &mdash; your actual back garden, the kitchen
+      you remember. Used as a second reference alongside your face.</p>
+      <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp"
+             aria-label="A photograph of the place">
+      <p class="hint or-describe">Or describe it, if you have no photograph of it.</p>
+      <input type="text" name="placeText" maxlength="200" autocomplete="off" spellcheck="false"
+             aria-label="Describe the place"
+             placeholder="my grandmother&#39;s kitchen" value="${h(values.place)}">
+    </div>
+
+    <!-- The rail is EXAMPLES now, and the prose has to say so -- §36A's lesson
+         that prose is a consumer of a change like any other. The <label> is the
+         same trick it always was: it targets #pl-own exactly as the card does,
+         so one line of prose comes back to your own place, re-reveals the
+         block and moves the carousel dot, with no JavaScript anywhere. It is
+         the way BACK now rather than the way in, because a radio group cannot
+         be cleared any other way. -->
+    <p class="hint escape">No photograph of it, and nothing in mind? Start from one of
+      these instead &mdash; or come back to
+      <label class="linky" for="pl-own">your own place</label> at any point.</p>
+
+    <div class="rail">
     <label class="placecard placecard--own" for="pl-own">
       <span class="thumb" aria-hidden="true"></span>
       <span class="badge" aria-hidden="true"></span>
@@ -1044,38 +1095,9 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
         <span class="name">Use my own place</span>
         <span class="when">Your photograph</span>
       </span>
-    </label>
+    </label>${placeCards}
     </div>
     <div class="dots" aria-hidden="true">${dots}</div>
-
-    <!-- THE ESCAPE HATCHES, NAMED WHERE SOMEBODY WILL SEE THEM.
-         Both of these already existed and neither could be found. The upload
-         lives behind a display:none rule and is revealed only by checking
-         the pl-own radio -- a card sitting at the far end of a horizontally scrolling
-         rail, off the edge of the viewport on a phone and on most laptops. The
-         free-text box was inside a collapsed <details>. So the product's
-         headline capability -- "anyone uploads any photo, gives a location" --
-         was reachable only by scrolling a carousel to its end and guessing.
-         Paul reported it as a missing feature. It was a missing SIGNPOST.
-         The <label> is the whole trick: it targets #pl-own exactly as the card
-         does, so one line of prose selects the card, reveals the upload and
-         moves the carousel dot, with no JavaScript anywhere. -->
-    <p class="hint escape">Somewhere else in mind?
-      <label class="linky" for="pl-own">Upload a photo of it</label>
-      or <label class="linky" for="pl-own">describe it below</label> &mdash;
-      your actual childhood garden beats any description of one.</p>
-
-    <div class="ownplace">
-      <p class="hint">A second photograph, used as a reference alongside your face.</p>
-      <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp">
-    </div>
-
-    <details class="aside" ${values.place ? 'open' : ''}>
-      <summary>Or describe the place</summary>
-      <p class="hint">Used only when no card above is chosen.</p>
-      <input type="text" name="placeText" maxlength="200" autocomplete="off" spellcheck="false"
-             placeholder="my grandmother&#39;s kitchen" value="${h(values.place)}">
-    </details>
   </section>
 
   <section class="panel panel--commit">

@@ -443,7 +443,197 @@ test('the step flow is three numbered steps, one decision each', async () => {
     assert.ok(html.includes('The place'));
     assert.ok(html.includes('+ Add photo'));
     assert.ok(html.includes('Uploaded once, kept in your library'));
-    assert.ok(html.includes('Use my own place'), 'the last card in the rail is the escape hatch');
+    assert.ok(html.includes('Use my own place'), 'the escape hatch is on the page');
+  });
+});
+
+/**
+ * STEP 3 LEADS WITH YOUR OWN PLACE (2026-08-30). The product's stated core
+ * since the 2026-08-20 scope change is "anyone uploads any photo, gives a
+ * location" -- and "your actual childhood garden beats any description of one"
+ * is the page's own copy. Both of the controls that deliver that were behind
+ * the menu: the upload was revealed only by a card at the far end of a
+ * horizontally scrolling rail (§33 measured six of eight cards already
+ * off-screen at 736px, and the own card is the ninth), and the free text was
+ * inside a collapsed <details>. So the eight presets read as THE MENU and the
+ * headline capability read as a footnote.
+ *
+ * These tests pin the inversion: the own-place block comes FIRST, it is not
+ * behind a disclosure, and the presets follow it as examples.
+ */
+
+/** Step 3 alone. Both step 2 and step 3 are `panel--choice`, so scoping by
+ *  class would silently include the outfit step's own <details> -- which is
+ *  staying, and which would make the disclosure assertion below pass or fail
+ *  for the wrong reason. Slice by the two headings instead; the test above
+ *  asserts both are present. */
+function placePanel(html) {
+  const start = html.indexOf('The place');
+  const end = html.indexOf('The tape');
+  assert.ok(start > 0 && end > start, 'could not locate step 3 in the page');
+  return html.slice(start, end);
+}
+
+test('step 3 leads with your own place -- the upload and the free text come before the rail', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const panel = placePanel(await (await get(base, '/', cookieA)).text());
+
+    // PRESENT FIRST, THEN ORDERED. An indexOf comparison between two -1s is
+    // `false < false`, which is not an ordering claim at all -- and §35E
+    // records this exact class of vacuous pass costing a session.
+    const upload = panel.indexOf('name="placePhoto"');
+    const text = panel.indexOf('name="placeText"');
+    const rail = panel.indexOf('class="rail"');
+    assert.ok(upload >= 0, 'step 3 offers no place photo upload');
+    assert.ok(text >= 0, 'step 3 offers no free-text box');
+    assert.ok(rail >= 0, 'step 3 has no preset rail');
+
+    assert.ok(upload < rail, 'the place photo upload still sits after the rail of presets');
+    assert.ok(text < rail, 'the free-text box still sits after the rail of presets');
+  });
+});
+
+test('the free text is not behind a disclosure any more', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    // STRUCTURE IS ASKED OF A COMMENT-STRIPPED COPY, which is the precedent
+    // test/email-templates.test.js set on 2026-08-30 in the other direction: a
+    // template ACTION inside a comment is still live text and must be caught,
+    // while an ELEMENT named inside a comment is prose and must not be. This is
+    // the second kind -- views.mjs explains the old layout by naming the
+    // element it used, and a raw substring match reads that explanation as
+    // structure. A real disclosure is not in a comment, so nothing is lost.
+    const panel = placePanel(html).replace(/<!--[\s\S]*?-->/g, '');
+
+    assert.ok(panel.includes('name="placeText"'), 'step 3 offers no free-text box');
+    assert.ok(!panel.includes('<details'), 'the place free text is still inside a collapsed disclosure');
+
+    // And the outfit step keeps ITS disclosure -- this change is about the
+    // place step only, so an assertion that passed by deleting every <details>
+    // on the page would be measuring the wrong thing.
+    assert.ok(html.includes('Or describe what you are wearing'),
+      'the outfit step lost its own aside, which was not the ask');
+  });
+});
+
+test('the page opens on "your own place", so the presets are examples rather than the menu', async () => {
+  await withServer(async ({ base, cookieA, app }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+
+    assert.match(html, /id="pl-own"[^>]*\bchecked\b/,
+      'the escape hatch is not selected on load, so the page still opens on the menu');
+
+    // Exactly one place is chosen, and it is not a preset. A second `checked`
+    // in the group would make the default whichever the browser saw last.
+    for (const p of app.cards.places) {
+      assert.doesNotMatch(html, new RegExp(`id="pl-${p.id}"[^>]*\\bchecked\\b`),
+        `preset ${p.id} is checked on load`);
+    }
+  });
+});
+
+test('the own-place card is the first thing in the rail, not the last', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const panel = placePanel(await (await get(base, '/', cookieA)).text());
+
+    const own = panel.indexOf('placecard--own');
+    const firstPreset = panel.indexOf('placecard--pl-');
+    assert.ok(own >= 0, 'the own-place card is gone from the rail -- it is the way back from a preset');
+    assert.ok(firstPreset >= 0, 'the rail has no preset cards');
+    assert.ok(own < firstPreset, 'the own-place card is still behind the presets in the rail');
+  });
+});
+
+test('both own-place controls have an accessible name of their own', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const panel = placePanel(await (await get(base, '/', cookieA)).text());
+
+    // These leaned on the prose beside them, which was survivable while they
+    // were hidden behind a card at the end of a rail and is not now that they
+    // are the first controls in the step. A file input with no accessible name
+    // is announced as "button" and nothing else. The visible prose stays where
+    // it is -- it is too long to be a label and does other work -- so the name
+    // is carried explicitly.
+    const upload = /<input[^>]*name="placePhoto"[^>]*>/.exec(panel);
+    const text = /<input[^>]*name="placeText"[^>]*>/.exec(panel);
+    assert.ok(upload, 'no place-photo input in step 3');
+    assert.ok(text, 'no place free-text input in step 3');
+
+    assert.match(upload[0], /aria-label="[^"]+"/, 'the place-photo upload has no accessible name');
+    assert.match(text[0], /aria-label="[^"]+"/, 'the place free-text box has no accessible name');
+  });
+});
+
+test('the carousel dots run in the same order as the cards they indicate', async () => {
+  await withServer(async ({ base, cookieA, app }) => {
+    const panel = placePanel(await (await get(base, '/', cookieA)).text());
+
+    // The dots are a position indicator for the rail. If the two orders
+    // disagree the indicator lights the wrong position -- invisible in a
+    // markup test that only counts them, which is why this compares sequences.
+    const dots = [...panel.matchAll(/class="dot dot--([a-z0-9-]+)"/g)].map((m) => m[1]);
+    const cards = [...panel.matchAll(/class="placecard placecard--([a-z0-9-]+)"/g)].map((m) => m[1]);
+
+    assert.equal(cards.length, app.cards.places.length + 1, 'the rail is not the eight presets plus the escape hatch');
+    assert.deepEqual(dots, cards, 'the dots and the cards are in different orders');
+  });
+});
+
+/**
+ * THE CONFLICT THE INVERSION MAKES REACHABLE.
+ *
+ * A `display:none` file input still submits. So even before this change you
+ * could pick "Use my own place", choose a place photo, change your mind, click
+ * a preset card, and post both -- the server took `placePhoto` as authoritative
+ * for `kind` while reading the caption from `firstFilled(fields.place,
+ * fields.placeText)`, so the manifest came out `{kind:'photo', value:
+ * 'ostsee-strand'}`: your garden photograph captioned with the beach. No test
+ * covered that combination.
+ *
+ * Putting the upload at the front of the step makes it one click away instead
+ * of five, so it is refused by name. That follows this endpoint's own rule for
+ * an unavailable resolution or shape -- refuse rather than quietly render
+ * something the person did not ask for -- and the message has to name BOTH
+ * halves, or it reads as "your upload was rejected".
+ */
+test('a preset card and an uploaded place photo contradict each other, and are refused', async () => {
+  await withServer(async ({ base, root, cookieA }) => {
+    const res = await post(base, '/api/jobs', multipart([
+      { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
+      { name: 'placePhoto', filename: 'garden.png', type: 'image/png', body: fakePhoto(20_000, 'g') },
+      { name: 'place', body: 'ostsee-strand' },
+      { name: 'outfit', body: 'winterjacke' },
+      { name: 'consent', body: 'yes' },
+    ]), cookieA);
+
+    assert.equal(res.status, 400, 'a preset card plus a place photo was accepted');
+    const { error } = await res.json();
+    assert.equal(error.code, 'PLACE_CONFLICT');
+    assert.match(error.message, /photo/i, 'the refusal does not mention the photograph');
+    assert.match(error.message, /place/i, 'the refusal does not mention the chosen place');
+
+    // Refused means nothing was written -- not a job whose credits were spent
+    // and whose directory has to be swept.
+    assert.deepEqual(jobDirs(root), []);
+  });
+});
+
+test('a place photo with a typed caption is still accepted -- only a CARD conflicts', async () => {
+  await withServer(async ({ base, root, cookieA }) => {
+    const res = await post(base, '/api/jobs', multipart([
+      { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
+      { name: 'placePhoto', filename: 'garden.png', type: 'image/png', body: fakePhoto(20_000, 'g') },
+      // "Use my own place" posts an empty `place`; the caption rides alongside.
+      { name: 'place', body: '' },
+      { name: 'placeText', body: 'the garden behind the house' },
+      { name: 'outfit', body: 'winterjacke' },
+      { name: 'consent', body: 'yes' },
+    ]), cookieA);
+
+    assert.equal(res.status, 201, 'the ordinary own-place order was refused as a conflict');
+    const job = loadJob({ root, jobId: (await res.json()).jobId });
+    assert.equal(job.input.place.kind, 'photo');
+    assert.equal(job.input.place.value, 'the garden behind the house');
   });
 });
 
