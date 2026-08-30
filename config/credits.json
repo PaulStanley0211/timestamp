@@ -119,8 +119,8 @@
       "priceUSD": 12,
       "credits": 92,
       "available": true,
-      "stripePriceId": "price_1U9BtZ0WJAHtsKz66FvdVNW2",
-      "source": "Paul, 2026-08-27. Credits derived from the MEASURED 46 CR cost of a 720p tape. TEST-MODE Stripe Price created 2026-08-27 on prod_V9UtpSAmyffKXk -- livemode false, MUST NOT GO LIVE."
+      "stripePriceId": "price_1UAIGtPFjb61BCp6zlUEqIuZ",
+      "source": "Paul, 2026-08-27. Credits derived from the MEASURED 46 CR cost of a 720p tape. LIVE Stripe Price created 2026-08-31 on Timestamp's own live account (acct_1UAGgQPFjb61BCp6) -- this one charges real cards. The test Price it replaced lived on a sandbox belonging to another product and could not be promoted: a Price is immutable and lives in one mode on one account, so going live meant creating it again. Tax is EXCLUSIVE -- Stripe adds VAT on top and remits it, so a German buyer pays $14.28 on this rung; /pricing says so."
     },
     "standard": {
       "_comment": "THE SECOND RUNG. $19 for 138 credits, decided by Paul on 2026-08-27, and $19 rather than $25 for a stated reason: a $7 gap is a step somebody takes without deliberating and a $13 gap is one they think about.\n\n138 IS 3 x 46 EXACTLY, the smallest pool that funds THREE 720p tapes, and it funds six 480p tapes at the same time. Unlike the entry rung, the number Paul asked for here IS achievable -- six-and-three is what 138 credits buys, precisely.\n\nTHIS RUNG'S RATE IS WORSE THAN THE ONE BELOW IT, ON PURPOSE. $0.1377 a credit against starter's $0.1304 -- 6% worse -- which is the INVERSE of the volume discount a credit ladder normally has. It is deliberate and it runs in this product's favour: 27.4% gross here against 23.3% below, so the rung a customer upgrades to is the rung that earns more. It is invisible on /pricing, which prints tape counts and never a per-credit rate, and the value story a reader actually sees is honest -- $7 more buys two more 480p tapes and one more 720p tape.\n\nDO NOT 'FIX' THIS BY ADDING CREDITS. Raising 138 toward a proper volume discount lowers the margin on the rung that is currently carrying the ladder: at $19, every credit added here costs 10c of provider spend straight off the top. The old `archive` plan died of exactly this -- it drifted to $0.188 a credit against a $10 pack at $0.250, a bigger commitment at a better rate and a 47% margin, and nothing went red when it happened.",
@@ -130,8 +130,8 @@
       "priceUSD": 19,
       "credits": 138,
       "available": true,
-      "stripePriceId": "price_1U9Bta0WJAHtsKz6vBWjZyMG",
-      "source": "Paul, 2026-08-27. Credits derived from the MEASURED 46 CR cost of a 720p tape. TEST-MODE Stripe Price created 2026-08-27 on prod_V9UtjqghXU9Zzu -- livemode false, MUST NOT GO LIVE."
+      "stripePriceId": "price_1UAIIXPFjb61BCp68LnLnwc3",
+      "source": "Paul, 2026-08-27. Credits derived from the MEASURED 46 CR cost of a 720p tape. LIVE Stripe Price created 2026-08-31 on Timestamp's own live account (acct_1UAGgQPFjb61BCp6) -- this one charges real cards. Tax is EXCLUSIVE, as on the rung above."
     }
   },
   "grant": {
