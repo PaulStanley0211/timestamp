@@ -7,12 +7,35 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-29, later that night) — A LAUNCH-READINESS REVIEW RAN, ITS FIX LIST STARTED LANDING, AND THE PR IS OPEN WITH GREEN CI. READ §41, THEN §40, §39, §38, §37.
+## START HERE (2026-08-30) — TWO OWNER ITEMS ARE CLOSED AND THE PLACES STOPPED BEING GERMAN. READ §42, THEN §41, §40, §39, §38, §37.
 
-**1919 tests / 1917 pass / 0 fail / 2 skipped** (§41; on a machine with no
+**1938 tests / 1936 pass / 0 fail / 2 skipped** (§42; on a machine with no
 Chromium-family browser the six browser tests self-skip too). The two standing
 skips are the `*-smoke.test.js` money guards, which self-skip without
-`TIMESTAMP_LIVE=1`.
+`TIMESTAMP_LIVE=1`. **PR #1's CI is GREEN on all five checks at `4965c2a`** —
+guards plus node 22/24 x ubuntu/windows.
+
+**§37G's SEVEN OWNER ITEMS ARE NOW FIVE.** The support mailbox and the
+password-reset email template are DONE and both were PROVEN rather than
+assumed — §42A. **The domain has an MX record for the first time**, so
+`support@timestamptapes.com`, which all three legal pages print as the contact
+address, is no longer a promise the DNS could not keep.
+
+**THE SELLING ENTITY IS DECIDED and the values deliberately are NOT in this
+repo.** They go in `TIMESTAMP_LEGAL_ENTITY` in `.env` on deploy day, where
+`docs/deploy-runbook.md` §1 step 3 already asks for them — because a sole
+trader's § 5 DDG address is a home address and this repository is public. §42D.
+
+**THE ONE THING WITH A CLOCK ON IT IS STRIPE BUSINESS VERIFICATION**, and
+nothing about taking money can start until it is filed. **Nobody can pay
+today.**
+
+**AND THE PRODUCT IS NOT ABOUT GERMANY.** The owner restated this on
+2026-08-29; the eight place labels are plain now (§42F). **The bigger half is
+still undone: free text and photo-upload are still the ninth card at the end of
+a scrolling rail**, so the page still reads as "pick one of our places" when
+the 2026-08-20 scope change calls the user's own place the strongest version of
+this product.
 
 **PR #1 IS OPEN AND ITS FIRST CI RUN WAS GREEN.** Paul opened it at 12:23 UTC
 on 2026-08-29 and all five checks passed — guards plus node 22/24 x
@@ -279,7 +302,13 @@ section 24.
 
 ### PICK UP HERE
 
-> **READ SECTION 41 FIRST (2026-08-29, third tranche), THEN 40, 39, 38, 37.**
+> **READ SECTION 42 FIRST (2026-08-30). It closes two of §37G's seven owner
+> items, de-nationalises the place menu, and corrects this file's own claim
+> that Resend's DNS records were missing — they never were; they sit at
+> `send.send.timestamptapes.com`, a double `send`, and were queried under the
+> wrong name. §42H is the current what-is-left.**
+>
+> **THEN SECTION 41 (2026-08-29, third tranche), THEN 40, 39, 38, 37.**
 > §41 records THREE DECISIONS PAUL TOOK — the deploy host is HETZNER (box
 > not yet created, on purpose), TESTING IS PARKED TO THE END behind his
 > friends-test plan (the blind-check texts fold into it), and Vercel is
@@ -4621,6 +4650,237 @@ friends test with the blind-check texts folded in.
 
 **AGENT-BUILDABLE: nothing is left ungated.** The next code work is
 whatever the friends test or the paid order surfaces.
+
+---
+
+### 42. TWO OWNER ITEMS CLOSED, AND THE PLACES STOPPED BEING GERMAN (2026-08-29/30)
+
+**1919 / 1917 → 1938 / 1936 pass / 0 fail, 2 skipped.** Three commits,
+`e3573c1..4965c2a`, pushed, and **PR #1's CI is GREEN on all five checks** —
+guards plus node 22/24 x ubuntu/windows. Every change test-first, every guard
+sabotage-verified, all seven `guards.yml` checks run locally verbatim before
+the push.
+
+#### A — §37G items 3 and 4 are DONE, and both are PROVEN rather than assumed
+
+**THE SUPPORT MAILBOX EXISTS.** Cloudflare Email Routing, `support@` →
+the owner's Gmail. Verified three ways: the apex MX and SPF records read back
+from the authoritative nameserver AND from Google/Cloudflare/Quad9 resolvers,
+and Cloudflare's own Activity Log showing a real message **Forwarded**.
+**This closes §37B: the domain had NO MX RECORD AT ALL and mail to it bounced.**
+`support@timestamptapes.com` is printed on all three legal pages, so that
+address had been a promise the DNS could not keep since the domain was bought.
+
+**CLOUDFLARE MOVED EMAIL ROUTING AND THE OLD PATH IS GONE.** It is no longer
+under a domain's Email tab (which now holds only Email Security and DMARC
+Management). It is **account-level: Compute → Email Service → Email Routing**,
+then Onboard Domain → Destination Addresses → Routing Rules as three separate
+phases. Cloudflare launched "Email Service" in April 2026 and folded Routing
+under it. Destination addresses are ACCOUNT-scoped, so one already verified on
+another domain shows `Verified` immediately.
+
+**Catch-all is deliberately left DISABLED.** Unmatched mail is then rejected
+and the sender gets a bounce; enabling it as "Drop" would make mail to a
+typo'd address vanish silently, which is the worse failure.
+
+**THE RESET-PASSWORD TEMPLATE NEVER EXISTED**, so item 4 was not the
+two-minute check it was filed as. `docs/supabase-email-templates/` held only
+`confirm-signup.html`, which means the dashboard was still serving Supabase's
+DEFAULT recovery template — a magic link, the one thing a six-digit page
+cannot survive. `recovery.html` now exists, is applied, and was proved by a
+real reset: six digits, no button. `Email OTP length` confirmed 6 and expiry
+confirmed 1 hour.
+
+#### B — A MAGIC LINK CAN HIDE IN AN HTML COMMENT
+
+Both email templates carried a header comment naming `{{ .ConfirmationURL }}`
+**in real syntax**, because it was the comment explaining that the variable is
+forbidden. The README says to paste each file WHOLE.
+
+**A template engine substitutes by scanning text. An HTML comment is not a
+hiding place — it is just more text.** Pasted whole, that comment would mint a
+working magic link and bury it in the source of every email: invisible when
+rendered, and a live credential to anyone who reads the source or is forwarded
+the message. Both comments now name their variables in words.
+
+Whether the live template ever did this depends on which Go template package
+GoTrue uses — one of the two strips HTML comments — and that was not worth
+reasoning about when replacing it costs thirty seconds.
+
+**OWED, AND THE ONLY ITEM 4 LEFTOVER: re-paste `confirm-signup.html`.** The
+version in the dashboard is the 2026-08-27 one with the old comment. To check
+rather than assume, open a received confirmation email, use Show original, and
+search for `ConfirmationURL` or a `/auth/v1/verify` link.
+
+**`test/email-templates.test.js` reads each file exactly as the dashboard
+receives it, comments included**, and fails if any template action other than
+the code appears anywhere. Its first version stripped comments — which is the
+same reasoning that created the hazard. Structural checks (style/img/anchor)
+still use the stripped copy, because a `<style>` written inside a comment is
+prose to a mail client.
+
+#### C — A CORRECTION: THE RESEND RECORDS WERE NEVER MISSING
+
+Earlier in this session it was reported here and to the owner that
+`send.timestamptapes.com` had lost its MX and SPF records. **That was wrong.**
+They are at **`send.send.timestamptapes.com`** — a DOUBLE `send` — because the
+domain registered in Resend is `send.timestamptapes.com` and Resend places its
+MAIL FROM records one level below whatever is registered. DKIM sits at
+`resend._domainkey.send.timestamptapes.com`, which is why only that one was
+found.
+
+```
+send.send.timestamptapes.com  MX   feedback-smtp.eu-west-1.amazonses.com
+send.send.timestamptapes.com  TXT  v=spf1 include:amazonses.com ~all
+```
+
+**Nothing was broken and nothing needed fixing.** The lesson is the one this
+file keeps recording in other forms: a query against the wrong name returns
+the same empty answer as a real absence.
+
+The new apex SPF (`v=spf1 include:_spf.mx.cloudflare.net ~all`) does not touch
+this — outbound mail is From the `send.` subdomain, so it is that subdomain's
+SPF that is consulted. **It WOULD matter if the Supabase SMTP sender were ever
+moved to the bare apex.**
+
+#### D — THE DISCLOSURE ADDRESS, AND TWO PAGES THAT WERE LYING
+
+**`TIMESTAMP_LEGAL_ENTITY`** carries the entity as one line of JSON in `.env`
+and beats `config/legal.json` when set. That channel already existed end to
+end — gitignored, out of the image, passed into both containers by compose's
+`env_file` — and it exists because **a sole trader's § 5 DDG address is a home
+address while this repository is public.** `config/legal.json` stays
+`entity: null` permanently and a test fails if anybody pastes an address into
+it. It closes the GIT half only; the pages publish the address while the site
+is live, which is what they are for.
+
+**Both routes end at `normaliseLegalEntity`**, an allow-list of the four fields
+that render, which REFUSES a partial entity. `h()` renders undefined as the
+EMPTY STRING, so an entity missing its email did not print "undefined" on the
+Impressum — it printed nothing, leaving a contact block that looks deliberate
+and is missing the one thing the page exists to carry.
+
+**TWO FACTUAL ERRORS CAME OUT OF THE PAGES:**
+
+1. **The Impressum cited § 5 TMG.** That statute was REPEALED in May 2024 and
+   replaced by the DDG, so the heading named a law that no longer exists for
+   anybody. It is `§ 5 DDG` now, and a test refuses both TMG and no citation
+   at all.
+2. **The privacy page claimed "the only cookie is the one that keeps you
+   signed in" and this app sets THREE** — session, anti-forgery, OAuth state.
+   All strictly necessary, so the no-banner position is unchanged, but a
+   privacy notice that misstates what it sets is the wrong thing to publish.
+   The count is pinned against `session-middleware.mjs`'s own constants, so a
+   fourth cookie fails the test and forces the prose to be reviewed.
+
+#### E — NOTHING IS INDEXABLE BY DEFAULT
+
+`TIMESTAMP_INDEXABLE=1` opens the site to search engines. **Unset means no**,
+and the default is the whole point: forgetting to switch indexing ON costs
+search traffic, which is visible and fixable any day; forgetting to switch it
+OFF costs an indexed and archived home address, which cannot be withdrawn.
+**The recoverable failure gets to be the default.**
+
+`robots.txt` disallows everything, and `X-Robots-Tag: noindex, nofollow` is set
+**before routing**, so a route added later is covered by construction rather
+than by somebody remembering. `/j/` stays disallowed even when indexing is
+opened — a tape is somebody's face, and those urls are unguessable rather than
+secret.
+
+**"Do not share the URL" is NOT a substitute**, and this is why the flag
+exists: Caddy issues a certificate on first boot and that publishes the
+hostname to Certificate Transparency logs, which crawlers watch. The site is
+discoverable from the first TLS handshake, linked or not. Runbook §4 step 8
+checks it and a "Going public" section says how to lift it.
+
+#### F — THE PLACES ARE NAMED FOR MEMORIES, NOT FOR GERMANY
+
+**The owner restated the product direction and it is worth quoting**, because
+it was misread twice as "add more countries":
+
+> "It's not about the country... people can make videos, like, in 2003 setup,
+> like, in a camcorder... It has to be plain, like, simple location names."
+
+The product is the ERA and the MEDIUM. The menu said otherwise:
+
+| was | is |
+|---|---|
+| Baltic beach, out of season | **The beach, out of season** |
+| Autobahn rest stop at dusk | **The car park, at dusk** |
+| Allotment garden, late August | **The garden, in summer** |
+| Balcony, washing on the line | **The balcony** |
+| Tiled kitchen at breakfast | **The kitchen table** |
+| Living room, television on | **The living room, evening** |
+| Concrete stairwell | **The stairwell** |
+| Indoor swimming pool | **The swimming pool** |
+
+**THE SPECIFICITY DID NOT GO, IT MOVED — from country to era.** A padlocked
+kiosk and a chained bin say out-of-season on any coastline; a thermos, a paper
+map and a disposable camera say 2003 anywhere. Making the presets VAGUER
+instead would have brought back exactly the AI-slop problem §17 was written
+against.
+
+**Only THREE prompts carried literal German words** and prompt text reaches the
+customer's TAPE rather than only the card, which is why those went while the
+photographs stayed: `an Autobahn rest stop`, `a small German kitchen`, `a small
+German allotment garden behind a clipped privet hedge`, `an Opel estate`.
+
+**IDS AND ASSET FILENAMES ARE DELIBERATELY UNCHANGED.** Nobody sees an id, and
+renaming them would touch 37 files for no visible gain. So `The beach` is still
+`ostsee-strand` on disk; that is intentional, not debt anybody forgot.
+
+**ALL EIGHT PHOTOGRAPHS WERE LOOKED AT, and six read as universal already** — a
+CRT with a crocheted antimacassar, a balcony with a red plastic basin, a
+municipal pool, a green-dado stairwell. **Only the beach shows an
+unmistakably German object** (four wicker Strandkörbe are the whole
+composition), so **the beach card and its prompt now disagree** and one
+Higgsfield generation fixes it whenever the owner wants. The car park is
+mildly European (90s estates, long plates) and illegible at card size.
+
+**The car park was kept rather than deleted** — `expand/local.mjs` maps free
+text onto the nearest preset, so it is the template every typed roadside scene
+borrows its light and lens from.
+
+#### G — Things that will bite
+
+- **A TEST CAN GO VACUOUS BECAUSE OF A CHANGE ELSEWHERE.** `expand-local`
+  asserted `wicker|groyne|marram` never leak into a warm expansion — and §42F
+  deleted those words from the repository, so it could no longer fail for any
+  reason. It now names dressing the preset actually carries, **proved present
+  in the winter expansion before being asserted absent from the warm one.**
+  Third instance of this class in three sessions.
+- **DO NOT APPROXIMATE A GUARD WHEN CHECKING IT.** Two hand-written
+  re-implementations of `guards.yml` steps reported failures that did not
+  exist — the real fal guard is BEHAVIOURAL (runs `requireFetchImpl` and
+  checks it throws) and the consent guard imports `consentText()`. Run the
+  guard's own lines.
+- **`sed`/`perl` mutations silently fail on this checkout more often than they
+  land.** Three sabotages this session reported "not caught" and every one was
+  a mutation that never applied — CRLF, or escaping. **Print the mutated line
+  and confirm it changed before believing a guard is blind.**
+- **A place preset may not use wardrobe vocabulary.** `a disposable camera in
+  its cardboard sleeve` failed the schema on the word **sleeve**. The
+  separation is enforced, which is the design working.
+
+#### H — What is left
+
+**PAUL'S:** Stripe business verification (the only item with a clock, and
+nobody can pay until it is done); the `confirm-signup.html` re-paste (§42B);
+then at the end, in his chosen order — the Hetzner box and the runbook, the
+~$2 paid web order (§38E), and the friends test with the blind check folded in.
+
+**AGENT-BUILDABLE, and the first one is the product's own stated core:**
+
+1. **MOVE FREE TEXT AND PHOTO-UPLOAD TO THE FRONT OF THE PLACE STEP.** This is
+   the unfinished half of §42F and the bigger half. `pl-own` is currently, in
+   `views.mjs`'s own words, *"a card sitting at the far end of a horizontally
+   scrolling carousel"* — the ninth card in a rail where §33 measured six of
+   eight already off-screen. **So the thing the 2026-08-20 scope change calls
+   "the strongest version of this product" is the hardest thing on the page to
+   find.** The presets should read as examples, not as the menu.
+2. The three tape-quality items (§34G), of which **the judder (§32 item 13) is
+   a visible defect in every tape ever made** and needs the owner to pick one
+   of three fixes.
 
 ---
 
