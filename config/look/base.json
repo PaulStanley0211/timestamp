@@ -75,7 +75,9 @@
     "droppedFrames": [
       201,
       202
-    ]
+    ],
+    "_comment_judderScatter": "How far, in fractions of a source frame, each frame's timing is nudged before the retiming. It exists because fal delivers 24fps against a 25fps contract, so one frame in every 25 is held for two -- at 12, 37, 62, 87 and so on, measured. Periodic judder is the most visible kind because the eye locks onto the rhythm, and it was in every tape this product had ever made. This does NOT remove those duplicates: fifteen frames are still repeated, they just stop arriving on a metronome. Measured at this value, the spacing goes from a flat 25 to a range of 21-30, with the count unchanged at 15. 0 restores the metronome exactly. The ceiling in CLAMPS is 0.45 because at half a frame a nudged frame can overtake its neighbour, which is a non-monotonic dts and a graph ffmpeg refuses; 0.25 leaves that margin doubled while still swinging the cadence about five frames either way. A source already at 25fps is untouched at any value under the clamp, which is what keeps `npm run look` honest over the real footage in assets/stock.",
+    "judderScatter": 0.25
   },
   "composite": {
     "_comment": "The final vignette is applied to the WHOLE 1080x1920 canvas after the overlay, not to the tape image. That is what fuses tape and surround into one photographed object rather than two stacked layers, and it is the move that actually sells the framing.",

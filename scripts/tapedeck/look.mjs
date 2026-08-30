@@ -67,6 +67,10 @@ export const CLAMPS = {
   'tape.chromaShiftR': [-8, 8],
   'tape.chromaShiftB': [-8, 8],
   'tape.grainStrength': [0, 60],
+  // Below half a frame on purpose: at 0.5 a nudged frame can overtake its
+  // neighbour, which is a non-monotonic dts and a graph ffmpeg refuses. See
+  // judderExpr.
+  'transport.judderScatter': [0, 0.45],
   'transport.jitterX': [0, 6],
   'transport.jitterY': [0, 4],
   'transport.headSwitchHeight': [0, 40],
@@ -135,6 +139,81 @@ const n = (v, digits = 4) => {
   if (!Number.isFinite(num)) throw new Error(`expected a finite number, got ${JSON.stringify(v)}`);
   return String(Number(num.toFixed(digits)));
 };
+
+/**
+ * Sub-frame timing wobble, so the retiming's duplicated frames stop arriving on
+ * a metronome.
+ *
+ * THE DEFECT. fal delivers 24fps against a 25fps contract, so `fps=fps=25`
+ * holds one frame in every 25 for two frames -- at 12, 37, 62, and so on, for
+ * the length of the tape. Periodic judder is the most visible kind, because the
+ * eye locks onto the rhythm rather than the individual hitch, and it has been
+ * in every tape this product has ever made.
+ *
+ * WHAT THIS DOES, AND WHAT IT DOES NOT. It nudges each source frame's
+ * presentation time by a fraction of a frame BEFORE the retiming, so the fps
+ * filter makes its hold-or-advance decision on a slightly uneven grid and the
+ * duplicates land in scattered places. Fifteen frames are still repeated. This
+ * moves them; it does not remove them. Removing them means interpolating new
+ * pixels, which was the alternative Paul weighed and did not take.
+ *
+ * SHAPED COSINES, NEVER `random()`. ffmpeg's random() is not reproducible
+ * across builds, and "same inputs, same bytes" is the property this whole
+ * repository is built on. Two raised cosines at incommensurable rates, with the
+ * job seed varying the RATES so two tapes do not judder identically.
+ *
+ * IT IS ZERO AT N=0 AND NEVER NEGATIVE, AND BOTH HALVES OF THAT ARE LOAD-
+ * BEARING -- this is what a first attempt got wrong and the delivery contract
+ * caught. `-frames:v 375` is a CEILING, not a floor: it stops ffmpeg after 375
+ * frames but cannot invent a 375th that the graph did not produce. A nudge that
+ * can pull the LAST frame earlier shortens the span by a slot, and a source
+ * with no slack -- a 15.000s lavfi clip, which is what the output-contract
+ * tests render -- comes out at 374 frames and 14.96s. A nudge that only ever
+ * DELAYS can lengthen the span but never shorten it, and the ceiling trims the
+ * surplus back to exactly 375. That is why the seed moves the rates instead of
+ * a phase: a phase offset is exactly what makes the nudge non-zero at N=0.
+ *
+ * THE RATES ARE SLOW, AND THAT IS THE WHOLE DIFFICULTY. `jitterX` below wobbles
+ * at 2.399 and 7.13 radians per frame, which is per-frame randomness and
+ * exactly right for SPATIAL jitter. Borrowing those rates here is wrong and was
+ * measured to be wrong: a fast wobble changes the spacing BETWEEN adjacent
+ * frames, so two of them land in one output slot and leave a gap in the next.
+ * That drops real frames and repeats others -- duplicates went from 15 to 42 on
+ * the first attempt, which is worse than the defect being fixed.
+ *
+ * Slow rates move all the neighbours together, so the spacing is preserved to
+ * about a hundredth of a frame and no new duplicate is created. What moves is
+ * the accumulated phase against the output grid: a duplicate falls where that
+ * phase crosses a whole frame, and offsetting the phase by `j` frames moves the
+ * crossing by 25*j output frames. At the shipped amplitude that is a swing of
+ * about six frames either side of the cadence -- which is what turns "every 25"
+ * into something the eye cannot lock onto.
+ *
+ * AND IT MUST STAY UNDER HALF A FRAME. At half a frame a nudged frame can
+ * overtake its neighbour, which is a non-monotonic dts and an ffmpeg that
+ * refuses the graph. `CLAMPS` holds the ceiling below that. Under it, a source
+ * ALREADY at the contract rate is untouched -- every frame still falls in its
+ * own output slot -- which is what keeps `npm run look` honest over the real
+ * footage in assets/stock, where there is no judder to fix and inventing one
+ * would be damage.
+ */
+export function judderExpr({ amplitude, seed }) {
+  const a = Number(amplitude);
+  if (!Number.isFinite(a) || a <= 0) return null;
+  const s = Number(seed) || 0;
+  // The seed varies the RATES, not a phase. A phase offset is what makes the
+  // nudge non-zero at N=0, and that is precisely what must not happen -- see
+  // the delivery-contract note above. Prime moduli, so two seeds sharing a rate
+  // have to differ by a multiple of one.
+  const r1 = n(0.041 * (1 + 0.6 * ((s % 997) / 997)), 6);
+  const r2 = n(0.0117 * (1 + 0.6 * (((s * 7) % 991) / 991)), 6);
+  // Raised cosines: each term is 0 at N=0 and never negative. (1-cos) peaks at
+  // TWO, not one, so the coefficients are halved -- together they peak at
+  // exactly `amplitude` frames and the excursion is [0, amplitude].
+  const a1 = n(a * 0.3225);
+  const a2 = n(a * 0.1775);
+  return `(N+${a1}*(1-cos(N*${r1}))+${a2}*(1-cos(N*${r2})))/(FR*TB)`;
+}
 
 /** Turn [201,202,400] into "between(n,201,202)+eq(n,400)" -- consecutive runs
  *  collapse, so the expression stays short enough to read in a failure. */
@@ -227,7 +306,11 @@ export function buildVideoFilter(look, cfg, { inLabel = '0:v', outLabel = 'vout'
   // would break the one shape that was never wrong. Reduced, 4:3 comes out as
   // exactly `4/3`, so this emits a byte-identical graph for the default shape.
   const [cropW, cropH] = tapeDisplayRatio(tape);
+  // THE SCATTER GOES BEFORE THE RETIMING, or it changes nothing: by the time
+  // `fps` has run, the duplicate positions are already decided. See judderExpr.
+  const judder = judderExpr({ amplitude: look.transport.judderScatter, seed: look.seed });
   const source = [
+    ...(judder ? [`setpts=${judder}`] : []),
     `fps=fps=${fps}`,
     ...(drop ? [`select='if(${drop},0,1)'`, `fps=fps=${fps}`] : []),
     `crop=w='min(iw,ih*${cropW}/${cropH})':h='min(ih,iw*${cropH}/${cropW})'`,
