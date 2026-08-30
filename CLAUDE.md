@@ -7,9 +7,9 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-30) — THE PLACE STEP LEADS WITH YOUR OWN PLACE. READ §43, THEN §42, §41, §40, §39, §38, §37.
+## START HERE (2026-08-30) — THE PLACE STEP LEADS WITH YOUR OWN PLACE AND THE JUDDER IS FIXED. READ §44, THEN §43, §42, §41, §40, §39, §38, §37.
 
-**1947 tests / 1945 pass / 0 fail / 2 skipped** (§43; on a machine with no
+**1957 tests / 1955 pass / 0 fail / 2 skipped** (§44; on a machine with no
 Chromium-family browser the seven browser tests self-skip too). The two
 standing skips are the `*-smoke.test.js` money guards, which self-skip without
 `TIMESTAMP_LIVE=1`. **PR #1's CI is GREEN on all five checks at `4965c2a`** —
@@ -304,7 +304,12 @@ section 24.
 
 ### PICK UP HERE
 
-> **READ SECTION 43 FIRST (2026-08-30). It closes §42H item 1 — the place step
+> **READ SECTION 44 FIRST (2026-08-30). The judder is fixed — §32 item 13,
+> open since 2026-08-25, decided by Paul and shipped. Read §44B before touching
+> the expression: two things there were corrected BY MEASUREMENT after being
+> reasoned wrong, one of which broke the 375-frame delivery contract.**
+>
+> **THEN SECTION 43 (2026-08-30). It closes §42H item 1 — the place step
 > leads with your own place now, and the presets are examples. It leaves ONE
 > thing undone on purpose and that thing is the owner's: the place upload is
 > still a bare native `Choose File` control, and §43D says why making it match
@@ -573,13 +578,18 @@ and LOWs outside the fix order, including one that **still arms on the next
 edit to `config/models.json`** -- whoever fills in the still model reads the
 review's section 3 FIRST, same rule as before.
 
-### Two cheap wins nobody has taken
+### One cheap win left — the other two were already taken
 
-- **A fluorescent buzz and a kitchen clock tick.** The ambience layer makes
-  noise only; both want a TONE. The capstan already proves tones work. Section 20.
-- **The camera zooming is still a negative.** A punch-in zoom is the most
-  characteristic home-recording move there is. Left alone so the vlog run
-  measured one change. Section 19.
+- ~~**A fluorescent buzz and a kitchen clock tick.**~~ **BOTH DONE, and this
+  entry was stale for an unknown number of sessions — checked 2026-08-30,
+  §44E.** The tick is in `kuechentisch-fruehstueck.json` and the buzz in
+  `plattenbau-treppenhaus.json`, both with full derivations. Section 20's "NOT
+  DONE" paragraph is history.
+- **The camera zooming is still a negative**, confirmed at
+  `scripts/compose/prompt.mjs:171`. A punch-in zoom is the most characteristic
+  home-recording move there is. Left alone so the vlog run measured one change.
+  Section 19. **Buildable, but judging it needs a paid render**, which is parked
+  behind the friends test.
 
 ### Things that will bite you
 
@@ -3294,11 +3304,12 @@ render the day a real provider was configured.
 
 #### C — Decisions only Paul can make
 
-13. **The judder, and it is in every tape ever made.** fal delivers 24fps
-    against a 25fps contract, so 361 source frames stretched to 375 duplicate 15
-    of them at frames 12, 37, 62 ... **exactly one every 25**. Periodic judder is
-    the most visible kind. Three ways out in §26 -- interpolate, scatter the
-    duplicates from the job seed, or leave it. **The call has never been made.**
+13. ~~**The judder, and it is in every tape ever made.**~~ **DECIDED AND DONE
+    2026-08-30 — §44, commit `e5aa898`.** Paul chose the second of §26's three
+    ways out: scatter the duplicates from the job seed. Spacing went from a flat
+    25 to a 22-29 wobble with the count unchanged at 15. **The fifteen
+    duplicated frames are still there** — this stops them being metronomic, it
+    does not remove them.
 14. **The free-tape exposure — SMALLER THAN THIS ENTRY SAID; corrected
     2026-08-29 by checking (§34E).** 21 CR at signup is **$2.07 of real
     provider spend per account**, ~$207 against the global ceiling of 100.
@@ -4886,9 +4897,12 @@ then at the end, in his chosen order — the Hetzner box and the runbook, the
    the place upload is still a bare native `Choose File` control** sitting
    directly across from step 1's designed `.drop` panel — invisible while it
    was hidden, conspicuous now that it leads the step. §43D.
-2. The three tape-quality items (§34G), of which **the judder (§32 item 13) is
-   a visible defect in every tape ever made** and needs the owner to pick one
-   of three fixes.
+2. The tape-quality items (§34G). ~~The judder~~ **is DONE — §44.** What is
+   left of that group is the **punch-in zoom** (still a negative at
+   `scripts/compose/prompt.mjs:171`; buildable, but judging it needs a paid
+   render) and **audible cuts at shot boundaries**, which needs shot-boundary
+   detection on the finished clip. ~~The fluorescent buzz and the kitchen clock
+   tick~~ **were already done** — §44E.
 
 ---
 
@@ -4992,6 +5006,99 @@ attached, and design on this page is Paul's.
 - **A screenshot is worth taking on a layout change.** Every assertion passed
   before anyone looked at the page, and §43D — the thing most worth telling
   the owner — was visible only in the laptop screenshot.
+
+---
+
+### 44. THE JUDDER STOPS ARRIVING ON A METRONOME (2026-08-30)
+
+**1947 / 1945 → 1957 / 1955 pass / 0 fail, 2 skipped.** +10 tests. **One
+commit, `e5aa898`**, test-first, every assertion sabotage-verified. All guards
+green. This closes **§32 item 13**, open since 2026-08-25.
+
+#### A — What it does, and what it does not
+
+fal delivers 24fps against a 25fps contract, so `fps=fps=25` holds one frame in
+every 25 for two. **Measured, and it reproduces §26 exactly: positions 12, 37,
+62, 87 … every gap 25.** Periodic judder is the most visible kind because the
+eye locks onto the rhythm, and it was in every tape this product ever made.
+
+Of §26's three ways out, **Paul chose the second: keep the duplicates and
+scatter them.** Each source frame's presentation time is nudged by a fraction
+of a frame BEFORE the retiming, so the fps filter decides hold-or-advance on a
+slightly uneven grid. Measured on the shipped seed, the spacing goes from a flat
+25 to **22 24 28 25 22 24 28 25 22 24 29 26 22 25** — count unchanged at 15.
+
+**FIFTEEN FRAMES ARE STILL REPEATED. This moves them; it does not remove them.**
+Removing them was the interpolation option, which invents pixels that were never
+delivered. **And the result is not white noise** — the faster cosine has a
+period of about 96 frames, so the gaps carry a residual four-duplicate cycle. It
+is a wobble around 25 rather than a flat 25, which is enough to stop the eye
+locking on; it is not perfect irregularity, and nobody should describe it as
+such.
+
+`transport.judderScatter` in `config/look/base.json`, shipped at **0.25**.
+**0 restores the metronome exactly**, which is the way to A/B it.
+
+#### B — TWO CORRECTIONS THE MEASUREMENTS MADE, and neither was reasoning
+
+1. **THE RATES HAVE TO BE SLOW.** The first attempt borrowed `jitterX`'s 2.399
+   and 7.13 radians per frame — the house idiom, and correct for SPATIAL
+   wobble. For TIMING it is wrong: a fast wobble changes the spacing BETWEEN
+   adjacent frames, so two land in one output slot and leave a gap in the next.
+   **Duplicates went from 15 to 42** — dropping real frames and repeating
+   others, which is worse than the defect. Slow rates move neighbours together,
+   so spacing survives and only the phase against the output grid moves.
+2. **`-frames:v` IS A CEILING, NOT A FLOOR**, and this was asserted to Paul as a
+   guarantee before it was checked. It stops ffmpeg after 375 frames; it cannot
+   invent a 375th the graph never produced. A nudge that pulls the LAST frame
+   earlier shortens the span by a slot, and a source with no slack — a 15.000s
+   lavfi clip, which is what the output-contract tests render — came out at
+   **374 frames and 14.96s**. The fix is a nudge that is **zero at N=0 and never
+   negative**: the span can then only grow, and the ceiling trims the surplus.
+   **That is why the seed varies the RATES and not a phase** — a phase offset is
+   precisely what displaces frame zero.
+
+Raised cosines, never `random()`, which is not reproducible across ffmpeg
+builds. `CLAMPS['transport.judderScatter']` caps at **0.45**: at half a frame a
+nudged frame can overtake its neighbour, which is a non-monotonic dts and a
+graph ffmpeg refuses. Clamped rather than refused, following the rule the rest
+of that table already states.
+
+#### C — Two things about the test that are the point of it
+
+- **IT MEASURES THE RAW RETIMING, NOT A FINISHED TAPE.** The tape chain adds
+  per-frame temporal grain (`noise=allf=t+u`), so two output frames are never
+  byte-identical even when one is a duplicate of the other. **A framehash of the
+  delivered mp4 reports zero duplicates on a tape that is full of them.** §26
+  measured the raw segment for this reason and so does this file.
+- **IT ASSERTS THE DEFECT BEFORE IT ASSERTS THE FIX** — a flat 25-frame cadence,
+  from a source whose every frame is unique — so it cannot pass vacuously.
+- **A 25fps source is proved untouched, not argued to be.** `buildVideoFilter`
+  also serves `npm run look` over the REAL footage in `assets/stock`, where
+  there is no judder to fix and inventing one would be damage.
+
+#### D — Things that will bite
+
+- **THE FULL SUITE FOUND THE 374-FRAME BUG, NOT THE NEW TEST FILE**, 56 seconds
+  into `ffmpeg-output.test.js`. There is now an invariant test in the judder file
+  that trips on the same mistake in under a millisecond, but the lesson is the
+  older one: **a new feature's own tests measure what its author thought of.**
+- **The golden spine in `tapedeck-look.test.js` did NOT move**, correctly — it
+  builds from the FIXTURE profile, which sets no `judderScatter`, and
+  `judderExpr` returns null for an absent amplitude. So the shipped source chain
+  is not covered by that golden string. Worth knowing before trusting it.
+
+#### E — A correction to this file, found by checking
+
+**"Two cheap wins nobody has taken" in the START HERE block is stale — both were
+taken.** The kitchen clock tick is in `kuechentisch-fruehstueck.json` (a 2400 Hz
+partial gated 20ms in every 1000ms, so the integrated loudness contribution
+stays tiny) and the fluorescent buzz in `plattenbau-treppenhaus.json` (100 Hz
+ballast hum plus a 300 Hz third harmonic). Both carry full derivations.
+**Also: §37G reads as though image moderation still needs code. It does not** —
+`imageModerateImpl` is already a null seam in `safety/moderate.mjs`, honest
+about being one, recording `image-unclassified` warnings in the manifest. Only
+the vendor choice is left, and that is the owner's.
 
 ---
 
