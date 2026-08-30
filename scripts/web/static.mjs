@@ -1810,6 +1810,11 @@ input[type="file"]::file-selector-button {
 }
 .consent-text span { display: block; color: var(--muted); font-size: 13px; }
 .consent-text span + span { margin-top: 0.5rem; }
+/* The immediate-supply acknowledgement, which sits between the plan and its Buy
+   button rather than at the end of a long form the way the consent gate does.
+   It needs air on both sides: flush against the button it reads as part of the
+   button, and flush against the price it reads as part of the price. */
+.check--buy { margin: var(--s-3) 0; text-align: left; }
 
 /* --- pricing ----------------------------------------------------------- */
 

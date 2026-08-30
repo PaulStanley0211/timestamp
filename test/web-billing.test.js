@@ -598,7 +598,7 @@ test('checkout refuses a pack the config does not name', async () => {
   await withApp(async ({ base, root, app }) => {
     const account = await makeAccount(root);
     const cookie = await signIn(app, account.accountId);
-    const res = await buy(base, cookie, { pack: 'unlimited-everything' });
+    const res = await buy(base, cookie, { withdrawal: 'yes', pack: 'unlimited-everything' });
     assert.equal(res.status, 400);
     assert.equal((await res.json()).error.code, 'UNKNOWN_PACK');
   }, { billing: configuredBilling() });
@@ -616,7 +616,7 @@ test('a pack with no Stripe Price cannot be bought, and no request is attempted'
   await withApp(async ({ base, root, app }) => {
     const account = await makeAccount(root);
     const cookie = await signIn(app, account.accountId);
-    const res = await buy(base, cookie, { pack: PACK_ID });
+    const res = await buy(base, cookie, { withdrawal: 'yes', pack: PACK_ID });
     assert.equal(res.status, 503);
     assert.equal((await res.json()).error.code, 'CHECKOUT_NOT_OPEN');
     assert.deepEqual(calls, [], 'a Stripe request was attempted for a pack with no price');
@@ -626,6 +626,107 @@ test('a pack with no Stripe Price cannot be bought, and no request is attempted'
       envImpl: () => ({ STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET }),
     }),
   });
+});
+
+/**
+ * THE ACKNOWLEDGEMENT THAT MAKES "CREDITS ARE NOT REDEEMABLE FOR MONEY" TRUE.
+ *
+ * The operator is a trader established in Germany, so the obligation travels
+ * with the SELLER and not with the buyer's address: it is the same rule on
+ * every sale, to anyone, anywhere. Credits are supplied the instant a payment
+ * lands, and a customer who never asked for that -- and was never told what
+ * asking for it costs them -- keeps a cancellation right that /terms was
+ * quietly denying.
+ *
+ * So the purchase carries an express request for immediate supply plus an
+ * acknowledgement of what it forecloses. Checked on the SERVER and not only in
+ * the markup, because a checkbox is a suggestion to anything that is not a
+ * browser.
+ */
+test('a purchase without the immediate-supply acknowledgement is refused, and never reaches Stripe', async () => {
+  const calls = [];
+  const fetchImpl = async (...args) => { calls.push(args); throw new Error('this must not run'); };
+  await withApp(async ({ base, root, app }) => {
+    const account = await makeAccount(root);
+    const cookie = await signIn(app, account.accountId);
+
+    const res = await buy(base, cookie, { pack: PACK_ID });
+    assert.equal(res.status, 400, 'a purchase with no acknowledgement was accepted');
+    assert.equal((await res.json()).error.code, 'WITHDRAWAL_NOT_ACCEPTED');
+    assert.deepEqual(calls, [], 'a Stripe session was opened for a purchase that was never acknowledged');
+  }, {
+    // PRICED and keyed on purpose: without the gate this request WOULD reach
+    // Stripe, so "no request was made" is an assertion rather than a truism.
+    billing: pricedBilling({
+      fetchImpl,
+      envImpl: () => ({ STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET }),
+    }),
+  });
+});
+
+test('the acknowledgement has to be affirmative, not merely present', async () => {
+  const calls = [];
+  const fetchImpl = async (...args) => { calls.push(args); throw new Error('this must not run'); };
+  await withApp(async ({ base, root, app }) => {
+    const account = await makeAccount(root);
+    const cookie = await signIn(app, account.accountId);
+
+    // The same set-membership rule the signup and order gates use. An unchecked
+    // box submits nothing at all; a hand-written client can send anything, and
+    // "no" must not read as consent because it happens to be a non-empty string.
+    for (const value of ['', 'no', 'false', '0', 'maybe', 'undefined']) {
+      const res = await buy(base, cookie, { pack: PACK_ID, withdrawal: value });
+      assert.equal(res.status, 400, `withdrawal=${JSON.stringify(value)} was taken as consent`);
+      assert.equal((await res.json()).error.code, 'WITHDRAWAL_NOT_ACCEPTED');
+    }
+    assert.deepEqual(calls, [], 'a Stripe session was opened without consent');
+  }, {
+    billing: pricedBilling({
+      fetchImpl,
+      envImpl: () => ({ STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET }),
+    }),
+  });
+});
+
+test('the buy form asks for the acknowledgement, and cannot be submitted without it', async () => {
+  await withApp(async ({ base, root, app }) => {
+    const account = await makeAccount(root);
+    const cookie = await signIn(app, account.accountId);
+    const html = await (await fetch(`${base}/pricing`, { headers: { cookie } })).text();
+
+    const form = (html.match(/<form\b[\s\S]*?<\/form>/gi) ?? [])
+      .find((f) => /action="\/api\/billing\/checkout"/.test(f));
+    assert.ok(form, 'no checkout form on the pricing page');
+
+    const box = (form.match(/<input\b[^>]*>/gi) ?? []).find((i) => /name="withdrawal"/.test(i));
+    assert.ok(box, 'the buy form does not ask for the acknowledgement');
+    assert.match(box, /type="checkbox"/, 'the acknowledgement is not a checkbox');
+    assert.match(box, /\brequired\b/, 'the browser will submit the form without the acknowledgement');
+  }, {
+    billing: pricedBilling({
+      fetchImpl: async () => { throw new Error('the pricing page must not call Stripe'); },
+      envImpl: () => ({ STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET }),
+    }),
+  });
+});
+
+test('the terms say what happens about cancelling and refunds, without naming a region', async () => {
+  await withApp(async ({ base }) => {
+    const html = await (await fetch(`${base}/terms`)).text();
+
+    assert.match(html, /Cancelling and refunds/i, 'the terms carry no cancellation or refund policy');
+    // Stripe's activation asks for this in so many words, and a customer
+    // deciding whether to buy should not have to infer it.
+    assert.match(html, /refund/i);
+
+    // ONE POLICY FOR EVERYONE. The obligation follows the seller, so carving
+    // the world into regions would be both wrong and worse -- a patchwork
+    // satisfies fewer regimes than a single clear promise.
+    for (const region of [/\bEU\b/, /European/i, /\bEEA\b/, /Germany|German/]) {
+      assert.doesNotMatch(html.replace(/DDG|Impressum/g, ''), region,
+        `the terms scope the policy to a region (${region}) -- it applies to every customer`);
+    }
+  }, { billing: configuredBilling() });
 });
 
 test('a checkout post naming a foreign origin is refused before anything else is looked at', async () => {
@@ -682,6 +783,7 @@ test('a priced pack sends the account id to Stripe and nothing a browser chose',
     // The extra fields are what a tampered form would carry. None of them may
     // reach Stripe.
     const res = await buy(base, cookie, {
+      withdrawal: 'yes',
       pack: PACK_ID, credits: '99999', amount: '1', priceUSD: '0.01', price: 'price_free',
     });
     assert.equal(res.status, 200);
@@ -693,6 +795,8 @@ test('a priced pack sends the account id to Stripe and nothing a browser chose',
     assert.equal(sent.body.get('metadata[credits]'), String(PACK.credits));
     assert.equal(sent.body.get('amount'), null);
     assert.equal(sent.body.get('priceUSD'), null);
+    // The acknowledgement is a gate on THIS server and nothing Stripe is told.
+    assert.equal(sent.body.get('withdrawal'), null);
     assert.equal(sent.body.get('success_url'), 'https://timestamp.example/pricing?checkout=done');
     assert.equal(sent.body.get('cancel_url'), 'https://timestamp.example/pricing?checkout=cancelled');
   }, {
@@ -711,7 +815,7 @@ test('a browser is redirected to the hosted page rather than shown a JSON body',
   await withApp(async ({ base, root, app }) => {
     const account = await makeAccount(root);
     const cookie = await signIn(app, account.accountId);
-    const res = await buy(base, cookie, { pack: PACK_ID }, { accept: 'text/html' });
+    const res = await buy(base, cookie, { withdrawal: 'yes', pack: PACK_ID }, { accept: 'text/html' });
     assert.equal(res.status, 303);
     assert.equal(res.headers.get('location'), 'https://checkout.stripe.com/c/pay/cs_1');
   }, {
@@ -733,7 +837,7 @@ test('a checkout url that is not Stripe is never redirected to', async () => {
   await withApp(async ({ base, root, app }) => {
     const account = await makeAccount(root);
     const cookie = await signIn(app, account.accountId);
-    const res = await buy(base, cookie, { pack: PACK_ID }, { accept: 'text/html' });
+    const res = await buy(base, cookie, { withdrawal: 'yes', pack: PACK_ID }, { accept: 'text/html' });
     assert.equal(res.status, 502);
     assert.equal(res.headers.get('location'), null);
   }, {
@@ -752,7 +856,7 @@ test('checkout grants nothing on its own -- only the webhook does', async () => 
   await withApp(async ({ base, root, app }) => {
     const account = await makeAccount(root);
     const cookie = await signIn(app, account.accountId);
-    await buy(base, cookie, { pack: PACK_ID });
+    await buy(base, cookie, { withdrawal: 'yes', pack: PACK_ID });
     assert.deepEqual(await paymentRows(root, account.accountId), []);
 
     // Nor does landing on the success page, which anybody can visit.
@@ -936,7 +1040,7 @@ test('a public url with a trailing slash does not become a double slash', async 
     const base = `http://127.0.0.1:${port}`;
     const account = await makeAccount(root);
     const cookie = await signIn(app, account.accountId);
-    await buy(base, cookie, { pack: PACK_ID });
+    await buy(base, cookie, { withdrawal: 'yes', pack: PACK_ID });
     assert.equal(sent.get('success_url'), 'https://timestamp.example/pricing?checkout=done');
   } finally {
     await app.close();

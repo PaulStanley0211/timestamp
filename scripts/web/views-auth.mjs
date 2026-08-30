@@ -597,6 +597,12 @@ export function pricingPage({
     const buy = rung.grant ? '' : `
       <form method="post" action="/api/billing/checkout">
         <input type="hidden" name="pack" value="${h(rung.id)}">
+        <label class="check check--buy">
+          <input type="checkbox" name="withdrawal" value="yes" required>
+          <span class="consent-text"><span>I want my credits straight away. I understand they are
+          added to my account the moment I pay, and that I cannot then cancel them for a
+          refund.</span></span>
+        </label>
         <button type="submit" class="record"${rung.buyable ? '' : ' disabled'}>
           ${h(rung.buyable ? `Buy ${rung.label}` : 'Not open yet')}
         </button>

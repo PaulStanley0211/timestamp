@@ -1403,10 +1403,36 @@ test('no page in this app contains anything that collects payment details', asyn
         if (!/action="[^"]*(checkout|pay|billing|card)/i.test(form)) continue;
         assert.match(form, /action="\/api\/billing\/checkout"/,
           `${target} posts at a payment-ish path that is not the checkout route: ${form}`);
+        // THE RULE IS "NOTHING HERE CAN CHANGE WHAT IS CHARGED", NOT "EXACTLY
+        // ONE FIELD" (2026-08-30). This asserted a field COUNT of one, which
+        // was a proxy for the real property and stopped being one the day the
+        // form gained the immediate-supply acknowledgement -- a checkbox that
+        // carries no amount, no credit count and no price, and gates the
+        // purchase on this server rather than telling Stripe anything.
+        //
+        // Stated directly, the guard is STRONGER than the count it replaces: an
+        // allow-list of field names, so a future edit adding `amount`,
+        // `credits`, `price` or anything else unnamed fails here exactly as it
+        // did before -- and a second hidden field called `pack2` would have
+        // sailed through a count of one only if it replaced something.
         const fields = form.match(/<input\b[^>]*>/gi) ?? [];
-        assert.equal(fields.length, 1, `the checkout form on ${target} carries more than a pack id`);
-        assert.match(fields[0], /name="pack"/, `the checkout form on ${target} sends something other than a pack id`);
-        assert.match(fields[0], /type="hidden"/, 'the pack id must not be typeable');
+        const named = fields.map((f) => (/name="([^"]*)"/.exec(f) ?? [])[1]);
+        assert.deepEqual(named.slice().sort(), ['pack', 'withdrawal'],
+          `the checkout form on ${target} carries fields that are not the pack id and the acknowledgement: ${named.join(',')}`);
+
+        const pack = fields[named.indexOf('pack')];
+        assert.match(pack, /type="hidden"/, 'the pack id must not be typeable');
+        assert.match(pack, /value="[a-z0-9-]+"/i, 'the pack id is not a plain id');
+
+        const withdrawal = fields[named.indexOf('withdrawal')];
+        assert.match(withdrawal, /type="checkbox"/, 'the acknowledgement must be a real checkbox');
+        assert.match(withdrawal, /\brequired\b/, 'the acknowledgement must be required');
+
+        // The property the count was standing in for, asserted on its own terms.
+        for (const field of fields) {
+          assert.doesNotMatch(field, /name="(amount|credits|price|priceUSD|currency|quantity)"/i,
+            `the checkout form on ${target} carries something that could change what is charged: ${field}`);
+        }
       }
     }
   });

@@ -1489,6 +1489,15 @@ export function termsPage({ entity = null, account = null }) {
   order. A render that fails to deliver a tape refunds its unspent credits automatically.
   Credits are not redeemable for money.</p>
 
+  <p class="eyebrow">Cancelling and refunds</p>
+  <p class="sub">Credits are added to your account the moment your payment clears, which is
+  why the payment page asks you to confirm you want them straight away &mdash; once they are
+  there, a purchase cannot be cancelled for a refund. Credits you have not spent stay in your
+  account and do not expire. If a render fails to deliver a tape, the credits it did not spend
+  come back automatically; if something goes wrong that this page does not cover, write to
+  <a class="linky" href="mailto:support@timestamptapes.com">support@timestamptapes.com</a> and
+  we will sort it out.</p>
+
   <p class="eyebrow">Your photo, your responsibility</p>
   <p class="sub">Upload only photographs of yourself, or of someone who has given you their
   clear permission &mdash; the consent box you tick at signup and at every order is a promise

@@ -3341,6 +3341,31 @@ export function createServer({
       if (!sameOriginPost(req)) return refuseCrossSite(req, res);
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
 
+      // THE ONE THING THIS FORM CARRIES BESIDES THE PACK ID, and it is not a
+      // preference -- it is what makes "credits are not redeemable for money"
+      // on /terms a true sentence rather than a wish.
+      //
+      // Credits are supplied the instant the payment lands. A customer who
+      // never expressly asked for that, and was never told what asking costs
+      // them, keeps a cancellation right the terms were quietly denying. The
+      // obligation travels with the SELLER rather than the buyer's address, so
+      // this is the same rule on every sale, to anyone, anywhere -- there is no
+      // region branch here and there must not be one.
+      //
+      // CHECKED HERE AND NOT ONLY IN THE MARKUP, because `required` on a
+      // checkbox is a suggestion to anything that is not a browser. Set
+      // membership rather than truthiness, the same rule and the same reason as
+      // CONSENT_YES at signup: "false" and "0" are non-empty strings.
+      //
+      // It carries no amount, no credit count and no price, so the property the
+      // checkout form was built around is intact -- nothing a browser sends can
+      // change what is charged.
+      if (!CONSENT_YES.has(String(body.withdrawal ?? '').trim().toLowerCase())) {
+        throw new HttpError(400,
+          'Please confirm you want your credits straight away before paying.',
+          { code: 'WITHDRAWAL_NOT_ACCEPTED' });
+      }
+
       let pack;
       try {
         pack = await sales.packFor(String(body.pack ?? ''));
