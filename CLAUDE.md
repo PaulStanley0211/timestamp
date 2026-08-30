@@ -7,11 +7,11 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-30) — TWO OWNER ITEMS ARE CLOSED AND THE PLACES STOPPED BEING GERMAN. READ §42, THEN §41, §40, §39, §38, §37.
+## START HERE (2026-08-30) — THE PLACE STEP LEADS WITH YOUR OWN PLACE. READ §43, THEN §42, §41, §40, §39, §38, §37.
 
-**1938 tests / 1936 pass / 0 fail / 2 skipped** (§42; on a machine with no
-Chromium-family browser the six browser tests self-skip too). The two standing
-skips are the `*-smoke.test.js` money guards, which self-skip without
+**1947 tests / 1945 pass / 0 fail / 2 skipped** (§43; on a machine with no
+Chromium-family browser the seven browser tests self-skip too). The two
+standing skips are the `*-smoke.test.js` money guards, which self-skip without
 `TIMESTAMP_LIVE=1`. **PR #1's CI is GREEN on all five checks at `4965c2a`** —
 guards plus node 22/24 x ubuntu/windows.
 
@@ -31,11 +31,13 @@ nothing about taking money can start until it is filed. **Nobody can pay
 today.**
 
 **AND THE PRODUCT IS NOT ABOUT GERMANY.** The owner restated this on
-2026-08-29; the eight place labels are plain now (§42F). **The bigger half is
-still undone: free text and photo-upload are still the ninth card at the end of
-a scrolling rail**, so the page still reads as "pick one of our places" when
-the 2026-08-20 scope change calls the user's own place the strongest version of
-this product.
+2026-08-29; the eight place labels are plain now (§42F). ~~The bigger half is
+still undone~~ — **THE BIGGER HALF LANDED 2026-08-30, §43.** Step 3 leads with
+the own-place upload and free text, `pl-own` is checked on load, and the eight
+presets follow as examples. **What is left of it is one design call and it is
+the owner's: the place upload is still a bare native `Choose File` control**
+sitting across from step 1's designed dropzone — §43D says why doing it
+properly is a script change and not a restyle.
 
 **PR #1 IS OPEN AND ITS FIRST CI RUN WAS GREEN.** Paul opened it at 12:23 UTC
 on 2026-08-29 and all five checks passed — guards plus node 22/24 x
@@ -302,7 +304,13 @@ section 24.
 
 ### PICK UP HERE
 
-> **READ SECTION 42 FIRST (2026-08-30). It closes two of §37G's seven owner
+> **READ SECTION 43 FIRST (2026-08-30). It closes §42H item 1 — the place step
+> leads with your own place now, and the presets are examples. It leaves ONE
+> thing undone on purpose and that thing is the owner's: the place upload is
+> still a bare native `Choose File` control, and §43D says why making it match
+> step 1's dropzone is a script change rather than a restyle.**
+>
+> **THEN SECTION 42 (2026-08-30, earlier). It closes two of §37G's seven owner
 > items, de-nationalises the place menu, and corrects this file's own claim
 > that Resend's DNS records were missing — they never were; they sit at
 > `send.send.timestamptapes.com`, a double `send`, and were queried under the
@@ -4871,16 +4879,119 @@ then at the end, in his chosen order — the Hetzner box and the runbook, the
 
 **AGENT-BUILDABLE, and the first one is the product's own stated core:**
 
-1. **MOVE FREE TEXT AND PHOTO-UPLOAD TO THE FRONT OF THE PLACE STEP.** This is
-   the unfinished half of §42F and the bigger half. `pl-own` is currently, in
-   `views.mjs`'s own words, *"a card sitting at the far end of a horizontally
-   scrolling carousel"* — the ninth card in a rail where §33 measured six of
-   eight already off-screen. **So the thing the 2026-08-20 scope change calls
-   "the strongest version of this product" is the hardest thing on the page to
-   find.** The presets should read as examples, not as the menu.
+1. ~~**MOVE FREE TEXT AND PHOTO-UPLOAD TO THE FRONT OF THE PLACE STEP.**~~
+   **DONE 2026-08-30 — §43, commit `67ce0e0`.** Step 3 leads with the
+   own-place block, `pl-own` is checked on load, and the presets follow as
+   examples. **One thing was deliberately NOT done and it is a design call:
+   the place upload is still a bare native `Choose File` control** sitting
+   directly across from step 1's designed `.drop` panel — invisible while it
+   was hidden, conspicuous now that it leads the step. §43D.
 2. The three tape-quality items (§34G), of which **the judder (§32 item 13) is
    a visible defect in every tape ever made** and needs the owner to pick one
    of three fixes.
+
+---
+
+### 43. THE PLACE STEP LEADS WITH YOUR OWN PLACE (2026-08-30)
+
+**1938 / 1936 → 1947 / 1945 pass / 0 fail, 2 skipped.** +9 tests, nothing
+dropped or weakened. **One commit, `67ce0e0`**, test-first throughout — every
+assertion watched failing first and every one sabotage-verified. All seven
+`guards.yml` checks run verbatim and green (the commit-message guard scanned
+195 commits). This closes §42H item 1, the first agent-buildable item.
+
+#### A — What changed, and what deliberately did not
+
+Step 3 now reads: the own-place block (a photograph of the place, then "or
+describe it"), then the prose introducing the rail, then the rail with the
+own-place card at its FRONT, then the dots.
+
+**THE REVEAL MECHANIC IS UNCHANGED, AND THAT IS THE WHOLE POINT.** `.ownplace`
+is still shown by `#pl-own:checked ~ .wrap`, the rule that has always driven
+it. What changed is that `pl-own` carries `checked`, so the condition is true
+when the page arrives. No JavaScript, no second mechanism, no new CSS beyond
+one margin. **Do not add a second way to reveal that block.**
+
+**`pl-own` HAS TWO JOBS AND ONLY ONE OF THEM IS NEW.** It reveals the block,
+and it is **the only way out of a radio group** — a group cannot be cleared
+without JavaScript, so once a preset is clicked that card is what "none of
+these" means. It is the way BACK now rather than the way in. Do not delete it
+on the grounds that the block no longer needs revealing.
+
+**The dots follow the cards.** They are a position indicator; if the two
+orders disagree the indicator lights the wrong position, which no test that
+merely counts them can see. There is one that compares the sequences.
+
+#### B — A CARD AND A PHOTOGRAPH ARE TWO ANSWERS TO ONE QUESTION
+
+**A `display:none` file input still submits.** So the own-place upload, once
+filled, rode along even after the block was hidden by clicking a preset — and
+`POST /api/jobs` took `placePhoto` as authoritative for `kind` while reading
+the caption from `firstFilled(fields.place, ...)`. The manifest came out
+`{kind:'photo', value:'ostsee-strand'}`: **the customer's own garden
+photograph captioned with the beach preset**, and nothing downstream could
+tell that had happened. No test covered the combination.
+
+It was reachable before this change and it is one click away now, so it is
+refused by name — `PLACE_CONFLICT`, a 400 naming both halves. That is this
+endpoint's own existing rule for an unavailable resolution or shape: refuse
+rather than quietly render something the person did not ask for. **Paul chose
+refuse over silently picking a winner**, with the two silent options on the
+table.
+
+**The test is a non-empty `place`, not a resolvable preset id.** That field is
+the card channel and the form can only ever put a preset id or an empty string
+in it, so anything else came from a hand-written POST and is ambiguous by
+construction.
+
+#### C — The one assertion a markup test cannot make about this
+
+The reveal is **two layers** — an attribute and a stylesheet rule — and §36B
+records a regression test going green while the page was still broken for
+exactly that reason. So `test/browser-smoke.test.js` measures painted pixels:
+non-zero width and height, and document position against the rail. Proved by
+flipping **paint order alone** (a `position: relative; top`, leaving DOM order
+untouched) and watching it fail at 2675px against 1976px.
+
+Both own-place controls also carry an `aria-label` now. They leaned on the
+prose beside them, which was survivable while they were hidden and is not once
+they are the first controls in the step.
+
+#### D — NOT DONE, AND IT IS THE OWNER'S CALL
+
+**The place upload is still a bare native `Choose File | No file chosen`.**
+Step 1's photo upload is a designed `.drop` panel ("+ Add photo", a recess, a
+hint); step 3's is the browser's default control — and it now sits directly
+across from step 1 as the lead control of its own step. Screenshotted at
+375px and 1440px to confirm. It reads as an afterthought, which is the exact
+impression this change exists to remove.
+
+**It was left alone on purpose, because doing it properly is not a restyle.**
+`.drop` hides its input at `opacity: 0` and shows the chosen filename through
+`HOME_SCRIPT`; reusing it for a second input means extending that inline
+script and adding a slimmer variant of a 15rem-tall component. Without the
+script half, a `.drop` place upload would give **less** feedback than the
+native control it replaced. That is a design decision with a script change
+attached, and design on this page is Paul's.
+
+#### E — Things that will bite
+
+- **THE BACKTICK TRAP FIRED AGAIN**, on the first edit to `views.mjs`, exactly
+  as this file has warned since 2026-08-21 — a backtick inside an HTML comment
+  inside a template literal. It was caught immediately by the `node --check`
+  this file prescribes, which is the only reason it cost seconds. **Run it
+  after every edit to `views.mjs` and `static.mjs`.**
+- **A STRUCTURAL TEST CAN MATCH ITS OWN DOCUMENTATION.** The assertion that
+  the free text is no longer inside a disclosure failed against correct code,
+  because the comment explaining the OLD layout names the element it used.
+  Structure is now asked of a comment-stripped copy — the precedent
+  `test/email-templates.test.js` set on 2026-08-30 in the other direction: a
+  template ACTION inside a comment is live text and must be caught, an ELEMENT
+  named inside a comment is prose and must not be. **Verified it still catches
+  a real disclosure before trusting it.**
+- **A screenshot is worth taking on a layout change.** Every assertion passed
+  before anyone looked at the page, and §43D — the thing most worth telling
+  the owner — was visible only in the laptop screenshot.
 
 ---
 
