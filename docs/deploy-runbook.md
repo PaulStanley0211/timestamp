@@ -66,9 +66,9 @@ prerequisite.
 |---|---|
 | **Supabase** (Auth → URL Configuration) | Site URL → `https://timestamptapes.com`; add `https://timestamptapes.com/**` to Redirect URLs. KEEP the `http://localhost:3000/**` entry — local dev still signs in. |
 | **Google** Cloud Console | Verify only, change nothing: the authorized redirect URI is Supabase's callback (`https://<ref>.supabase.co/auth/v1/callback`), and in this architecture Google never sees our URL at all. |
-| **Stripe** | New webhook endpoint `https://timestamptapes.com/api/stripe/webhook` (event: `checkout.session.completed`); paste its signing secret into the server `.env` as `STRIPE_WEBHOOK_SECRET`. Going LIVE additionally needs the business-verified own account and new live Prices — §27's record; test mode proves the path without either. |
+| **Stripe** | New webhook endpoint `https://timestamptapes.com/api/stripe/webhook` (event: `checkout.session.completed`); paste its signing secret into the server `.env` as `STRIPE_WEBHOOK_SECRET`. **This first deploy stays in TEST mode and that is the plan** — smoke step 5 proves the whole path without a penny moving. Going live is a separate exercise on a separate account: see "Going live on Stripe" below. |
 | **TIMESTAMP_PUBLIC_URL** | `https://timestamptapes.com` in the server `.env` — it is where Stripe sends the buyer back and what the OAuth state cookie lives on; the bound address is wrong here in ways that only fail at the callback. |
-| **DNS** | §2 above, plus: mail to the apex still bounces until a mailbox exists (no MX record) — support@ needs Email Routing before it goes in a footer. |
+| **DNS** | §2 above. Nothing else: `support@timestamptapes.com` already receives, through Cloudflare Email Routing to the owner's Gmail (2026-08-30, §42A — MX and SPF verified from the authoritative nameserver and from public resolvers, and a real message logged as Forwarded). Catch-all is deliberately OFF, so mail to a mistyped address bounces to its sender rather than vanishing. |
 
 ## 4. Smoke, in order, before anyone is told the URL
 
@@ -91,6 +91,38 @@ prerequisite.
    during a friends-only launch. **Do not skip this on the assumption that an
    unlinked site is unfindable** — the TLS certificate publishes the hostname
    to Certificate Transparency logs the moment Caddy issues it.
+
+### Going live on Stripe
+
+**Decided 2026-08-30: Timestamp sells from its OWN live Stripe account, not the
+one ClearCost uses.** Read off the API that day, the account the test Prices
+live in is a sandbox belonging to another product — `business_profile.name` is
+literally `ClearCost sandbox`, with `details_submitted: false`,
+`charges_enabled: false` and no capabilities. **A sandbox cannot be verified**;
+activation happens on a live account, and Checkout prints the ACCOUNT's business
+name with no per-Price override, which is why one account cannot serve two
+product names.
+
+Consequences, in the order they bite:
+
+1. **The website comes first, which is why this deploy moved ahead of
+   activation.** Stripe's activation asks for a business website, and a
+   consumer product with no URL invites a manual review. Do §§1-4 above, then
+   file.
+2. **Activation needs things this repo deliberately does not hold** — legal
+   name, home address, date of birth, tax ID, IBAN, an ID document. None of
+   that belongs in git; §42D is why. The same legal name and address then go
+   into `TIMESTAMP_LEGAL_ENTITY`, and **they must match what Stripe shows on
+   checkout**.
+3. **The two Price ids in `config/credits.json` are TEST objects and cannot be
+   promoted.** A Price is immutable and lives in one mode on one account, so
+   going live means creating both rungs again on the new account and pasting
+   the new ids. Both entries say `MUST NOT GO LIVE` in their own `source`
+   field; that is what it means.
+4. **Set the business name and statement descriptor deliberately during
+   activation.** The first is what a customer reads on the payment page; the
+   second is what they read on their card statement weeks later, and an
+   unrecognised descriptor is what a chargeback is made of.
 
 ### Going public
 
