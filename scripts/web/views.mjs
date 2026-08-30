@@ -1502,7 +1502,9 @@ export function termsPage({ entity = null, account = null }) {
   <p class="sub">Upload only photographs of yourself, or of someone who has given you their
   clear permission &mdash; the consent box you tick at signup and at every order is a promise
   to us and to them. We may refuse or remove content that breaks that promise or the law,
-  and we answer takedown requests from anyone who appears in a tape without consent.</p>
+  and we answer takedown requests from anyone who appears in a tape without consent &mdash;
+  write to <a class="linky" href="mailto:support@timestamptapes.com">support@timestamptapes.com</a>
+  and you do not need an account with us to do it.</p>
 
   <p class="eyebrow">What we do not promise</p>
   <p class="sub">Generation runs on third-party AI models and results vary; a likeness is

@@ -22,9 +22,19 @@ top to bottom; nothing here is optional.
 
    ```bash
    apt-get update && apt-get install -y docker.io docker-compose-v2 git
-   git clone https://github.com/PaulStanley0211/timestamp /opt/timestamp
+   git clone -b supabase-identity-slice \
+     https://github.com/PaulStanley0211/timestamp /opt/timestamp
    cd /opt/timestamp
    ```
+
+   **THE BRANCH IS NOT OPTIONAL AND A PLAIN `git clone` CANNOT WORK.** Checked
+   2026-08-30: `origin/main` is `b6f64a3`, **201 commits behind**, and it has
+   **no `Dockerfile`, no `compose.yaml`, no `Caddyfile` and not this file
+   either** — every one of them landed on `supabase-identity-slice`. A default
+   clone therefore gets a tree where step 4 dies on "no configuration file
+   provided", which reads like a broken runbook rather than the wrong branch.
+   **When PR #1 is merged, drop the `-b` and delete this paragraph**; until
+   then the branch is the deployable ref.
 
 3. Write `/opt/timestamp/.env`. Start from `.env.example`; every key it
    documents, plus the three production lines it explains:
@@ -178,6 +188,11 @@ cd /opt/timestamp && git pull && docker compose up -d --build
 
 State lives on the volume; the image is disposable. A failed build leaves the
 old containers running.
+
+`git pull` follows whatever branch §1 cloned, so this is correct as it stands —
+but if the checkout is ever moved onto `main`, move it deliberately
+(`git fetch && git checkout main && git pull`) rather than discovering the
+switch during an update. See the branch note in §1.
 
 ## 7. Watching it
 

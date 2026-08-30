@@ -409,3 +409,31 @@ test('normaliseLegalEntity takes only what renders, and refuses the rest', () =>
       `${label} was refused without saying why`);
   }
 });
+
+/**
+ * A TAKEDOWN PROMISE WITH NO ADDRESS IS NOT A ROUTE.
+ *
+ * /terms has always said takedown requests are answered. Until 2026-08-30 it
+ * did not say WHERE to send one -- and the person who most needs that sentence
+ * is not the customer, it is a stranger who has found themselves in a video
+ * they never agreed to. They have no account, no order, and no reason to know
+ * that an address appears further down the page.
+ *
+ * Stripe's activation asks how consent for an uploaded likeness is obtained and
+ * what happens when it was not; this sentence is the answer to the second half.
+ */
+test('the takedown promise names somewhere to send a takedown', async () => {
+  await withLegalServer({ entity: null }, async ({ base }) => {
+    const terms = await (await fetch(`${base}/terms`)).text();
+
+    // BY PARAGRAPH, NOT BY SENTENCE. Splitting on full stops looks right and
+    // is not: an email address contains one, so a "sentence" ending at the
+    // first period truncates the very address being asserted. The paragraph is
+    // the unit that actually holds the promise.
+    const para = (terms.match(/<p\b[^>]*>[\s\S]*?<\/p>/gi) ?? [])
+      .find((p) => /takedown/i.test(p));
+    assert.ok(para, '/terms no longer promises to answer takedown requests');
+    assert.match(para, /support@timestamptapes\.com/,
+      'the takedown promise does not say where to send one');
+  });
+});
