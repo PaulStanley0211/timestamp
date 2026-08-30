@@ -461,3 +461,23 @@ test('the impressum is written in English, and still cites the statute', async (
     assert.match(html, /Contact/i, 'the page does not label the contact');
   });
 });
+
+/**
+ * THE PRICE ON THE PAGE IS NOT THE PRICE AT THE TILL, and the page has to say so.
+ *
+ * Stripe adds VAT on top of the listed amount and remits it: a German customer
+ * sees $12 here and is charged $14.28. Measured in the dashboard, not assumed.
+ *
+ * WHY THIS IS COPY RATHER THAN A PRICE CHANGE. Timestamp sells worldwide and
+ * the rate depends on where the buyer is -- 19% in Germany, nothing in much of
+ * the world. There is no single final price that is true for everyone, so the
+ * honest thing is to say tax is added and let checkout compute it.
+ */
+test('the pricing page says tax is added at checkout', async () => {
+  await withLegalServer({ entity: null }, async ({ base }) => {
+    const html = await (await fetch(`${base}/pricing`)).text();
+    assert.match(html, /VAT|sales tax/i, 'the pricing page never mentions tax');
+    assert.match(html, /added at checkout|added at the checkout|where it applies|where applicable/i,
+      'the page does not say the tax is added on top of the listed price');
+  });
+});
