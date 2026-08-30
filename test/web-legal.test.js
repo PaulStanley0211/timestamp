@@ -437,3 +437,27 @@ test('the takedown promise names somewhere to send a takedown', async () => {
       'the takedown promise does not say where to send one');
   });
 });
+
+/**
+ * THE PAGES ARE IN ENGLISH, INCLUDING THE IMPRESSUM (2026-08-30).
+ *
+ * The Impressum shipped with German labels -- "Angaben gemäß § 5 DDG",
+ * "Anbieter", "Kontakt" -- on a site that is otherwise entirely in English and
+ * sells worldwide. The owner asked for one language.
+ *
+ * WHAT STAYS GERMAN IS THE CITATION, and only the citation: "§ 5 DDG" names a
+ * German statute, and a statute's name does not translate. The words AROUND it
+ * are ours and they are English.
+ */
+test('the impressum is written in English, and still cites the statute', async () => {
+  await withLegalServer({ entity: ENV_ENTITY }, async ({ base }) => {
+    const html = await (await fetch(`${base}/impressum`)).text();
+
+    assert.match(html, /\bDDG\b/, 'the citation is gone');
+    for (const german of ['Angaben', 'Anbieter', 'Kontakt']) {
+      assert.ok(!html.includes(german), `the impressum still reads "${german}"`);
+    }
+    assert.match(html, /Operator/i, 'the page does not say who the operator is');
+    assert.match(html, /Contact/i, 'the page does not label the contact');
+  });
+});

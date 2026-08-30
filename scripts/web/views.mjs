@@ -584,7 +584,7 @@ ${body}
 <footer class="foot">
   <p>Your photo is deleted after 7 days and the video after 30. You can ask for either sooner.</p>
   <p class="fine">Date-stamp lettering is VT323 by Peter Hull, under the SIL Open Font Licence 1.1.</p>
-  <p class="fine"><a class="quiet" href="/privacy">Privacy</a> &middot; <a class="quiet" href="/terms">Terms</a> &middot; <a class="quiet" href="/impressum">Impressum</a></p>
+  <p class="fine"><a class="quiet" href="/privacy">Privacy</a> &middot; <a class="quiet" href="/terms">Terms</a> &middot; <a class="quiet" href="/impressum">Legal notice</a></p>
 </footer>
 </div>
 </body>
@@ -1534,15 +1534,15 @@ export function impressumPage({ entity = null, account = null }) {
   const body = `
 <main>
   <section class="panel">
-  <p class="eyebrow">Impressum</p>
-  <h1 class="headline">Angaben gem&auml;&szlig; &sect; 5 DDG</h1>
-  ${operatorBlock(entity, { heading: 'Anbieter' })}
-  ${entity ? `<p class="eyebrow">Kontakt</p>
+  <p class="eyebrow">Legal notice (Impressum)</p>
+  <h1 class="headline">Information required under &sect; 5 DDG</h1>
+  ${operatorBlock(entity, { heading: 'Operator' })}
+  ${entity ? `<p class="eyebrow">Contact</p>
   <p class="sub">${h(entity.email)}</p>` : ''}
   </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - impressum', body, bodyClass: 'page-legal', account });
+  return layout({ title: 'Timestamp - legal notice', body, bodyClass: 'page-legal', account });
 }
 
 // ---------------------------------------------------------------------------
