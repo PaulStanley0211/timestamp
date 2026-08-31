@@ -1787,6 +1787,22 @@ input[type="file"]::file-selector-button {
 }
 .tape img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
+/* THE CROP FOLLOWS THE TAPE'S OWN SHAPE (2026-08-31), and until today it did
+   not. The 9/8 above is MEASURED and correct -- for a 4:3 tape, which is
+   delivered 1080x1920 with the picture matted inside it, so 9/8 removes the
+   letterbox and nothing else. Then the frame menu opened (§34D) and nothing
+   taught this rule: a 9:16 order is delivered FULL-BLEED at 1080x1920, so the
+   same crop threw away more than half of a real picture, and a 16:9 tape lost
+   its sides. Invisible so far only because every finished tape on this machine
+   is 4:3.
+   The default stays 9/8 rather than 4/3 because the file really does carry a
+   little surround above and below the picture; the two wide shapes carry none,
+   so they take their own ratio exactly. Rows of different heights are the
+   honest result -- these ARE different-shaped tapes, and pretending otherwise
+   is what loses the picture. */
+.tape .frame--a-16x9 { aspect-ratio: 16 / 9; }
+.tape .frame--a-9x16 { aspect-ratio: 9 / 16; }
+
 /* The player on /videos. 'object-fit: cover' matches the poster it replaces, so
    the tile does not resize the instant somebody presses play. Black behind it
    because a video element with nothing decoded yet is transparent, and on cream

@@ -359,13 +359,14 @@ const goodParts = (extra = []) => ([
 
 /** Build a job straight through the model, to put the server in front of a state
  *  a worker would have produced, and hand it to an account. */
-function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a t-shirt', result = null, owner = null } = {}) {
+function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a t-shirt', result = null, owner = null, aspect = null } = {}) {
   const job = createJob({
     root,
     input: {
       photo: { path: 'input/upload-photo', sha256: 'x'.repeat(64) },
       place: { kind: 'text', value: place },
       outfit: { kind: 'text', value: outfit },
+      ...(aspect ? { aspect } : {}),
       stillCount: 3,
       consent: { granted: true, at: new Date().toISOString(), text: 'the wording' },
     },
@@ -2591,6 +2592,7 @@ test('the frame row offers three shapes and all three are real choices', async (
     assert.match(checked[0], /value="4:3"/, 'and it is the camcorder shape -- the product premise');
   });
 });
+
 // ---------------------------------------------------------------------------
 // /videos -- the tapes get a place of their own
 // ---------------------------------------------------------------------------
@@ -2706,5 +2708,65 @@ test('the home page keeps a short strip of recent tapes and sends the rest to /v
       `the home page still shows all ${tiles} tapes; the strip is meant to be the recent few`);
     assert.match(panel[0], /href="\/videos"/,
       'the home strip does not offer a way to the rest of them');
+  });
+});
+
+test('a tile is cropped to its own tape shape, not to the shape 4:3 tapes happen to be', async () => {
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    // THE BUG THIS CLOSES, found while mocking up /videos on 2026-08-31.
+    //
+    // The shelf tile is a fixed `aspect-ratio: 9 / 8` with `object-fit: cover`.
+    // That number was MEASURED and is right -- for a 4:3 tape. Section 31
+    // derived it from a real render: a 4:3 order is delivered 1080x1920 with
+    // the picture matted inside, so rows 1-4 and 13-16 of a 16-row sample are
+    // luma 0 and the content is exactly the middle half. Cropping to 9/8
+    // removes the letterbox and nothing else.
+    //
+    // Then section 34D opened the frame menu, and nothing taught the tile. A
+    // 9:16 order is delivered FULL-BLEED at 1080x1920 -- there is no letterbox
+    // to remove -- so the same crop throws away more than half of a real
+    // picture, and a 16:9 tape loses its sides. It is invisible today only
+    // because every finished tape on this machine is 4:3.
+    const wide = seedJob(app, root, {
+      status: 'done', place: 'a wide one', owner: accountA, aspect: '16:9',
+      result: { videoPath: 'timestamp.mp4', posterPath: 'poster.jpg' },
+    });
+    const tall = seedJob(app, root, {
+      status: 'done', place: 'a tall one', owner: accountA, aspect: '9:16',
+      result: { videoPath: 'timestamp.mp4', posterPath: 'poster.jpg' },
+    });
+    const html = await (await get(base, '/videos', cookieA)).text();
+
+    const frameClassNear = (jobId) => {
+      const at = html.indexOf(jobId);
+      assert.ok(at > 0, `${jobId} is not on the page at all`);
+      const before = html.slice(Math.max(0, at - 600), at);
+      const m = [...before.matchAll(/class="frame frame--([a-z0-9-]+)"/g)].pop();
+      return m ? m[1] : null;
+    };
+
+    const wideClass = frameClassNear(wide.jobId);
+    const tallClass = frameClassNear(tall.jobId);
+    assert.ok(wideClass, 'a 16:9 tape tile carries no shape at all');
+    assert.ok(tallClass, 'a 9:16 tape tile carries no shape at all');
+    assert.notEqual(wideClass, tallClass,
+      `a landscape and a portrait tape are cropped identically (both "${wideClass}") -- `
+      + 'one of them is losing picture');
+
+    // AND THE CLASS MUST DO SOMETHING. A distinct class name that no rule
+    // matches is the shape reaching the markup and stopping there, which reads
+    // green forever while every tile is still cropped identically. Assert the
+    // STYLESHEET, from the server, the way a browser gets it.
+    const css = await (await get(base, '/styles.css', cookieA)).text();
+    const aspectOf = (cls) => {
+      const m = new RegExp(`\\.frame--${cls}\\s*\\{[^}]*aspect-ratio:\\s*([^;}]+)`).exec(css);
+      return m ? m[1].trim() : null;
+    };
+    const wideRatio = aspectOf(wideClass);
+    const tallRatio = aspectOf(tallClass);
+    assert.ok(wideRatio, `the stylesheet gives .frame--${wideClass} no aspect-ratio, so the class is decorative`);
+    assert.ok(tallRatio, `the stylesheet gives .frame--${tallClass} no aspect-ratio, so the class is decorative`);
+    assert.notEqual(wideRatio, tallRatio,
+      `landscape and portrait tiles are both ${wideRatio} -- the shape reached the markup and not the crop`);
   });
 });
