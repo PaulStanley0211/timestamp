@@ -1953,10 +1953,36 @@ export function createServer({
         // Still no balance, no shelf, no account read -- `landingPricing`
         // asks the catalogue and the pack list, both of which are public
         // facts, so the anonymous branch stays unable to leak account data.
+        // THE LANDING MINTS AN ANTI-FORGERY TOKEN NOW, because the sign-in
+        // dialog lives on it. Same call and same cookie the /login page has
+        // always made -- the pair is per-visitor, not per-page, so nothing new
+        // is trusted and `/login` keeps working unchanged for anyone whose
+        // browser never runs the dialog script.
+        //
+        // IT IS GUARDED BECAUSE THE LANDING MUST NOT LEARN TO NEED AUTH. This
+        // route's own comment above is the contract: the anonymous branch
+        // "cannot leak account data because it never touches any", and it had
+        // never called into scripts/auth at all. Wiring csrfIssue in
+        // unconditionally broke the degraded mode outright -- with the auth
+        // module missing, the 503 test went red, because the page that is
+        // supposed to still work stopped working.
+        //
+        // No token means no forms: the dialog renders a plain link to /login
+        // instead, which is the same discipline as `stripePriceId: null`
+        // rendering a disabled button. A control that is guaranteed to 403 is
+        // worse than a link.
+        let token = '';
+        let setCookie = null;
+        try {
+          ({ token, setCookie } = await auths.csrfIssue(req));
+        } catch (err) {
+          logImpl(`[web] the landing could not mint an anti-forgery token: ${err?.message ?? err}`);
+        }
         return sendHtml(req, res, 200, landingPage({
           places: cards.places,
           pricing: await landingPricing(),
-        }));
+          csrf: token,
+        }), setCookie ? { 'Set-Cookie': setCookie } : {});
       }
       const [balance, resolutions, resolution] = await Promise.all([
         balanceOf(account), resolutionRows(), defaultResolution(),
@@ -3037,7 +3063,13 @@ export function createServer({
           { error: { code: 'NOT_FROM_THIS_SITE', message: 'We could not confirm that came from this site.', status: 403 } });
       }
       const cookie = await auths.endSession(req);
-      if (wantsHtml(req)) return redirect(res, '/login', 303, { 'Set-Cookie': cookie });
+      // THE LANDING, NOT /login. Answering "I am leaving" with a password field
+      // reads as "sign back in", and /login also renders an unauthenticated
+      // notice -- so somebody who signed out on purpose could be met by what
+      // looks like a failure. The landing is where a signed-out person belongs,
+      // and its masthead already carries a Sign in link for anybody who was
+      // actually swapping accounts.
+      if (wantsHtml(req)) return redirect(res, '/', 303, { 'Set-Cookie': cookie });
       return sendJson(req, res, 200, { ok: true }, { 'Set-Cookie': cookie });
     },
 

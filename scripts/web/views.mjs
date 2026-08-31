@@ -343,8 +343,47 @@ const BG_SCRIPT = `
 `;
 
 /** base64 sha256 of each shipped script, for `script-src 'sha256-...'`. */
+/**
+ * The sign-in dialog, opened from the landing.
+ *
+ * WHY THIS IS A FOURTH SCRIPT RATHER THAN THE HOISTED-RADIO TRICK the rest of
+ * this page runs on. A checkbox can show and hide a panel, and that is how the
+ * place carousel and every selection here work -- but it cannot trap focus,
+ * cannot close on Escape, and cannot make the page behind it inert. A modal
+ * that a keyboard user tabs straight out of is an accessibility defect, and
+ * this product measured focus behaviour carefully enough in §16 and §6b to
+ * know better. `showModal()` gives all three for free.
+ *
+ * IT IS AN ENHANCEMENT, NOT A REQUIREMENT. The opener is a real link to
+ * /login. With no JavaScript, an unsupported dialog, or a CSP that refused
+ * this script, the link simply navigates and the sign-in page works exactly as
+ * it does today -- which is why nothing here is guarded against being missing.
+ */
+const SIGNIN_SCRIPT = `
+(function () {
+  var dlg = document.getElementById('signin');
+  if (!dlg || typeof dlg.showModal !== 'function') return;
+
+  var openers = document.querySelectorAll('[data-signin]');
+  for (var i = 0; i < openers.length; i += 1) {
+    openers[i].addEventListener('click', function (e) {
+      e.preventDefault();
+      dlg.showModal();
+    });
+  }
+
+  var shut = dlg.querySelector('[data-signin-close]');
+  if (shut) shut.addEventListener('click', function () { dlg.close(); });
+
+  // Clicking the backdrop closes it. The dialog's own box is a child, so a
+  // click that lands on the element ITSELF landed outside the box.
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+}());
+`;
+
 export const INLINE_SCRIPT_HASHES = Object.freeze(
-  [HOME_SCRIPT, STATUS_SCRIPT, BG_SCRIPT].map((s) => crypto.createHash('sha256').update(s, 'utf8').digest('base64')),
+  [HOME_SCRIPT, STATUS_SCRIPT, BG_SCRIPT, SIGNIN_SCRIPT]
+    .map((s) => crypto.createHash('sha256').update(s, 'utf8').digest('base64')),
 );
 
 /**
@@ -528,9 +567,14 @@ export function creditMeter(balance) {
 
 function nav({ account = null, balance = null } = {}) {
   if (!account) {
+    // `data-signin` is an OPENER MARK, not a behaviour. On the landing the
+    // sign-in script upgrades it to open the dialog in place; on every other
+    // page the dialog does not exist, the script returns early, and this stays
+    // an ordinary link to /login. Same markup either way, so the nav does not
+    // have to know which page it is on.
     return `<nav class="nav">
   <a href="/pricing">Plans</a>
-  <a href="/login">Sign in</a>
+  <a href="/login" data-signin>Sign in</a>
 </nav>`;
   }
   const left = balance ? creditMeter(balance) : '';
@@ -727,7 +771,7 @@ function stepHead(n, name, subtitle) {
  * Omitted, the line is not rendered -- so a caller that cannot price (a test
  * fake, a degraded config) shows no price rather than a wrong one.
  */
-export function landingPage({ places = [], account = null, pricing = null } = {}) {
+export function landingPage({ places = [], account = null, pricing = null, csrf = '' } = {}) {
   const first = places[0]?.id ?? null;
 
   // Hoisted so `#id:checked ~ .wrap` can reach the stack and the veils. Fixed
@@ -860,7 +904,59 @@ ${backgrounds}
   </section>
 
 </main>
-<script>${BG_SCRIPT}</script>`;
+
+  <!-- SIGNING IN HAPPENS HERE, NOT ON ANOTHER PAGE. A returning visitor was
+       being sent away from the only page that sells to type a password on a
+       different one. The dialog is rendered on the landing and opened in
+       place; /login still exists and still works, and is exactly where the
+       opener link goes when this script does not run.
+
+       ONE PROVIDER, NOT THREE. The reference this follows offers Google, Apple
+       and Microsoft. This product has Google and a password, so those are the
+       two doors drawn. A button for a provider that is not wired is a dead
+       control, and CLAUDE.md already rules Instagram out and defers Facebook.
+
+       Both forms carry the anti-forgery pair, exactly as /login does -- the
+       token is minted by the landing route and the cookie rides with the
+       response. Without a token neither form renders, so a page built without
+       one cannot show a control that is guaranteed to 403. -->
+  <dialog id="signin" class="signin" aria-labelledby="signin-t">
+    <div class="signin-box">
+      <button type="button" class="signin-x" data-signin-close aria-label="Close">&times;</button>
+      <h2 class="signin-t" id="signin-t">Welcome back</h2>
+      <p class="signin-sub">Your shelf is where you left it.</p>
+
+      ${csrf ? `
+      <form method="post" action="/auth/google">
+        <input type="hidden" name="csrf" value="${h(csrf)}">
+        <button type="submit" class="signin-way">Continue with Google</button>
+      </form>
+
+      <p class="signin-or"><span>or</span></p>
+
+      <form method="post" action="/login" class="signin-form">
+        <input type="hidden" name="csrf" value="${h(csrf)}">
+        <label class="signin-l" for="signin-email">Email</label>
+        <!-- AUTOFOCUS BECAUSE showModal() OTHERWISE FOCUSES THE CLOSE BUTTON.
+             It takes the first focusable child, which is the X -- so the first
+             thing a keyboard user met on opening the dialog was "leave", ringed
+             and ready to activate on Enter. Measured: activeElement came back
+             as .signin-x. The email field is what somebody who just clicked
+             Sign in actually wants. -->
+        <input class="signin-i" id="signin-email" name="email" type="email" autocomplete="username" autofocus required>
+        <label class="signin-l" for="signin-password">Password</label>
+        <input class="signin-i" id="signin-password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit" class="signin-go">Sign in</button>
+      </form>` : `
+      <p class="signin-sub"><a class="linky" href="/login">Continue to sign in</a></p>`}
+
+      <p class="signin-alt"><a class="linky" href="/auth/reset">Forgot password?</a>
+      <a class="linky" href="/signup">No account yet? Make a tape.</a></p>
+    </div>
+  </dialog>
+
+<script>${BG_SCRIPT}</script>
+<script>${SIGNIN_SCRIPT}</script>`;
 
   return layout({
     title: 'Timestamp — one photo, fifteen seconds, 2003',

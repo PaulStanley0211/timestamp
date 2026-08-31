@@ -1053,6 +1053,37 @@ test('signing out destroys the record, so the old cookie stops working', async (
   });
 });
 
+test('signing out lands on the landing page, not on a sign-in form', async () => {
+  // REPORTED BY THE OWNER, 2026-08-31: signing out dropped him on /login.
+  //
+  // It is a small thing that says the wrong thing. Answering "I am leaving"
+  // with a password field reads as "sign back in", and for the one visitor who
+  // has just deliberately ended a session that is the least useful page in the
+  // product. /login also renders an unauthenticated notice, so somebody who
+  // signed out on purpose could be met by what looks like a failure.
+  //
+  // The landing is the honest destination: it is where a signed-out person
+  // belongs, it is the only page that sells, and its masthead already carries a
+  // Sign in link for anybody who did want to swap accounts.
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
+
+    const out = await fetch(`${base}/logout`, {
+      method: 'POST',
+      headers: { cookie, accept: 'text/html' },
+      redirect: 'manual',
+    });
+    assert.equal(out.status, 303);
+    assert.equal(out.headers.get('location'), '/',
+      'signing out still sends the customer to a sign-in form');
+    // The clearing cookie is the point of the response and must survive the
+    // change of destination -- a redirect that forgets it signs nobody out.
+    assert.match(out.headers.get('set-cookie') ?? '', /timestamp_session=/,
+      'the logout stopped clearing the session cookie');
+  });
+});
+
 test('a forged or tampered cookie is rejected before any filesystem lookup', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });

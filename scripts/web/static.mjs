@@ -1923,6 +1923,74 @@ input[type="file"]::file-selector-button {
 .check--buy .lbl,
 .check--buy span { font-size: var(--t-label); line-height: 1.45; color: var(--ink-soft); }
 
+/* --- the sign-in dialog ------------------------------------------------- */
+
+/* IT SITS ON PAPER EVEN THOUGH THE LANDING IS DARK, and that is the decision
+   worth recording. The landing is the one page still speaking Struck, but this
+   dialog is a piece of the APPLICATION -- the same fields the /login page
+   renders -- and everything behind the sign-in door is cream. Making it dark
+   would give the product two different-looking sign-ins depending on which
+   door you came through. Paper here is also what makes the backdrop read as a
+   backdrop: a dark panel on a dark scrimmed photograph has nothing to separate
+   it from the page. */
+.signin { border: 0; padding: 0; background: transparent; max-width: min(26rem, calc(100vw - 2rem)); }
+.signin::backdrop { background: rgba(7, 10, 17, 0.72); }
+.signin-box {
+  position: relative;
+  background: var(--paper);
+  border-radius: var(--r);
+  padding: var(--s-8) var(--s-6) var(--s-6);
+  text-align: center;
+}
+/* The close control is a real 44px target rather than a decorative glyph --
+   SC 2.5.8 asks 24x24 and §6b already had to fix this product's consent box
+   for exactly that reason. */
+.signin-x {
+  position: absolute; top: var(--s-3); right: var(--s-3);
+  width: 44px; height: 44px; line-height: 1;
+  border: 0; background: transparent; cursor: pointer;
+  font-size: var(--t-4); color: var(--ink-soft);
+}
+.signin-x:hover { color: var(--ink-strong); }
+.signin-t { font-family: var(--osd); font-size: var(--d-4); text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-strong); margin: 0 0 var(--s-2); font-weight: 400; }
+.signin-sub { color: var(--ink-soft); font-size: var(--t-1); margin: 0 0 var(--s-6); }
+/* One door per row, full width, in the order the reference sets: the provider
+   first, then the password. Stacked rather than side by side so neither reads
+   as the lesser option. */
+.signin-way, .signin-go {
+  display: block; width: 100%;
+  font: inherit; font-size: var(--t-2);
+  padding: var(--s-3) var(--s-4);
+  border: 0; border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.signin-way { background: var(--lift); color: var(--ink-strong); }
+.signin-way:hover { background: #F2EDE4; }
+.signin-go { background: var(--oxide); color: var(--paper); margin-top: var(--s-4); }
+.signin-go:hover { background: var(--oxide-deep); }
+/* The rule through the "or" is drawn with a gradient, not a border. This world
+   forbids borders and a test enforces it; a gradient is a fill. */
+.signin-or {
+  margin: var(--s-5) 0;
+  font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-soft);
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--s-3);
+}
+.signin-or::before, .signin-or::after {
+  content: ''; height: 1px;
+  background: linear-gradient(to right, transparent, rgba(42, 33, 27, 0.18), transparent);
+}
+.signin-form { text-align: left; margin: 0; }
+.signin-l { display: block; font-size: var(--t-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); margin: var(--s-4) 0 var(--s-1); }
+.signin-i {
+  display: block; width: 100%; box-sizing: border-box;
+  font: inherit; font-size: var(--t-2);
+  padding: var(--s-3);
+  border: 0; border-radius: var(--r-sm);
+  background: var(--lift); color: var(--ink-strong);
+}
+.signin-alt { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-4); margin: var(--s-6) 0 0; font-size: var(--t-label); }
+
 /* --- pricing ----------------------------------------------------------- */
 
 /* EQUAL COLUMNS HERE ARE CORRECT, AND THAT IS A DELIBERATE EXCEPTION TO THE
