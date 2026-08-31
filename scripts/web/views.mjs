@@ -923,8 +923,15 @@ ${backgrounds}
   <dialog id="signin" class="signin" aria-labelledby="signin-t">
     <div class="signin-box">
       <button type="button" class="signin-x" data-signin-close aria-label="Close">&times;</button>
-      <h2 class="signin-t" id="signin-t">Welcome back</h2>
-      <p class="signin-sub">Your shelf is where you left it.</p>
+      <!-- "WELCOME TO TIMESTAMP", NOT "WELCOME BACK". This dialog opens on the
+           LANDING, which is the page strangers arrive on -- so a greeting that
+           assumes you have been here before is wrong for most of the people who
+           will read it, and it quietly tells a first-time visitor they are in
+           the wrong place. The subtitle had the same fault and moved with it:
+           "your shelf is where you left it" means nothing to somebody who does
+           not have one yet. Both doors are named instead. -->
+      <h2 class="signin-t" id="signin-t">Welcome to Timestamp</h2>
+      <p class="signin-sub">Sign in, or start a shelf.</p>
 
       ${csrf ? `
       <form method="post" action="/auth/google">
