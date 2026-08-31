@@ -7,7 +7,7 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-31) — IT IS DEPLOYED AND STRIPE IS ACTIVATED. READ §46, THEN §45, §44, §43, §42, §41, §40, §39, §38, §37. (§47 is CI only — read it if CI is red.)
+## START HERE (2026-08-31) — IT IS DEPLOYED AND STRIPE IS ACTIVATED. READ §46, THEN §45, §44, §43, §42, §41, §40, §39, §38, §37. (§47 is CI only — read it if CI is red. **§48 IS A LIVE PIECE OF WORK: the premium redesign is half done and the branch is AHEAD of the deployed site.**)
 
 # THE PRODUCT IS LIVE AT https://timestamptapes.com AND IT CAN TAKE MONEY.
 
@@ -5575,6 +5575,89 @@ regression.
 reason beside it. That is deliberate — a run that could not arrange the race
 should say so rather than read as a clean pass — but it means **the "2 skipped"
 figure quoted throughout this file is the floor, not an invariant.**
+
+---
+
+### 48. THE PREMIUM PASS — TYPE GETS A SCALE, AND THE LANDING STOPS BEING A TEMPLATE (2026-08-31)
+
+**Six commits, `637bee8..2260960`. Suite 1965 → 1968 / 1966 pass / 0 fail / 2
+skipped. NOTHING DEPLOYED — timestamptapes.com still serves the old code.**
+
+The owner asked for the whole site to be premium and explicitly **not AI slop**.
+The spec is `docs/superpowers/specs/2026-08-31-premium-redesign-design.md` and it
+is the thing to read first. **DESIGN.md now carries the type scale and the
+asymmetry rule**, so it is still the authority.
+
+**Decisions he took, so nobody re-argues them:** perfect Struck rather than
+replace it; structure plus one signature moment per key page; **the auth five
+stay carved out** (login, signup, verify, reset, reset-complete get type and
+spacing only, no layout); the thesis is **the artifact, not the instrument** —
+every competitor in this category looks like a cinema void, and adopting that
+language would read as a clone.
+
+#### A — What landed
+
+- **A TYPE SCALE, WHICH DID NOT EXIST.** 71 hard-coded sizes across 19 values,
+  no ratio between any two. Minor third, 1.2, 16px base. The worst of it was the
+  label: eyebrow, flag, unit and tick are ONE role and were set at 9/10/11/12px
+  depending on the component. **Body moved 15px → 16px** — §6c found it and left
+  it as too disruptive; it also kills iOS input auto-zoom. Zero horizontal
+  overflow after, measured at 320/375/414/768/1024/1440.
+- **The landing's three-column block is gone** (§33's finding, unfixed since
+  2026-08-28). Copy untouched, Texture leads, the 01/02/03 dropped because they
+  are three facts and not steps. One CTA — the second duplicated the masthead's
+  Sign in. **And it states a price for the first time**, derived from the seams
+  that already bill.
+- **The legal pages had no document outline.** Seven section headings were
+  `<p class="eyebrow">` at 12px, so /privacy was one h1 across thirteen
+  paragraphs at an 82ch measure. Now H1 + five H2 at 71ch.
+- **§43D closed.** Step 3's bare `Choose File` is a slim dropzone with the
+  script half it always needed.
+- **Signing out lands on `/`, not `/login`** — owner-reported.
+- **A SIGN-IN DIALOG ON THE LANDING**, built to a reference he supplied.
+
+#### B — The fourth inline script, and why it is not a rule broken
+
+`SIGNIN_SCRIPT` is the fourth entry in `INLINE_SCRIPT_HASHES`. A hoisted
+checkbox can show a panel but cannot trap focus, close on Escape, or make the
+page behind inert; `showModal()` gives all three. **It is an enhancement** — the
+opener is a real link to `/login`, so with no JS it simply navigates. Verified
+in a browser: no CSP refusal, `:modal` matches, Escape closes, 331x594 at 375px.
+
+**ONE PROVIDER, NOT THREE.** The reference offers Google, Apple and Microsoft.
+This product has Google and a password. Do not draw the other two.
+
+#### C — Things that will bite
+
+- **THE LANDING MUST NOT LEARN TO NEED AUTH.** Wiring `csrfIssue` into it made
+  the route depend on `scripts/auth` for the first time and **broke the 503
+  degraded mode instantly**. It is guarded; no token renders a link to `/login`
+  instead of forms. That route's own comment is the contract.
+- **THE BACKTICK TRAP FIRED TWICE IN ONE SESSION**, in both `static.mjs` and
+  `views.mjs`, exactly as this file has warned since 2026-08-21.
+- **A CSS CHANGE NEEDS BOTH RESTARTS.** `sheetCache` memoises the sheet AND it
+  is served `max-age=300`. Restarting the server is not enough — the browser
+  holds the old one. Measurements read as "the fix did nothing" until both go.
+- **WIDTH IS NOT WEIGHT.** The first asymmetric block measured 768x234 against a
+  384x410 pair and the SUBORDINATE column read as more important. Hierarchy is
+  size: 48px against 18px.
+- **A FLOOR IS A WEAK GUARD.** The first legal-outline test only counted
+  headings, and a floor of three tolerated losing one — proved by the sabotage
+  passing. The second version states the real rule: past the h1, a section
+  heading may not be a paragraph. **It then caught a heading in
+  `operatorBlock()` that the sweep had missed.**
+
+#### D — What is NOT done
+
+- **`result`, `status`, `select`, `onboarding` and the error trio** have had no
+  structural work. They inherit the type scale, so nothing looks broken.
+- **The landing's centrepiece — a tape playing — is not built**, and it is
+  blocked on the owner: it needs one real paid render. The spec describes it.
+- **14.2% of the landing page is design-rationale HTML comments** (3,130 of
+  21,987 bytes), shipped to every visitor. One of them quotes the deleted
+  still-approval promise verbatim in page source. **The fix is to move that
+  reasoning out of the template into ordinary JS comments.** Raised with the
+  owner, not yet actioned.
 
 ---
 
