@@ -7,7 +7,7 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-31) — IT IS DEPLOYED AND STRIPE IS ACTIVATED. READ §46, THEN §45, §44, §43, §42, §41, §40, §39, §38, §37.
+## START HERE (2026-08-31) — IT IS DEPLOYED AND STRIPE IS ACTIVATED. READ §46, THEN §45, §44, §43, §42, §41, §40, §39, §38, §37. (§47 is CI only — read it if CI is red.)
 
 # THE PRODUCT IS LIVE AT https://timestamptapes.com AND IT CAN TAKE MONEY.
 
@@ -34,8 +34,18 @@ a tidy-up — the Impressum publishes a home address. §46F, §42E.
 **1964 tests / 1962 pass / 0 fail / 2 skipped** (§46; on a machine with no
 Chromium-family browser the seven browser tests self-skip too). The two
 standing skips are the `*-smoke.test.js` money guards, which self-skip without
-`TIMESTAMP_LIVE=1`. **PR #1's CI is GREEN on all five checks at `4965c2a`** —
-guards plus node 22/24 x ubuntu/windows.
+`TIMESTAMP_LIVE=1`. **PR #1's CI is GREEN on all five checks at `d6ec4b6`** —
+guards plus node 22/24 x ubuntu/windows, 1964/1962/0/2 on every leg.
+
+**IT WAS RED IN BETWEEN, AND NOT BECAUSE OF ANYTHING IN THE TREE.** Both Windows
+legs failed at `6bf5b1a` — a commit that changed only this file — when
+`community.chocolatey.org` answered 504 and `choco install` reported
+`installed 0/0 packages` **while exiting 0**, so the install step went green and
+the job died at the next one saying `'ffmpeg' is not recognized`. **§47** is the
+fix and the reasoning: probe for the binary, retry, and fall back to the same
+gyan.dev build chocolatey itself ships. **Read §47F before reading any future
+matrix failure as a code defect — two legs failing at the same second is an
+upstream outage, and the clock says so faster than the diff does.**
 
 **§37G'S SEVEN OWNER ITEMS ARE NOW TWO, AND BOTH ARE PAID RUNS.** The support
 mailbox and the password-reset template closed on 2026-08-30 (§42A); the
@@ -5419,6 +5429,111 @@ public repository.
 - **A price on a browser-smoke screenshot is a fixture value** — §45D, and it
   came up again while reviewing the live pricing page. Real costs are
   21/28/46/61.
+
+---
+
+### 47. A THIRD PARTY WENT DOWN AND THE INSTALL STEP LIED ABOUT IT (2026-08-31)
+
+**PR #1 went red on both Windows legs at `6bf5b1a` — a commit that changed THIS
+FILE and nothing else.** Ubuntu stayed green. One commit, `d6ec4b6`, workflow
+only; **CI is green again on all four legs, 1964 / 1962 pass / 0 fail / 2
+skipped on every one.**
+
+#### A — The outage, and how to tell it was one
+
+`choco install ffmpeg` spent **105 seconds** collecting a **504 Gateway
+Timeout** from `community.chocolatey.org`, installed `0/0 packages`, and the job
+died at the NEXT step with `'ffmpeg' is not recognized`.
+
+**BOTH WINDOWS LEGS FAILED AT THE SAME SECOND (13:18:45 and 13:18:46), AND THAT
+IS THE TELL.** Two independent runners hitting the identical failure in the same
+tick is one upstream event, not two code paths. Ubuntu was green because `apt` is
+a different CDN. **Check the timestamps across legs before reading a matrix
+failure as a code defect** — it is the cheapest available discriminator.
+
+It was **still down hours later** (503 on the same query, measured, not assumed)
+and recovered around 13:35. So "re-run it" would have failed again, and the
+window in which a re-run was the right answer was never open.
+
+#### B — THE PART THAT WAS OURS: A FAILED INSTALL REPORTED SUCCESS
+
+**`choco install` EXITED 0 having installed nothing.** So the step that actually
+broke was marked `success`, and the failure surfaced one step later wearing a
+PATH error's clothes — which is what the emailed annotation showed and where the
+diagnosis would naturally have gone first.
+
+**A PACKAGE MANAGER'S EXIT CODE IS NOT EVIDENCE THAT A BINARY EXISTS.** The step
+now probes for the binary and ignores what choco returns. Three rulings, one per
+part:
+
+1. **Probe, do not trust the exit code.**
+2. **Retry with backoff** — a 504 is usually a blip.
+3. **Fall back** — this one was not a blip, and retry alone would have stayed red
+   for hours.
+
+#### C — The fallback installs the SAME build, and that is now measured twice
+
+`ffmpeg-release-essentials.zip` from gyan.dev. It was chosen on the inference
+that the chocolatey package wraps gyan's builds — choco asked for `9.0.1` and
+gyan's own `release-version` file said `9.0.1` — and **the green run then proved
+it outright: the ffmpeg choco installed on the runner identifies itself as
+`9.0.1-essentials_build-www.gyan.dev`.** The fallback is the same artifact, not a
+substitute. That matters because §4 records two CI reds that were really one
+ffmpeg build's wording.
+
+**Verified on that build before trusting it, by downloading and running it:
+all 36 filters `doctor` requires are present, `libfreetype` included** — which is
+what `drawtext` needs and precisely the omission `doctor`'s own header names as
+the failure it exists to prevent. "Essentials" sounds like it might be short of a
+filter; measured, it is not.
+
+**`Expand-Archive` ships inside PowerShell, so this adds no tool, no marketplace
+action and no dependency** — `test.yml`'s own no-third-party-action ruling
+survives intact. `ffmpeg-release-full.zip` does not exist (404); only `full.7z`
+and `essentials.zip` do, which is why the zip is the essentials one.
+
+#### D — A BUG IN THE FIX, CAUGHT BY RUNNING THE FIX
+
+The verification line was first written as
+`& $found -version 2>&1 | Select-Object -First 1` followed by a
+`$LASTEXITCODE -ne 0` check. **Measured: that left `$LASTEXITCODE` at `-1` on a
+run where ffmpeg had plainly printed its version — so the step would have failed
+the build ON THE HAPPY PATH.** Reading `$LASTEXITCODE` after a pipeline that can
+stop early is unreliable. Captured, then checked, then printed.
+
+**It was found by executing the step locally, not by reading it.** An isolated
+repro without the `2>&1` returns 0, so this does not reproduce from the obvious
+one-liner — which is the argument for running the thing rather than reasoning
+about it.
+
+#### E — What is proven and what is not
+
+Both directions were exercised locally before the push, in this repo's sabotage
+discipline: **both sources unreachable → exit 1 with a named error; ffmpeg
+present → exit 0 and the network never touched.**
+
+**THE FALLBACK HAS NEVER RUN ON A REAL RUNNER.** Chocolatey recovered before the
+verifying run, so the green above took the PRIMARY path (`attempt 1 of 3`, 23
+seconds). The fallback's first live outing will be the next chocolatey wobble.
+Stated plainly so nobody reads that green tick as coverage it is not.
+
+#### F — Things that will bite
+
+- **A matrix failure that lands on two legs at the same second is upstream.**
+  Look at the clock across legs before reading the diff.
+- **A docs-only commit can be red and be innocent.** `6bf5b1a` touched only
+  `CLAUDE.md`. Check what the commit actually changed before believing it.
+- **`gh run view --job <id> --log` echoes the whole `run:` block**, so grepping
+  for `::error::` matches the SCRIPT TEXT as well as any real emission. The
+  echoed lines carry ANSI colour codes and the executed ones do not; tell them
+  apart by that, or by the timestamp ordering.
+- **This step must stay `shell: pwsh`.** The default Windows shell for a bare
+  `run:` is also pwsh here, but the script uses `$env:GITHUB_PATH` appends and
+  `Get-Command`, and it should not silently become `cmd` if a default ever moves.
+- **`test.yml` is NOT pinned in `.gitattributes` and does not need to be**,
+  unlike the Dockerfile (§34B): YAML block scalars normalise line breaks, so a
+  CRLF checkout cannot break the embedded script the way a CRLF `\` continuation
+  breaks a Dockerfile.
 
 ---
 
