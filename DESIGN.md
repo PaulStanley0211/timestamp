@@ -99,6 +99,56 @@ colour them.
   the readout is.
 - Display is uppercase with open tracking. Body is never uppercase.
 
+### The scale (2026-08-31)
+
+**A minor third, 1.2, on a 16px base.** Until this existed the sheet carried 71
+hard-coded sizes across 19 distinct values with no ratio between any two of
+them. That is the same disease the spacing scale cured — and ordered spacing on
+unordered type is why these pages read as tidy rather than as composed.
+
+| Token | Value | Role |
+|---|---|---|
+| `--t-label` | 12px | **every** uppercase tracked label |
+| `--t-1` | 13px | fine print, legal, captions |
+| `--t-2` | 16px | body prose — the base |
+| `--t-3` | 19px | lede |
+| `--t-4` | 23px | h3, legal section heading |
+| `--t-5` … `--t-8` | fluid | h2 through display |
+| `--t-hero` | `clamp(48px, 8vw, 96px)` | the landing hero, **once per site** |
+| `--d-1` … `--d-4` | 15px → fluid 32px | the VT323 ladder, kept separate |
+
+**The display ladder is separate and has to be.** VT323 reads noticeably smaller
+than the system sans at the same pixel size, so one shared set of tokens would
+make every readout look timid beside the prose next to it.
+
+**One size for every label.** The eyebrow, the step key, the flag, the unit, the
+tick and the "not yet" are one role, and the sheet was setting it at 9px, 10px,
+11px and 12px depending on which component you landed in. Uppercase and tracked
+reads larger than its px size, which is why nobody noticed.
+
+**Body is 16px, not 15px.** §6c found this and left it because it reflows every
+page. It also removes iOS input auto-zoom, which fires below 16px and silently
+breaks every form in the product.
+
+A test fails if any rule sets a size instead of naming one.
+
+## Content grids are never equal-column
+
+`repeat(3, 1fr)` of icon-heading-line is the canonical machine-made layout, and
+it is the shape rather than the styling that gives it away. The landing carried
+one and §33's review named it as the only templated thing on the page.
+
+The house ratio is already in the product: the signed-in page's `#tape` is a
+320px anchor beside a 640px flow column, measured at exactly 1:2 (§6a). A lead
+element takes the wide column **and the larger type** — width alone is not
+weight, which was proved by getting it wrong: the lead measured 768x234 against
+a 384x410 pair and the subordinate column read as the more important one.
+
+**The exception, and it is a real one: a pricing comparison.** Parallel
+purchasable things shown at parallel size is what makes them comparable.
+Forcing an uneven grid there would be this rule applied without judgment, which
+is its own kind of slop.
+
 ## Ghosts and the accessibility floor
 
 The catalogued grammar for this world puts unlit options at ghost opacity.

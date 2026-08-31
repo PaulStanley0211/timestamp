@@ -343,6 +343,72 @@ test('no page promises the still-approval gate that direct mode deleted', () => 
   }
 });
 
+test('the type scale is the only place a size is decided', () => {
+  // THE SPACING SCALE'S ARGUMENT, APPLIED TO TYPE. Before 2026-08-31 the sheet
+  // carried 71 hard-coded font sizes across 19 distinct values -- 9px, 10px,
+  // 11px and 12px all doing the SAME uppercase-label job -- with no ratio and
+  // no relationship between any two of them. §15 made exactly this case for
+  // spacing and it is why the pages read as ordered; type never got the pass.
+  //
+  // This is the guard that stops it coming back one convenient literal at a
+  // time, which is how the first 71 arrived.
+  const { css } = createStylesheet(FOCUS_MENU);
+  // The token block is where sizes ARE decided, so it is excluded by finding
+  // where the declarations live rather than by matching their names.
+  const rootEnd = css.indexOf('--d-4:');
+  assert.ok(rootEnd > 0, 'the display ladder is missing from the token block');
+  const rules = css.slice(rootEnd);
+
+  const bare = [...rules.matchAll(/font-size:\s*([0-9.]+)(px|rem)/g)].map((m) => m[0]);
+  assert.deepEqual(bare, [],
+    `these rules set a size instead of naming one: ${bare.join(', ')}`);
+
+  // Asserted PRESENT first so the check above cannot pass vacuously the day
+  // somebody deletes every font-size in the sheet -- §35E.
+  assert.ok(/font-size: var\(--t-2\)/.test(rules), 'nothing uses the body step');
+  assert.ok(/font-size: var\(--t-label\)/.test(rules), 'nothing uses the label step');
+});
+
+test('a legal page is a document, with a document outline', () => {
+  // /privacy shipped SEVEN section headings written as <p class="eyebrow"> --
+  // 12px uppercase labels -- so its outline was one h1 across thirteen
+  // paragraphs. On the longest prose in the product, whose entire job is to be
+  // read and understood, that is an accessibility defect before it is a design
+  // one: a screen reader got no structure for a privacy policy.
+  //
+  // The three page KICKERS that sit above each h1 stay <p class="eyebrow"> on
+  // purpose. An h2 before the h1 is worse structure than none, which is a
+  // mistake this guard would otherwise encourage.
+  // The minimums differ because the PAGES differ, and flattening them to one
+  // number would be the test inventing structure. /privacy and /terms are
+  // multi-section documents. The Impressum is a short statutory notice with
+  // exactly one section -- demanding a second would push somebody to split
+  // § 5 DDG information that belongs together.
+  const MIN_SECTIONS = { privacy: 3, terms: 3, impressum: 1 };
+  const pages = renderedPages().filter(([name]) => name in MIN_SECTIONS);
+  assert.equal(pages.length, 3, 'a legal page has fallen out of renderedPages()');
+  for (const [name, html] of pages) {
+    const h2s = (html.match(/<h2\b/g) || []).length;
+    assert.ok(h2s >= MIN_SECTIONS[name],
+      `${name} has ${h2s} section headings, wanted ${MIN_SECTIONS[name]}; its outline is not a document`);
+    const firstH1 = html.indexOf('<h1');
+    const firstH2 = html.indexOf('<h2');
+    assert.ok(firstH1 >= 0, `${name} has no h1 at all`);
+    assert.ok(firstH2 > firstH1, `${name} opens with an h2 before its h1`);
+
+    // THE COUNT ABOVE IS A FLOOR AND A FLOOR IS A WEAK GUARD -- verified: with
+    // only the counts, reverting ONE heading to <p class="eyebrow"> still
+    // passed, because /privacy has four and needs three. This is the assertion
+    // that actually holds the line, and it states the rule exactly: past the
+    // h1, a section heading may not be written as a paragraph. It is also not
+    // brittle to editing the copy, which an exact count would be.
+    const afterH1 = html.slice(firstH1);
+    const strays = (afterH1.match(/<p class="eyebrow">/g) || []).length;
+    assert.equal(strays, 0,
+      `${name} writes ${strays} section heading(s) after its h1 as <p class="eyebrow">; a heading that is not a heading leaves the document with no outline`);
+  }
+});
+
 test('the gauze is gone from the stylesheet, not merely unreferenced', () => {
   // The same argument as the grain plate below: markup nobody emits today is
   // one `preBody` away from being emitted tomorrow, and a rule that still

@@ -968,7 +968,34 @@ body {
 
 .headline { font-size: var(--t-5); line-height: 1.15; letter-spacing: -0.015em; font-weight: 500; margin: 0 0 0.5rem; }
 .title { font-size: var(--t-3); line-height: 1.3; font-weight: 500; margin: 0 0 0.4rem; }
-.sub { color: var(--muted); margin: 0 0 0.75rem; }
+/* MEASURED AT 82ch ON /privacy BEFORE THIS CAP, on the longest prose in the
+   product. §6c adopted the 65-75ch band from the UX guideline set and moved the
+   landing lede from 62ch to 66ch to satisfy it; the rule never reached ordinary
+   body copy, so the legal pages -- the one place somebody actually reads several
+   hundred words in a row -- were the worst offender. A cap only ever narrows,
+   so this is safe on the pages where .sub already sits in a column. */
+.sub { color: var(--muted); margin: 0 0 0.75rem; max-width: 66ch; }
+
+/* THE LEGAL PAGES ARE THE ONLY LONG-FORM DOCUMENTS IN THIS PRODUCT, AND THEY
+   WERE STRUCTURED LIKE A MARKETING PANEL. Their section headings were
+   <p class="eyebrow"> -- 12px uppercase tracked labels -- so /privacy shipped
+   SEVEN headings that were not headings and a document outline consisting of
+   one h1. For a page whose whole job is to be read and understood, that is an
+   accessibility defect before it is a design one: a screen reader got no
+   structure for a privacy policy.
+   They are h2 now, and they stop borrowing the eyebrow's voice: a label
+   announces a field, a heading opens a section, and at 23px in sentence case
+   this reads as the second one. The three page kickers that sit ABOVE the h1
+   stay <p class="eyebrow"> -- an h2 before the h1 would be worse structure
+   than none. */
+.legal-h {
+  font-size: var(--t-4);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  color: var(--ink-strong);
+  margin: var(--s-7) 0 var(--s-3);
+}
 .hint { color: var(--faint); font-size: var(--t-1); margin: 0 0 0.7rem; }
 .lede { color: var(--muted); margin: 0 0 2rem; }
 
@@ -1867,11 +1894,34 @@ input[type="file"]::file-selector-button {
    button rather than at the end of a long form the way the consent gate does.
    It needs air on both sides: flush against the button it reads as part of the
    button, and flush against the price it reads as part of the price. */
-.check--buy { margin: var(--s-3) 0; text-align: left; }
+/* THE ACKNOWLEDGEMENT IS LAW, SO IT STAYS -- BUT IT WAS SHOUTING. §45D recorded
+   it and let it go: the sentence renders once per PAID rung, so it appears
+   twice on /pricing, and in a narrow column it wrapped to about eight ragged
+   lines each. Two identical eight-line legal blobs were the heaviest thing on
+   the page, above the price and above the button.
+   It cannot be hoisted into one shared line -- that needs one form to own a
+   field the other posts, which the checkout guard forbids by design. So it is
+   made QUIET instead of shared: label size, tighter leading, and a measure wide
+   enough that it sets as a short paragraph rather than a ragged column. The
+   words are unchanged; consent copy is not something to trim for looks. */
+.check--buy { margin: var(--s-4) 0 var(--s-5); text-align: left; gap: var(--s-2); }
+.check--buy .lbl,
+.check--buy span { font-size: var(--t-label); line-height: 1.45; color: var(--ink-soft); }
 
 /* --- pricing ----------------------------------------------------------- */
 
-.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.9rem; }
+/* EQUAL COLUMNS HERE ARE CORRECT, AND THAT IS A DELIBERATE EXCEPTION TO THE
+   ASYMMETRY RULE the .how block sets. A pricing table is a COMPARISON: the
+   reader is holding two purchasable things side by side and asking which, and
+   parallel things shown at parallel size is what makes that possible. Forcing
+   an uneven grid here would be the rule applied without judgment, which is its
+   own kind of slop.
+   What IS uneven is Free, because Free is not a third option -- it is what an
+   account already has, and it has no button. Sitting at equal width it read as
+   a purchase the visitor had somehow failed to make. It is narrower now, so
+   the row shows two choices and one piece of context. */
+.plans { display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-5); }
+@media (max-width: 48rem) { .plans { grid-template-columns: 1fr; gap: var(--s-6); } }
 /* EVERY VALUE PRESENT, ONE STRUCK -- the world's central mechanic, finally on
    the page that most needs it. DESIGN.md § 23 recorded the failure in its own
    words: the page that answers "which plan am I on?" was the one page not using
