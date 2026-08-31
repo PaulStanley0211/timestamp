@@ -5535,6 +5535,47 @@ Stated plainly so nobody reads that green tick as coverage it is not.
   CRLF checkout cannot break the embedded script the way a CRLF `\` continuation
   breaks a Dockerfile.
 
+#### G — A SIXTH FLAKE, AND IT WAS ASSERTING ITS OWN PRECONDITION
+
+The docs commit that recorded all of the above then went red on **ubuntu node
+24** — a different failure, and nothing to do with the Windows work:
+
+```
+✖ 8 threads generate the secret at once and all of them end up with the same one
+  AssertionError: the contenders must genuinely overlap; peak concurrent
+  sessionSecret() calls was 1
+```
+
+**THE REAL INVARIANTS PASSED.** Nobody threw, all eight threads agreed on one
+secret, and that secret was the one on disk — those assertions run first and are
+unconditional. What failed was the LAST line, which checks that the eight threads
+genuinely overlapped. On a loaded runner the scheduler serialised them, so the
+race the test wanted to hold never took place.
+
+**A RACE THAT DID NOT HAPPEN PROVES NOTHING ABOUT A RACE THAT DOES, SO THERE WAS
+NOTHING THERE TO FAIL.** It now stands the run down as skipped, with its reason
+printed, which is the same ruling §4 records for `job-model`'s concurrent reader.
+**It is not a hole**: the forced-interleaving test immediately below it drives the
+exact `openSync(secret,'wx')` window deterministically on every run, so the
+window is covered whether or not this one overlaps.
+
+**Sabotage-verified in the direction that matters.** Forcing `peak` to 1 makes it
+SKIP; forcing `peak` to 1 **and** breaking the agreement assertion makes it still
+**FAIL** — so the skip cannot mask a genuine defect, because the real assertions
+run first. Baseline unchanged at 1964 / 1962 / 0 / 2.
+
+**WHAT COULD NOT BE DONE: REPRODUCE IT LOCALLY.** 22 consecutive runs, idle and
+under eight cpu hogs, never once failed to overlap — this machine has too many
+cores to recreate a 4-vCPU runner's contention. The fix is reasoned from the CI
+evidence plus §4's precedent, not watched going green against a local red. The
+re-run of that leg passed, which is what identifies it as a flake rather than a
+regression.
+
+**WHEN IT FIRES THE SUITE REPORTS 3 SKIPPED, NOT THE STANDING 2**, with the
+reason beside it. That is deliberate — a run that could not arrange the race
+should say so rather than read as a clean pass — but it means **the "2 skipped"
+figure quoted throughout this file is the floor, not an invariant.**
+
 ---
 
 ## Not in scope
