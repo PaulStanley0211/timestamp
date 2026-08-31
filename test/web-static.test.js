@@ -300,6 +300,49 @@ test('no page the app can render wears a texture of its own', () => {
   }
 });
 
+test('no page promises the still-approval gate that direct mode deleted', () => {
+  // THE LANDING PAGE SOLD A REFUND THAT DOES NOT EXIST. Its closing paragraph
+  // read "You approve a still before any video is made, so a likeness you do
+  // not recognise costs you nothing." That was true of the still path and
+  // stopped being true when the web app went direct: `server.mjs` sets
+  // `direct: PAID_PROVIDER_IDS.includes(provider)`, the still-count control is
+  // gone from views.mjs entirely, and §18 records the trade in as many words --
+  // the still WAS the cheap rejection gate at $0.04, and direct mode removed
+  // it, so a likeness that misses now costs a whole tape.
+  //
+  // It is the §37 signup defect on the page that sells: a product claim the
+  // copy kept making after the code stopped honouring it. This is the guard
+  // that stops it coming back, and it sweeps EVERY page rather than the
+  // landing, because the sentence is the kind of reassurance that gets pasted
+  // onto a pricing or signup page next.
+  //
+  // The legitimate sentence is asserted PRESENT first, on purpose. A test that
+  // only asserts an absence passes vacuously the day somebody deletes the whole
+  // paragraph, or renames the page out of renderedPages() -- §35E, which this
+  // repo has already been caught by once.
+  const pages = renderedPages();
+  const landing = pages.find(([name]) => name === 'landing');
+  assert.ok(landing, 'the landing is missing from renderedPages(), so this sweep proves nothing');
+  assert.ok(/run through a real tape chain/.test(landing[1]),
+    'the landing no longer explains the tape chain -- this test is asserting an absence against the wrong page');
+
+  // Any claim that the customer sees or approves something BEFORE the video is
+  // billed. Kept to the shape of the promise rather than its exact wording, so
+  // a paraphrase does not slip through.
+  const PRE_APPROVAL = [
+    /approve[sd]? a still/i,
+    /approve[sd]? .{0,24}before any video/i,
+    /costs you nothing/i,
+    /choose from .{0,20}looks? before/i,
+  ];
+  for (const [name, html] of pages) {
+    for (const claim of PRE_APPROVAL) {
+      assert.ok(!claim.test(html),
+        `${name} still promises a pre-approval gate (${claim}); the paid path is direct and approves nothing`);
+    }
+  }
+});
+
 test('the gauze is gone from the stylesheet, not merely unreferenced', () => {
   // The same argument as the grain plate below: markup nobody emits today is
   // one `preBody` away from being emitted tomorrow, and a rule that still

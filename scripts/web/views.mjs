@@ -784,11 +784,19 @@ ${backgrounds}
   </section>
 
   <section class="plain">
+    <!-- The sentence that used to close this paragraph promised "You approve a
+         still before any video is made, so a likeness you do not recognise costs
+         you nothing." It was true of the still path and false from the day the
+         web app went direct (server.mjs sets direct: true for a paid provider,
+         and the still-count control is gone) -- a refund-shaped promise on the
+         page that sells, which the product had stopped honouring. Deleted
+         rather than reworded: whether a customer gets anything back for a
+         likeness they do not recognise is a REFUND POLICY, and inventing one in
+         marketing copy is how the first claim got here. test/web-static.test.js
+         sweeps every page for it coming back. -->
     <p>It is not a filter. The picture is generated, then run through a real tape chain
     in ffmpeg &mdash; the grain goes on before the upscale, the date stamp degrades with
-    the image, and the frame is matted the way a camcorder frame actually sat. You
-    approve a still before any video is made, so a likeness you do not recognise costs
-    you nothing.</p>
+    the image, and the frame is matted the way a camcorder frame actually sat.</p>
   </section>
 
 </main>
