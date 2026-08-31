@@ -7,34 +7,50 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-30) — THE DEPLOY MOVES AHEAD OF STRIPE ACTIVATION. READ §45, THEN §44, §43, §42, §41, §40, §39, §38, §37.
+## START HERE (2026-08-31) — IT IS DEPLOYED AND STRIPE IS ACTIVATED. READ §46, THEN §45, §44, §43, §42, §41, §40, §39, §38, §37.
 
-**THE ORDER CHANGED AND IT IS PAUL'S CALL: the Hetzner box comes BEFORE Stripe
-verification**, because activation asks for a business website and nothing is
-reachable yet. §41's "deploy at the end" is superseded. **And Timestamp sells
-from its OWN live Stripe account** — the one the test Prices live in is a
-sandbox belonging to another product and cannot be verified. §45.
+# THE PRODUCT IS LIVE AT https://timestamptapes.com AND IT CAN TAKE MONEY.
 
-**1961 tests / 1959 pass / 0 fail / 2 skipped** (§45; on a machine with no
+**Both of the things this file called blockers for a fortnight are closed.**
+A Hetzner box runs the app behind Caddy with a real certificate; Timestamp's
+OWN Stripe account is verified — `charges_enabled: true`,
+`payouts_enabled: true` — with both live Prices created and the webhook
+verifying signatures. **§46 is the record and it supersedes every "nobody can
+pay" and "no host chosen" line below.**
+
+**WHAT HAS NOT HAPPENED: NO CARD HAS EVER BEEN CHARGED, AND NO WEB ORDER HAS
+EVER REACHED REAL FAL.** `worker.lastSeen` is `null` — the worker has never
+rendered a job on that box. Every piece is verified individually and the chain
+has never been run end to end with money in it. **Those two runs are the top of
+the list and they are the owner's, because they spend.** §46C.
+
+**THE SERVER COSTS €23.79/mo, NOT €5.** §34A's price table is stale by 5x: the
+CX line it quotes is "temporarily not available" everywhere, so the box is a
+**CPX22**. Backups are deliberately OFF until real money moves. §46A.
+
+**THE SITE IS `noindex` ON PURPOSE** and lifting it is a deliberate step, not
+a tidy-up — the Impressum publishes a home address. §46F, §42E.
+
+**1964 tests / 1962 pass / 0 fail / 2 skipped** (§46; on a machine with no
 Chromium-family browser the seven browser tests self-skip too). The two
 standing skips are the `*-smoke.test.js` money guards, which self-skip without
 `TIMESTAMP_LIVE=1`. **PR #1's CI is GREEN on all five checks at `4965c2a`** —
 guards plus node 22/24 x ubuntu/windows.
 
-**§37G's SEVEN OWNER ITEMS ARE NOW FIVE.** The support mailbox and the
-password-reset email template are DONE and both were PROVEN rather than
-assumed — §42A. **The domain has an MX record for the first time**, so
-`support@timestamptapes.com`, which all three legal pages print as the contact
-address, is no longer a promise the DNS could not keep.
+**§37G'S SEVEN OWNER ITEMS ARE NOW TWO, AND BOTH ARE PAID RUNS.** The support
+mailbox and the password-reset template closed on 2026-08-30 (§42A); the
+selling entity, the deploy host, the deploy itself and Stripe verification all
+closed on 2026-08-30/31 (§46). **What is left of that list is the blind check —
+folded into the friends test by §41 — plus the two runs in §46C.**
 
-**THE SELLING ENTITY IS DECIDED and the values deliberately are NOT in this
-repo.** They go in `TIMESTAMP_LEGAL_ENTITY` in `.env` on deploy day, where
-`docs/deploy-runbook.md` §1 step 3 already asks for them — because a sole
-trader's § 5 DDG address is a home address and this repository is public. §42D.
+**THE SELLING ENTITY IS FILLED IN AND IT LIVES ONLY IN `.env` ON THE BOX**, per
+§42D — a sole trader's § 5 DDG address is a home address and this repository is
+public. The street is **Keplerstraße**; this file and the live site both carried
+"Kaplerstraße" for an hour because it was guessed and then confirmed by a
+leading question. §46F.
 
-**THE ONE THING WITH A CLOCK ON IT IS STRIPE BUSINESS VERIFICATION**, and
-nothing about taking money can start until it is filed. **Nobody can pay
-today.**
+~~**THE ONE THING WITH A CLOCK ON IT IS STRIPE BUSINESS VERIFICATION.**~~
+**FILED AND APPROVED 2026-08-31 — §46B.** The account charges and pays out.
 
 **AND THE PRODUCT IS NOT ABOUT GERMANY.** The owner restated this on
 2026-08-29; the eight place labels are plain now (§42F). ~~The bigger half is
@@ -310,7 +326,19 @@ section 24.
 
 ### PICK UP HERE
 
-> **READ SECTION 45 FIRST (2026-08-30). The deploy now comes BEFORE Stripe
+> **READ SECTION 46 FIRST (2026-08-31). THE APP IS DEPLOYED AND STRIPE IS
+> ACTIVATED — https://timestamptapes.com takes payments. §46 is the server, the
+> account, the live Prices, and the two things that are still unproven because
+> they cost money. It supersedes every "nobody can pay", "no host chosen" and
+> "deploy at the end" line in this file, and it corrects §34A's server price by
+> a factor of five.**
+>
+> **THE FIRST THING WORTH DOING NEEDS NOBODY BUT THE OWNER AND SPENDS ABOUT
+> $16 IN TOTAL:** buy a Starter pack and refund it (~$14.28), and put one 480p
+> order through the site (~$2). Every part of both paths is verified in
+> isolation; neither has ever been run with real money in it. §46C.
+>
+> **THEN SECTION 45 (2026-08-30). The deploy came BEFORE Stripe
 > activation, Timestamp gets its own live Stripe account, and buying credits
 > asks the customer for them. §45B is a correction to the deploy runbook you
 > are about to follow; §45D says why a price on a browser-smoke screenshot is
@@ -5215,6 +5243,182 @@ change); then the ~$2 paid web order (§38E) and the friends test.
 
 **AGENT-BUILDABLE:** nothing is ungated again. The punch-in zoom (§34G) is
 buildable but only a paid render can judge it.
+
+---
+
+### 46. IT IS DEPLOYED, AND STRIPE IS ACTIVATED (2026-08-30/31)
+
+**The two things this file has called blockers for a fortnight are both done.**
+Timestamp is live at **https://timestamptapes.com**, and its own Stripe account
+is verified and able to charge cards. Everything below was read off the live
+API or the live site, never assumed.
+
+**Nothing was committed for the deploy itself** — it is a server and a `.env`,
+not code. The commits from that session are §§43-45 plus the four small changes
+in §46E. Local, `origin/supabase-identity-slice` and the box are all at
+`711603b`; the tree is clean.
+
+#### A — The box, and the price this file had wrong
+
+| | |
+|---|---|
+| Host | Hetzner **CPX22**, `178.105.77.16`, Falkenstein |
+| Spec | 2 vCPU / 3.8 GB / 75 GB free — the shape the image was proven on |
+| OS | **Ubuntu 26.04 LTS**, not the 24.04 the runbook names |
+| Cost | **€23.79/mo**, and backups are OFF |
+
+**§34A's €5 IS STALE AND THE GAP IS 5x.** The CX line it priced —
+CX23 at €4.49-5.49 — is **"temporarily not available"** in every location
+offered, tied to the "Limited availability of cloud instances" notice Hetzner
+has had open since June 2026. CPX22 is the cheapest thing that fits. Re-price
+before quoting that table again.
+
+**UBUNTU 26.04 RATHER THAN 24.04 WAS A CHECK, NOT A SHRUG.** The image change
+did not take at creation, and rather than rebuild, `docker.io`,
+`docker-compose-v2` and `git` were confirmed present in 26.04's archive first.
+They are. The app runs in a pinned `node:22-bookworm-slim` container anyway, so
+the host distribution reaches very little.
+
+**BACKUPS ARE DELIBERATELY OFF** and this is a decision with a trigger on it.
+At €5/mo they were an easy yes; at €28/mo with **no customer data on the disk
+yet** they are not. `npm run backup` covers the irreplaceable half (accounts,
+owners, refunds) and needs no Hetzner feature. **Turn them on the day before
+real money moves** — that is the point where losing the disk stops being an
+inconvenience and starts being somebody's paid credits.
+
+#### B — Stripe: activated, on its own account
+
+```
+acct_1UAGgQPFjb61BCp6      country DE, default currency EUR
+charges_enabled    true
+payouts_enabled    true
+details_submitted  true
+```
+
+**It is a SEPARATE account from ClearCost**, per §45A — created through the
+switcher's "Create a separate account", so it shares no data, team or reporting
+with the other product. §27's warning about the business name on the checkout
+page is now closed at the root rather than worked around.
+
+**MANAGED PAYMENTS IS ON, AND IT IS A 3.5% DECISION.** Stripe is the merchant
+of record: they are liable for global sales tax and VAT and they handle
+disputes. It costs **3.5% on top of the usual ~2.9% + 30c**, which is about 15%
+of the gross margin on a $12 pack. Taken knowingly, because the alternative is
+the owner registering for OSS and filing returns in a business that has not yet
+made a sale. **Revisit when revenue is real** — the screen says it can be
+changed.
+
+| | |
+|---|---|
+| Fraud | **Radar Lite** (free). Standard was preselected at €0.05/txn and refused — Managed Payments already covers fraud, and Lite explicitly covers card testing, which is the actual threat to a new account. |
+| Climate | Off. Revisit when the business supports it. |
+| Statement descriptor | `TIMESTAMPTAPES` |
+| Category | Digital Audio Visual Works — downloaded with **permanent** rights and streamed, non-subscription |
+
+**THE LIVE PRICES, verified through the API rather than the dashboard:**
+
+| Rung | Price id | Checked |
+|---|---|---|
+| Starter $12 / 92 CR | `price_1UAIGtPFjb61BCp6zlUEqIuZ` | `livemode: true`, `type: one_time`, `recurring: null`, `usd`, active |
+| Standard $19 / 138 CR | `price_1UAIIXPFjb61BCp68LnLnwc3` | same |
+
+`recurring: null` is the one worth checking on any future Price: the create form
+**defaults to Recurring**, and a recurring Price in `mode: payment` is refused by
+Stripe in front of the customer at the moment they click Buy.
+
+**TAX IS EXCLUSIVE AND THE PAGE NOW SAYS SO.** Measured in the dashboard: a $12
+pack shows a German buyer **$14.28**, VAT added on top and remitted by Stripe.
+That is the better direction — VAT *inside* $12 would have left ~$9.01 against
+a $9.20 provider cost, i.e. **a loss on every EU sale**. `/pricing` carries a
+line saying tax is added at checkout, and it names no region on purpose: the
+rate follows the buyer, so no single printed total is true everywhere.
+
+**Webhook:** `https://timestamptapes.com/api/stripe/webhook`,
+`checkout.session.completed` only, **Snapshot** payload (the "thin" style sends
+a stub this code does not fetch), scope "Your account".
+
+#### C — What is proven, and what is still not
+
+**PROVEN, by doing it:**
+
+- The site answers over HTTPS with a Let's Encrypt certificate Caddy got itself.
+- **A real signup worked on the live domain** — the owner's own test; the
+  six-digit code arrived and the account opened.
+- The three legal pages carry the real entity and cite § 5 DDG.
+- An **unsigned** POST to the webhook is refused **400**. That refusal is the
+  only thing between a forged event and credits appearing from nowhere.
+- `/pricing` shows Buy buttons rather than "Not open yet".
+- The image build ran the 36-filter ffmpeg preflight and passed, so the video
+  chain works on this machine.
+
+**NOT PROVEN, and both cost real money:**
+
+1. **No card has ever been charged.** The whole payment path is wired and
+   verified piece by piece; nobody has run a pound through it. Buy a Starter
+   pack (~$14.28), confirm 92 credits land, refund from the dashboard.
+2. **No web order has ever reached real fal.** `worker.lastSeen` is `null` —
+   the worker has never rendered a job on this box. §38E is the runbook.
+
+#### D — THE KEY ROTATION, AND THE PASTE THAT FAILED TWICE
+
+The first live secret key was pasted into the chat and therefore had to be
+rolled. It was, and Stripe answered `Expired API Key` on the old one — the
+exposure is closed.
+
+**GETTING THE REPLACEMENT ONTO THE BOX FAILED TWICE, AND NOT ON THE SERVER.**
+A `read -rs -p ... K` one-liner was pasted into the terminal; both times the
+clipboard still held **the command text itself**, so the command was fed into
+its own prompt and `.env` came out holding
+`STRIPE_SECRET_KEY=read -rs -p "Paste new key...`. `docker compose` then warned
+`The "K" variable is not set` — the literal `$K` had been written into the file.
+
+**Two lessons, both cheap:**
+
+- **`read -s` hides the input, so a failed paste looks identical to a
+  successful one.** Confirm the clipboard first — paste into Notepad and look.
+- **The fix that worked was `nano` into an EMPTY file** (`newkey.txt`), then a
+  script to merge, `shred`, and restart. One paste, visible, nothing to
+  mis-quote. Use that shape for any secret going onto a box.
+
+**An extraction attempt in between made it worse and is worth recording:**
+pulling `sk_live_[A-Za-z0-9]+` out of the mangled line returned a key with two
+stray characters on the end, because `_` is not in that class and two
+concatenated keys merge into one match. It verified as invalid. **Do not
+reconstruct a secret with a regex; get it again from the source.**
+
+#### E — What changed in the code
+
+| Commit | What it does |
+|---|---|
+| `9351e49` | A takedown request has somewhere to go; the runbook's `git clone` names the branch (a default clone gets `main`, 201 commits behind, with no Dockerfile) |
+| `9afb34a` | The legal notice is in English — the statute stays German because a statute's name does not translate, and the word "Impressum" stays because German visitors scan for it |
+| `ee62e31` | `/pricing` says the listed price is before tax |
+| `711603b` | Both rungs point at the live Prices |
+
+Plus `docs/stripe-activation.md` — what activation asks, which answers this
+project already holds, and which are the owner's and deliberately absent from a
+public repository.
+
+#### F — Things that will bite
+
+- **THE SITE IS `noindex` AND THAT IS CORRECT.** `TIMESTAMP_INDEXABLE` is unset,
+  so `robots.txt` disallows everything and every response carries
+  `X-Robots-Tag: noindex`. Do not lift it casually — §42E: the Impressum
+  publishes a home address, and Certificate Transparency already published the
+  hostname the moment Caddy issued the certificate, so "nobody has the link" was
+  never the protection.
+- **`.env` ON THE BOX IS THE ONLY COPY OF FOUR SECRETS** — the fal key, three
+  Supabase keys, and the two Stripe secrets — and it is `chmod 600`, gitignored,
+  and out of the image. `npm run backup` does NOT include it. Losing the server
+  means re-fetching every one of them from its own console.
+- **`TIMESTAMP_LEGAL_ENTITY` lives only in that `.env`**, by design (§42D). The
+  street is **Keplerstraße**, not Kaplerstraße — this file and the live site
+  both carried the wrong spelling for about an hour because it was guessed from
+  a transcription and confirmed by a leading question. Stripe's copy is what
+  caught it.
+- **A price on a browser-smoke screenshot is a fixture value** — §45D, and it
+  came up again while reviewing the live pricing page. Real costs are
+  21/28/46/61.
 
 ---
 
