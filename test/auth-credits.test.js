@@ -37,6 +37,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 
+import { aspectIds } from '../scripts/tapedeck/frame.mjs';
 import {
   PLANS,
   createAccount,
@@ -75,6 +76,10 @@ const T0 = Date.UTC(2026, 7, 20, 14, 45, 0);
 const clock = (ms = T0) => () => new Date(ms);
 const iso = (ms) => new Date(ms).toISOString();
 const JOB = (n) => `20260820-1445${String(n).padStart(2, '0')}-a3f19c`;
+
+/** The shapes the order form actually offers. Read from the same file the page
+ *  reads, so a shape added there joins the free-grant check without an edit. */
+const RENDER_CFG = JSON.parse(fs.readFileSync(new URL('../config/render.json', import.meta.url), 'utf8'));
 
 /** One 15-second tape at the default resolution: the unit the whole plan ladder
  *  is built out of. */
@@ -151,6 +156,51 @@ test('every number in the money path says what kind of number it is', async () =
     assert.match(cfg.resolutions[id]._comment, /MEASURED/,
       `${id} is on offer and its price is still a guess`);
   }
+});
+
+test('the free grant buys the default shape, and nothing it cannot buy is a surprise', () => {
+  // THE OWNER FIXED THIS NUMBER AT 21 ON 2026-08-31 -- "for a free video, make
+  // it 21 credits. It's final." It was briefly 42 earlier the same day, for the
+  // reason below, and he overruled it. So this test does NOT assert that a free
+  // account can afford every shape: it cannot, by his decision. It asserts the
+  // two things that must hold WHATEVER the number is.
+  //
+  // ONE: A NEW ACCOUNT IS NEVER STRANDED. The grant must buy at least the
+  // default shape at the cheapest tier. That is section 26 finding 4, which is
+  // the whole reason the grant had to move off 16 credits: at 16 an account
+  // could "sign up, see a balance, and be refused at the button", with no tape
+  // reachable at all. A grant that buys nothing is the one state that is always
+  // a bug rather than a pricing choice.
+  //
+  // TWO: WHAT IT CANNOT BUY IS PRICED, NOT HIDDEN. 21 buys one 480p tape in 4:3
+  // and nothing in 16:9 or 9:16, which cost 28 -- a non-4:3 shape is 4/3 the
+  // pixels because a resolution label holds the short edge. That is legitimate
+  // and it is the shape of the free tier. What would NOT be legitimate is the
+  // page showing 21 CR and letting somebody choose the phone shape, upload a
+  // photograph, and only then meet a 402. So every shape the order form offers
+  // must have a computable price for the warning to quote -- the surfaces that
+  // print it are pinned in web-static and web-api, and this is the arithmetic
+  // they rest on.
+  const free = PLANS.free.creditsPerPeriod;
+  const cheapest = creditCost({ resolution: '480p' });
+
+  assert.ok(free >= cheapest,
+    `the free grant of ${free} cannot buy even the cheapest tape (${cheapest} CR) -- a balance `
+    + 'that buys nothing is section 26 finding 4 all over again');
+
+  for (const aspect of aspectIds(RENDER_CFG)) {
+    const cost = creditCost({ resolution: '480p', aspect });
+    assert.ok(Number.isFinite(cost) && cost > 0,
+      `480p in ${aspect} has no price, so the order page cannot warn about it before the upload`);
+  }
+
+  // The free tier is the CHEAP tier on purpose: the free tape proves the
+  // likeness at 480p and the paid rungs are what a person buys once they
+  // believe it. A grant that reached 720p would be giving the paid tier away.
+  const cheapest720 = creditCost({ resolution: '720p' });
+  assert.ok(free < cheapest720,
+    `the free grant of ${free} reaches a 720p tape (${cheapest720} CR); the free tier is the `
+    + 'cheap tier on purpose');
 });
 
 test('the numbers: 21 credits at 480p, 46 at 720p, measured', async () => {
