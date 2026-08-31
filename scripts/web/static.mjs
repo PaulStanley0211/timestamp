@@ -543,6 +543,59 @@ export const BASE_CSS = `
   --s-7: 48px;
   --s-8: 64px;
 
+  /* THE TYPE SCALE, and the reason it did not exist until 2026-08-31.
+     The spacing scale above was built because the page used 34 distinct rem
+     values and seven of them stepped by 0.8px. Type had exactly the same
+     disease and nobody measured it: the sheet carried clamp(29,4.4vw,40),
+     clamp(44,7.4vw,104), clamp(20,2.4vw,29), clamp(26,3.6vw,44), then bare
+     15px, 25px and 16px. No ratio, no named steps, and no relationship between
+     any two of them. Ordered spacing on unordered type is why the pages read
+     as tidy rather than as composed.
+
+     A MINOR THIRD, 1.2, ON A 16px BASE. The restrained ratio on purpose: a
+     major third (1.25) compounds to 31px by the third step and starts shouting
+     where this world whispers. 1.2 gives more usable middle steps, which is
+     what an editorial page actually needs -- the same argument the 4px spacing
+     base won on.
+
+     THE BODY MOVES 15px -> 16px AND THAT IS A FIX, NOT A PREFERENCE. §6c of
+     CLAUDE.md found it, named the consequence, and deliberately left it:
+     "changing it reflows every page in the product. Typography, not layout --
+     not done unasked." This is the pass where typography IS the subject. It
+     also removes iOS input auto-zoom, which fires on any input below 16px and
+     silently breaks every form on this site.
+
+     Small steps are fixed and large steps are fluid, because only the large
+     ones have anywhere to go on a phone. */
+  /* ONE SIZE FOR EVERY LABEL, AND THIS IS THE WORST OF THE FOUR FINDINGS.
+     The uppercase tracked label -- the eyebrow, the step key, the flag, the
+     unit, the tick, the "not yet" -- is ONE role, and the sheet was setting it
+     at 9px, 10px, 11px and 12px depending on which component you landed in.
+     Four values for one job, none of them a decision, and the 9px one
+     (.stepno-k) was the smallest type in the product. Uppercase and tracked
+     reads larger than its px size, which is why nobody noticed and why the
+     answer is one honest value rather than a bigger one. */
+  --t-label: 12px;                      /* every uppercase tracked label      */
+  --t-1: 13px;                          /* fine print, legal, captions        */
+  --t-2: 16px;                          /* body prose -- the base             */
+  --t-3: 19px;                          /* lede                               */
+  --t-4: 23px;                          /* h3                                 */
+  --t-5: clamp(23px, 2.2vw, 28px);      /* h2                                 */
+  --t-6: clamp(28px, 3.2vw, 33px);      /* h1, interior pages                 */
+  --t-7: clamp(33px, 4.4vw, 40px);      /* h1, the app page                   */
+  --t-8: clamp(40px, 6vw, 48px);        /* display, sub-hero                  */
+  --t-hero: clamp(48px, 8vw, 96px);     /* the landing hero, ONCE per site    */
+
+  /* THE DISPLAY LADDER IS SEPARATE, AND IT HAS TO BE. VT323 reads noticeably
+     smaller than the system sans at the same pixel size -- it is a terminal
+     face with a small x-height -- so putting both ladders on one set of tokens
+     would make every readout look timid beside the prose next to it. Same 1.2
+     ratio, shifted up a step. Uppercase with open tracking, per DESIGN.md. */
+  --d-1: 15px;                          /* OSD labels, step numerals, hints   */
+  --d-2: 18px;                          /* readouts in prose                  */
+  --d-3: clamp(22px, 2.4vw, 26px);      /* card titles                        */
+  --d-4: clamp(26px, 3.6vw, 32px);      /* section headings                   */
+
   /* THE IDENTITY, ON PAPER. DESIGN.md § "The palette". Every ratio below was
      re-derived against --paper on 2026-08-28; none of the Struck numbers carry
      over, because they were all measured against #070A11.
@@ -668,7 +721,7 @@ body {
   background: var(--ground);
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 15px;
+  font-size: var(--t-2);
   line-height: 1.6;
   padding: 0 1.15rem 5rem;
 }
@@ -832,7 +885,7 @@ body {
 .nav { display: flex; align-items: center; gap: 1.1rem; min-width: 0; }
 .nav a, .nav button {
   background: none; border: 0; padding: 0; cursor: pointer;
-  font: inherit; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+  font: inherit; font-size: var(--t-label); letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--faint); text-decoration: none; flex: none;
 }
 .nav a:hover, .nav button:hover { color: var(--accent); }
@@ -845,7 +898,7 @@ body {
    address put the only way out of the account outside the frame. Everything
    else in the row is a control and holds its size (flex: none above). */
 .nav .who {
-  color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 13px;
+  color: var(--muted); text-transform: none; letter-spacing: 0; font-size: var(--t-1);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -862,7 +915,7 @@ body {
   gap: 0.4rem;
   text-transform: none;
   letter-spacing: 0;
-  font-size: 13px;
+  font-size: var(--t-1);
   color: var(--muted);
 }
 .ring { width: 20px; height: 20px; flex: none; overflow: visible; }
@@ -884,7 +937,7 @@ body {
   transition: stroke-dasharray 420ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .creds-n { font-variant-numeric: tabular-nums; color: var(--ink); }
-.creds-u { color: var(--faint); font-size: 11px; }
+.creds-u { color: var(--faint); font-size: var(--t-label); }
 
 /* Two of the cheapest tape or fewer: worth noticing, not yet a problem. */
 .creds--low .ring-fill { stroke: var(--accent-bright); }
@@ -906,24 +959,24 @@ body {
 /* The eyebrow is on the landing AND on six paper pages, so it names no ground:
    '--faint' resolves to --l-dim there and to --ink-soft here. */
 .eyebrow {
-  font-size: 11px;
+  font-size: var(--t-label);
   text-transform: uppercase;
   letter-spacing: 0.22em;
   color: var(--faint);
   margin: 0 0 var(--s-2);
 }
 
-.headline { font-size: 28px; line-height: 1.15; letter-spacing: -0.015em; font-weight: 500; margin: 0 0 0.5rem; }
-.title { font-size: 20px; line-height: 1.3; font-weight: 500; margin: 0 0 0.4rem; }
+.headline { font-size: var(--t-5); line-height: 1.15; letter-spacing: -0.015em; font-weight: 500; margin: 0 0 0.5rem; }
+.title { font-size: var(--t-3); line-height: 1.3; font-weight: 500; margin: 0 0 0.4rem; }
 .sub { color: var(--muted); margin: 0 0 0.75rem; }
-.hint { color: var(--faint); font-size: 13px; margin: 0 0 0.7rem; }
+.hint { color: var(--faint); font-size: var(--t-1); margin: 0 0 0.7rem; }
 .lede { color: var(--muted); margin: 0 0 2rem; }
 
 .stamp {
   font-family: var(--osd);
   color: var(--accent-deep);
   letter-spacing: 0.16em;
-  font-size: 14px;
+  font-size: var(--t-1);
   margin: 0 0 1rem;
 }
 
@@ -950,7 +1003,7 @@ body {
   color: var(--alarm);
   padding: 0.75rem 0.95rem;
   margin: 0 0 1.5rem;
-  font-size: 14px;
+  font-size: var(--t-1);
   border-radius: var(--r-sm);
 }
 
@@ -959,7 +1012,7 @@ body {
   color: var(--faint);
   padding: 0.75rem 0.95rem;
   margin: 0 0 1.5rem;
-  font-size: 14px;
+  font-size: var(--t-1);
   border-radius: var(--r-sm);
 }
 
@@ -973,7 +1026,7 @@ body {
 .app-head { margin: 0 0 2.1rem; }
 
 .app-h1 {
-  font-size: clamp(29px, 4.4vw, 40px);
+  font-size: var(--t-7);
   line-height: 1.1;
   letter-spacing: -0.02em;
   font-weight: 500;
@@ -1103,7 +1156,7 @@ body {
 
 .stepno-k {
   display: block;
-  font-size: 9px;
+  font-size: var(--t-label);
   text-transform: uppercase;
   letter-spacing: 0.2em;
   color: var(--faint);
@@ -1118,12 +1171,12 @@ body {
 .stepno-n {
   display: block;
   font-family: var(--osd);
-  font-size: 44px;
+  font-size: var(--t-8);
   line-height: 0.82;
   color: var(--accent-deep);
 }
 
-.stepno-n--mark { font-size: 26px; line-height: 1.4; color: var(--accent-deep); }
+.stepno-n--mark { font-size: var(--t-4); line-height: 1.4; color: var(--accent-deep); }
 
 /* The subtitle is prose and takes the readable measure with it. */
 .step-say .sub { max-width: 56ch; }
@@ -1231,9 +1284,9 @@ body {
    the panel it is recessed into. */
 .drop:hover { background: rgba(168, 52, 42, 0.05); }
 .drop input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.drop .plus { font-size: 20px; color: var(--ink); letter-spacing: 0.04em; }
-.drop .say { color: var(--faint); font-size: 13px; max-width: 22rem; }
-.drop .chosen-name { color: var(--ink); font-size: 13px; }
+.drop .plus { font-size: var(--t-3); color: var(--ink); letter-spacing: 0.04em; }
+.drop .say { color: var(--faint); font-size: var(--t-1); max-width: 22rem; }
+.drop .chosen-name { color: var(--ink); font-size: var(--t-1); }
 
 /* --- step 02, the look grid -------------------------------------------- */
 
@@ -1252,13 +1305,13 @@ body {
   transition: opacity 160ms linear;
 }
 .lookcard:hover { opacity: var(--ghost-hover); }
-.lookcard .name { display: block; font-size: 15px; color: var(--ink); }
+.lookcard .name { display: block; font-size: var(--t-2); color: var(--ink); }
 /* NOTHING INSIDE A GHOSTED CARD IS WRITTEN IN THE SOFT TIER. --ink-soft under
    the ghost measures 2.45:1; it would need .97 opacity to clear the floor, and
    .97 is not a ghost. The hierarchy inside a card is carried by SIZE -- 15px
    name over 13px detail -- which survives being multiplied by an opacity, and a
    colour step does not. */
-.lookcard .detail { display: block; font-size: 13px; color: var(--ink); margin-top: 0.15rem; }
+.lookcard .detail { display: block; font-size: var(--t-1); color: var(--ink); margin-top: 0.15rem; }
 /* The state marks carry NO TEXT IN THE MARKUP. They are hidden by opacity, and
    with the stylesheet switched off an opacity rule does nothing -- so a badge
    that spelled out "Selected" would appear on all nine cards at once and the
@@ -1267,7 +1320,7 @@ body {
    so their text belongs in the decoration. */
 .lookcard .tick {
   position: absolute; top: 0.7rem; right: 0.8rem;
-  color: var(--accent); font-size: 11px; letter-spacing: 0.12em;
+  color: var(--accent); font-size: var(--t-label); letter-spacing: 0.12em;
   opacity: 0; transition: opacity 140ms;
 }
 .lookcard .tick::before { content: "●"; }
@@ -1346,12 +1399,12 @@ body {
   padding: 2.5rem 0.75rem 0.7rem;
   background: linear-gradient(180deg, rgba(11,10,9,0) 0%, rgba(11,10,9,0.88) 62%);
 }
-.placecard .cap .name { display: block; font-size: 14px; color: var(--on-image); line-height: 1.25; }
-.placecard .cap .when { display: block; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--on-image-soft); margin-top: 0.25rem; }
+.placecard .cap .name { display: block; font-size: var(--t-1); color: var(--on-image); line-height: 1.25; }
+.placecard .cap .when { display: block; font-size: var(--t-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--on-image-soft); margin-top: 0.25rem; }
 
 .placecard .badge {
   position: absolute; top: 0.6rem; left: 0.6rem;
-  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase;
   /* Struck, ON THE IMAGE -- so it takes the lifted oxide, not --accent. The
      glow went with the cathode: a halo is how a value reads as lit on a
      near-black plane, and on a photograph under a paper-world page it reads as
@@ -1409,7 +1462,7 @@ body {
 /* --- the free-text escape hatch ---------------------------------------- */
 
 .aside { margin-top: 1.1rem; }
-.aside summary { color: var(--faint); font-size: 13px; cursor: pointer; }
+.aside summary { color: var(--faint); font-size: var(--t-1); cursor: pointer; }
 .aside summary:hover { color: var(--accent); }
 .aside[open] summary { margin-bottom: 0.7rem; }
 
@@ -1429,13 +1482,13 @@ input[type="text"], input[type="email"], input[type="password"], select {
 input::placeholder { color: var(--ink-soft); }
 select { width: auto; min-width: 6rem; }
 
-input[type="file"] { color: var(--muted); font-size: 13px; }
+input[type="file"] { color: var(--muted); font-size: var(--t-1); }
 input[type="file"]::file-selector-button {
   background: var(--paper);
   border: 1px solid var(--hairline-firm);
   border-radius: 999px;
   color: var(--ink);
-  font: inherit; font-size: 13px;
+  font: inherit; font-size: var(--t-1);
   padding: 0.4rem 0.85rem;
   margin-right: 0.8rem;
   cursor: pointer;
@@ -1444,7 +1497,7 @@ input[type="file"]::file-selector-button {
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .field { margin: 0 0 var(--s-5); }
-.field label { display: block; font-size: 13px; letter-spacing: 0; color: var(--ink); margin-bottom: var(--s-2); }
+.field label { display: block; font-size: var(--t-1); letter-spacing: 0; color: var(--ink); margin-bottom: var(--s-2); }
 
 /* --- the settings panel ------------------------------------------------ */
 
@@ -1456,7 +1509,7 @@ input[type="file"]::file-selector-button {
    16:9 would make this a filter instead of a tape, and the 375-frame contract
    is asserted by roughly two hundred tests. */
 .pill {
-  font-size: 12px; letter-spacing: 0.14em;
+  font-size: var(--t-label); letter-spacing: 0.14em;
   color: var(--accent);
   /* A 10% wash of the accent, and NO ring. The 1px oxide border was a box drawn
      round a fact -- forbidden by DESIGN.md's one rule, and invisible to the
@@ -1490,9 +1543,9 @@ input[type="file"]::file-selector-button {
   transition: opacity 160ms linear;
 }
 .framecard:hover { opacity: var(--ghost-hover); }
-.framecard .ratio { font-family: var(--osd); font-size: 16px; letter-spacing: 0.08em; color: var(--ink); }
-.framecard .detail { font-size: 12px; color: var(--ink); }
-.framecard .tick { color: var(--accent); font-size: 11px; opacity: 0; transition: opacity 140ms; }
+.framecard .ratio { font-family: var(--osd); font-size: var(--t-2); letter-spacing: 0.08em; color: var(--ink); }
+.framecard .detail { font-size: var(--t-label); color: var(--ink); }
+.framecard .tick { color: var(--accent); font-size: var(--t-label); opacity: 0; transition: opacity 140ms; }
 .framecard .tick::before { content: "●"; }
 
 /* The drawn shape. Height is fixed at 18px and the width carries the ratio. */
@@ -1516,7 +1569,7 @@ input[type="file"]::file-selector-button {
    also the only version a screen reader ever had. */
 .framecard--soon { cursor: default; opacity: var(--ghost); }
 .framecard--soon:hover { opacity: var(--ghost); }
-.framecard--soon .flag { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); }
+.framecard--soon .flag { font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); }
 
 /* --- the quality row: a real choice, and it must not look like the pills --- */
 
@@ -1534,17 +1587,17 @@ input[type="file"]::file-selector-button {
   transition: opacity 160ms linear;
 }
 .qualitycard:hover { opacity: var(--ghost-hover); }
-.qualitycard .name { display: block; font-family: var(--osd); font-size: 17px; letter-spacing: 0.1em; color: var(--ink); }
+.qualitycard .name { display: block; font-family: var(--osd); font-size: var(--t-3); letter-spacing: 0.1em; color: var(--ink); }
 /* One price per shape, hidden until the frame row says which shape. Painting
    them all at once would list three numbers on one card; painting the un-shaped
    one quotes the 4:3 price for a shape charged 4/3 of it. The deferred tier is
    the exception and says so in its own class -- it has no per-shape quote to
    switch to, because creditCost refuses it outright. */
-.qualitycard .cr { display: none; font-size: 12px; letter-spacing: 0.14em; color: var(--ink); margin-top: 0.1rem; }
+.qualitycard .cr { display: none; font-size: var(--t-label); letter-spacing: 0.14em; color: var(--ink); margin-top: 0.1rem; }
 .qualitycard .cr--soon { display: block; }
-.qualitycard .detail { display: block; font-size: 13px; color: var(--ink); margin-top: 0.35rem; }
-.qualitycard .flag { display: inline-block; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); margin-top: 0.4rem; }
-.qualitycard .tick { position: absolute; top: 0.7rem; right: 0.8rem; color: var(--accent); font-size: 11px; opacity: 0; transition: opacity 140ms; }
+.qualitycard .detail { display: block; font-size: var(--t-1); color: var(--ink); margin-top: 0.35rem; }
+.qualitycard .flag { display: inline-block; font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); margin-top: 0.4rem; }
+.qualitycard .tick { position: absolute; top: 0.7rem; right: 0.8rem; color: var(--accent); font-size: var(--t-label); opacity: 0; transition: opacity 140ms; }
 .qualitycard .tick::before { content: "●"; }
 
 /* Unavailable options are a <span>, not a <label>: there is no radio behind
@@ -1564,8 +1617,8 @@ input[type="file"]::file-selector-button {
 .panel--commit .hint { margin-bottom: var(--s-5); }
 
 .facts { display: grid; grid-template-columns: 1fr auto; gap: var(--s-1) var(--s-4); margin: var(--s-5) 0; }
-.facts dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--faint); }
-.facts dd { margin: 0; font-family: var(--osd); font-size: 15px; letter-spacing: 0.12em; color: var(--ink); text-align: right; }
+.facts dt { font-size: var(--t-label); text-transform: uppercase; letter-spacing: 0.22em; color: var(--faint); }
+.facts dd { margin: 0; font-family: var(--osd); font-size: var(--t-2); letter-spacing: 0.12em; color: var(--ink); text-align: right; }
 
 .record {
   display: block; width: 100%;
@@ -1576,7 +1629,7 @@ input[type="file"]::file-selector-button {
      mid-dark red and dark ink on it measures 2.4:1. Paper on oxide is 6.16:1
      -- the same pair as oxide on paper, because contrast is symmetric. */
   color: var(--paper);
-  font: inherit; font-weight: 600; font-size: 15px;
+  font: inherit; font-weight: 600; font-size: var(--t-2);
   letter-spacing: 0.04em;
   padding: 0.85rem 1rem;
   cursor: pointer;
@@ -1585,7 +1638,7 @@ input[type="file"]::file-selector-button {
 .record:hover { background: var(--accent-bright); }
 .record:disabled { background: var(--lift); color: var(--faint); cursor: not-allowed; }
 
-.reason { text-align: center; color: var(--faint); font-size: 13px; margin: var(--s-3) 0 0; }
+.reason { text-align: center; color: var(--faint); font-size: var(--t-1); margin: var(--s-3) 0 0; }
 
 /* --- the shelf --------------------------------------------------------- */
 
@@ -1643,8 +1696,8 @@ input[type="file"]::file-selector-button {
    unknown photograph, and a device this world does not need once the text has
    paper to sit on. Deleting it also deletes the only dark rectangle left in
    the tile after the crop. */
-.tape .cap { display: block; padding-top: var(--s-3); font-size: 12px; }
-.tape .what { display: block; font-size: 14px; color: var(--ink); line-height: 1.3; overflow-wrap: anywhere; }
+.tape .cap { display: block; padding-top: var(--s-3); font-size: var(--t-label); }
+.tape .what { display: block; font-size: var(--t-1); color: var(--ink); line-height: 1.3; overflow-wrap: anywhere; }
 .tape .when { display: block; font-family: var(--osd); letter-spacing: 0.1em; color: var(--faint); }
 
 /* Unfinished tapes still say so -- AND THE BADGE IS NEVER ON AN IMAGE, which is
@@ -1656,7 +1709,7 @@ input[type="file"]::file-selector-button {
    same badge read as what it is -- a small label on a pale card. */
 .tape .state {
   position: absolute; top: 0.5rem; left: 0.5rem;
-  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase;
   color: var(--ink); background: var(--paper);
   border-radius: 999px; padding: 0.15rem 0.5rem;
 }
@@ -1688,7 +1741,7 @@ input[type="file"]::file-selector-button {
 
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-.counter { font-family: var(--osd); color: var(--faint); letter-spacing: 0.12em; font-size: 14px; margin: 0 0 1.75rem; }
+.counter { font-family: var(--osd); color: var(--faint); letter-spacing: 0.12em; font-size: var(--t-1); margin: 0 0 1.75rem; }
 
 .steps { list-style: none; padding: 0; margin: 0 0 1.75rem; }
 .step {
@@ -1703,8 +1756,8 @@ input[type="file"]::file-selector-button {
   color: var(--faint);
 }
 .step-mark { grid-area: mark; width: 6px; height: 6px; margin-top: 0.6rem; border-radius: 50%; background: rgba(42, 33, 27, 0.18); }
-.step-name { grid-area: name; font-size: 15px; }
-.step-note { grid-area: note; font-size: 13px; color: var(--faint); }
+.step-name { grid-area: name; font-size: var(--t-2); }
+.step-note { grid-area: note; font-size: var(--t-1); color: var(--faint); }
 .step-done { color: var(--muted); }
 .step-done .step-mark { background: var(--accent-deep); }
 .step-skipped .step-mark { box-shadow: inset 0 0 0 1px var(--accent-deep); background: transparent; }
@@ -1713,8 +1766,8 @@ input[type="file"]::file-selector-button {
 .step-current .step-mark { background: var(--accent); }
 .step-current .step-note { color: var(--muted); }
 
-.inputs { font-size: 14px; color: var(--muted); line-height: 1.9; }
-.inputs .k { display: inline-block; min-width: 5rem; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; }
+.inputs { font-size: var(--t-1); color: var(--muted); line-height: 1.9; }
+.inputs .k { display: inline-block; min-width: 5rem; color: var(--faint); font-size: var(--t-label); text-transform: uppercase; letter-spacing: 0.2em; }
 .inputs .v { overflow-wrap: anywhere; }
 
 /* --- contact sheet ----------------------------------------------------- */
@@ -1741,7 +1794,7 @@ input[type="file"]::file-selector-button {
 .still.chosen { opacity: 1; }
 .still-n {
   position: absolute; left: 0.45rem; bottom: 0.35rem;
-  font-family: var(--osd); color: var(--on-image-soft); font-size: 16px; line-height: 1;
+  font-family: var(--osd); color: var(--on-image-soft); font-size: var(--t-2); line-height: 1;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 /* The index of the struck one goes to the accent-on-an-image. It is the one
@@ -1763,7 +1816,7 @@ input[type="file"]::file-selector-button {
   overflow: hidden; line-height: 0;
 }
 .player video { width: 100%; height: auto; display: block; background: ${PALETTE.ground}; }
-.meta { font-family: var(--osd); color: var(--faint); letter-spacing: 0.12em; font-size: 14px; margin: 0.8rem 0 1.5rem; }
+.meta { font-family: var(--osd); color: var(--faint); letter-spacing: 0.12em; font-size: var(--t-1); margin: 0.8rem 0 1.5rem; }
 
 /* --- buttons and links ------------------------------------------------- */
 
@@ -1779,7 +1832,7 @@ input[type="file"]::file-selector-button {
 
 .quiet {
   background: none; border: 0; color: var(--faint);
-  font: inherit; font-size: 14px; padding: 0; cursor: pointer;
+  font: inherit; font-size: var(--t-1); padding: 0; cursor: pointer;
   text-decoration: underline; text-underline-offset: 3px;
   text-decoration-color: var(--hairline-firm);
 }
@@ -1808,7 +1861,7 @@ input[type="file"]::file-selector-button {
   width: 1.5rem;
   height: 1.5rem;
 }
-.consent-text span { display: block; color: var(--muted); font-size: 13px; }
+.consent-text span { display: block; color: var(--muted); font-size: var(--t-1); }
 .consent-text span + span { margin-top: 0.5rem; }
 /* The immediate-supply acknowledgement, which sits between the plan and its Buy
    button rather than at the end of a long form the way the consent gate does.
@@ -1832,15 +1885,15 @@ input[type="file"]::file-selector-button {
    there is anything lit before anything is dimmed. */
 .plans:has(.plan--current) .plan { opacity: var(--ghost); }
 .plans:has(.plan--current) .plan--current { opacity: 1; }
-.plan .price { font-family: var(--osd); font-size: 30px; letter-spacing: 0.06em; color: var(--ink); margin: 0.3rem 0 0.1rem; }
-.plan .per { color: var(--faint); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; }
-.plan ul { list-style: none; padding: 0; margin: 1rem 0 0; color: var(--muted); font-size: 14px; }
+.plan .price { font-family: var(--osd); font-size: var(--t-6); letter-spacing: 0.06em; color: var(--ink); margin: 0.3rem 0 0.1rem; }
+.plan .per { color: var(--faint); font-size: var(--t-label); letter-spacing: 0.14em; text-transform: uppercase; }
+.plan ul { list-style: none; padding: 0; margin: 1rem 0 0; color: var(--muted); font-size: var(--t-1); }
 /* Fifteen of these were the only visible lines left in the product. Space does
    the grouping now, per DESIGN.md's one rule. */
 .plan li { padding: 0.42rem 0; }
 .plan .mark {
   position: absolute; top: -0.65rem; left: 1.4rem;
-  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent);
+  font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent);
   /* THE THIRD BORDER DESIGN.md NAMED AND REFUSED. Its § 23 note says this pill
      "never argued" itself onto the list of two permitted borders. It is a wash
      and a colour now, like every other flag on the page. */
@@ -1949,12 +2002,12 @@ input[type="file"]::file-selector-button {
 
 .hero-line {
   font-family: var(--osd);
-  font-size: clamp(44px, 7.4vw, 104px);
+  font-size: var(--t-hero);
   line-height: 0.94; letter-spacing: 0.01em; text-transform: uppercase;
   color: var(--l-bone); margin: 0 0 var(--s-5); max-inline-size: 14ch;
 }
 .hero-line .lit { color: var(--l-cathode); text-shadow: 0 0 24px rgba(255, 138, 30, 0.42); display: block; }
-.hero-sub { color: #C8C2B8; margin: 0 0 var(--s-6); max-width: 42ch; font-size: 17px; line-height: 1.6; }
+.hero-sub { color: #C8C2B8; margin: 0 0 var(--s-6); max-width: 42ch; font-size: var(--t-3); line-height: 1.6; }
 
 /* the ghost stack: every place present at once, one struck */
 /* THE OPTIONS ARE STILL A LIST IN THE MARKUP AND A RAIL ONLY HERE. They are a
@@ -1993,7 +2046,7 @@ input[type="file"]::file-selector-button {
 .lrail .lopt { white-space: nowrap; }
 .lopt {
   display: block; cursor: pointer;
-  font-family: var(--osd); font-size: clamp(20px, 2.4vw, 29px); line-height: 1.24;
+  font-family: var(--osd); font-size: var(--d-3); line-height: 1.24;
   text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--l-bone); opacity: 0.5; padding: var(--s-1) 0;
 }
@@ -2011,7 +2064,7 @@ input[type="file"]::file-selector-button {
    size does not. */
 .lopt .lidx { font-size: 0.5em; letter-spacing: 0.22em; color: var(--l-bone); margin-right: var(--s-3); vertical-align: 0.3em; }
 .lopt:hover { opacity: 0.82; }
-.strike-hint { font-family: var(--osd); font-size: 15px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--l-dim); margin: 0 0 var(--s-6); }
+.strike-hint { font-family: var(--osd); font-size: var(--d-1); letter-spacing: 0.3em; text-transform: uppercase; color: var(--l-dim); margin: 0 0 var(--s-6); }
 
 /* THE VEIL STACK IS GONE, RULES AND ALL. It framed the selected place in a 4:3
    panel beside the text; the place is now behind the whole page, and keeping
@@ -2022,38 +2075,87 @@ input[type="file"]::file-selector-button {
    THE READ-OUT SURVIVED IT and is better placed for it: it is pinned to the
    viewport now, over the picture, which is where a camcorder put its OSD. */
 .losds { position: fixed; right: 1.15rem; bottom: 1rem; width: 14rem; height: 1.4rem; z-index: 6; pointer-events: none; }
-.losd { position: absolute; right: 0; bottom: 0; opacity: 0; font-family: var(--osd); font-size: 16px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--l-cathode); text-shadow: 0 0 12px rgba(255, 138, 30, 0.7); transition: opacity 420ms linear; }
+.losd { position: absolute; right: 0; bottom: 0; opacity: 0; font-family: var(--osd); font-size: var(--d-1); letter-spacing: 0.16em; text-transform: uppercase; color: var(--l-cathode); text-shadow: 0 0 12px rgba(255, 138, 30, 0.7); transition: opacity 420ms linear; }
 
 /* the act */
 .hero-do { display: flex; gap: var(--s-6); align-items: baseline; flex-wrap: wrap; margin: 0; }
+/* The price sits UNDER the action, quietly, in the label size. It is a fact the
+   visitor needs before deciding, not a second thing competing with the button
+   -- putting it in body size beside the CTA would recreate the two-equal-things
+   problem that deleting the second CTA just solved. #B9B3A9 for the reason
+   .how-d carries it: this is text over the place photograph, and --l-dim
+   measures 2.86:1 there. */
+.hero-price {
+  margin: var(--s-4) 0 0;
+  font-size: var(--t-label);
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  color: #B9B3A9;
+  max-width: 46ch;
+}
+.hero-price .linky { margin-left: var(--s-2); }
 .is-landing .cta {
   display: inline-block; text-decoration: none;
-  font-family: var(--osd); font-size: clamp(26px, 3.6vw, 44px); letter-spacing: 0.04em; text-transform: uppercase;
+  font-family: var(--osd); font-size: var(--d-4); letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--l-cathode); text-shadow: 0 0 26px rgba(255, 138, 30, 0.34);
   background: none; border: 0; padding: 0; border-radius: 0;
 }
 .is-landing .cta:hover { color: var(--l-hot); text-shadow: 0 0 40px rgba(255, 178, 92, 0.6); }
-.is-landing .cta--quiet { font-size: 15px; letter-spacing: 0.24em; color: var(--l-dim); text-shadow: none; }
+.is-landing .cta--quiet { font-size: var(--d-1); letter-spacing: 0.24em; color: var(--l-dim); text-shadow: none; }
 .is-landing .cta--quiet:hover { color: var(--l-bone); text-shadow: none; }
 
 /* the claim, deeper in the plane. three columns, no lines between them. */
-.how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4rem; padding: 0 0 6rem; }
-@media (max-width: 60rem) { .how { grid-template-columns: 1fr; gap: 2rem; padding-bottom: 3.5rem; } }
-.how-n { font-family: var(--osd); font-size: 15px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--l-cathode); margin: 0 0 var(--s-3); }
-.how-t { font-family: var(--osd); font-size: 25px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--l-bone); margin: 0 0 var(--s-3); font-weight: 400; }
-.how-d { font-size: 16px; line-height: 1.62; color: #B9B3A9; margin: 0; max-width: 34ch; }
+/* THE ASYMMETRY RULE, AND THIS IS THE RULE'S HOME. A content grid in this
+   product is never equal-column: a 'repeat(3, 1fr)' is the shape that reads as
+   machine-made whatever is inside it, and §33 caught this exact block wearing
+   it. 2fr/1fr, the lead on the left. The ratio is not invented here either --
+   the signed-in page's #tape has been a 320px anchor beside a 640px flow column
+   since §6a, measured at exactly 1:2, and it is the best layout in the product.
+   This makes it the house ratio instead of a one-page accident. */
+.how {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: var(--s-8);
+  align-items: start;
+  padding: 0 0 var(--s-8);
+}
+@media (max-width: 60rem) { .how { grid-template-columns: 1fr; gap: var(--s-7); padding-bottom: 3.5rem; } }
+/* WIDTH IS NOT WEIGHT, and the first attempt at this proved it. The lead was
+   given the 2fr column and kept its old type sizes, so it measured 768x234
+   beside a 384x410 pair -- the SUBORDINATE column was 176px taller and read as
+   the more important one. A wide column holding small type is not emphasis, it
+   is a half-empty column.
+   The hierarchy is carried by SIZE: 48px against 18px on the headings, 23px
+   against 16px on the prose. That is a step the eye cannot mistake, and it is
+   the same reasoning §31 used when it moved hierarchy inside a ghosted card
+   from colour to size. */
+.how-lead .how-t { font-size: var(--t-8); line-height: 1.05; }
+.how-lead .how-d { font-size: var(--t-4); line-height: 1.5; max-width: 26ch; }
+/* The two subordinate facts stack rather than sitting side by side, so the
+   page never shows two things of equal weight on one line. */
+.how-rest { display: grid; gap: var(--s-7); }
+.how-t { font-family: var(--osd); font-size: var(--d-3); text-transform: uppercase; letter-spacing: 0.04em; color: var(--l-bone); margin: 0 0 var(--s-3); font-weight: 400; }
+.how-t--sm { font-size: var(--d-2); letter-spacing: 0.14em; }
+/* THE LITERAL IS DELIBERATE AND MUST NOT BE "TIDIED" INTO --l-dim. This text
+   sits over the place photograph -- .bgs is position: fixed, so the ground is
+   the picture on every scroll position, not just in the hero. §31 measured
+   --l-dim (#8D8880) at 2.86:1 over the brightest place, a real AA failure, and
+   that is the whole reason the --on-image tier exists. #B9B3A9 is lighter than
+   --l-dim on purpose. It is not a token because no existing token holds this
+   value; giving it one is worth doing when a second use appears. */
+.how-d { font-size: var(--t-2); line-height: 1.62; color: #B9B3A9; margin: 0; max-width: 34ch; }
 
 .plain { padding: 0 0 5rem; }
-.plain p { margin: 0; font-size: 17px; line-height: 1.68; color: #B9B3A9; max-width: 62ch; }
+.plain p { margin: 0; font-size: var(--t-3); line-height: 1.68; color: #B9B3A9; max-width: 62ch; }
 
 /* THE FOOT IS ON EVERY PAGE, SO IT NAMES NO GROUND. It used to reach straight
    for '--l-dim' and a #453E36 literal, which is the landing's palette hard-coded
    into shared chrome -- correct on one page out of thirteen and 1.3:1 on paper.
    '--faint' resolves per ground, so this rule is now the same rule on both. */
 .is-landing .foot { margin-top: 0; }
-.is-landing .fine { font-size: 12px; }
+.is-landing .fine { font-size: var(--t-label); }
 
-.foot { margin-top: var(--s-8); padding-top: 0; border-top: 0; color: var(--faint); font-size: 13px; }
+.foot { margin-top: var(--s-8); padding-top: 0; border-top: 0; color: var(--faint); font-size: var(--t-1); }
 .foot p { margin: 0 0 0.4rem; }
 .fine { color: var(--faint); }
 

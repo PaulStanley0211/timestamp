@@ -1747,6 +1747,41 @@ export function createServer({
     }
   }
 
+  /**
+   * What the landing says a tape costs.
+   *
+   * The landing never carried a price, and a consumer product that hides its
+   * price reads as enterprise or evasive. This derives it from the two seams
+   * that already bill -- the same `resolutions` the Record button quotes from
+   * and the same `packs` the pricing page sells -- so the sentence on the
+   * public page cannot drift from the ledger. Nothing here is typed by hand;
+   * that is what went wrong with the still-approval claim.
+   *
+   * FLOOR, NOT AVERAGE. `fromCredits` is the CHEAPEST offered combination, and
+   * the copy says "from", because 21 credits is 480p at 4:3 while the phone
+   * shape is 28 and 720p is 46 or 61. Quoting the cheapest as if it were the
+   * price would be the §36A defect again -- a card advertising a third under
+   * what the ledger takes.
+   *
+   * Returns null whenever it cannot answer honestly -- no rows, no buyable
+   * pack, or a seam that threw. The page then shows no price rather than a
+   * wrong one, which is the `stripePriceId: null` discipline applied to copy.
+   */
+  async function landingPricing() {
+    try {
+      const [rows, packs] = await Promise.all([resolutionRows(), packRows()]);
+      const offered = (rows ?? []).filter((r) => r.available && Number.isFinite(r.credits));
+      const buyable = (packs ?? []).filter((p) => p.buyable && Number.isFinite(p.priceUSD));
+      if (offered.length === 0 || buyable.length === 0) return null;
+      const cheapestTape = Math.min(...offered.map((r) => r.credits));
+      const pack = buyable.reduce((a, b) => (a.priceUSD <= b.priceUSD ? a : b));
+      return { fromCredits: cheapestTape, packUSD: pack.priceUSD, packCredits: pack.credits };
+    } catch (err) {
+      logImpl(`[web] the landing price could not be derived: ${err?.message ?? err}`);
+      return null;
+    }
+  }
+
   // -------------------------------------------------------------------------
   // who is selling (the legal pages)
   // -------------------------------------------------------------------------
@@ -1915,7 +1950,13 @@ export function createServer({
      */
     async homePage(req, res, { account }) {
       if (!account) {
-        return sendHtml(req, res, 200, landingPage({ places: cards.places }));
+        // Still no balance, no shelf, no account read -- `landingPricing`
+        // asks the catalogue and the pack list, both of which are public
+        // facts, so the anonymous branch stays unable to leak account data.
+        return sendHtml(req, res, 200, landingPage({
+          places: cards.places,
+          pricing: await landingPricing(),
+        }));
       }
       const [balance, resolutions, resolution] = await Promise.all([
         balanceOf(account), resolutionRows(), defaultResolution(),

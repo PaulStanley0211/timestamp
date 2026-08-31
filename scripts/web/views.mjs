@@ -696,7 +696,22 @@ function stepHead(n, name, subtitle) {
  * The preset's own `timeOfDay` is true, and in the OSD face it reads as a
  * camcorder read-out just as well.
  */
-export function landingPage({ places = [], account = null } = {}) {
+/**
+ * `pricing` is optional and is `{ fromCredits, packUSD, packCredits }`.
+ *
+ * THE LANDING NEVER SAID WHAT A TAPE COSTS, on any version of this page, and a
+ * consumer product that hides its price reads as either enterprise or evasive.
+ * It is threaded in rather than written into the markup for the reason the
+ * consent text is derived from the retention config: a number typed into a
+ * template is a number that goes stale silently, which is precisely how the
+ * still-approval claim survived direct mode. `creditCost` and `allPacks` are
+ * the same functions the pricing page and the Record button already bill from,
+ * so this line cannot disagree with the ledger.
+ *
+ * Omitted, the line is not rendered -- so a caller that cannot price (a test
+ * fake, a degraded config) shows no price rather than a wrong one.
+ */
+export function landingPage({ places = [], account = null, pricing = null } = {}) {
   const first = places[0]?.id ?? null;
 
   // Hoisted so `#id:checked ~ .wrap` can reach the stack and the veils. Fixed
@@ -746,10 +761,21 @@ ${backgrounds}
       </ul>
       <p class="strike-hint">Strike one</p>
 
+      <!-- ONE CALL TO ACTION, AND THE SECOND ONE WAS A DUPLICATE RATHER THAN A
+           CHOICE. "I have an account" pointed at /login, and the signed-out
+           masthead six lines up in nav() already carries a "Sign in" link to
+           the same place -- so the hero was asking the visitor to choose
+           between doing the thing and doing a thing the chrome already offers.
+           Two calls to action of near-equal weight is the clearest slop tell
+           there is: it reads as a page that could not decide what it wanted,
+           and it halves the emphasis on the one that matters. Nothing is lost
+           by deleting it, which is why it goes rather than getting quieter. -->
       <p class="hero-do">
         <a class="cta" href="/signup">Make a tape &rarr;</a>
-        <a class="cta cta--quiet" href="/login">I have an account</a>
       </p>
+      ${pricing ? `<p class="hero-price">From ${h(String(pricing.fromCredits))} credits a tape.
+      ${h(String(pricing.packCredits))} credits is $${h(String(pricing.packUSD))}, and tax is added at checkout.
+      <a class="linky" href="/pricing">What a tape costs</a></p>` : ''}
     </div>
   </section>
 
@@ -763,23 +789,41 @@ ${backgrounds}
   </div>
 
   <section class="how">
-    <div>
-      <p class="how-n">01</p>
-      <h2 class="how-t">Content</h2>
-      <p class="how-d">A plausible person, a plausible place, an outfit, and motion that
-      goes nowhere in particular. Your photograph is the only authority on the face.</p>
-    </div>
-    <div>
-      <p class="how-n">02</p>
+    <!-- THIS WAS THREE EQUAL COLUMNS AND IT WAS THE ONLY TEMPLATED THING ON THE
+         PAGE. §33's design review named it: a three-column 1fr grid of
+         number + heading + one line is the canonical AI-generated landing
+         layout, and it was "the only section on that page that reads
+         templated". The COPY was never the problem -- "chroma bleed, grain, the
+         head-switch band, transport jitter, the date burnt into the corner" is
+         the most specific writing on the site. So the words are untouched and
+         the shape is gone.
+
+         TEXTURE LEADS because it is the only one of the three that is ours.
+         Content is what any generator does; consent is what any careful company
+         does; the tape chain is the product. Giving all three the same weight
+         said they were equally interesting, which is exactly the flatness that
+         reads as machine-made.
+
+         AND THE NUMBERS ARE GONE, which matters more than it looks. 01/02/03
+         promised a SEQUENCE, and these are not steps -- they are three facts
+         about one thing. Numbering them was the page pretending to be a
+         process, and a false sequence is its own small dishonesty. -->
+    <div class="how-lead">
       <h2 class="how-t">Texture</h2>
       <p class="how-d">Chroma bleed, grain, the head-switch band, transport jitter, the
       date burnt into the corner. All of it deterministic, none of it asked of a model.</p>
     </div>
-    <div>
-      <p class="how-n">03</p>
-      <h2 class="how-t">Consent</h2>
-      <p class="how-d">Location and camera data stripped the moment your photograph
-      arrives. The photograph is deleted after seven days, the tape after thirty.</p>
+    <div class="how-rest">
+      <div>
+        <h3 class="how-t how-t--sm">Content</h3>
+        <p class="how-d">A plausible person, a plausible place, an outfit, and motion that
+        goes nowhere in particular. Your photograph is the only authority on the face.</p>
+      </div>
+      <div>
+        <h3 class="how-t how-t--sm">Consent</h3>
+        <p class="how-d">Location and camera data stripped the moment your photograph
+        arrives. The photograph is deleted after seven days, the tape after thirty.</p>
+      </div>
     </div>
   </section>
 
