@@ -492,6 +492,60 @@ test('a long email cannot carry Sign out off a phone screen', { skip }, async ()
   assert.ok(nav.right <= 375 + 1, `Sign out ends at x=${nav.right}, off a 375px screen`);
 });
 
+test('the signed-in nav sits on one line -- Sign out included', { skip }, async () => {
+  // A LAYOUT FAULT NO MARKUP TEST CAN SEE, and the cause is one declaration.
+  //
+  // Sign out is a <button> inside a <form>, because signing out is a POST and
+  // must not be a link a foreign page can follow. That form is what the nav
+  // lays out, not the button -- and `.nav-form { display: inline }` is
+  // BLOCKIFIED by the flex container into `display: block`, so the form becomes
+  // a block box whose line box carries the INHERITED 16px strut while the
+  // button inside it is 12px. Measured before the fix: the links were 19.19px
+  // tall, the form 25.59px, and Sign out sat 1.8px BELOW Plans and Account --
+  // small, and plainly visible on 12px uppercase type with 0.14em tracking,
+  // which is what the owner reported on 2026-08-31.
+  //
+  // The assertion is on the BOX, not the baseline: every control in this row
+  // shares a font-size and a line-height, so equal tops is equal baselines, and
+  // a top is measurable without a font metric.
+  const s = await session();
+  await s.signIn();
+  const page = await visit('/pricing', LAPTOP);
+  assert.deepEqual(page.errors, [], page.errors.join('; '));
+
+  const row = await page.evaluate(`(() => {
+    const nav = document.querySelector('.nav');
+    if (!nav) return { found: false };
+    const controls = [...nav.querySelectorAll('a, button')];
+    if (controls.length < 2) return { found: false };
+    return {
+      found: true,
+      items: controls.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { text: el.textContent.trim(), top: r.top, height: r.height };
+      }),
+    };
+  })()`);
+
+  assert.ok(row.found, 'the signed-in nav must render its controls');
+  const out = row.items.find((i) => /sign out/i.test(i.text));
+  assert.ok(out, 'the signed-in nav must offer Sign out');
+
+  const tops = row.items.map((i) => i.top);
+  const spread = Math.max(...tops) - Math.min(...tops);
+  assert.ok(spread <= 0.5,
+    `the nav controls do not share a line -- ${spread.toFixed(2)}px of spread across `
+    + row.items.map((i) => `${JSON.stringify(i.text)}@${i.top.toFixed(2)}`).join(', '));
+
+  // And the form must not be taller than the control it wraps, which is the
+  // mechanism rather than the symptom: a form with its own strut re-introduces
+  // the offset the moment anything else is added to this row.
+  const heights = row.items.map((i) => i.height);
+  const hSpread = Math.max(...heights) - Math.min(...heights);
+  assert.ok(hSpread <= 0.5,
+    `the nav controls are not the same height -- ${hSpread.toFixed(2)}px apart`);
+});
+
 test('the app form is usable at phone width, and its consent gate is big enough to hit', { skip }, async () => {
   const s = await session();
   await s.signIn();

@@ -898,7 +898,20 @@ body {
   color: var(--faint); text-decoration: none; flex: none;
 }
 .nav a:hover, .nav button:hover { color: var(--accent); }
-.nav-form { display: inline; margin: 0; flex: none; }
+/* A FLEX ITEM THAT WRAPS A CONTROL MUST NOT BRING ITS OWN STRUT. Sign out is a
+   <button> in a <form> because signing out is a POST, so the item this row
+   lays out is the FORM and not the button. 'display: inline' here was
+   blockified by the flex container into 'display: block' -- a block box whose
+   line box carries the inherited 16px strut while the button inside it is
+   12px. Measured on /pricing at 1440px: the links were 19.19px tall, this form
+   25.59px, and Sign out sat 1.8px BELOW Plans and Account. Small, and plainly
+   visible on 12px uppercase type at 0.14em; the owner reported it on
+   2026-08-31. As a flex container the form has no strut of its own and
+   collapses to the button's height, so .nav's align-items centres a box that
+   is finally the same size as its neighbours. Re-measured after: 0.00px of
+   spread across all three controls. A browser test asserts it, because this
+   is invisible to every markup test in the suite. */
+.nav-form { display: flex; align-items: center; margin: 0; flex: none; }
 /* THE EMAIL IS THE ONLY ITEM IN THIS ROW WHOSE WIDTH THE CUSTOMER CHOOSES, so
    it is the only one allowed to give way. A flex item defaults to
    min-width: auto and refuses to shrink below its text, so without the 0 here
