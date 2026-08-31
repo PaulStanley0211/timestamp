@@ -1309,6 +1309,21 @@ body {
    The wash is the accent at 5%, which is the only direction left: the recess
    cannot deepen without failing '.say', and lifting it would flatten it into
    the panel it is recessed into. */
+/* THE SECOND UPLOAD IN A STEP IS NOT THE SUBJECT OF ONE. Step 1's dropzone is
+   15rem because the face IS that step; the place photograph is one of two ways
+   to answer step 3, sitting above a text field that answers it equally well.
+   Same recess, same behaviour, a third of the height -- so it reads as a
+   sibling of the field below it rather than as a competing hero. */
+.drop--slim { min-height: 5.5rem; gap: var(--s-2); background: var(--lift); }
+.drop--slim .plus { font-size: var(--t-2); }
+/* IT LIFTS INSTEAD OF RECESSING, AND THE RULE ABOVE SAYS WHY IT MUST. .drop
+   makes its well by dropping back to --paper from a --lift anchor panel, and
+   its own comment records the limit: "It cannot go deeper than that." Step 3 is
+   a --choice panel, which is already paper -- so a paper well is invisible
+   there, and measured on the rendered page the control read as a centred
+   heading with no affordance at all. On a paper parent the only direction left
+   is nearer, which is exactly what --lift means in this palette. Same depth
+   idea, opposite sign, because the ground changed. */
 .drop:hover { background: rgba(168, 52, 42, 0.05); }
 .drop input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .drop .plus { font-size: var(--t-3); color: var(--ink); letter-spacing: 0.04em; }

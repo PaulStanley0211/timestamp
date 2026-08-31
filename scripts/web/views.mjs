@@ -172,6 +172,22 @@ const HOME_SCRIPT = `
   var name = document.getElementById('photo-name');
   var reason = document.getElementById('reason');
   var record = document.getElementById('record');
+
+  // The place upload is wired FIRST and on its own, deliberately. §43D left
+  // step 3 as a bare native "Choose File" because a .drop styling it without
+  // this half would give LESS feedback than the control it replaced -- the
+  // real input is at opacity 0, so with no script nothing would ever say which
+  // file was chosen. It is guarded separately from the record button so that a
+  // page carrying the place upload but no Record button still names the file.
+  var place = document.getElementById('placePhoto');
+  var placeName = document.getElementById('place-photo-name');
+  if (place && placeName) {
+    place.addEventListener('change', function () {
+      var picked = place.files && place.files[0];
+      placeName.textContent = picked ? picked.name : '';
+    });
+  }
+
   if (!photo || !record) return;
   if (!record.disabled) { record.disabled = true; }
   photo.addEventListener('change', function () {
@@ -1120,8 +1136,20 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
     <div class="ownplace">
       <p class="hint">A photograph of the place &mdash; your actual back garden, the kitchen
       you remember. Used as a second reference alongside your face.</p>
-      <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp"
-             aria-label="A photograph of the place">
+      <!-- §43D CLOSED. This was a bare native "Choose File" sitting directly
+           across from step 1's designed dropzone, and it was left that way
+           deliberately: .drop hides its real input at opacity 0 and names the
+           chosen file through HOME_SCRIPT, so styling this one WITHOUT the
+           script half would have given less feedback than the native control it
+           replaced. The script half now exists, so the control can match.
+           A slim variant rather than the 15rem original: this is the second
+           upload in a step, not the subject of one. -->
+      <label class="drop drop--slim" for="placePhoto">
+        <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp"
+               aria-label="A photograph of the place">
+        <span class="plus">+ Add a photo of the place</span>
+        <span class="chosen-name" id="place-photo-name"></span>
+      </label>
       <p class="hint or-describe">Or describe it, if you have no photograph of it.</p>
       <input type="text" name="placeText" maxlength="200" autocomplete="off" spellcheck="false"
              aria-label="Describe the place"
