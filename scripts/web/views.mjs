@@ -1192,8 +1192,16 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
      full stop that was already in it. -->
 <div class="app-head">
   <h1 class="app-h1">One photo, one look, one place.</h1>
-  <p class="lede">Fifteen seconds that look like they came off a camcorder tape in a
-  German suburb, some time around 2003.</p>
+  <!-- "in a German suburb" came out on 2026-08-31. It was the first sentence a
+       signed-in customer reads, and it told everyone who is not in Germany that
+       this product is about somewhere else -- on the page where they are about
+       to upload their own face and describe their own kitchen. Section 42F took
+       the country out of the place menu and the prompts and left this behind.
+       Nothing is added in its place: the copy is still Paul's, split at the full
+       stop that was already in it, and a replacement clause would be new
+       marketing rather than a de-nationalised lede. -->
+  <p class="lede">Fifteen seconds that look like they came off a camcorder tape,
+  some time around 2003.</p>
 </div>
 
 <form id="tape" method="post" action="/api/jobs" enctype="multipart/form-data">

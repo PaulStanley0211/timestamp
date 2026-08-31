@@ -122,6 +122,35 @@ test('the era reaches the prompt as set dressing rather than as a photographic s
   assert.match(prompt, /nothing visible was manufactured later/);
 });
 
+test('the era names a period and not a country', () => {
+  // THE PROMPT IS THE ONE PLACE A COUNTRY REACHES THE CUSTOMER'S OWN TAPE.
+  // Section 42F de-nationalised the eight place labels and the three preset
+  // prompts that named Germany, and it did not touch this constant -- which is
+  // handed to composeStillPrompt, composeMotionPrompt AND composeReferencePrompt
+  // on every render, so every tape this product has ever made was set in
+  // Germany whatever the customer typed. Somebody describing their grandmother's
+  // kitchen in Kerala was getting a German one.
+  //
+  // A PERIOD IS STILL REQUIRED. This is not "drop the era" -- the era is the
+  // product, and it is what keeps a mobile phone or a flat-screen out of a 2003
+  // frame. What comes out is the COUNTRY, so the clause constrains the decade
+  // and leaves the place to the place, which is where the customer's own
+  // description and their own photograph already speak.
+  assert.doesNotMatch(DEFAULT_ERA, /german|deutsch/i,
+    `the default era names a country: ${JSON.stringify(DEFAULT_ERA)}`);
+  assert.match(DEFAULT_ERA, /\b(19|20)\d{2}\b/,
+    `the default era must still fix a period: ${JSON.stringify(DEFAULT_ERA)}`);
+
+  // And the whole composed prompt, not just the constant -- the era is one of
+  // several clauses and any of them could carry the country back in.
+  for (const [label, text] of [
+    ['still', composeStillPrompt({ place, outfit }).prompt],
+    ['motion', composeMotionPrompt({ place, outfit }).prompt],
+  ]) {
+    assert.doesNotMatch(text, /german|deutsch/i, `the ${label} prompt names a country`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // composition
 // ---------------------------------------------------------------------------

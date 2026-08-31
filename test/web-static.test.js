@@ -278,6 +278,44 @@ function renderedPages() {
   ];
 }
 
+test('no page sells this product as German -- only the two that state a legal fact', () => {
+  // THE PRODUCT IS THE ERA AND THE MEDIUM, NOT THE COUNTRY. Paul restated this
+  // on 2026-08-29 and again on 2026-08-31: "It's not about the country ...
+  // people can make videos, like, in 2003 setup, like, in a camcorder."
+  // Section 42F de-nationalised the eight place labels and the three prompts
+  // that carried literal German words, and MISSED the one sentence a signed-in
+  // customer reads first -- the lede said the tape came off a camcorder "in a
+  // German suburb". A person in Manila or Lagos was being told, on the page
+  // where they choose their own photograph, that the product is about somewhere
+  // else.
+  //
+  // TWO PAGES ARE EXEMPT AND BOTH STATE A FACT RATHER THAN A FRAME. The
+  // Impressum exists because the operator is resident in Germany -- that is the
+  // whole reason a DDG notice is owed at all -- and the privacy page names the
+  // country the servers are in, which is the data-residency claim the same
+  // notice rests on. Removing either would not de-nationalise the product, it
+  // would make a legal page untrue. Everything else fails here.
+  const allowed = new Set(['privacy', 'impressum']);
+  const offenders = [];
+
+  for (const [name, html] of renderedPages()) {
+    if (allowed.has(name)) continue;
+    // Comments ship in the source and are the register these files are written
+    // in, but they are reasoning for whoever edits them rather than a claim to
+    // a reader -- and one of them measures a German buyer's VAT, which is a
+    // measurement rather than a frame. Strip them; assert on what renders.
+    const visible = html.replace(/<!--[\s\S]*?-->/g, '');
+    const hit = visible.match(/German\w*/i);
+    if (hit) {
+      const from = Math.max(0, hit.index - 70);
+      offenders.push(`${name}: ...${visible.slice(from, hit.index + 70)}...`);
+    }
+  }
+
+  assert.deepEqual(offenders, [],
+    `these pages tell a worldwide customer the product is German:\n${offenders.join('\n')}`);
+});
+
 test('no page the app can render wears a texture of its own', () => {
   // DESIGN.md, "Texture belongs to the tape, and to nothing else": the interface
   // carries NO grain, scanlines, noise or vignette, and every trace of texture

@@ -125,8 +125,26 @@ export const SUBJECT = 'The person in the reference image';
  *  order is a contract between this prompt and `falReferenceVideoBody`. */
 export const REFERENCE_SUBJECT = 'The person in @Image1';
 
-/** Set dressing, not a photographic style -- see the header. */
-export const DEFAULT_ERA = 'Germany between 1999 and 2005';
+/** Set dressing, not a photographic style -- see the header.
+ *
+ *  IT NAMES A PERIOD AND NOT A COUNTRY (2026-08-31). This read
+ *  "Germany between 1999 and 2005" until today, and it is handed to
+ *  composeStillPrompt, composeMotionPrompt and composeReferencePrompt on every
+ *  render -- so every tape this product has made was set in Germany whatever
+ *  the customer typed. Section 42F de-nationalised the eight place labels and
+ *  the three preset prompts that named the country, on Paul's ruling that the
+ *  product is the ERA AND THE MEDIUM rather than the place; this constant is
+ *  the same ruling one layer down, and it was missed because it reaches the
+ *  tape rather than a page.
+ *
+ *  THE PERIOD ITSELF IS LOAD-BEARING AND STAYS. It is what keeps a flat-screen
+ *  or a mobile phone out of a 2003 frame, and the clause below it -- vehicles,
+ *  packaging, signage, appliances, the cut of a garment -- is the whole
+ *  mechanism by which the decade arrives as objects rather than as a mood. What
+ *  came out is only the geography, which the place preset, the customer's own
+ *  description and their own uploaded photograph all already supply, and supply
+ *  correctly for wherever they actually are. */
+export const DEFAULT_ERA = '1999 to 2005';
 
 /**
  * Content defects, not texture. Every entry names something that must not be in
