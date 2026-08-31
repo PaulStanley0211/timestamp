@@ -1278,13 +1278,40 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
       these instead &mdash; or come back to
       <label class="linky" for="pl-own">your own place</label> at any point.</p>
 
+    <!-- TWO CARDS IN ONE SLOT, AND EXACTLY ONE OF THEM IS EVER IN THE RAIL
+         (2026-08-31). Reported by the owner: clicking the own-place card did
+         nothing. It was a <label for="pl-own"> and §43 made pl-own CHECKED ON
+         LOAD, so in the state every visitor arrives in it pointed at a radio
+         that was already selected -- and clicking a checked radio changes no
+         state, fires no event and moves nothing on the screen. The upload it
+         stands for is at the TOP of this step, so by the time the rail is in
+         view that control is off-screen behind you. A dead control, in the
+         default state, on the step whose whole point is your own place.
+         So the card splits in two by what it has to DO, and the radio that is
+         already there decides which one shows -- no JavaScript, and no second
+         reveal mechanism, which the stylesheet's comment on .ownplace forbids:
+           own-pick  a preset is selected -> the way BACK. Label for pl-own.
+           own-add   own place is selected -> the way IN. Label for the file
+                     input, so one click opens the picker.
+         One input, two labels, which is valid and deliberate: whichever is
+         clicked opens the same picker and fills the same field, so nothing
+         downstream has to know which one a person used. The input keeps its own
+         aria-label, so neither label renames it. -->
     <div class="rail">
-    <label class="placecard placecard--own" for="pl-own">
+    <label class="placecard placecard--own placecard--own-pick" for="pl-own">
       <span class="thumb" aria-hidden="true"></span>
       <span class="badge" aria-hidden="true"></span>
       <span class="cap">
         <span class="name">Use my own place</span>
         <span class="when">Your photograph</span>
+      </span>
+    </label>
+    <label class="placecard placecard--own placecard--own-add" for="placePhoto">
+      <span class="thumb" aria-hidden="true"></span>
+      <span class="badge" aria-hidden="true"></span>
+      <span class="cap">
+        <span class="name">Add a photo of your place</span>
+        <span class="when">Or describe it above</span>
       </span>
     </label>${placeCards}
     </div>

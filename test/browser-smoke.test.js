@@ -561,6 +561,66 @@ test('step 3 opens on the own-place upload and text box, painted above the prese
     `the upload paints at ${probes.upload.top}px and the rail at ${probes.rail.top}px -- the presets are still the first thing in step 3`);
 });
 
+test('the own-place card in the rail is a live control in both states', { skip }, async () => {
+  // A MARKUP TEST CANNOT SEE A DEAD CONTROL, which is how this shipped. The
+  // rail's own-place card was a <label for="pl-own"> and §43 made pl-own
+  // checked on load, so in the state every visitor arrives in it pointed at a
+  // radio that was already selected: clicking it changed nothing and moved
+  // nothing, and the owner reported exactly that -- "there is no response".
+  // Every fetch() test in the suite passed the whole time, because the label
+  // and its `for` were both present and both correct.
+  //
+  // So this asserts what a person can actually DO: exactly one own-place card
+  // is painted, and the control it points at is the one that is useful in the
+  // state the page is currently in. Then it clicks a preset and checks the pair
+  // swaps back, because a card that only works on arrival is half a fix.
+  const s = await session();
+  await s.signIn();
+  const page = await visit('/', PHONE);
+  assert.deepEqual(page.errors, [], page.errors.join('; '));
+
+  const read = `(() => {
+    const shown = [...document.querySelectorAll('.rail .placecard--own')]
+      .filter((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0);
+    return {
+      count: shown.length,
+      cls: shown.map((el) => el.className),
+      target: shown.map((el) => el.getAttribute('for')),
+      targetExists: shown.map((el) => Boolean(document.getElementById(el.getAttribute('for')))),
+      checked: (document.querySelector('#pl-own') || {}).checked,
+    };
+  })()`;
+
+  const onArrival = await page.evaluate(read);
+  assert.equal(onArrival.checked, true, 'the page no longer opens on your own place');
+  assert.equal(onArrival.count, 1,
+    `the rail paints ${onArrival.count} own-place cards; exactly one slot is the contract the dots count on`);
+  assert.match(onArrival.cls[0], /placecard--own-add/,
+    'the card showing on arrival is the one for a radio that is already checked -- clicking it does nothing');
+  assert.equal(onArrival.target[0], 'placePhoto',
+    `the visible own-place card points at ${JSON.stringify(onArrival.target[0])}, not the upload`);
+  assert.equal(onArrival.targetExists[0], true,
+    'the visible own-place card points at an id that is not on the page, so clicking it does nothing at all');
+
+  // Now leave own place, exactly as a person does: click a preset card.
+  const preset = await page.evaluate(`(() => {
+    const card = document.querySelector('.rail .placecard:not(.placecard--own)');
+    if (!card) return { clicked: false };
+    card.click();
+    return { clicked: true };
+  })()`);
+  assert.ok(preset.clicked, 'the rail has no preset card to leave your own place with');
+
+  const onPreset = await page.evaluate(read);
+  assert.equal(onPreset.checked, false, 'clicking a preset card did not leave your own place');
+  assert.equal(onPreset.count, 1,
+    `with a preset chosen the rail paints ${onPreset.count} own-place cards, not one`);
+  assert.match(onPreset.cls[0], /placecard--own-pick/,
+    'with a preset chosen the rail offers the upload rather than the way back, so there is no way back');
+  assert.equal(onPreset.target[0], 'pl-own',
+    `the way back points at ${JSON.stringify(onPreset.target[0])}, which does not reselect your own place`);
+});
+
 test('the status page runs its poller under the CSP the server really sends', { skip }, async () => {
   const s = await session();
   await s.signIn();

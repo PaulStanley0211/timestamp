@@ -433,8 +433,17 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
     );
   }
 
-  // The escape hatch at the end of the rail. Same mechanism, no image.
+  // The escape hatch at the FRONT of the rail. Same mechanism, no image.
+  //
+  // TWO CARDS SHARE THIS SLOT AND THE RADIO PICKS ONE (2026-08-31). See the
+  // comment on the rail in views.mjs. own-pick is the way back from a preset;
+  // own-add is the way in to the upload, and it is the one showing in the state
+  // the page opens in. The scale/thumb/badge rules below are keyed on
+  // .placecard--own, which BOTH carry, so they light whichever is present
+  // without either card needing its own copy of the selected styling.
   out.push(
+    `#pl-own:checked~.wrap .placecard--own-pick{display:none;}`,
+    `#pl-own:checked~.wrap .placecard--own-add{display:block;}`,
     `#pl-own:checked~.wrap .placecard--own{transform:scale(1.03);}`,
     `#pl-own:checked~.wrap .placecard--own .thumb{opacity:1;}`,
     `#pl-own:checked~.wrap .placecard--own .badge{opacity:1;}`,
@@ -1435,6 +1444,15 @@ body {
    used, kept as the faintest thing on the page rather than a dark slab where
    every other card is a picture. */
 .placecard--own .thumb { background: repeating-linear-gradient(135deg, #FAF7F2 0 8px, #FFFFFF 8px 16px); }
+
+/* THE DEFAULT STATE OF THIS PAIR IS THE PRESET STATE, and that is the safe way
+   round rather than an arbitrary one. Base CSS shows own-pick and hides
+   own-add; the generated '#pl-own:checked' rules swap them. So a browser that
+   somehow never applies the generated block still shows a WORKING card -- the
+   label for the radio, which is what the rail had before today -- rather than
+   an upload card sitting next to a preset it contradicts. The failure mode of
+   the fallback is the old behaviour, not a new one. */
+.placecard--own-add { display: none; }
 
 .placecard .cap {
   position: absolute; inset: auto 0 0 0;

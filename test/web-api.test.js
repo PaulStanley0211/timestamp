@@ -564,6 +564,49 @@ test('both own-place controls have an accessible name of their own', async () =>
   });
 });
 
+test('the own-place card offers the upload once own place is already chosen', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const panel = placePanel(await (await get(base, '/', cookieA)).text());
+
+    // WHAT THIS EXISTS TO STOP, reported by the owner on 2026-08-31: "if you
+    // click on their own place on the card, they should have the ability to
+    // upload their own place ... there is no response."
+    //
+    // He is right and the cause is section 43's own design. `pl-own` is CHECKED
+    // ON LOAD, so the one card in the rail that speaks for your own place is a
+    // <label> for a radio that is ALREADY SELECTED -- and clicking a checked
+    // radio changes nothing, fires nothing, and moves nothing on screen. The
+    // upload it is supposed to lead to sits at the TOP of the step, above the
+    // prose and above the rail, so by the time the rail is in view the control
+    // is off-screen behind you. The card was a dead control for the whole of
+    // the default state, which is the state every visitor arrives in.
+    //
+    // THE FIX IS TWO CARDS IN ONE SLOT, SWAPPED BY THE RADIO THAT IS ALREADY
+    // THERE -- no JavaScript, and no second reveal mechanism, which the
+    // stylesheet's own comment forbids. One card is the way BACK from a preset
+    // (a label for pl-own); the other is the way IN to the upload (a label for
+    // the file input). Exactly one is in the rail at a time, so the rail still
+    // has one own-place card and the dots still count right.
+    const pick = /<label class="placecard placecard--own placecard--own-pick" for="pl-own">/.exec(panel);
+    const add = /<label class="placecard placecard--own placecard--own-add" for="placePhoto">/.exec(panel);
+
+    assert.ok(pick, 'the rail lost the card that returns to your own place from a preset');
+    assert.ok(add, 'the own-place card still cannot reach the upload -- it is a label for a radio '
+      + 'that is already checked, so clicking it does nothing at all');
+
+    // The upload card leads: it is the one showing in the state the page opens
+    // in, so it is the one a person meets first in the rail.
+    assert.ok(panel.indexOf(add[0]) < panel.indexOf('placecard--pl-'),
+      'the upload card is behind the presets in the rail');
+
+    // It must point at the real input, not a copy of it -- one input, two
+    // labels, so whichever is clicked opens the same picker and the chosen file
+    // lands in the same field the server reads.
+    assert.equal((panel.match(/name="placePhoto"/g) ?? []).length, 1,
+      'there is more than one place-photo input, so which one carries the file is a coin toss');
+  });
+});
+
 test('the carousel dots run in the same order as the cards they indicate', async () => {
   await withServer(async ({ base, cookieA, app }) => {
     const panel = placePanel(await (await get(base, '/', cookieA)).text());
@@ -571,8 +614,24 @@ test('the carousel dots run in the same order as the cards they indicate', async
     // The dots are a position indicator for the rail. If the two orders
     // disagree the indicator lights the wrong position -- invisible in a
     // markup test that only counts them, which is why this compares sequences.
+    //
+    // POSITIONS, NOT ELEMENTS (2026-08-31). The own-place slot is now two
+    // <label>s of which the stylesheet shows exactly one -- own-pick when a
+    // preset is selected, own-add otherwise -- so the rail has nine cards in
+    // the markup and eight in the frame, and there are still eight dots. The
+    // pair collapses to the one position it occupies, which is what the dot
+    // beside it indicates. This is the assertion getting MORE specific, not
+    // less: it now says what a dot is a dot FOR.
     const dots = [...panel.matchAll(/class="dot dot--([a-z0-9-]+)"/g)].map((m) => m[1]);
-    const cards = [...panel.matchAll(/class="placecard placecard--([a-z0-9-]+)"/g)].map((m) => m[1]);
+    const cards = [...panel.matchAll(/class="placecard placecard--([a-z0-9-]+)/g)]
+      .map((m) => m[1])
+      .filter((id, i, all) => !(id === 'own' && all[i - 1] === 'own'));
+
+    // Both halves of the pair are present, or one of the two states has no card
+    // at all and the dedupe above is hiding it.
+    for (const half of ['own-pick', 'own-add']) {
+      assert.ok(panel.includes(`placecard--${half}`), `the own-place slot has lost its ${half} card`);
+    }
 
     assert.equal(cards.length, app.cards.places.length + 1, 'the rail is not the eight presets plus the escape hatch');
     assert.deepEqual(dots, cards, 'the dots and the cards are in different orders');
