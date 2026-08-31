@@ -675,6 +675,48 @@ test('the own-place card in the rail is a live control in both states', { skip }
     `the way back points at ${JSON.stringify(onPreset.target[0])}, which does not reselect your own place`);
 });
 
+test('/videos paints a real player for a finished tape, and fits a phone', { skip }, async () => {
+  // WHAT ONLY A LAYOUT ENGINE CAN SAY. A markup test can see a <video> tag; it
+  // cannot see whether the element has a box, whether the CSP let the media
+  // through, or whether the page it sits on scrolls sideways on a phone. Every
+  // one of those has shipped broken in this project before.
+  const s = await session();
+  await s.signIn();
+  const page = await visit('/videos', PHONE);
+  assert.deepEqual(page.errors, [], page.errors.join('; '));
+  assert.ok(page.layout.bodyOverflowX <= 0,
+    `/videos scrolls sideways by ${page.layout.bodyOverflowX}px at 375px`);
+
+  const probe = await page.evaluate(`(() => {
+    const v = document.querySelector('.shelf video');
+    if (!v) return { found: false };
+    const r = v.getBoundingClientRect();
+    const dl = document.querySelector('.shelf a.dl');
+    return {
+      found: true,
+      w: r.width, h: r.height,
+      preload: v.getAttribute('preload'),
+      controls: v.hasAttribute('controls'),
+      // readyState 0 with preload="none" is the POINT: nothing has been
+      // fetched, so a full shelf costs posters rather than decoders.
+      readyState: v.readyState,
+      dlHref: dl ? dl.getAttribute('href') : null,
+      dlVisible: dl ? dl.getBoundingClientRect().width > 0 : false,
+    };
+  })()`);
+
+  assert.ok(probe.found, 'no player on /videos at all');
+  assert.ok(probe.w > 0 && probe.h > 0,
+    'the player is in the markup but paints at zero size -- which every fetch() test would call a pass');
+  assert.equal(probe.controls, true, 'the player has no controls, so nobody can start it');
+  assert.equal(probe.preload, 'none', 'the player preloads');
+  assert.equal(probe.readyState, 0,
+    `preload="none" is set but the browser fetched anyway (readyState ${probe.readyState})`);
+  assert.ok(probe.dlVisible, 'the download link paints at zero size');
+  assert.match(probe.dlHref ?? '', /\/video\?download=1$/,
+    `the download link points at ${probe.dlHref}, which is not the attachment URL`);
+});
+
 test('the status page runs its poller under the CSP the server really sends', { skip }, async () => {
   const s = await session();
   await s.signIn();

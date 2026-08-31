@@ -891,7 +891,31 @@ body {
    width, .who is never squeezed, and the ellipsis it was given below never
    fires. Measured with the fix on .who alone: still 44px of page overflow at
    375px. The chain has to give way at every link. */
+/* IT WRAPS, BECAUSE AT 375px THERE IS NOTHING LEFT TO SHRINK (2026-08-31).
+   Adding "My videos" put the row 61px over a 375px viewport, and the measured
+   parts say why no amount of tightening fixes it: with a 58-character address
+   the email is ALREADY at 0px -- it is the only item allowed to give way and it
+   has given way completely -- leaving credits 75.4 + My videos 76.4 + Plans
+   44.2 + Account 66 + Sign out 67.1 plus five 17.6px gaps, which is about 417px
+   of controls. Six items do not fit on one phone line at any sane type size.
+   Wrapping is the one answer that loses nothing: no control is hidden, no type
+   shrinks, and §36B's guarantee -- that Sign out is never carried off the right
+   edge -- is kept by taking a second line rather than by pushing something out
+   of the frame. min-width: 0 stays: it is what lets the email ellipsise before
+   the row is forced to wrap at all, so wider screens still get one line. */
 .nav { display: flex; align-items: center; gap: 1.1rem; min-width: 0; }
+
+/* AND IT WRAPS ONLY ON A PHONE. flex-wrap cannot be the default here: wrapping
+   is decided BEFORE shrinking, so a wrapping row lets the 58-character address
+   take its full natural width and pushes the links onto a second line at 1440px
+   as readily as at 375px -- measured, two rows on a laptop, which is not a fix,
+   it is a different bug. Below 30rem there is genuinely no single-line answer
+   (see the arithmetic above), and above it the ellipsis has always been enough.
+   30rem sits between two of the six widths this layout is tested at -- 414 and
+   768 -- so no tested width lands on the boundary. */
+@media (max-width: 30rem) {
+  .nav { flex-wrap: wrap; gap: 0.5rem 1.1rem; }
+}
 .nav a, .nav button {
   background: none; border: 0; padding: 0; cursor: pointer;
   font: inherit; font-size: var(--t-label); letter-spacing: 0.14em; text-transform: uppercase;
@@ -1762,6 +1786,23 @@ input[type="file"]::file-selector-button {
   background: var(--lift);
 }
 .tape img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* The player on /videos. 'object-fit: cover' matches the poster it replaces, so
+   the tile does not resize the instant somebody presses play. Black behind it
+   because a video element with nothing decoded yet is transparent, and on cream
+   that reads as a hole rather than as a picture that has not started. */
+.tape--play { display: block; }
+.vplay { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+
+/* The download sits under the caption rather than over the picture: it is an
+   action on the tape, not part of it, and DESIGN.md keeps text off a photograph
+   unless the photograph is the ground. */
+.dl {
+  display: inline-block; margin-top: 0.35rem;
+  font-size: var(--t-label); letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--oxide); text-decoration: none;
+}
+.dl:hover { color: var(--accent); }
 
 /* THE CAPTION CAME OUT OF THE PICTURE AND ONTO THE PAGE, which is the other
    half of what the reference does. It used to sit inside the tile under a 90%

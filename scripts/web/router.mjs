@@ -105,6 +105,12 @@ export const ROUTES = Object.freeze([
   // and the export need only a session; the deletion POST additionally proves
   // origin, carries the anti-forgery pair, and demands the account's own email
   // typed back -- a one-way door gets a typed confirmation, not a checkbox.
+  // --- the tapes, somewhere of their own (2026-08-31) ---------------------
+  // Gated by the default, like /account: it lists what an account has made, so
+  // there is nothing on it for a stranger. The media it links to are the
+  // existing per-job routes, each already ownership-checked by `ownedJob`.
+  { method: 'GET', pattern: '/videos', name: 'videosPage' },
+
   { method: 'GET', pattern: '/account', name: 'accountPage' },
   { method: 'GET', pattern: '/api/account/export', name: 'accountExport' },
   { method: 'POST', pattern: '/account/delete', name: 'accountDelete' },

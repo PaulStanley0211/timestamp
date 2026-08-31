@@ -582,9 +582,16 @@ function nav({ account = null, balance = null } = {}) {
   // so being signed into an account that is not yours -- however that happened
   // -- is visible on sight instead of discoverable only from what later lands
   // on the wrong shelf.
+  // "My videos" leads the links because it is the one a person comes BACK for:
+  // Plans and Account are visited once, the tapes are the reason to return. It
+  // is signed-in only, because /videos is gated and a link to a redirect is not
+  // an offer. §36B's measured overflow is the constraint on adding anything
+  // here -- .who is the only item allowed to shrink, and a browser test holds
+  // the whole row inside 375px with a 58-character address.
   return `<nav class="nav">
   <span class="who">${h(account.email ?? '')}</span>
   ${left}
+  <a href="/videos">My videos</a>
   <a href="/pricing">Plans</a>
   <a href="/account">Account</a>
   <form method="post" action="/logout" class="nav-form"><button type="submit">Sign out</button></form>
@@ -1371,7 +1378,17 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
     : 'Every finished recording lands here.')}</p>
     </div>
   </div>
-  ${tapes.length ? `<div class="shelf">${tapes.map(shelfTile).join('')}</div>` : `
+  ${''/* A STRIP, NOT THE WHOLE SHELF (2026-08-31). This panel used to print
+        every tape the account had, up to sixty, at the bottom of the order
+        form. That is the right place to answer "I just made one, where is it?"
+        and the wrong place to keep everything you have ever made -- so the
+        recent few stay here and /videos holds the rest. The link is rendered
+        only when there IS a rest, because "see all" pointing at the same four
+        tiles is a lie about there being more. */}
+  ${tapes.length ? `<div class="shelf">${tapes.slice(0, HOME_STRIP).map(shelfTile).join('')}</div>
+  ${tapes.length > HOME_STRIP
+    ? `<p class="hint"><a class="linky" href="/videos">See all ${h(tapes.length)} videos</a></p>`
+    : '<p class="hint"><a class="linky" href="/videos">My videos</a></p>'}` : `
   <div class="empty">
     <p class="title">The shelf is empty</p>
     <p>Pick a photo, a look, and a place above &mdash; your first tape lands here.</p>
@@ -1391,6 +1408,11 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
     balance,
   });
 }
+
+/** How many tapes the home page's strip shows before it defers to /videos.
+ *  Four is one row at every width the layout is tested at, so the strip never
+ *  wraps into a second row and starts competing with the form above it. */
+const HOME_STRIP = 4;
 
 /** One poster on the shelf. `status` is shown for anything unfinished, because a
  *  grid of identical grey rectangles tells you nothing about which one stopped.
@@ -1420,6 +1442,75 @@ function shelfTile(tape) {
     <span class="when">${h(stampDate(tape.jobId))}</span>
   </span>
 </a>`;
+}
+
+/**
+ * One tape on `/videos`: the same tile as the shelf, with the poster swapped
+ * for a player and a download beneath it.
+ *
+ * `preload="none"` IS THE WHOLE DESIGN AND NOT A DETAIL. It is what lets a
+ * shelf of sixty tapes cost sixty POSTERS rather than sixty decoders, and it is
+ * why watching a tape here needs no JavaScript at all -- the poster attribute
+ * paints the frame, the native controls start it, and nothing is fetched until
+ * somebody presses play. A test asserts the attribute, because losing it is
+ * invisible on a page with two tapes on it and ruinous on a page with sixty.
+ *
+ * AN UNFINISHED TAPE GETS NO PLAYER AND NO DOWNLOAD. There is no file behind
+ * either yet, so both would be controls that can only fail when used; it keeps
+ * the shelf's status tile and its link through to the job.
+ */
+function videoTile(tape) {
+  if (tape.status !== 'done' || !tape.videoUrl) return shelfTile(tape);
+  return `<div class="tape tape--play">
+  <span class="frame frame--${h(aspectSlug(tape.aspect ?? '4:3'))}">
+    <video class="vplay" controls preload="none" playsinline${
+  tape.posterUrl ? ` poster="${h(tape.posterUrl)}"` : ''}>
+      <source src="${h(tape.videoUrl)}" type="video/mp4">
+    </video>
+  </span>
+  <span class="cap">
+    <span class="what">${h(tape.place)}</span>
+    <span class="when">${h(stampDate(tape.jobId))}</span>
+  </span>
+  <a class="dl" href="${h(tape.videoUrl)}?download=1"
+     download="timestamp-${h(tape.jobId)}.mp4">Download</a>
+</div>`;
+}
+
+/**
+ * `GET /videos`. Every tape this account has made, newest first.
+ *
+ * WHY IT IS ITS OWN PAGE. The shelf has always existed, at the bottom of the
+ * order form -- which is the right place to answer "I just made one, where is
+ * it?" and the wrong place to keep everything you have ever made. The owner
+ * asked for somewhere to watch and download, on 2026-08-31, and this is it; the
+ * home page keeps a short recent strip that links here.
+ *
+ * IT ADDS NO ISOLATION SURFACE. The tapes come from the same `shelfFor` the
+ * home page uses, which reads the ownership index and nothing else, and the
+ * media URLs it hands out are the existing per-job routes -- every one of them
+ * already ownership-checked by `ownedJob`. There is a test that another
+ * account's tape cannot appear here.
+ */
+export function videosPage({ account = null, balance = null, tapes = [], retentionDays = null } = {}) {
+  const body = `
+<main>
+  <section class="panel panel--archive">
+    <h1 class="app-h1">My videos</h1>
+    <p class="lede">Every tape you have made. Press play to watch one here, or download it.</p>
+    <p class="hint">${h(Number.isFinite(retentionDays) && retentionDays > 0
+    ? `Every recording stays on the shelf for ${retentionDays} days.`
+    : 'Every finished recording lands here.')}</p>
+
+    ${tapes.length ? `<div class="shelf">${tapes.map(videoTile).join('')}</div>` : `
+    <div class="empty">
+      <p class="title">No videos yet</p>
+      <p>Make your first tape and it lands here &mdash; <a class="linky" href="/">start one</a>.</p>
+    </div>`}
+  </section>
+</main>
+`;
+  return layout({ title: 'My videos', body, bodyClass: 'page-videos', account, balance });
 }
 
 // ---------------------------------------------------------------------------

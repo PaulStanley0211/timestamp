@@ -2591,3 +2591,120 @@ test('the frame row offers three shapes and all three are real choices', async (
     assert.match(checked[0], /value="4:3"/, 'and it is the camcorder shape -- the product premise');
   });
 });
+// ---------------------------------------------------------------------------
+// /videos -- the tapes get a place of their own
+// ---------------------------------------------------------------------------
+
+test('GET /videos lists this account tapes and never another account tapes', async () => {
+  await withServer(async ({ base, root, app, cookieA, cookieB, accountA, accountB }) => {
+    const mine = seedJob(app, root, { status: 'done', place: 'my own garden', owner: accountA });
+    const theirs = seedJob(app, root, { status: 'done', place: 'somebody else garden', owner: accountB });
+
+    const res = await get(base, '/videos', cookieA);
+    assert.equal(res.status, 200, 'there is no /videos page');
+    const html = await res.text();
+
+    assert.ok(html.includes(mine.jobId), 'my own finished tape is missing from my videos');
+    assert.ok(!html.includes(theirs.jobId),
+      'another account tape is on this page -- the shelf must be built from the ownership index');
+    assert.ok(html.includes('my own garden'), 'the tape is listed without saying where it is');
+  });
+});
+
+test('GET /videos is refused to somebody who is not signed in', async () => {
+  await withServer(async ({ base }) => {
+    // BOTH DOORS, because this app answers them differently on purpose and a
+    // page listing somebody's tapes must be shut to both: a browser is sent to
+    // the sign-in page, an API caller is told NOT_SIGNED_IN. Asking with the
+    // wrong Accept header tests one door and reports on the other.
+    const page = await get(base, '/videos', null,
+      { accept: 'text/html' }, { redirect: 'manual' });
+    assert.equal(page.status, 303, `a signed-out browser got ${page.status} from /videos`);
+    assert.match(page.headers.get('location') ?? '', /^\/login/,
+      'a signed-out browser is not sent to the sign-in page');
+
+    const api = await get(base, '/videos', null, { accept: 'application/json' });
+    assert.equal(api.status, 401, 'a signed-out API caller is not refused');
+    assert.equal((await api.json()).error.code, 'NOT_SIGNED_IN');
+  });
+});
+
+test('a finished tape on /videos plays in place and offers its own download', async () => {
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    // A finished tape has a poster as well as a video -- seed both, or the
+    // poster assertion below measures the fixture rather than the page.
+    const job = seedJob(app, root, {
+      status: 'done',
+      place: 'a beach',
+      owner: accountA,
+      result: { videoPath: 'timestamp.mp4', posterPath: 'poster.jpg' },
+    });
+    const html = await (await get(base, '/videos', cookieA)).text();
+
+    // The player, and the reason preload="none" is asserted rather than assumed:
+    // it is what keeps a shelf of sixty tapes costing sixty POSTERS instead of
+    // sixty decoders, and it is the whole reason this can be done with no
+    // JavaScript and no CSP change.
+    const player = new RegExp(`<video[^>]*poster="/api/jobs/${job.jobId}/poster"[^>]*>`).exec(html);
+    assert.ok(player, 'the finished tape has no player on /videos');
+    assert.match(player[0], /\bcontrols\b/, 'the player has no controls, so nobody can start it');
+    assert.match(player[0], /preload="none"/,
+      'the player preloads, so a full shelf spins up a decoder per tape before anybody presses play');
+
+    assert.ok(html.includes(`/api/jobs/${job.jobId}/video?download=1`),
+      'the tape cannot be downloaded from the page that exists to offer it');
+  });
+});
+
+test('an unfinished tape on /videos says so instead of pretending to be playable', async () => {
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    const job = seedJob(app, root, { status: 'running', place: 'a beach', owner: accountA });
+    const html = await (await get(base, '/videos', cookieA)).text();
+
+    assert.ok(html.includes(job.jobId), 'the unfinished tape is missing entirely');
+    assert.ok(!new RegExp(`<video[^>]*${job.jobId}`).test(html),
+      'a tape with no video yet is given a player, which can only fail when pressed');
+    assert.ok(!html.includes(`/api/jobs/${job.jobId}/video?download=1`),
+      'a tape with no video yet offers a download that cannot work');
+  });
+});
+
+test('the signed-in nav offers My videos, and the signed-out one does not', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const signedIn = await (await get(base, '/pricing', cookieA)).text();
+    const nav = /<nav class="nav">[\s\S]*?<\/nav>/.exec(signedIn);
+    assert.ok(nav, 'the signed-in page has no nav');
+    assert.match(nav[0], /href="\/videos"/, 'the nav does not reach the videos page');
+    assert.match(nav[0], />My videos</, 'the nav link is not named for what it holds');
+
+    // Signed out there is nothing behind it -- the route is gated, so a link
+    // would be an invitation to a redirect.
+    const signedOut = await (await get(base, '/pricing', null)).text();
+    const anonNav = /<nav class="nav">[\s\S]*?<\/nav>/.exec(signedOut);
+    assert.ok(anonNav, 'the signed-out page has no nav');
+    assert.doesNotMatch(anonNav[0], /href="\/videos"/,
+      'a signed-out visitor is offered a page that will only turn them away');
+  });
+});
+
+test('the home page keeps a short strip of recent tapes and sends the rest to /videos', async () => {
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    // Six finished tapes: more than the strip should show.
+    for (let i = 0; i < 6; i += 1) {
+      seedJob(app, root, {
+        status: 'done', place: `place ${i}`, owner: accountA,
+        result: { videoPath: 'timestamp.mp4', posterPath: 'poster.jpg' },
+      });
+    }
+    const html = await (await get(base, '/', cookieA)).text();
+    const panel = /<section class="panel panel--archive">[\s\S]*?<\/section>/.exec(html);
+    assert.ok(panel, 'the home page lost its archive panel');
+
+    const tiles = [...panel[0].matchAll(/class="tape\b/g)].length;
+    assert.ok(tiles > 0, 'the home page shows no recent tapes at all');
+    assert.ok(tiles < 6,
+      `the home page still shows all ${tiles} tapes; the strip is meant to be the recent few`);
+    assert.match(panel[0], /href="\/videos"/,
+      'the home strip does not offer a way to the rest of them');
+  });
+});

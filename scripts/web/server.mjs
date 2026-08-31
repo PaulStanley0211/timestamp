@@ -87,7 +87,7 @@ import { boundaryFromContentType, parseMultipart, fileSink, MultipartError } fro
 import { createStylesheet, sendFile } from './static.mjs';
 import { aspectIds } from '../tapedeck/frame.mjs';
 import {
-  homePage, landingPage, statusPage, selectPage, resultPage, errorPage, INLINE_SCRIPT_HASHES,
+  homePage, landingPage, statusPage, selectPage, resultPage, videosPage, errorPage, INLINE_SCRIPT_HASHES,
   privacyPage, termsPage, impressumPage,
 } from './views.mjs';
 // The ONE fact the web layer takes from the provider layer: whether a provider
@@ -1554,6 +1554,13 @@ export function createServer({
         place: labelsOf(job).place ?? '',
         posterUrl: job.result?.posterPath ? `/api/jobs/${jobId}/poster` : null,
         href: job.status === 'done' ? `/j/${jobId}/result` : `/j/${jobId}`,
+        // `/videos` plays the tape in place, so it needs the media URL and the
+        // SHAPE. The shape is not decoration: the tile crops what it shows, and
+        // a 9:16 tape cropped to a 4:3 tile loses more than half its picture.
+        // Null for anything unfinished -- there is no file behind it yet, and a
+        // player pointed at nothing is a control that can only fail.
+        videoUrl: job.status === 'done' && job.result?.videoPath ? `/api/jobs/${jobId}/video` : null,
+        aspect: job.input?.aspect ?? '4:3',
       });
     }
     return out;
@@ -3172,6 +3179,18 @@ export function createServer({
      * about you and taking a copy must not depend on the identity provider
      * being up. Only the deletion POST below needs the upstream half.
      */
+    /** `GET /videos` -- every tape this account has made, playable and
+     *  downloadable in place. The tapes come from the same `shelfFor` the home
+     *  page uses, so this adds no new path to anybody else's media. */
+    async videosPage(req, res, { account }) {
+      return sendHtml(req, res, 200, videosPage({
+        account,
+        balance: await balanceOf(account),
+        tapes: shelfFor(account),
+        retentionDays: cfg.retention?.jobDays ?? null,
+      }));
+    },
+
     async accountPage(req, res, { account }) {
       const [{ token, setCookie }, balance] = await Promise.all([
         auths.csrfIssue(req), balanceOf(account),

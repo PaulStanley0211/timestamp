@@ -38,7 +38,7 @@ import fs from 'node:fs';
 
 import { createStylesheet } from '../scripts/web/static.mjs';
 import {
-  creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, errorPage,
+  creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, videosPage, errorPage,
   privacyPage, termsPage, impressumPage,
 } from '../scripts/web/views.mjs';
 import {
@@ -265,6 +265,18 @@ function renderedPages() {
     ['status', statusPage({ view })],
     ['select', selectPage({ view, stills: [] })],
     ['result', resultPage({ view })],
+    // Both states, because the empty one is what a new account meets and a
+    // page missing from this list is invisible to every sweep below.
+    ['videos', videosPage({
+      account: { email: 'a@b.com' }, retentionDays: 30,
+      tapes: [{
+        jobId: '20260824-120000-abcdef', status: 'done', place: 'a beach', aspect: '4:3',
+        posterUrl: '/api/jobs/20260824-120000-abcdef/poster',
+        videoUrl: '/api/jobs/20260824-120000-abcdef/video',
+        href: '/j/20260824-120000-abcdef/result',
+      }],
+    })],
+    ['videos-empty', videosPage({ account: { email: 'a@b.com' }, retentionDays: 30, tapes: [] })],
     ['error', errorPage({ status: 404, title: 'Not found' })],
     ['auth-unavailable', authUnavailablePage()],
     ['identity-unavailable', identityUnavailablePage()],
