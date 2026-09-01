@@ -31,7 +31,20 @@ services:
     build: .
     image: timestamp
     restart: unless-stopped
-    env_file: .env
+    # LEAST PRIVILEGE, AND THE SPLIT IS NOT COSMETIC. Both services used to
+    # load one combined `.env`, which handed every secret to every
+    # container -- so the internet-facing process held a LIVE Stripe secret key
+    # and the fal key, neither of which anything reachable from `server-cli.mjs`
+    # reads. That does not create a way in; it decides how bad it is once
+    # somebody finds one, and it turns an identity incident into a
+    # payments-and-spend incident.
+    #
+    # `.env.common` carries the TIMESTAMP_* settings both processes need.
+    # `.env.web` carries SUPABASE_* and STRIPE_*. Neither file names the other's
+    # secrets, and `test/deploy-topology.test.js` fails if that stops being true.
+    env_file:
+      - .env.common
+      - .env.web
     volumes:
       - data:/data
     healthcheck:
@@ -52,7 +65,15 @@ services:
     image: timestamp
     restart: unless-stopped
     command: ["node", "scripts/worker/worker-cli.mjs", "--root=/data", "--provider=fal"]
-    env_file: .env
+    # The worker's half. FAL_KEY because this is the process that spends, and
+    # AWS_* when the image classifier is configured. NOT the Stripe secrets and
+    # NOT Supabase: proved by running it, not by reading it -- a worker started
+    # with no secrets at all rendered a complete tape, and `credits.mjs` carries
+    # no Supabase reference, so the refund path is filesystem work on
+    # `out/owners`.
+    env_file:
+      - .env.common
+      - .env.worker
     volumes:
       - data:/data
     logging:

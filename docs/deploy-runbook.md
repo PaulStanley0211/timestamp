@@ -36,8 +36,11 @@ top to bottom; nothing here is optional.
    **When PR #1 is merged, drop the `-b` and delete this paragraph**; until
    then the branch is the deployable ref.
 
-3. Write `/opt/timestamp/.env`. Start from `.env.example`; every key it
-   documents, plus the three production lines it explains:
+3. Write **three** env files in `/opt/timestamp`, not one. Each container is
+   given only the secrets its own process reads, so a compromise of the
+   internet-facing web process does not also hand over the render budget.
+
+   **`.env.common`** — what both processes need:
 
    ```
    TIMESTAMP_PROVIDER=fal
@@ -48,12 +51,41 @@ top to bottom; nothing here is optional.
 
    The last one is who is selling, for the three legal pages. It lives here and
    not in `config/legal.json` because the repository is public and a sole
-   trader's disclosure address is a home address — this file is gitignored and
-   kept out of the image. `.env.example` documents the shape; §4 step 7 is what
-   proves it took.
+   trader's disclosure address is a home address — these files are gitignored
+   and kept out of the image. `.env.example` documents the shape; §4 step 7 is
+   what proves it took.
 
-   `chmod 600 .env`. The compose file never carries a secret; this file is
-   the only place they live on the box.
+   **`.env.web`** — the three Supabase values and the two Stripe secrets.
+   **`.env.worker`** — `FAL_KEY`, and the three `AWS_*` values if and when the
+   image classifier is turned on (see §52 first — it changes `/privacy`).
+
+   **WHICH SIDE A KEY BELONGS ON WAS MEASURED, NOT ASSUMED.** A worker started
+   with no secrets at all rendered a complete tape, 375 frames, and constructed
+   its refund glue: `credits.mjs` carries no Supabase reference and the refund
+   path is filesystem work on `out/owners`. On the other side, nothing
+   reachable from `server-cli.mjs` reads `FAL_KEY` — there is a test that fails
+   if a paid provider ever enters the web's import graph.
+
+   `chmod 600 .env.common .env.web .env.worker`. The compose file never carries
+   a secret; these files are the only place they live on the box.
+
+   **MIGRATING AN EXISTING SINGLE `.env`** — the box has one from before this
+   split. Do not hand-retype the keys; split it in place and keep a backup
+   until the health check passes:
+
+   ```bash
+   cd /opt/timestamp && cp .env .env.backup
+   grep -E '^TIMESTAMP_' .env > .env.common
+   grep -E '^SUPABASE_|^STRIPE_' .env > .env.web
+   grep -E '^FAL_KEY|^AWS_' .env > .env.worker
+   chmod 600 .env.common .env.web .env.worker .env.backup
+   wc -l .env .env.common .env.web .env.worker   # the three must sum to .env's key lines
+   ```
+
+   Then `docker compose up -d` and check `/api/health` and one sign-in before
+   `shred -u .env .env.backup`. **Compose does not fail on a missing key** — a
+   value that ended up in no file is simply absent, and the first symptom is a
+   503 on checkout or a worker that cannot spend, so verify before deleting.
 
 4. `docker compose up -d --build` — the image build runs the preflight
    (36 filters + the font) and refuses to produce an image on a bad ffmpeg,
