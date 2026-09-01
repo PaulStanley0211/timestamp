@@ -78,10 +78,12 @@ arc is verified: the model genuinely delivers arrive / look around / notice / do
 / react / settle in ONE generation. **What nobody had measured is the price: the
 customer is absent from 27% of the beach tape and 53% of the 720p one, and both
 tapes END ON A FRAME WITH NO PERSON IN IT.** On the tape Paul praised, he is not
-in the picture for over half of it. The fix is prompt text in
-`composeReferencePrompt`, not architecture — **held on purpose until after the
-paid 480p order**, so that render tests fal against the documented prompt rather
-than one changed the same morning.
+in the picture for over half of it. ~~held on purpose until after the paid 480p
+order~~ — **FIXED THE SAME DAY, `90bf3e1`**, at Paul's direction: four of the
+six beats named no subject and now only the wide pan does, with the tape ending
+on the person. **Unproven against a model — only the paid run can prove it —
+and it is the ONLY prompt change made**, so that render still measures one
+change and not two (§19).
 
 **STILL THE OWNER'S, AND THE BLIND CHECK IS STILL THE ONE THAT MATTERS MOST.**
 Free, ten minutes, packet unsent at `out/blind-check/` for five sessions, and
@@ -6397,11 +6399,23 @@ of a fifteen-second product on the place without the person, on a product whose
 entire premise is putting the person in the place. **That is a trade, not a bug**,
 and it had never been measured on either side.
 
-**THE FIX IS PROMPT TEXT, NOT ARCHITECTURE** — `composeReferencePrompt`'s sixth
-beat can require the subject in frame, and the middle two can be shortened.
-**DELIBERATELY NOT DONE: it is held until after the paid 480p order**, so that
-render tests fal against the prompt this file documents rather than one changed
-the same morning. Paul's call, taken 2026-09-01.
+~~**THE FIX IS PROMPT TEXT, NOT ARCHITECTURE** — `composeReferencePrompt`'s
+sixth beat can require the subject in frame. **DELIBERATELY NOT DONE: held
+until after the paid 480p order.**~~ **DONE THE SAME DAY, `90bf3e1`, at the
+owner's direction — he reversed the hold.** And the count was worse than §53B
+estimated: **FOUR of the six beats named no subject**, not two — the arrival,
+the pan, the prop push-in and the close all described the camera and the scene
+and nothing else, so the model omitted the person from all four. Three now name
+them and the sixth ends on them; **exactly one beat is still the place without
+the person**, which is the wide pan, kept because Paul asked for it in as many
+words. Two guards, sabotage-verified, checked at 15s/12s/6s because the shorter
+runtimes drop the middle and keep the ends.
+
+**IT IS UNPROVEN AGAINST A MODEL AND ONLY THE PAID RUN CAN PROVE IT.** This
+changes what the model is ASKED for, not what it returns. It is also the ONLY
+prompt change made: the punch-in zoom (§34G) was deliberately left alone so the
+next paid render measures one change and not two — §19's own ruling, and the
+reason that render is worth its money.
 
 #### C — IT SEES TRADE DRESS, AND THAT IS THE ARGUMENT FOR KEEPING IT
 
