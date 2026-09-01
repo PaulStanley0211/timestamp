@@ -72,6 +72,17 @@ page is design rationale shipped to every visitor, one comment quoting a promise
 the product deleted); then the premium pass on the result and status pages,
 which needs the owner's taste and should start with mockups.
 
+**AND ONE PROMPT CHANGE IS QUEUED BEHIND THE PAID RUN — §53.** A machine looked
+at the three model tapes for the first time (free, offline) and §19's six-beat
+arc is verified: the model genuinely delivers arrive / look around / notice / do
+/ react / settle in ONE generation. **What nobody had measured is the price: the
+customer is absent from 27% of the beach tape and 53% of the 720p one, and both
+tapes END ON A FRAME WITH NO PERSON IN IT.** On the tape Paul praised, he is not
+in the picture for over half of it. The fix is prompt text in
+`composeReferencePrompt`, not architecture — **held on purpose until after the
+paid 480p order**, so that render tests fal against the documented prompt rather
+than one changed the same morning.
+
 **STILL THE OWNER'S, AND THE BLIND CHECK IS STILL THE ONE THAT MATTERS MOST.**
 Free, ten minutes, packet unsent at `out/blind-check/` for five sessions, and
 the only thing left that can tell us the product premise is wrong. ~~Then an
@@ -6295,6 +6306,151 @@ that.
   `Explicit`. Both are checked, and a sabotage confirmed the test catches it.
 - **`AWS_*` are vendor-native names on purpose**, matching `FAL_KEY` and
   `STRIPE_SECRET_KEY`. `TIMESTAMP_*` is for this product's own settings.
+
+---
+
+### 53. A MACHINE LOOKED AT THE TAPES, AND THE CUSTOMER IS MISSING FROM HALF OF THEM (2026-09-01)
+
+**No code changed, nothing was rendered, and this cost $0 and about a minute.**
+The `claude-video-vision` plugin has been installed on this machine and never
+used. It was pointed at the three model-generated tapes on this disk. It is a
+PERCEPTION layer and not an interpretation one: ffmpeg filters (`scdet`, `siti`,
+`freezedetect`, `blurdetect`, `signalstats`) plus extracted frames handed over as
+images. **Audio was skipped outright** — the bed is synthesised noise with no
+speech, so transcription buys nothing, no backend is needed, and nothing left
+this machine.
+
+#### A — §19's SIX-BEAT ARC IS VERIFIED, OBJECTIVELY, FOR THE FIRST TIME
+
+**Which prompt a tape froze is answerable from its own manifest**, which is what
+made this a controlled comparison rather than three impressions:
+
+```
+node -e 'const o=JSON.parse(require("fs").readFileSync("out/jobs/<id>/manifest.json","utf8"));
+const p=o.resolved.referencePrompt.prompt; console.log((p.match(/Shot \d/g)||[]).length)'
+```
+
+| Job | Frozen prompt | Place | `scdet` |
+|---|---|---|---|
+| `20260824-122201-af8b0d` 12:22 | **single continuous take** (pre-§19) | allotment | **0 scenes**, "low motion, detailed static shots" |
+| `20260824-130457-a2e9ac` 13:04 | **six shots** | beach, 480p | 5 hard cuts (scores 6.0-7.1) among motion noise |
+| `20260824-225641-f34b4f` 22:56 | **six shots** | allotment, 720p | cuts present, too noisy at 1112x834 to count cleanly |
+
+**THE CONTROL IS WHAT MAKES THE REST BELIEVABLE.** The pre-§19 tape reports
+**zero** scene changes, from a prompt that says *"Nothing dramatic happens ... it
+simply continues for the whole 15 seconds."* The model obeyed it exactly — which
+is precisely what Paul complained about — and the instrument correctly reports
+nothing. §19's own ruling, *read the prompt before blaming the model*, measured.
+
+**The beat structure is legible frame by frame on the beach tape**, and it is
+§19's arc as specified:
+
+| | |
+|---|---|
+| 0-3s | **arrive** — low camera, walking away up the sand |
+| 4-5s | **look around** — wide of the beach and dunes |
+| 6-7s | **notice a thing** — push in on a wicker beach chair |
+| 8-10s | **do the thing** — walking back toward camera |
+| 11-12s | **react** — turning, looking at the lens |
+| 13-14s | **settle** — wide, walking away |
+
+Seedance genuinely does multi-shot inside ONE generation, which is the premise
+`DIRECT_NEEDS_ONE_CALL` rests on. That premise is now observed rather than
+assumed.
+
+#### B — THE FINDING: THE PERSON IS ABSENT FROM A THIRD TO A HALF OF THEIR OWN TAPE
+
+Counted per second across both six-shot tapes:
+
+| | beach 480p | allotment 720p |
+|---|---|---|
+| **Nobody in frame at all** | 4s — **27%** | 8s — **53%** |
+| Face legible | 5s — 33% | 7s — 47% |
+| Final frame | tiny distant figure | **empty garden** |
+
+**ON THE 720p TAPE PAUL PRAISED — "it looks great ... especially the face ... it
+doesn't look like AI" — THE CUSTOMER IS NOT IN THE PICTURE FOR OVER HALF OF IT.**
+Seconds 3 through 8 are a garden table with nobody at it, second 8 is a close-up
+of a mineral water bottle, and the last two seconds are the empty garden again.
+
+**BOTH TAPES END ON A FRAME WITH NO PERSON IN IT.** The model reads the sixth
+beat, "settle", as *the camera comes to rest on the scene* — a fair reading of
+the word, and probably not the last image somebody wants from a tape of
+themselves.
+
+**THIS IS THE PRICE OF §19 AND NOBODY HAD PRICED IT.** Shots 2 and 3 are exactly
+what Paul asked for — *"it has to be running toward the streets, the beach view,
+and everything"* — and they work. But the arc as written spends a third to a half
+of a fifteen-second product on the place without the person, on a product whose
+entire premise is putting the person in the place. **That is a trade, not a bug**,
+and it had never been measured on either side.
+
+**THE FIX IS PROMPT TEXT, NOT ARCHITECTURE** — `composeReferencePrompt`'s sixth
+beat can require the subject in frame, and the middle two can be shortened.
+**DELIBERATELY NOT DONE: it is held until after the paid 480p order**, so that
+render tests fal against the prompt this file documents rather than one changed
+the same morning. Paul's call, taken 2026-09-01.
+
+#### C — IT SEES TRADE DRESS, AND THAT IS THE ARGUMENT FOR KEEPING IT
+
+The tracksuit sleeve at 0:01, 0:02 and 0:09 of `f34b4f` carries **three white
+stripes** — §30's adidas problem, which cost three renders and $0.12 to
+establish by counting stripes on enlarged crops by hand. That tape predates the
+§30 fix, so it is the historical defect and not a live one. **What matters is
+that the tool sees it**: an IP risk, visible only in pixels, on a tape that had
+already passed every test in the suite.
+
+**This is now the only thing in this project that can look at a tape.** Every
+picture defect this product has ever had was found by Paul watching a screen.
+
+#### D — WHAT IT CANNOT DO, STATED SO NOBODY OVERSELLS IT
+
+- **IT IS NOT THE BLIND CHECK AND MUST NEVER BE CALLED ONE.** The source
+  photograph is in context, so "the beard and the tight curls survived" is
+  observable — they did, on both tapes — but that is not a stranger naming Paul.
+  §32 item 5 is untouched by this.
+- **THE JUDDER IS INVISIBLE TO IT, and this was pitched wrongly before being
+  checked.** §44C already says why: the tape chain adds per-frame temporal grain
+  (`noise=allf=t+u`), so no two output frames are byte-identical even when one is
+  a duplicate — a framehash of the delivered mp4 reports ZERO duplicates on a tape
+  full of them, and `freezedetect` works on the same similarity. §44 measured the
+  raw retiming for exactly this reason.
+- **Geometry is already covered better.** `tapedeck-geometry.test.js` measures a
+  rendered circle deterministically in 2.5s (§35C). Do not replace a measurement
+  you have with a model's impression.
+- **n=2, and both tapes are pre-§42F.** The beach tape's "notice a thing" prop is
+  a German *Strandkorb* — the de-nationalised prompt may not produce one today,
+  and that is only testable with a paid render.
+- **Sampling was 1 fps**, so the percentages in §53B are ±1s. The shot boundaries
+  are independently confirmed by `scdet`, so the structure stands regardless.
+
+#### E — Things that will bite
+
+- **CHECK THE MANIFEST BEFORE CALLING SOMETHING A DEFECT.** The beach tape shows a
+  bearded man in a white floral sundress, which reads instantly as a catastrophic
+  wardrobe failure. It is not: the job ordered `sommerkleid`, whose own
+  `wardrobe` field says *"a thin cotton sundress with a small floral print,
+  narrow straps"*. The model rendered it exactly. **A frame is evidence of what
+  was produced and says nothing about what was asked for** — same family as
+  §51D's term-density finding, one medium over.
+- **MEASURE `segments/seg-01.mp4`, NOT `timestamp.mp4`.** The raw model output is
+  what carries the model's own composition and cuts; the delivered tape has the
+  grade, the grain and two vignettes on top of it. §44C's ruling, one layer over.
+- **A FIXTURE TAPE IS USELESS FOR THIS AND THERE ARE FOUR OF THEM ON THIS DISK.**
+  The fixture generates its source clip locally with ffmpeg — no person, no place,
+  no shot list. Filter by provider first:
+  `grep -o '"provider"[^,}]*' out/jobs/*/manifest.json`. Only `af8b0d`, `a2e9ac`
+  and `f34b4f` have a finished model tape; the other paid jobs stopped at compose.
+- **THE MODEL ADDS ITS OWN VIGNETTE.** A pronounced circular falloff is visible in
+  the RAW segments, before tapedeck touches them. This file's rulings record
+  `vignette` costing 18-45% of mean luma and being applied twice, with
+  `grade.curveMaster` compensating. If the source already carries one that is
+  **three**, and the compensation was solved against two. Observed, not yet
+  measured — worth a `signalstats` pass before anybody raises either angle.
+- **`claude-video-vision` needs no setup for this use.** `/setup-video-vision`
+  configures a transcription backend (Gemini, OpenAI, or local Whisper); with
+  `skip_audio: true` none is required and nothing leaves the machine but frames,
+  which come into the conversation.
 
 ---
 
