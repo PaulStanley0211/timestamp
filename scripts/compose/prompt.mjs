@@ -437,13 +437,26 @@ export function composeReferencePrompt({
   // around, notice a thing, do the thing, react, settle. A shorter runtime
   // drops the middle and keeps the ends, so every length still opens on
   // arriving and closes on settling.
+  // EXACTLY ONE BEAT IS THE PLACE WITHOUT THE PERSON, AND IT IS THE SECOND.
+  // Four of the six used to be: the arrival, the pan, the prop and the close
+  // all described the camera and the scene without ever naming the subject, so
+  // the model left them out of all four. Measured on the two real tapes
+  // (section 53), the customer was absent from 27% of the beach tape and 53%
+  // of the 720p one, and BOTH ENDED ON A FRAME WITH NOBODY IN IT -- the closing
+  // beat said "settle" without a subject, and "the camera comes to rest on the
+  // scene" is a fair reading of that word.
+  //
+  // The wide of the place stays, because Paul asked for it in as many words and
+  // a shot list that never leaves the subject is a portrait in six pieces. What
+  // changes is that it is now the ONLY one, and that the tape ends on the
+  // person who paid for it.
   const beats = [
-    'Wide. Walking in at the near edge, camera following a step behind and swinging round to catch up.',
+    'Wide. Walking in at the near edge, camera following a step behind and swinging round to catch up with them.',
     `Wide. The whole place, camera panning slowly across it -- ${place.motionHint} -- and holding at the far side.`,
-    `Close. ${propSentence}, camera pushing in and steadying.`,
+    `Close. ${propSentence}, with them just behind it in the same frame, camera pushing in and steadying.`,
     `Medium. ${place.prompt.moment ?? DEFAULT_MOMENT}, camera moving round to keep them in frame.`,
     'Medium close. Turning back toward the lens mid-gesture, camera lifting to meet them.',
-    'Wide. One last look across the place, camera drifting and settling.',
+    'Wide. One last look across the place with them still standing in it, camera drifting and settling on them.',
   ];
   const chosen = shotCount >= beats.length
     ? beats

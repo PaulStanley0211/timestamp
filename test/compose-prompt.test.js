@@ -599,3 +599,38 @@ test('rule 1 and the look ban survive the rewrite, across the whole catalog', ()
     }
   }
 });
+
+test('the tape does not end without the customer in it', () => {
+  // MEASURED ON THE TWO REAL TAPES, 2026-09-01 (section 53). Both ended on a
+  // frame with nobody in it: the beach tape on a figure fifty metres away, the
+  // 720p one on an empty garden. The cause is in the beat itself -- the closing
+  // shot said "one last look across the place, camera drifting and settling"
+  // and never named the subject, so the model read "settle" as THE CAMERA COMES
+  // TO REST ON THE SCENE. That is a fair reading of the word and it is not what
+  // somebody who paid for a tape of themselves wants as the final image.
+  const { prompt } = composeReferencePrompt({ place, outfit });
+  const shots = prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
+  assert.ok(shots.length >= 3, 'no shot list to check');
+
+  const last = shots[shots.length - 1];
+  assert.match(last, /\b(them|they|their)\b/i,
+    `the closing shot never names the subject, so the tape can end on an empty frame: ${last}`);
+});
+
+test('at most one shot in the arc is the place without the person', () => {
+  // THE PLACE SHOT IS DELIBERATE AND STAYS. Paul asked for it in as many words
+  // -- "it has to be running toward the streets, the beach view, and
+  // everything" -- and a shot list that never leaves the subject is a portrait
+  // in six pieces. What was never priced is how much of a fifteen-second
+  // product it costs: measured, the customer was absent from 27% of the beach
+  // tape and 53% of the 720p one. One beat is the view; the rest have them in
+  // it.
+  for (const seconds of [15, 12, 6]) {
+    const { prompt } = composeReferencePrompt({ place, outfit, seconds });
+    const shots = prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
+    const empty = shots.filter((s) => !/\b(them|they|their)\b/i.test(s));
+    assert.ok(empty.length <= 1,
+      `${seconds}s: ${empty.length} shots have no subject in them, which is how half a tape `
+      + `ends up without the customer:\n${empty.join('\n')}`);
+  }
+});
