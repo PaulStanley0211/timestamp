@@ -185,15 +185,39 @@ app-level backup copies the three directories that cannot be regenerated —
 accounts, owners, refunds — and deliberately nothing else (no photographs
 travel; see `scripts/ops/backup.mjs`). Nightly, on the host:
 
+**THE DESTINATION MUST BE OWNED BY uid 1000 AND THIS LINE USED TO OMIT IT.**
+The image runs as `USER node` (uid 1000), so a `/var/backups/timestamp` created
+by root is unwritable and the backup dies on `EACCES: permission denied, mkdir`
+— measured on the box 2026-09-01, running the line exactly as it was published
+here. **It is §34B's fresh-volume bug in a second place**, and it would have
+failed silently at 03:10 every night into a log nobody reads. `install -d` is
+therefore part of the cron line itself rather than a one-time setup step, so the
+job is self-healing if the directory is ever lost.
+
 ```bash
 crontab -e
 # 03:10 nightly; keep two weeks
-10 3 * * * cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14 >> /var/log/timestamp-backup.log 2>&1
+10 3 * * * install -d -o 1000 -g 1000 /var/backups/timestamp && cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14 >> /var/log/timestamp-backup.log 2>&1
+```
+
+**RUN IT ONCE BY HAND BEFORE TRUSTING THE SCHEDULE** — everything after
+`crontab -e` in the line above is invisible until 03:10, and a backup that has
+never been observed working is not a backup:
+
+```bash
+install -d -o 1000 -g 1000 /var/backups/timestamp
+cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups \
+  web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14
+find /var/backups/timestamp -type f          # accounts/, _index/, _free-tapes.json, backup.json
 ```
 
 `/var/backups/timestamp` is on the host filesystem, outside the volume —
 `backup-cli` refuses a destination inside the root it protects. For offsite,
 rsync that directory anywhere; it contains no media and no faces.
+
+**IT DOES NOT COVER THE THREE `.env` FILES**, deliberately (§7 splits them and
+they hold every live credential). Only Hetzner's disk-level backup in §1 would
+carry those, which is most of the argument for paying for it.
 
 ### Restore
 

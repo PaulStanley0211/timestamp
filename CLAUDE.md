@@ -91,8 +91,20 @@ one genuinely unbuilt thing~~ — **BUILT 2026-09-01, §52, AND DELIBERATELY OFF
 Rekognition sits behind the seam, tested, unconfigured. **DO NOT SET THE THREE
 AWS VARIABLES YET: the privacy page says the photograph goes to fal.ai "and to
 nobody else", and that sentence stops being true the moment they exist.** The
-page, a DPA and the processor list come first. Backups are deliberately off
-until real money moves.
+page, a DPA and the processor list come first. ~~Backups are deliberately off
+until real money moves.~~ **THE APP-LEVEL BACKUP IS ON AS OF 2026-09-01** —
+nightly at 03:10 on the box, accounts/owners/refunds, keep 14, proved by running
+it once by hand rather than waiting for the schedule. **The runbook's own cron
+line could not work as published**: the image runs as uid 1000 and a root-owned
+destination dies on `EACCES`, which is §34B's fresh-volume bug in a second place
+and would have failed every night into a log nobody reads. Fixed in
+`docs/deploy-runbook.md` §5. **HETZNER'S DISK-LEVEL BACKUP IS STILL OFF and is
+the owner's** (~€4.76/mo, 20% of the server) — it is the only thing that would
+carry the three `.env` files, which the app-level backup deliberately does not.
+
+**`TIMESTAMP_TRUST_PROXY=1` IS SET ON THE BOX — §51E's owed verification is
+CLOSED**, checked on the running web container 2026-09-01. The auth limiter
+keys on each visitor's forwarded address, not one bucket for the whole internet.
 
 **THE SERVER COSTS €23.79/mo, NOT €5.** §34A's price table is stale by 5x: the
 CX line it quotes is "temporarily not available" everywhere, so the box is a
