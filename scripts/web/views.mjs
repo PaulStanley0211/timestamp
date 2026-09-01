@@ -1682,44 +1682,76 @@ export function resultPage({ view, account = null, labels = {} }) {
   const raster = Number.isFinite(tape?.width) && Number.isFinite(tape?.height)
     ? `${tape.width}x${tape.height}${(view.input?.aspect ?? '4:3') === '4:3' ? ' PAL' : ''}`
     : null;
+  // THE SPEC LINE LOSES ITS DURATION AND KEEPS EVERYTHING ELSE. A frame count
+  // and a raster are facts a customer has no use for on the page where they
+  // meet a memory, so the line demotes below the buttons rather than captioning
+  // the picture -- but it is not deleted, because it is the only place the tape
+  // says what it physically is. `metaLineOf` in the tests reads `class="meta"`
+  // exactly, which is why the demotion is a stylesheet change and not a second
+  // class here.
   const metaLine = [
-    seconds ? `${Number(seconds).toFixed(3)} seconds` : null,
     view.result?.frames ? `${view.result.frames} frames` : null,
     raster,
   ].filter(Boolean).join(' · ');
+
+  // The runtime moves ONTO the label, in words, because "15 seconds" is a
+  // thing somebody says about a tape and "15.000 seconds" is a thing an
+  // assertion says about a file. Rounded for the same reason.
+  const runtime = Number.isFinite(Number(seconds)) && Number(seconds) > 0
+    ? `${Math.round(Number(seconds))} seconds`
+    : null;
+  const labelSub = [labels.outfit ?? view.input?.outfit ?? null, runtime].filter(Boolean).join(' · ');
   const body = `
 <main>
   <section class="panel">
   <p class="stamp">${h(view.jobId)}</p>
-  <p class="eyebrow">${h(stampDate(view.jobId))}</p>
-  <h1 class="headline">Here it is</h1>
 
+  ${/* THE PICTURE OPENS THE PAGE. There was an eyebrow and an <h1> saying
+       "Here it is" above this, which captioned something already on the
+       screen -- the clearest kind of filler. The naming that heading was
+       doing badly is done properly by the label below, which is also where
+       the date went. */''}
   <div class="player">
     <video controls playsinline preload="metadata"
            poster="/api/jobs/${h(view.jobId)}/poster"
            src="/api/jobs/${h(view.jobId)}/video"></video>
   </div>
 
-  <p class="meta">${h(metaLine)}</p>
-
-  <p class="inputs">
-    <span class="k">Where</span> <span class="v">${h(labels.place ?? view.input.place)}</span><br>
-    <span class="k">Wearing</span> <span class="v">${h(labels.outfit ?? view.input.outfit)}</span>
+  ${/* THE LABEL IS THE OBJECT THIS PRODUCT IMITATES. A cassette carries a
+       label saying where and when, and so does this: place, then outfit and
+       runtime, then the date in the accent. It replaces the old eyebrow, the
+       old headline and the two-row Where/Wearing table with one element that
+       carries all of it -- and it is a fill rather than a box, so DESIGN.md's
+       no-borders rule is untouched. The human labels, never the preset ids:
+       this is the most-read line on the page and therefore the worst place to
+       leak `schrebergarten-august` at somebody. */''}
+  <p class="label">
+    <span class="lname">${h(labels.place ?? view.input.place)}</span>
+    <span class="lsub">${h(labelSub)}</span>
+    <span class="ldate">${h(stampDate(view.jobId))}</span>
   </p>
-
-  ${/* EU AI Act Art. 50: the disclosure lives on the page where a person
-       meets the content, not only in file metadata a browser never shows.
-       The file-side half is the provenance tags in scripts/audio/mix.mjs. */''}
-  <p class="fine">Made with AI &mdash; a generative model built this scene from your photograph. It did not happen.</p>
 
   <p class="actions">
     ${/* Both halves on purpose: the download attribute is what a same-origin
          click uses, and ?download=1 makes the server send Content-Disposition,
          so the file still arrives named correctly when the attribute is ignored
-         (right-click save-as, an in-app browser, a copied link). */''}
+         (right-click save-as, an in-app browser, a copied link).
+
+         IT COMES BEFORE THE FINE PRINT NOW. It is the reason the page exists
+         and it used to sit last, underneath the Art. 50 sentence, so the final
+         thing on the payoff page was a disclaimer rather than the tape. */''}
     <a class="go" href="/api/jobs/${h(view.jobId)}/video?download=1" download="timestamp-${h(view.jobId)}.mp4">Download</a>
     <a class="quiet" href="/">Make another</a>
   </p>
+
+  <p class="meta">${h(metaLine)}</p>
+
+  ${/* EU AI Act Art. 50: the disclosure lives on the page where a person
+       meets the content, not only in file metadata a browser never shows.
+       The file-side half is the provenance tags in scripts/audio/mix.mjs.
+       It stays VISIBLE and it stays on this page -- moving the download above
+       it changes the order and nothing else. */''}
+  <p class="fine">Made with AI &mdash; a generative model built this scene from your photograph. It did not happen.</p>
   </section>
 </main>
 `;

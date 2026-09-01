@@ -1948,6 +1948,59 @@ input[type="file"]::file-selector-button {
 .player video { width: 100%; height: auto; display: block; background: ${PALETTE.ground}; }
 .meta { font-family: var(--osd); color: var(--faint); letter-spacing: 0.12em; font-size: var(--t-1); margin: 0.8rem 0 1.5rem; }
 
+/* THE TAPE LABEL -- the payoff page's one signature moment.
+
+   A FILL, NOT A BOX, which is what keeps DESIGN.md's single rule intact: no
+   borders, no rules, no dividers, and grouping is done with depth and space.
+   The wash is the same warm step off the paper that the panels already use,
+   so this introduces no colour the palette did not have.
+
+   The date takes the accent because on this page the date IS the product --
+   it is the one place the single accent means "this is the thing you chose",
+   the same job it does on a struck option everywhere else. */
+.label {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  column-gap: 1rem;
+  background: var(--lift);
+  border-radius: var(--r-sm);
+  padding: 0.75rem 0.9rem 0.8rem;
+  margin: 0.6rem 0 0;
+}
+.label .lname { font-weight: 600; letter-spacing: -0.01em; }
+.label .lsub {
+  grid-column: 1; grid-row: 2;
+  color: var(--faint); font-size: var(--t-label);
+}
+.label .ldate {
+  grid-column: 2; grid-row: 1 / span 2;
+  font-family: var(--osd); font-size: var(--t-2);
+  color: var(--accent); letter-spacing: 0.06em; white-space: nowrap;
+}
+
+/* ON A PHONE THE DATE TAKES ITS OWN LINE. The date column is fixed-width and
+   never wraps, so on a narrow screen it squeezes the place name into a ragged
+   two-line wrap beside it -- measured at 375px, the commonest phone width and
+   one of the six this project tests: 'The garden, in / summer'. Stacked, the
+   date reads as the top line of the label, which is where a real cassette
+   label carries it. The DOM order is unchanged, so a screen reader still hears
+   the place first; only the painting order moves. */
+@media (max-width: 27rem) {
+  .label { grid-template-columns: 1fr; }
+  .label .ldate { grid-column: 1; grid-row: 1; }
+  .label .lname { grid-column: 1; grid-row: 2; }
+  .label .lsub { grid-column: 1; grid-row: 3; }
+}
+
+/* THE SPEC LINE DEMOTES ON THE PAYOFF PAGE ONLY. A frame count and a raster
+   are true and a customer has no use for them where they meet a memory, so
+   here the line sits under the buttons at the ghost floor instead of
+   captioning the picture. It is a stylesheet change rather than a second
+   class because the tests read 'class="meta"' exactly -- and because where a
+   fact sits in the hierarchy is a design decision, not a markup one. */
+.page-result .meta { font-size: var(--t-label); margin: 1.1rem 0 0.6rem; }
+
 /* --- buttons and links ------------------------------------------------- */
 
 .go {

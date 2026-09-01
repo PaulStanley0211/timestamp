@@ -1100,3 +1100,105 @@ test('no page ships its own design rationale to the browser', () => {
     'these pages send design rationale to the browser -- move it out of the ' +
     `template literal into a JS comment, where the source keeps it and the wire does not:\n${offenders.join('\n')}`);
 });
+
+test('the finished tape carries a label, the way a cassette does', () => {
+  // THE SIGNATURE MOMENT OF THE PAYOFF PAGE. What a customer waited and paid
+  // for is an object, and the object this product imitates has a label on it
+  // saying where and when. Place, outfit and date were previously spread over
+  // an eyebrow, an <h1> and a two-row Where/Wearing table; one label carries
+  // all of it and is the thing the picture sits on.
+  const html = resultPage({
+    view: {
+      jobId: '20260901-143022-8f2a1c',
+      status: 'done',
+      result: { durationSeconds: 15, frames: 375, tape: { width: 720, height: 576 } },
+      input: { place: 'schrebergarten-august', outfit: 'trainingsjacke', aspect: '4:3' },
+    },
+    labels: { place: 'The garden, in summer', outfit: 'Tracksuit jacket' },
+  });
+
+  const label = html.match(/<p class="label">([\s\S]*?)<\/p>/);
+  assert.ok(label, 'the result page renders no tape label');
+  const text = label[1];
+
+  assert.match(text, /The garden, in summer/, 'the label must name the place');
+  assert.match(text, /Tracksuit jacket/, 'the label must name the outfit');
+  assert.match(text, /01\.09\.2026/, 'the label must carry the date, which is the product');
+
+  // THE HUMAN LABELS, NOT THE PRESET IDS. `labels` exists precisely so a
+  // customer never meets `schrebergarten-august`, and the label is the most
+  // read thing on the page -- so it is the worst place to leak an id.
+  assert.doesNotMatch(text, /schrebergarten|trainingsjacke/,
+    'the label is showing preset ids to a customer');
+});
+
+test('the download comes before the legal line, not after it', () => {
+  // IT IS THE REASON THE PAGE EXISTS. It used to sit last, beneath the Art. 50
+  // sentence -- so the final thing on the payoff page was a disclaimer rather
+  // than the tape. Order is the whole assertion here; both elements existed
+  // before and still do.
+  const html = resultPage({
+    view: {
+      jobId: '20260901-143022-8f2a1c',
+      status: 'done',
+      result: { durationSeconds: 15, frames: 375, tape: { width: 720, height: 576 } },
+      input: { place: 'ostsee-strand', aspect: '4:3' },
+    },
+  });
+
+  const download = html.indexOf('download="timestamp-');
+  const fine = html.indexOf('Made with AI');
+
+  assert.ok(download > -1, 'the download link is gone entirely');
+  assert.ok(fine > -1, 'the Art. 50 disclosure is gone entirely -- it is not optional');
+  assert.ok(download < fine,
+    'the download must precede the disclosure; the page ends on a disclaimer instead of the tape');
+});
+
+test('the payoff page does not caption the tape with a heading', () => {
+  // "Here it is" announced something already on the screen. A caption for a
+  // visible picture is the clearest kind of filler, and deleting it lets the
+  // picture open the page -- which is what the picture is for. The label two
+  // elements down now carries the naming this heading was doing badly.
+  const html = resultPage({
+    view: {
+      jobId: '20260901-143022-8f2a1c',
+      status: 'done',
+      result: { durationSeconds: 15, frames: 375, tape: { width: 720, height: 576 } },
+      input: { place: 'ostsee-strand', aspect: '4:3' },
+    },
+  });
+
+  // PRESENT FIRST, so this cannot pass against a page that lost its player.
+  assert.match(html, /<video/, 'the result page renders no player at all');
+  assert.ok(!/Here it is/.test(html), 'the tape is still being captioned by a heading');
+});
+
+test('nothing in the soft tier is also ghosted', () => {
+  // SECTION 31 SOLVED THE GHOST FLOOR FOR `--ink` AND FOR NOTHING ELSE. 0.63 is
+  // the least opacity at which `--ink` still clears 4.5:1 over `--paper`, and
+  // it lands on 4.55:1. The soft tier starts at 4.85:1 with no opacity on it at
+  // all, so multiplying it by the floor drops it straight through: measured,
+  // `--faint` at `--ghost` over paper is 2.45:1, which is a real AA failure on
+  // body text.
+  //
+  // IT FAILS QUIETLY, WHICH IS WHY IT NEEDS A TEST. A ghost is supposed to look
+  // faint, so nothing looks wrong -- and this exact combination shipped in the
+  // result page's spec line and survived a full 2021-test run before a contrast
+  // calculation caught it. Section 31 states the rule in words ("hierarchy
+  // inside a card is carried by SIZE, which survives being multiplied by an
+  // opacity, and not by colour, which does not"); this is the rule with teeth.
+  const sheet = createStylesheet({});
+  const css = typeof sheet === 'string' ? sheet : sheet.css;
+
+  const rules = css.match(/[^{}]+\{[^{}]*\}/g) || [];
+  const offenders = rules
+    .filter((r) => /opacity:\s*var\(--ghost\)/.test(r))
+    .filter((r) => /color:\s*var\((--faint|--ink-soft|--l-dim)\)/.test(r))
+    .map((r) => r.replace(/\s+/g, ' ').trim().slice(0, 120));
+
+  assert.deepEqual(offenders, [],
+    'these rules ghost text that is already in the soft tier -- the floor was ' +
+    'solved for --ink alone, and the product is about 2.45:1. Demote by size ' +
+    `or position instead:\n${offenders.join('\n')}`);
+});
