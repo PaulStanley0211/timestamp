@@ -3994,6 +3994,18 @@ export function createServer({
      * arriving mid-render would be applied to a step that has already run.
      */
     async select(req, res, { params, account }) {
+      // Same gate as `createJob` and `checkout`, and for the same reason: this
+      // is a state-changing POST that commits work. It records the choice,
+      // flips the job to `running` and re-enqueues it. The header check comes
+      // first, before the ownership lookup and before the body is drained, so
+      // a forgery costs a header comparison and nothing else.
+      //
+      // `sameOriginPost` and not the full anti-forgery pair: the contact sheet
+      // is a plain form carrying no token, exactly as at `checkout` -- see the
+      // reasoning there. `SameSite=Lax` on the session cookie already stops the
+      // browser case, but that is a cookie attribute defined in another file
+      // and this route should not depend on it silently.
+      if (!sameOriginPost(req)) return refuseCrossSite(req, res);
       const job = ownedJob(account, params.id);
 
       // The body is drained BEFORE the refusals, even though a 409 does not need

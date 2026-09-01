@@ -1996,6 +1996,55 @@ test('POST select records the 1-based index and re-enqueues', async () => {
   });
 });
 
+test('a select naming a foreign origin is refused before the job moves', async () => {
+  // `select` is the second and last place the web process writes a manifest:
+  // it records the choice, flips the job to `running` and puts it back on the
+  // queue. Every other state-changing POST in this app opens on the same-origin
+  // gate; this one reached the write with only the ownership check. Today the
+  // session cookie is `SameSite=Lax`, so a cross-site POST arrives with no
+  // session and the dispatcher 303s to /login before the handler runs -- which
+  // is exactly why the gap was invisible. The gate is asserted here so it does
+  // not depend on a cookie attribute defined three files away.
+  await withServer(async ({ base, root, queue, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'awaiting-selection', owner: accountA });
+    writeStills(root, job.jobId, [1, 2, 3]);
+
+    const forged = await fetch(`${base}/api/jobs/${job.jobId}/select`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: cookieA,
+        origin: 'https://evil.example',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({ stillIndex: 1 }),
+    });
+    assert.equal(forged.status, 403, 'a cross-site select must be refused');
+    assert.equal((await forged.json()).error.code, 'NOT_FROM_THIS_SITE');
+
+    const after = loadJob({ root, jobId: job.jobId });
+    assert.equal(after.status, 'awaiting-selection', 'a refused forgery must not move the job');
+    assert.equal(after.selection?.stillIndex ?? null, null, 'a refused forgery must not record a choice');
+    assert.deepEqual(queue.calls.enqueued, [], 'a refused forgery must not reach the queue');
+
+    // The submission this gate exists to keep working: the contact-sheet form
+    // is same-origin and carries no token, so `sameOriginPost` is the gate and
+    // the full anti-forgery pair would break it.
+    const genuine = await fetch(`${base}/api/jobs/${job.jobId}/select`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: cookieA,
+        'sec-fetch-site': 'same-origin',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({ stillIndex: 1 }),
+    });
+    assert.equal(genuine.status, 200, 'the real contact-sheet submission must still work');
+    assert.deepEqual(queue.calls.enqueued, [job.jobId], 'and it must still reach the queue');
+  });
+});
+
 test('an out-of-range still index is a 400 and never a clamp', async () => {
   await withServer(async ({ base, root, app, accountA, cookieA }) => {
     const job = seedJob(app, root, { status: 'awaiting-selection', owner: accountA });
