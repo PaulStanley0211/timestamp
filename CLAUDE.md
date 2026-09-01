@@ -6167,11 +6167,19 @@ from "this exists" would start missing real ones.
 
 #### E -- What is left of it
 
-**ONE ITEM IS OPEN FROM THIS AUDIT AND IT IS NOT DESCRIBED HERE.** It is a
+~~**ONE ITEM IS OPEN FROM THIS AUDIT AND IT IS NOT DESCRIBED HERE.** It is a
 MEDIUM, it is infrastructure rather than code, it needs a compose change and a
-deploy rather than a commit, and it is written up in
-`.gstack/security-reports/2026-09-01-101000.json`. **Read that file before
-touching `compose.yaml`.**
+deploy rather than a commit.~~ **CLOSED IN THE CODE 2026-09-01, `c49ac96` —
+each container now gets only the secrets its own process reads, three env files
+instead of one. IT IS NOT CLOSED ON THE BOX UNTIL THE FILES ARE SPLIT THERE:
+the runbook §1 step 3 carries the migration, and until it runs the deployed
+containers still share one file.** Which side each key belongs on was measured
+rather than reasoned — a worker with no secrets at all rendered a complete tape
+— and the write-up stays in `.gstack/security-reports/2026-09-01-101000.json`.
+
+**SO EVERY FINDING FROM THAT AUDIT IS NOW EITHER CLOSED OR A RECORDED
+DECISION**, and the two that are decisions are the published commit messages
+(§51C, accept) and the image classifier (§52, built and deliberately off).
 
 **And one verification is owed that could not be made from this machine:**
 confirm `TIMESTAMP_TRUST_PROXY=1` is genuinely set in `/opt/timestamp/.env` on
