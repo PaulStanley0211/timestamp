@@ -669,13 +669,13 @@ export function pricingPage({
     You spend credits, and how many depends on the size the video is generated at before
     the tape gets hold of it, and on the frame you choose.</p>
     <p class="hint">${costs || 'Costs are unavailable right now.'}</p>
-    <!-- THE LISTED PRICE IS BEFORE TAX, AND THE PAGE HAS TO SAY SO (2026-08-31).
+    ${/* THE LISTED PRICE IS BEFORE TAX, AND THE PAGE HAS TO SAY SO (2026-08-31).
          Measured in the Stripe dashboard rather than assumed: a $12 pack shows a
          German buyer a $14.28 total, VAT added on top and remitted for us.
          It is stated here rather than folded into the price because this is sold
          worldwide and the rate follows the BUYER -- 19% in Germany, nothing in
          much of the world. There is no single final price that would be true for
-         everyone, so a number printed here would be a lie somewhere. -->
+         everyone, so a number printed here would be a lie somewhere. */''}
     <p class="hint">Prices are before tax. VAT or sales tax is added at checkout where it
     applies, at the rate for the country you are in, and the total is shown to you before
     you pay.</p>

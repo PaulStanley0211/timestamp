@@ -11,6 +11,26 @@
  * and `<img src=x onerror=...>` in the outfit box is the first thing anybody
  * tries.
  *
+ * WHY THE RATIONALE LIVES IN AN INTERPOLATION SLOT AND NEVER IN AN HTML COMMENT.
+ * The shape is a dollar-brace interpolation containing a JS block comment and an
+ * empty string literal -- written out here in words rather than in syntax,
+ * because the closing sequence of a block comment cannot appear inside this one
+ * without ending it. That trap is real and it fired while this note was being
+ * written.
+ * These files argue with themselves on purpose -- the reasoning beside a rule is
+ * what stops the rule being undone by somebody who cannot see why it exists --
+ * and that argument is for whoever EDITS this file, never for whoever visits the
+ * site. An HTML comment inside a template literal is the same words shipped to
+ * every browser: measured on the live landing page 2026-09-01, 5,060 of 26,166
+ * bytes, 19.3%, and the cost was never the bytes. One of them quoted verbatim a
+ * promise the product had DELETED -- "You approve a still before any video is
+ * made" -- so anyone opening View Source read a guarantee this product does not
+ * make. An interpolation slot holding a block comment evaluates to the empty
+ * string, which keeps the note exactly where the markup it explains lives while
+ * sending nothing. `test/web-static.test.js` fails on any `<!--` that reaches a
+ * rendered page, and the rule is ZERO rather than a budget: a percentage ceiling
+ * only invites the next author to spend up to it.
+ *
  * WHY THE PAGES ARE PURE STRINGS AND KNOW NOTHING ABOUT `res`. A view that takes
  * a response object can only be tested by faking one. A view that returns a
  * string can be asserted on directly, which is how `test/web-api.test.js` checks
@@ -828,7 +848,7 @@ ${backgrounds}
       </ul>
       <p class="strike-hint">Strike one</p>
 
-      <!-- ONE CALL TO ACTION, AND THE SECOND ONE WAS A DUPLICATE RATHER THAN A
+      ${/* ONE CALL TO ACTION, AND THE SECOND ONE WAS A DUPLICATE RATHER THAN A
            CHOICE. "I have an account" pointed at /login, and the signed-out
            masthead six lines up in nav() already carries a "Sign in" link to
            the same place -- so the hero was asking the visitor to choose
@@ -836,7 +856,7 @@ ${backgrounds}
            Two calls to action of near-equal weight is the clearest slop tell
            there is: it reads as a page that could not decide what it wanted,
            and it halves the emphasis on the one that matters. Nothing is lost
-           by deleting it, which is why it goes rather than getting quieter. -->
+           by deleting it, which is why it goes rather than getting quieter. */''}
       <p class="hero-do">
         <a class="cta" href="/signup">Make a tape &rarr;</a>
       </p>
@@ -846,17 +866,17 @@ ${backgrounds}
     </div>
   </section>
 
-  <!-- THE READ-OUT MOVED OUT OF THE PANEL AND ONTO THE PICTURE, which is where
+  ${/* THE READ-OUT MOVED OUT OF THE PANEL AND ONTO THE PICTURE, which is where
        a camcorder actually put it. It used to sit in the corner of the 4:3 veil
        that framed the place; that veil is gone, because the place is now behind
        the whole page and showing the same photograph twice at two sizes and two
        crops is one picture too many. Kept inside .wrap so the generated
-       "#pl-x:checked ~ .wrap .losd--x" rules still reach it. -->
+       "#pl-x:checked ~ .wrap .losd--x" rules still reach it. */''}
   <div class="losds" aria-hidden="true">${osds}
   </div>
 
   <section class="how">
-    <!-- THIS WAS THREE EQUAL COLUMNS AND IT WAS THE ONLY TEMPLATED THING ON THE
+    ${/* THIS WAS THREE EQUAL COLUMNS AND IT WAS THE ONLY TEMPLATED THING ON THE
          PAGE. §33's design review named it: a three-column 1fr grid of
          number + heading + one line is the canonical AI-generated landing
          layout, and it was "the only section on that page that reads
@@ -874,7 +894,7 @@ ${backgrounds}
          AND THE NUMBERS ARE GONE, which matters more than it looks. 01/02/03
          promised a SEQUENCE, and these are not steps -- they are three facts
          about one thing. Numbering them was the page pretending to be a
-         process, and a false sequence is its own small dishonesty. -->
+         process, and a false sequence is its own small dishonesty. */''}
     <div class="how-lead">
       <h2 class="how-t">Texture</h2>
       <p class="how-d">Chroma bleed, grain, the head-switch band, transport jitter, the
@@ -895,7 +915,7 @@ ${backgrounds}
   </section>
 
   <section class="plain">
-    <!-- The sentence that used to close this paragraph promised "You approve a
+    ${/* The sentence that used to close this paragraph promised "You approve a
          still before any video is made, so a likeness you do not recognise costs
          you nothing." It was true of the still path and false from the day the
          web app went direct (server.mjs sets direct: true for a paid provider,
@@ -904,7 +924,7 @@ ${backgrounds}
          rather than reworded: whether a customer gets anything back for a
          likeness they do not recognise is a REFUND POLICY, and inventing one in
          marketing copy is how the first claim got here. test/web-static.test.js
-         sweeps every page for it coming back. -->
+         sweeps every page for it coming back. */''}
     <p>It is not a filter. The picture is generated, then run through a real tape chain
     in ffmpeg &mdash; the grain goes on before the upscale, the date stamp degrades with
     the image, and the frame is matted the way a camcorder frame actually sat.</p>
@@ -912,7 +932,7 @@ ${backgrounds}
 
 </main>
 
-  <!-- SIGNING IN HAPPENS HERE, NOT ON ANOTHER PAGE. A returning visitor was
+  ${/* SIGNING IN HAPPENS HERE, NOT ON ANOTHER PAGE. A returning visitor was
        being sent away from the only page that sells to type a password on a
        different one. The dialog is rendered on the landing and opened in
        place; /login still exists and still works, and is exactly where the
@@ -926,17 +946,17 @@ ${backgrounds}
        Both forms carry the anti-forgery pair, exactly as /login does -- the
        token is minted by the landing route and the cookie rides with the
        response. Without a token neither form renders, so a page built without
-       one cannot show a control that is guaranteed to 403. -->
+       one cannot show a control that is guaranteed to 403. */''}
   <dialog id="signin" class="signin" aria-labelledby="signin-t">
     <div class="signin-box">
       <button type="button" class="signin-x" data-signin-close aria-label="Close">&times;</button>
-      <!-- "WELCOME TO TIMESTAMP", NOT "WELCOME BACK". This dialog opens on the
+      ${/* "WELCOME TO TIMESTAMP", NOT "WELCOME BACK". This dialog opens on the
            LANDING, which is the page strangers arrive on -- so a greeting that
            assumes you have been here before is wrong for most of the people who
            will read it, and it quietly tells a first-time visitor they are in
            the wrong place. The subtitle had the same fault and moved with it:
            "your shelf is where you left it" means nothing to somebody who does
-           not have one yet. Both doors are named instead. -->
+           not have one yet. Both doors are named instead. */''}
       <h2 class="signin-t" id="signin-t">Welcome to Timestamp</h2>
       <p class="signin-sub">Sign in, or start a shelf.</p>
 
@@ -951,12 +971,12 @@ ${backgrounds}
       <form method="post" action="/login" class="signin-form">
         <input type="hidden" name="csrf" value="${h(csrf)}">
         <label class="signin-l" for="signin-email">Email</label>
-        <!-- AUTOFOCUS BECAUSE showModal() OTHERWISE FOCUSES THE CLOSE BUTTON.
+        ${/* AUTOFOCUS BECAUSE showModal() OTHERWISE FOCUSES THE CLOSE BUTTON.
              It takes the first focusable child, which is the X -- so the first
              thing a keyboard user met on opening the dialog was "leave", ringed
              and ready to activate on Enter. Measured: activeElement came back
              as .signin-x. The email field is what somebody who just clicked
-             Sign in actually wants. -->
+             Sign in actually wants. */''}
         <input class="signin-i" id="signin-email" name="email" type="email" autocomplete="username" autofocus required>
         <label class="signin-l" for="signin-password">Password</label>
         <input class="signin-i" id="signin-password" name="password" type="password" autocomplete="current-password" required>
@@ -1188,7 +1208,7 @@ export function homePage({
 <main>
 ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
 
-<!-- THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
+${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
      markup and on the screen at once. It opened on a paragraph and then four
      sibling <h2>s of equal size, so a screen reader met four headings with
      nothing above them and an eye met four boxes with nothing above them: the
@@ -1196,17 +1216,17 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
      strangers ("one thing is the subject -- the sentence -- and it is several
      times the size of everything else"); the signed-in page never got the same
      treatment. The copy is not new: it is Paul's existing lede, split at the
-     full stop that was already in it. -->
+     full stop that was already in it. */''}
 <div class="app-head">
   <h1 class="app-h1">One photo, one look, one place.</h1>
-  <!-- "in a German suburb" came out on 2026-08-31. It was the first sentence a
+  ${/* "in a German suburb" came out on 2026-08-31. It was the first sentence a
        signed-in customer reads, and it told everyone who is not in Germany that
        this product is about somewhere else -- on the page where they are about
        to upload their own face and describe their own kitchen. Section 42F took
        the country out of the place menu and the prompts and left this behind.
        Nothing is added in its place: the copy is still Paul's, split at the full
        stop that was already in it, and a replacement clause would be new
-       marketing rather than a de-nationalised lede. -->
+       marketing rather than a de-nationalised lede. */''}
   <p class="lede">Fifteen seconds that look like they came off a camcorder tape,
   some time around 2003.</p>
 </div>
@@ -1238,7 +1258,7 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
   <section class="panel panel--choice">
     ${stepHead(3, 'The place', 'Your own place beats any description of one. Start there.')}
 
-    <!-- STEP 3 LEADS WITH YOUR OWN PLACE (2026-08-30).
+    ${/* STEP 3 LEADS WITH YOUR OWN PLACE (2026-08-30).
          The 2026-08-20 scope change calls the user's own place "the strongest
          version of this product", and both controls that deliver it used to sit
          at the BOTTOM of this panel, behind the menu: the upload was revealed
@@ -1250,18 +1270,18 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
          back of the room.
          So the block is FIRST and the pl-own radio is checked on load. The rule
          it rides on is unchanged; what changed is that its condition is now
-         true when the page arrives. No JavaScript, exactly as before. -->
+         true when the page arrives. No JavaScript, exactly as before. */''}
     <div class="ownplace">
       <p class="hint">A photograph of the place &mdash; your actual back garden, the kitchen
       you remember. Used as a second reference alongside your face.</p>
-      <!-- §43D CLOSED. This was a bare native "Choose File" sitting directly
+      ${/* §43D CLOSED. This was a bare native "Choose File" sitting directly
            across from step 1's designed dropzone, and it was left that way
            deliberately: .drop hides its real input at opacity 0 and names the
            chosen file through HOME_SCRIPT, so styling this one WITHOUT the
            script half would have given less feedback than the native control it
            replaced. The script half now exists, so the control can match.
            A slim variant rather than the 15rem original: this is the second
-           upload in a step, not the subject of one. -->
+           upload in a step, not the subject of one. */''}
       <label class="drop drop--slim" for="placePhoto">
         <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp"
                aria-label="A photograph of the place">
@@ -1274,18 +1294,18 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
              placeholder="my grandmother&#39;s kitchen" value="${h(values.place)}">
     </div>
 
-    <!-- The rail is EXAMPLES now, and the prose has to say so -- §36A's lesson
+    ${/* The rail is EXAMPLES now, and the prose has to say so -- §36A's lesson
          that prose is a consumer of a change like any other. The <label> is the
          same trick it always was: it targets #pl-own exactly as the card does,
          so one line of prose comes back to your own place, re-reveals the
          block and moves the carousel dot, with no JavaScript anywhere. It is
          the way BACK now rather than the way in, because a radio group cannot
-         be cleared any other way. -->
+         be cleared any other way. */''}
     <p class="hint escape">No photograph of it, and nothing in mind? Start from one of
       these instead &mdash; or come back to
       <label class="linky" for="pl-own">your own place</label> at any point.</p>
 
-    <!-- TWO CARDS IN ONE SLOT, AND EXACTLY ONE OF THEM IS EVER IN THE RAIL
+    ${/* TWO CARDS IN ONE SLOT, AND EXACTLY ONE OF THEM IS EVER IN THE RAIL
          (2026-08-31). Reported by the owner: clicking the own-place card did
          nothing. It was a <label for="pl-own"> and §43 made pl-own CHECKED ON
          LOAD, so in the state every visitor arrives in it pointed at a radio
@@ -1303,7 +1323,7 @@ ${error ? `<p class="alert" role="alert">${h(error.message)}</p>` : ''}
          One input, two labels, which is valid and deliberate: whichever is
          clicked opens the same picker and fills the same field, so nothing
          downstream has to know which one a person used. The input keeps its own
-         aria-label, so neither label renames it. -->
+         aria-label, so neither label renames it. */''}
     <div class="rail">
     <label class="placecard placecard--own placecard--own-pick" for="pl-own">
       <span class="thumb" aria-hidden="true"></span>
@@ -1687,16 +1707,16 @@ export function resultPage({ view, account = null, labels = {} }) {
     <span class="k">Wearing</span> <span class="v">${h(labels.outfit ?? view.input.outfit)}</span>
   </p>
 
-  <!-- EU AI Act Art. 50: the disclosure lives on the page where a person
+  ${/* EU AI Act Art. 50: the disclosure lives on the page where a person
        meets the content, not only in file metadata a browser never shows.
-       The file-side half is the provenance tags in scripts/audio/mix.mjs. -->
+       The file-side half is the provenance tags in scripts/audio/mix.mjs. */''}
   <p class="fine">Made with AI &mdash; a generative model built this scene from your photograph. It did not happen.</p>
 
   <p class="actions">
-    <!-- Both halves on purpose: the download attribute is what a same-origin
+    ${/* Both halves on purpose: the download attribute is what a same-origin
          click uses, and ?download=1 makes the server send Content-Disposition,
          so the file still arrives named correctly when the attribute is ignored
-         (right-click save-as, an in-app browser, a copied link). -->
+         (right-click save-as, an in-app browser, a copied link). */''}
     <a class="go" href="/api/jobs/${h(view.jobId)}/video?download=1" download="timestamp-${h(view.jobId)}.mp4">Download</a>
     <a class="quiet" href="/">Make another</a>
   </p>

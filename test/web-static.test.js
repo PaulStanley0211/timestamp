@@ -1064,3 +1064,39 @@ test('the signup page does not promise a recurring free allowance, because there
   assert.ok(!/every month|per month|each month|monthly/i.test(html),
     'the signup page claims the free allowance recurs, and it never does');
 });
+
+test('no page ships its own design rationale to the browser', () => {
+  // WHY THIS IS A TEST AND NOT A TIDY-UP. These files are written in a register
+  // that argues with itself -- the reasoning beside a rule is what stops the
+  // rule being undone by somebody who cannot see why it exists. That register
+  // is right, and it belongs in a JS comment, which the reader of the SOURCE
+  // sees and the browser never receives. An HTML comment inside the template
+  // literal is the same words shipped to every visitor.
+  //
+  // Measured on the live landing page 2026-09-01: 5,060 of 26,166 bytes,
+  // 19.3%, in seven comments -- and one of them quoted, verbatim, a promise
+  // the product DELETED ("You approve a still before any video is made, so a
+  // likeness you do not recognise costs you nothing"). Anyone who opened View
+  // Source read a guarantee this product does not make. That is the real cost:
+  // not the bytes, a stale claim published where nobody was looking.
+  //
+  // THE RULE IS ZERO, NOT A BUDGET. A percentage ceiling invites the next
+  // author to spend up to it, and there is no such thing as an HTML comment
+  // this product needs -- every one of them is a note to its own maintainer.
+  const offenders = [];
+
+  for (const [name, html] of renderedPages()) {
+    const comments = html.match(/<!--[\s\S]*?-->/g) || [];
+    if (!comments.length) continue;
+    const bytes = comments.reduce((n, c) => n + Buffer.byteLength(c), 0);
+    const pct = ((100 * bytes) / Buffer.byteLength(html)).toFixed(1);
+    offenders.push(
+      `${name}: ${comments.length} comment(s), ${bytes} bytes (${pct}% of the page)` +
+      `\n    first: ${comments[0].replace(/\s+/g, ' ').slice(0, 90)}...`,
+    );
+  }
+
+  assert.deepEqual(offenders, [],
+    'these pages send design rationale to the browser -- move it out of the ' +
+    `template literal into a JS comment, where the source keeps it and the wire does not:\n${offenders.join('\n')}`);
+});
