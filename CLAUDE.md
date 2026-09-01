@@ -7,69 +7,108 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-08-31) — IT IS DEPLOYED AND STRIPE IS ACTIVATED. READ §46, THEN §45, §44, §43, §42, §41, §40, §39, §38, §37. (§47 is CI only — read it if CI is red. **§48 IS A LIVE PIECE OF WORK: the premium redesign is half done and the branch is AHEAD of the deployed site.**)
+## START HERE (2026-09-01) — IT IS DEPLOYED, CURRENT, AND STRIPE IS ACTIVATED. READ §49 FIRST, THEN §46, §45, §44, §43, §42, §41, §40, §39, §38, §37. (§47 is CI only — read it if CI is red.)
 
 # THE PRODUCT IS LIVE AT https://timestamptapes.com AND IT CAN TAKE MONEY.
 
-**Both of the things this file called blockers for a fortnight are closed.**
-A Hetzner box runs the app behind Caddy with a real certificate; Timestamp's
-OWN Stripe account is verified — `charges_enabled: true`,
-`payouts_enabled: true` — with both live Prices created and the webhook
-verifying signatures. **§46 is the record and it supersedes every "nobody can
-pay" and "no host chosen" line below.**
+**THE DEPLOYED SITE IS CURRENT AS OF 2026-09-01 — §49.** It was 18 commits
+behind for a day; everything from the premium pass (§48) onward had never been
+served. `origin/supabase-identity-slice`, local, and the box are all at
+`ccaea1c`. **PR #1's CI is GREEN on all five checks there**, and the browser
+tests genuinely RAN on Linux rather than self-skipping (only 2 skips, both the
+money guards). **§48's banner line saying the branch is AHEAD of the deployed
+site is HISTORY — do not act on it.**
 
 **WHAT HAS NOT HAPPENED: NO CARD HAS EVER BEEN CHARGED, AND NO WEB ORDER HAS
-EVER REACHED REAL FAL.** `worker.lastSeen` is `null` — the worker has never
-rendered a job on that box. Every piece is verified individually and the chain
-has never been run end to end with money in it. **Those two runs are the top of
-the list and they are the owner's, because they spend.** §46C.
+EVER REACHED REAL FAL.** `worker.lastSeen` is still `null` — the worker on that
+box has never claimed a single job, done 0, failed 0. Every piece is verified
+individually and the chain has never been run end to end with money in it.
+**Those two runs are the top of the list and they are the owner's, because they
+spend.** §46C, and §49I for what changed.
+
+**THE PAID PATH IS ARMED AND THERE IS NO SAFETY NET.** `/api/health` reports
+`"provider": "fal"` on the web process and `compose.yaml` hardcodes
+`--provider=fal` on the worker, so **any web order on that box reaches real fal
+and spends real money.** That is the correct production configuration; know it
+before clicking Record.
+
+**THE OWNER'S FAL BALANCE WAS $2.97 ON 2026-08-31 AND A 480p TAPE COSTS $2.0727
+(MEASURED).** Too thin for the first job that machine has ever run — a retry or
+a slightly larger delivered raster turns a clean signal into a confusing
+failure, and a request that reaches fal and fails is still billable. **He is
+topping up ~$20 on 2026-09-01 and then running the test: 480p and 4:3, nothing
+else**, because the free grant of 21 credits pays for exactly that combination
+and 16:9 or 9:16 costs 28. §49I has the checks to make afterwards.
+
+**THE FREE GRANT IS 21 AND THAT IS FINAL — the owner's words, 2026-08-31.** It
+was briefly 42 the same day and he overruled it. **21 buys ONE 480p tape in 4:3
+and nothing at all in 16:9 or 9:16**, which cost 28; the page says so before
+anybody spends an upload, and a test pins that. 28 is the number that would buy
+one tape in every shape. **Do not raise it without him.** §49B — which also
+explains why four accounts on this machine show 82, 51, 21 and 16: the ledger is
+append-only, so each keeps the grant in force the day it was made. That is the
+audit trail working, not drift.
+
+**FIVE DEFECTS SHIPPED PAST 1968 PASSING TESTS AND THE OWNER FOUND ALL OF THEM
+BY LOOKING AT THE SCREEN** (§49): the tape was still set in Germany in every
+prompt (§42F fixed the pages and missed `DEFAULT_ERA`); §43's own-place card was
+a DEAD CONTROL in the state every visitor arrives in; Sign out sat 1.8px low;
+§31's measured 9/8 poster crop became wrong the day §34D opened the frame menu,
+so a 9:16 tape was cropped to a sliver. **That is the pattern worth keeping, not
+the individual bugs.** The tapes also got a page of their own — `/videos`,
+playable and downloadable, linked from the nav as MY VIDEOS.
+
+**AGREED FOR THE NEXT SESSION, in order (§49I):** a free local fixture render as
+a dress rehearsal, so the paid run tests fal rather than our plumbing; then the
+landing page's comment bloat (§48D — 14% of that page is design rationale
+shipped to every visitor, one comment quoting a promise the product deleted);
+then the premium pass on the result and status pages, which needs the owner's
+taste and should start with mockups.
+
+**STILL THE OWNER'S, AND THE BLIND CHECK IS STILL THE ONE THAT MATTERS MOST.**
+Free, ten minutes, packet unsent at `out/blind-check/` for five sessions, and
+the only thing left that can tell us the product premise is wrong. Then an
+image-moderation vendor — `imageModerateImpl` is an honest null seam and is the
+one genuinely unbuilt thing, needed before strangers upload faces. Backups are
+deliberately off until real money moves.
 
 **THE SERVER COSTS €23.79/mo, NOT €5.** §34A's price table is stale by 5x: the
 CX line it quotes is "temporarily not available" everywhere, so the box is a
-**CPX22**. Backups are deliberately OFF until real money moves. §46A.
+**CPX22**. §46A.
 
-**THE SITE IS `noindex` ON PURPOSE** and lifting it is a deliberate step, not
-a tidy-up — the Impressum publishes a home address. §46F, §42E.
+**THE SITE IS `noindex` ON PURPOSE** and lifting it is a deliberate step, not a
+tidy-up — the Impressum publishes a home address. §46F, §42E.
 
-**1964 tests / 1962 pass / 0 fail / 2 skipped** (§46; on a machine with no
-Chromium-family browser the seven browser tests self-skip too). The two
-standing skips are the `*-smoke.test.js` money guards, which self-skip without
-`TIMESTAMP_LIVE=1`. **PR #1's CI is GREEN on all five checks at `d6ec4b6`** —
-guards plus node 22/24 x ubuntu/windows, 1964/1962/0/2 on every leg.
+**1982 tests / 1980 pass / 0 fail / 2 skipped.** The two standing skips are the
+`*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`; on a
+machine with no Chromium-family browser the browser tests self-skip too, and
+§47G's session-secret race test stands itself down when the scheduler will not
+overlap its threads — so **2 is the floor, not an invariant.**
 
-**IT WAS RED IN BETWEEN, AND NOT BECAUSE OF ANYTHING IN THE TREE.** Both Windows
-legs failed at `6bf5b1a` — a commit that changed only this file — when
-`community.chocolatey.org` answered 504 and `choco install` reported
-`installed 0/0 packages` **while exiting 0**, so the install step went green and
-the job died at the next one saying `'ffmpeg' is not recognized`. **§47** is the
-fix and the reasoning: probe for the binary, retry, and fall back to the same
-gyan.dev build chocolatey itself ships. **Read §47F before reading any future
-matrix failure as a code defect — two legs failing at the same second is an
-upstream outage, and the clock says so faster than the diff does.**
-
-**§37G'S SEVEN OWNER ITEMS ARE NOW TWO, AND BOTH ARE PAID RUNS.** The support
-mailbox and the password-reset template closed on 2026-08-30 (§42A); the
-selling entity, the deploy host, the deploy itself and Stripe verification all
-closed on 2026-08-30/31 (§46). **What is left of that list is the blind check —
-folded into the friends test by §41 — plus the two runs in §46C.**
-
-**THE SELLING ENTITY IS FILLED IN AND IT LIVES ONLY IN `.env` ON THE BOX**, per
-§42D — a sole trader's § 5 DDG address is a home address and this repository is
-public. The street is **Keplerstraße**; this file and the live site both carried
-"Kaplerstraße" for an hour because it was guessed and then confirmed by a
-leading question. §46F.
 
 ~~**THE ONE THING WITH A CLOCK ON IT IS STRIPE BUSINESS VERIFICATION.**~~
 **FILED AND APPROVED 2026-08-31 — §46B.** The account charges and pays out.
 
-**AND THE PRODUCT IS NOT ABOUT GERMANY.** The owner restated this on
-2026-08-29; the eight place labels are plain now (§42F). ~~The bigger half is
-still undone~~ — **THE BIGGER HALF LANDED 2026-08-30, §43.** Step 3 leads with
-the own-place upload and free text, `pl-own` is checked on load, and the eight
-presets follow as examples. **What is left of it is one design call and it is
-the owner's: the place upload is still a bare native `Choose File` control**
-sitting across from step 1's designed dropzone — §43D says why doing it
-properly is a script change and not a restyle.
+**AND THE PRODUCT IS NOT ABOUT GERMANY.** The owner restated this on 2026-08-29
+and again on 2026-08-31; the eight place labels are plain (§42F). ~~The bigger
+half is still undone~~ — **THE BIGGER HALF LANDED 2026-08-30, §43.** Step 3
+leads with the own-place upload and free text, `pl-own` is checked on load, and
+the eight presets follow as examples.
+
+**BUT §42F ONLY REACHED THE PAGES, AND THAT WAS NOT KNOWN UNTIL 2026-08-31.**
+`DEFAULT_ERA` still read "Germany between 1999 and 2005" and is handed to every
+prompt, so **every tape ever made was set in Germany whatever the customer
+typed.** Closed in §49C, along with the signed-in lede, which said the tape came
+off a camcorder "in a German suburb". Two guards now hold it — one over the
+rendered pages, one over the composed prompt — because neither layer can see the
+other. `/privacy` and `/impressum` keep the word on purpose and are exempt by
+name.
+
+~~**What is left of it is one design call: the place upload is a bare native
+`Choose File`**~~ — **CLOSED by §48, and §43's design then turned out to have
+built a DEAD CONTROL: `pl-own` being checked on load made the rail's own-place
+card a label for an already-selected radio, so clicking it did nothing at all in
+the state every visitor arrives in. §49D.**
 
 **PR #1 IS OPEN AND ITS FIRST CI RUN WAS GREEN.** Paul opened it at 12:23 UTC
 on 2026-08-29 and all five checks passed — guards plus node 22/24 x
@@ -4943,10 +4982,12 @@ then at the end, in his chosen order — the Hetzner box and the runbook, the
 1. ~~**MOVE FREE TEXT AND PHOTO-UPLOAD TO THE FRONT OF THE PLACE STEP.**~~
    **DONE 2026-08-30 — §43, commit `67ce0e0`.** Step 3 leads with the
    own-place block, `pl-own` is checked on load, and the presets follow as
-   examples. **One thing was deliberately NOT done and it is a design call:
-   the place upload is still a bare native `Choose File` control** sitting
-   directly across from step 1's designed `.drop` panel — invisible while it
-   was hidden, conspicuous now that it leads the step. §43D.
+   examples. ~~**One thing was deliberately NOT done and it is a design call:
+   the place upload is still a bare native `Choose File` control**~~ — **CLOSED
+   by §48**, which built the slim dropzone and the script half it needed. And
+   §49D then found what this design had cost elsewhere: `pl-own` checked on load
+   made the rail's own-place card a label for an already-selected radio, so it
+   was a dead control in the state every visitor arrives in.
 2. The tape-quality items (§34G). ~~The judder~~ **is DONE — §44.** What is
    left of that group is the **punch-in zoom** (still a negative at
    `scripts/compose/prompt.mjs:171`; buildable, but judging it needs a paid
@@ -5022,6 +5063,10 @@ prose beside them, which was survivable while they were hidden and is not once
 they are the first controls in the step.
 
 #### D — NOT DONE, AND IT IS THE OWNER'S CALL
+
+> **CLOSED BY §48 (2026-08-31)** — the slim dropzone exists, with the script
+> half this paragraph says it needs. Kept as the record of why it was left, and
+> because §49D is its sequel: the card that reveals this block was itself dead.
 
 **The place upload is still a bare native `Choose File | No file chosen`.**
 Step 1's photo upload is a designed `.drop` panel ("+ Add photo", a recess, a
@@ -5581,7 +5626,9 @@ figure quoted throughout this file is the floor, not an invariant.**
 ### 48. THE PREMIUM PASS — TYPE GETS A SCALE, AND THE LANDING STOPS BEING A TEMPLATE (2026-08-31)
 
 **Six commits, `637bee8..2260960`. Suite 1965 → 1968 / 1966 pass / 0 fail / 2
-skipped. NOTHING DEPLOYED — timestamptapes.com still serves the old code.**
+skipped.** ~~NOTHING DEPLOYED — timestamptapes.com still serves the old code.~~
+**DEPLOYED 2026-09-01 — §49.** It was 18 commits behind for a day; the box, the
+branch and `origin` are all at `ccaea1c` now.
 
 The owner asked for the whole site to be premium and explicitly **not AI slop**.
 The spec is `docs/superpowers/specs/2026-08-31-premium-redesign-design.md` and it
@@ -5658,6 +5705,245 @@ This product has Google and a password. Do not draw the other two.
   still-approval promise verbatim in page source. **The fix is to move that
   reasoning out of the template into ordinary JS comments.** Raised with the
   owner, not yet actioned.
+
+---
+
+### 49. SIX FIXES THE OWNER FOUND BY LOOKING, AND THE TAPES GET A PAGE (2026-08-31 / 09-01)
+
+**1968 / 1966 -> 1982 / 1980 pass / 0 fail / 2 skipped.** Six commits,
+`8602e5c..ccaea1c`, every one test-first and sabotage-verified. **PUSHED, CI
+GREEN ON ALL FIVE CHECKS at `ccaea1c`, AND DEPLOYED** -- guards plus node 22/24
+x ubuntu/windows, 1982/1980/0/2 on every leg, with only the two money-guard
+skips on Linux, so the browser tests genuinely RAN there rather than
+self-skipping. All seven `guards.yml` steps run locally before the push.
+
+**THE DEPLOYED SITE WAS 18 COMMITS BEHIND AND IS NOW CURRENT.** Everything from
+the premium pass (section 48) onward had never been served. `git pull && docker
+compose up -d --build` on the box; web healthy, worker up, Caddy untouched, no
+FATAL. Verified from OUTSIDE rather than from the container logs: `/videos`
+answers **303 -> `/login?next=%2Fvideos`** (a missing route would 404, so that
+one response proves both the deploy and the auth gate), and the live stylesheet
+carries all five of the day's new rules.
+
+#### A -- The defects the owner reported by looking at the screen
+
+Every one was invisible to the suite. That is the pattern worth keeping, not the
+individual bugs: **1968 tests passed while all of them were shipping.**
+
+| Commit | What it does |
+|---|---|
+| `8602e5c` | The free grant stays at 21, and the config says what 21 cannot buy |
+| `b7665ee` | The tape stops being set in Germany, on the page AND in the prompt |
+| `984a501` | The own-place card stops being a dead control |
+| `e4ed21d` | Sign out joins the line the rest of the nav is standing on |
+| `c62b70c` | The tapes get a page of their own, and it plays them |
+| `ccaea1c` | A tile is cropped to its own shape, not to the shape 4:3 tapes are |
+
+#### B -- THE CREDITS WERE NEVER INCONSISTENT, AND THE NUMBER IS FINAL AT 21
+
+The owner saw 82, 51, 21 and 16 across four accounts and reasonably read it as a
+bug. It is not: **the ledger is append-only, so every account keeps the grant
+that was in force on the day it was created.** The four numbers are a fossil
+record of every time this number moved.
+
+| balance | created | grant that day |
+|---|---|---|
+| 51 | 2026-08-20 | 51 (when a credit was $0.03) |
+| 16 | 2026-08-23 | 16 (after the $0.10 rescale) |
+| 82 | 2026-08-25 | 42, plus 40 from the section 27 Stripe test payment |
+| 21 | 2026-08-28 | 21 |
+
+**IT WAS BRIEFLY RAISED TO 42 AND THE OWNER OVERRULED IT: "for a free video,
+make it 21 credits. It's final."** The argument for 42 is recorded in
+`config/credits.json` because the fact behind it survives the decision: **21
+buys one 480p tape in 4:3 and NOTHING in 16:9 or 9:16, which cost 28** -- a
+non-4:3 shape is 4/3 the pixels because a resolution label holds the short edge.
+So the free tier cannot buy the phone shape, which is the shape this product
+delivers to phones for.
+
+**THAT IS LEGITIMATE ONLY BECAUSE THE PAGE SAYS SO BEFORE ANYBODY SPENDS AN
+UPLOAD.** Measured at a 21-credit balance: `/pricing` prints "1 tape at 480p
+(none in 16:9 or 9:16)", and choosing the phone shape on the order form shows
+"Not enough credits -- a 480p 9:16 tape costs ~28 CR and you have 21 CR". A test
+pins both. **28 is the number that would buy one tape in every shape**, recorded
+for whenever that is wanted. Do not raise this without the owner.
+
+#### C -- SECTION 42F DE-NATIONALISED THE PAGES AND MISSED THE TAPE
+
+`DEFAULT_ERA` read **"Germany between 1999 and 2005"** and is handed to
+`composeStillPrompt`, `composeMotionPrompt` AND `composeReferencePrompt` on
+every render. **Every tape this product has ever made was set in Germany
+whatever the customer typed** -- somebody describing their grandmother's kitchen
+in Kerala was getting a German one. It was missed because it reaches the TAPE
+rather than a page, which is why the guard for it cannot live in the page sweep.
+
+The visible half was the signed-in lede: "a camcorder tape in a German suburb",
+the first sentence a customer reads, on the page where they upload their own
+face. Four words removed, nothing added -- a replacement clause would be new
+marketing rather than a de-nationalised lede.
+
+**THE PERIOD STAYS AND IS LOAD-BEARING.** `'1999 to 2005'` is what keeps a
+flat-screen out of a 2003 frame; only the geography goes, and the place preset,
+the typed description and the uploaded photograph already supply that correctly
+for wherever the person actually is.
+
+**TWO PAGES KEEP THE WORD ON PURPOSE** and the guard exempts them by name:
+`/impressum` exists *because* the operator is resident in Germany, and
+`/privacy` names where the servers are. Deleting either would not
+de-nationalise the product, it would make a legal page untrue.
+
+#### D -- SECTION 43 BUILT A DEAD CONTROL AND NOBODY COULD SEE IT
+
+The owner: *"if you click on their own place on the card ... there is no
+response."* He was right, and the cause is section 43's own design. That card is
+a `<label for="pl-own">`, and section 43 made `pl-own` **checked on load** -- so
+in the state every visitor arrives in it pointed at a radio that was ALREADY
+SELECTED. Clicking a checked radio changes no state, fires no event and moves
+nothing. The upload it stands for is at the TOP of the step, off-screen behind
+you by the time the rail is in view.
+
+**A dead control, in the default state, on the step whose whole point is your
+own place -- and every fetch() test passed the entire time, because the label
+and its `for` were both present and both correct.**
+
+The fix is **two cards in one slot**, swapped by the radio that was already
+there: `own-pick` (a preset is selected -> the way BACK) and `own-add` (own place
+is selected -> a label for the file input, so one click opens the picker). No
+JavaScript, no second reveal mechanism. The base state is the PRESET state on
+purpose: a browser that never applies the generated block still gets a working
+card rather than an upload card beside a preset it contradicts.
+
+#### E -- THE NAV: 1.8px, THEN 61px
+
+**Sign out sat 1.8px below Plans and Account.** `.nav-form { display: inline }`
+is blockified by the flex container into `display: block`, and that block box
+carries the inherited **16px strut** while the button inside it is 12px --
+measured, links 19.19px tall against the form's 25.59px. As a flex container the
+form has no strut and collapses to the button's height. Re-measured: 0.00px.
+
+**THEN ADDING "My videos" PUT THE ROW 61px OVER A 375px SCREEN, and the
+measurement killed every obvious fix.** With a 58-character address `.who` is
+**already at 0px** -- it is the only item allowed to give way and it has given
+way completely -- leaving credits 75.4 + My videos 76.4 + Plans 44.2 + Account
+66 + Sign out 67.1 plus five 17.6px gaps, about **417px of controls for a 375px
+screen**. Nothing left to tighten.
+
+**The nav wraps below 30rem, and unconditional wrapping was tried first and was
+WORSE:** flexbox decides to wrap BEFORE it decides to shrink, so a wrapping row
+lets the long address take its full natural width and puts the links on a second
+line **at 1440px too**. Measured, two rows on a laptop. The media query is the
+whole fix; 30rem sits between two tested widths (414 and 768) so none lands on
+the boundary.
+
+#### F -- `/videos`, AND WHY IT ADDS NO ISOLATION SURFACE
+
+The owner asked for somewhere to watch and download a finished video. Most of it
+existed and could not be found: the shelf has always been a strip at the bottom
+of the ORDER FORM, and the player and download one click further on at
+`/j/<id>/result`. What was missing was a place, and a way in.
+
+`/videos` is gated by the router default like `/account`. **The tapes come from
+the same `shelfFor()` the home page uses**, which reads the ownership index and
+nothing else, and the media URLs are the existing per-job routes, every one
+already checked by `ownedJob`. A test seeds a second account's finished tape and
+asserts it cannot appear. The home page keeps the recent **four**
+(`HOME_STRIP`) and links here.
+
+**`preload="none"` IS THE DESIGN AND NOT A DETAIL.** It is what lets a shelf of
+sixty tapes cost sixty POSTERS rather than sixty decoders, and it is why
+watching one needs no JavaScript and no CSP change. A browser test asserts
+`readyState === 0` after load, because losing the attribute is invisible on a
+page with two tapes and ruinous on a page with sixty.
+
+**An unfinished tape gets no player and no download** -- there is no file behind
+either yet, so both would be controls that can only fail when used.
+
+#### G -- SECTION 31's MEASURED 9/8 BECAME WRONG WHEN 34D OPENED THE FRAME MENU
+
+Found while mocking up `/videos`. Every shelf tile is a fixed
+`aspect-ratio: 9 / 8`, and section 31 MEASURED that from a real render: a 4:3
+order is delivered 1080x1920 with the picture matted inside, so the content is
+exactly the middle half and 9/8 removes the letterbox and nothing else.
+
+**Then section 34D opened the frame menu and nothing taught this rule.** A 9:16
+order is delivered FULL-BLEED at 1080x1920 -- there is no letterbox to remove --
+so the same crop threw away more than half of a real picture, and a 16:9 tape
+lost its sides. Invisible since the day the menu opened because every finished
+tape on this machine is 4:3. Now measured on the real page: **4:3 -> 1.125,
+16:9 -> 1.778, 9:16 -> 0.563.** Rows of different heights are the honest result.
+
+#### H -- Things that will bite the next reader
+
+- **`git apply --cached` DOES NOT WORK ON THIS CHECKOUT.** `core.autocrlf` is
+  true, git emits LF patches, and every partial-staging attempt failed with
+  "patch does not apply". `git add -p` is unavailable here too. **The working
+  method is to build the intermediate blob and `git hash-object -w` plus
+  `git update-index --cacheinfo`**, then `node --check` every staged file before
+  committing. Three commits needed it.
+- **A TEST CAN CHECK THE WRONG LAYER AND PASS ON ITS FIRST RUN.** The per-shape
+  crop test asserted that two tiles carry DIFFERENT CLASS NAMES and went green
+  against a stylesheet with no rule for either -- the shape reaching the markup
+  and stopping there. It now reads `/styles.css` from the server and compares
+  computed ratios, and it immediately caught a second mistake: the ids are
+  `aspectSlug`'s own -- **`a-16x9`, not `16-9`** -- so a guess at the format
+  would have shipped two rules matching nothing. **TDD's "a test that passes
+  immediately is suspect" earned its place twice in one commit.**
+- **A SHELL LOOP CAN PRINT A GREEN IT DID NOT EARN.** A guard runner reported
+  "ALL GUARDS PASS" twice while the loop body never executed -- once because
+  python wrote its scripts to a different `/tmp` than Git Bash reads, once
+  because the names file was missing so `read` exited immediately. **Count what
+  actually ran and assert the count**, or a harness failure reads as a pass.
+- **`loadJob` takes the REPO root and appends `out/jobs` itself.** Passing
+  `'out'` makes it look for `out/out/jobs` and throw, which a `catch` then
+  swallows into empty captions. Read the manifest directly for scratch work.
+- **The backtick-in-a-comment trap fired THREE times in one session**, in
+  `static.mjs` and `views.mjs`, exactly as this file has warned since
+  2026-08-21. `node --check` caught all three instantly. It is still the most
+  repeated mistake in this codebase.
+- **A page rendered to a file cannot load this app's stylesheet cross-origin**
+  (section 31's own warning). A probe that links `http://localhost:3000/styles.css`
+  from a `file://` page renders unstyled and looks like a CSS bug. Inline it.
+- **A LONG HEREDOC BROKE THE SHELL AGAIN** while writing this very section. The
+  rule this file has carried since 2026-08-28 stands and is cheap: **use
+  Write/Edit for any long or escape-bearing content**, never `<<EOF`.
+
+#### I -- Where things stand, and what is next
+
+**THE SITE IS CURRENT AND THE WORKER HAS STILL NEVER RENDERED ANYTHING.**
+`/api/health` reports `"provider": "fal"` on the web process and compose
+hardcodes `--provider=fal` on the worker, so **a web order on that box reaches
+real fal and spends real money** -- there is no fixture safety net. And
+`worker.lastSeen` is **`null`**: the queue has never had a job, done 0, failed 0.
+
+**THE OWNER'S FAL BALANCE IS $2.97 AND A 480p TAPE COSTS $2.0727 (MEASURED).**
+That covers one render with about 30% headroom, which is too thin for the first
+job that machine has ever run -- a retry or a slightly larger delivered raster
+turns a clean signal into a confusing failure, and a request that reaches fal
+and fails is still billable. **He is topping up ~$20 on 2026-09-01 and then
+running the test.** The friends test needs five to ten renders anyway.
+
+**THE TEST, WHEN IT HAPPENS: 480p AND 4:3, nothing else.** The free grant of 21
+credits pays for exactly that combination; 16:9 or 9:16 costs 28 and the button
+refuses. Watch `/j/<id>` to the tape, then check the balance moved by exactly
+21, the manifest says `"direct": true` and freezes `...reference-to-video`, and
+the still and select steps print `skipped`. Then read fal's usage page and
+`npm run ledger -- record <jobId> --actual=<usd>`.
+
+**AGREED FOR THE NEXT SESSION, in order:**
+
+1. **A free dress rehearsal** -- a complete local fixture render, so the paid
+   run tests fal rather than our plumbing.
+2. **The landing page's comment bloat** (section 48D) -- 14% of that page is
+   design-rationale HTML shipped to every visitor, and one comment still quotes
+   the deleted still-approval promise verbatim in page source.
+3. **The premium pass on the result and status pages** -- the two pages the test
+   render puts you through. Needs the owner's taste; show mockups first.
+
+**STILL THE OWNER'S, unchanged:** the blind check (free, ten minutes, unsent for
+five sessions, and still the only thing that can tell us the product premise is
+wrong); an image-moderation vendor (`imageModerateImpl` is an honest null seam
+and is the one genuinely unbuilt thing, needed before strangers upload faces);
+and backups, deliberately off.
 
 ---
 
