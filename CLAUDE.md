@@ -20,11 +20,16 @@ money guards). **§48's banner line saying the branch is AHEAD of the deployed
 site is HISTORY — do not act on it.**
 
 **WHAT HAS NOT HAPPENED: NO CARD HAS EVER BEEN CHARGED, AND NO WEB ORDER HAS
-EVER REACHED REAL FAL.** `worker.lastSeen` is still `null` — the worker on that
-box has never claimed a single job, done 0, failed 0. Every piece is verified
-individually and the chain has never been run end to end with money in it.
-**Those two runs are the top of the list and they are the owner's, because they
-spend.** §46C, and §49I for what changed.
+EVER REACHED REAL FAL.** The box's queue reads **done 0, failed 0**, and THAT is
+the evidence. ~~`worker.lastSeen` is still `null` — the worker on that box has
+never claimed a single job~~ — **THE CONCLUSION IS RIGHT AND THE FIELD NAMED FOR
+IT IS WRONG, WHICH WILL MISLEAD YOU DURING THE PAID RUN.** `lastSeen` is derived
+only from CURRENTLY-CLAIMED jobs, so it reads `null` for a healthy idle worker
+and **returns to `null` the moment a tape succeeds**. Measured 2026-09-01 —
+§50B. Every piece is verified individually and the chain has never been run end
+to end with money in it. **Those two runs are the top of the list and they are
+the owner's, because they spend.** §46C, §49I, and §50 for the dress rehearsal
+that cleared everything on either side of the paid call.
 
 **THE PAID PATH IS ARMED AND THERE IS NO SAFETY NET.** `/api/health` reports
 `"provider": "fal"` on the web process and `compose.yaml` hardcodes
@@ -58,12 +63,14 @@ so a 9:16 tape was cropped to a sliver. **That is the pattern worth keeping, not
 the individual bugs.** The tapes also got a page of their own — `/videos`,
 playable and downloadable, linked from the nav as MY VIDEOS.
 
-**AGREED FOR THE NEXT SESSION, in order (§49I):** a free local fixture render as
-a dress rehearsal, so the paid run tests fal rather than our plumbing; then the
-landing page's comment bloat (§48D — 14% of that page is design rationale
-shipped to every visitor, one comment quoting a promise the product deleted);
-then the premium pass on the result and status pages, which needs the owner's
-taste and should start with mockups.
+**AGREED FOR THE NEXT SESSION, in order (§49I):** ~~a free local fixture render
+as a dress rehearsal, so the paid run tests fal rather than our plumbing~~ —
+**DONE 2026-09-01, §50. Everything on either side of the paid fal call is proven
+against current code; the call itself is the only thing left that money can
+test.** What is next is the landing page's comment bloat (§48D — 14% of that
+page is design rationale shipped to every visitor, one comment quoting a promise
+the product deleted); then the premium pass on the result and status pages,
+which needs the owner's taste and should start with mockups.
 
 **STILL THE OWNER'S, AND THE BLIND CHECK IS STILL THE ONE THAT MATTERS MOST.**
 Free, ten minutes, packet unsent at `out/blind-check/` for five sessions, and
@@ -5411,8 +5418,10 @@ a stub this code does not fetch), scope "Your account".
 1. **No card has ever been charged.** The whole payment path is wired and
    verified piece by piece; nobody has run a pound through it. Buy a Starter
    pack (~$14.28), confirm 92 credits land, refund from the dashboard.
-2. **No web order has ever reached real fal.** `worker.lastSeen` is `null` —
-   the worker has never rendered a job on this box. §38E is the runbook.
+2. **No web order has ever reached real fal.** The queue reads **done 0, failed
+   0**, which is the evidence for it; ~~`worker.lastSeen` is `null`~~ **that
+   field is not — it goes back to `null` on success. §50B.** §38E is the
+   runbook.
 
 #### D — THE KEY ROTATION, AND THE PASTE THAT FAILED TWICE
 
@@ -5912,8 +5921,10 @@ tape on this machine is 4:3. Now measured on the real page: **4:3 -> 1.125,
 **THE SITE IS CURRENT AND THE WORKER HAS STILL NEVER RENDERED ANYTHING.**
 `/api/health` reports `"provider": "fal"` on the web process and compose
 hardcodes `--provider=fal` on the worker, so **a web order on that box reaches
-real fal and spends real money** -- there is no fixture safety net. And
-`worker.lastSeen` is **`null`**: the queue has never had a job, done 0, failed 0.
+real fal and spends real money** -- there is no fixture safety net. And the
+queue reads **done 0, failed 0**: nothing has ever completed there.
+~~`worker.lastSeen` is `null`~~ -- **true, but NOT the evidence this sentence
+rested it on; that field returns to `null` on success. §50B.**
 
 **THE OWNER'S FAL BALANCE IS $2.97 AND A 480p TAPE COSTS $2.0727 (MEASURED).**
 That covers one render with about 30% headroom, which is too thin for the first
@@ -5931,8 +5942,8 @@ the still and select steps print `skipped`. Then read fal's usage page and
 
 **AGREED FOR THE NEXT SESSION, in order:**
 
-1. **A free dress rehearsal** -- a complete local fixture render, so the paid
-   run tests fal rather than our plumbing.
+1. ~~**A free dress rehearsal** -- a complete local fixture render, so the paid
+   run tests fal rather than our plumbing.~~ **DONE 2026-09-01 -- section 50.**
 2. **The landing page's comment bloat** (section 48D) -- 14% of that page is
    design-rationale HTML shipped to every visitor, and one comment still quotes
    the deleted still-approval promise verbatim in page source.
@@ -5944,6 +5955,96 @@ five sessions, and still the only thing that can tell us the product premise is
 wrong); an image-moderation vendor (`imageModerateImpl` is an honest null seam
 and is the one genuinely unbuilt thing, needed before strangers upload faces);
 and backups, deliberately off.
+
+---
+
+### 50. THE DRESS REHEARSAL — EVERYTHING EITHER SIDE OF THE PAID CALL, FOR $0 (2026-09-01)
+
+**No code changed. Nothing was committed but this file.** §49I item 1, worked:
+prove the plumbing for free so that when the owner spends, a failure is fal's
+and not ours. Suite **1982 / 1980 pass / 0 fail / 2 skipped** — the documented
+baseline exactly, both skips the money guards.
+
+#### A — What is proven, against current code (`c34a358`)
+
+| Layer | Result |
+|---|---|
+| `npm run doctor` | 36/36 filters, all five keys present |
+| Full fixture render | 11/11 steps; probed independently at **1080x1920, 25fps, 375 frames, 15.000000s, mono AAC 48k** |
+| Art. 50 disclosure | In the delivered file — the readable sentence AND the IPTC `trainedAlgorithmicMedia` code |
+| Web server | Current code; `/videos` answers `303 -> /login?next=%2Fvideos` |
+| Worker claim -> tape | Claimed in ~1s, **52.5s** to publish, real tape and poster on disk |
+
+**And the paid configuration's free half, in the exact shape the owner will
+spend on (480p, 4:3, direct):** `--dry-run` quotes **$2.0727**, which is §26's
+measured 480p price to the last digit; `--stop-after=compose` resolves
+**640x480 (4:3), one 15s segment**; and the frozen manifest carries
+`input.direct: true`, `resolved.models.video =
+bytedance/seedance-2.0/reference-to-video`, `resolved.stillPrompt: null`, a real
+`referencePrompt`, one 375-frame segment, and an estimate whose only line is
+`animate`. **All four of §38E's post-run checks would pass on shape. The fal
+call itself is the only thing left that money can test.**
+
+#### B — `worker.lastSeen` IS NOT EVIDENCE THAT A WORKER HAS NEVER RUN
+
+**This file asserted it in three places and every one was reading the wrong
+field.** The conclusion was true — nothing has ever rendered on that box — but
+the evidence for it is `done 0, failed 0`, which is cumulative. `lastSeen` is
+not.
+
+`queueHealth` (`server.mjs:1891`) derives it **only from CURRENTLY-CLAIMED
+jobs**, and the code's own comment says so in as many words: *null therefore
+means "no work is in flight", NOT "no worker exists"*. Confirmed by running it
+rather than reading it — a healthy worker polling an empty queue reported
+`null`, and a job pushed through it went:
+
+```
+09:39:20  claimed 1  done 7   | lastSeen SET
+09:39:54  claimed 0  done 8   | lastSeen null
+```
+
+**IT RETURNS TO `null` ON SUCCESS.** During the paid run it is `null` before,
+set during, and `null` again once the tape lands. **Reading that final `null` as
+a failure, at the exact moment the first paid render completes, is the mistake
+this section exists to prevent.** Read the job page for progress and
+`done`/`failed` for the verdict.
+
+#### C — Two stale-looking fields in a direct manifest, CHECKED and benign
+
+`input.stillCount = 3` and `resolved.segments[0].startsFrom = "still"` are both
+written on a job that has no still, which is the §26/§35 pass-through shape that
+has bitten this project repeatedly. Traced rather than assumed:
+`pipeline.mjs:1090` tests `if (direct)` **first**, sets `startPath = null`, and
+short-circuits the `startsFrom` branch entirely; the prompt switches on the same
+condition (`direct ? r.referencePrompt : r.motionPrompts[...]`). **Inert on the
+direct path, not defects** — recorded so the next reader does not re-diagnose
+them mid-render, and so nobody "fixes" a field the paid path never reads.
+
+#### D — Things that will bite
+
+- **`/api/health` CACHES ITS QUEUE FIGURES FOR 30 SECONDS** (§34C, deliberate —
+  the endpoint used to do two unbounded fs walks per hit). Watching it during a
+  live render shows numbers up to half a minute stale. Read the job page.
+- **A PROBE WITH THE WRONG `Accept` HEADER LIES.** `curl` sends `Accept: */*`,
+  and on that `/videos` and `/account` answer **401**, not the `303` §49F
+  records. With `Accept: text/html` both redirect correctly. The local server
+  looked stale for a minute and was not — §49H's own lesson, caught in the act.
+- **STOPPING AN `npm run worker` BACKGROUND TASK LEAVES THE NODE CHILD ALIVE.**
+  Exactly as this file warns for `npm run web`: the wrapper dies, the child keeps
+  polling the queue. Kill by PID. Convenient tell — the worker names itself after
+  its own PID (`CR7-9084` was pid 9084).
+- **The queue CLI cannot enqueue** — `stats|peek|reap|drain` only. Enqueuing is
+  `queue.enqueue(jobId)`, which the web app calls at `server.mjs:3901`. Handing
+  a parked `--stop-after=compose` job to a running worker is the cheapest way to
+  exercise claim -> render -> publish without going through auth.
+
+#### E — What is left
+
+**UNCHANGED AND STILL THE OWNER'S:** the paid 480p 4:3 order once the fal
+top-up lands (§38E is the runbook, §49I the checks), the Starter-pack purchase
+and refund, the blind check, and an image-moderation vendor. **AGENT-BUILDABLE
+NEXT:** the landing page's comment bloat (§48D), then the premium pass on the
+result and status pages.
 
 ---
 
