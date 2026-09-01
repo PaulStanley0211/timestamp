@@ -265,6 +265,25 @@ async function main() {
   const { createProvider, paidTransport } = await import('../providers/index.mjs');
   const provider = createProvider(providerId, { cfg, root });
 
+  // THE IMAGE CLASSIFIER, AND THIS IS THE ONLY PLACE ITS CREDENTIAL IS READ.
+  // Unconfigured it returns null, which is the state this product has shipped
+  // in all along: `moderate.mjs` records an `image-unclassified` warning and
+  // the job proceeds. Configured, it becomes a paid call, so it gets the same
+  // transport treatment as the render provider -- an explicitly bound `fetch`
+  // handed in from here, never a default inside the module, so `npm test`
+  // cannot reach the network however hard it tries.
+  //
+  // Half-configured THROWS and takes the worker down with it. That is the
+  // point: a worker that starts having quietly decided not to check
+  // photographs is worse than one that refuses to start.
+  const { awsImageModeratorFromEnv } = await import('../safety/image-moderate-aws.mjs');
+  const imageModerateImpl = awsImageModeratorFromEnv(process.env, {
+    fetchImpl: globalThis.fetch.bind(globalThis),
+  });
+  if (imageModerateImpl && !json) {
+    console.log('  moderation image classifier: AWS Rekognition');
+  }
+
   const t0 = Date.now();
   let lastLine = null;
   const worker = createWorker({
@@ -282,6 +301,10 @@ async function main() {
     // `paidTransport` returns nothing at all for the fixture, so the free path
     // is byte-identical to what it was.
     providerCtx: paidTransport(provider),
+    // Null when unconfigured, which `makeResolver` treats as an explicit
+    // override equal to the default it already had. Nothing changes until the
+    // three AWS variables exist.
+    deps: { imageModerateImpl },
     // THE OTHER WIRE THAT MUST NOT DANGLE. The worker consults this seam when
     // a job ends without a tape; the glue walks the ownership index back to
     // the account that paid at enqueue and asks `refundIfUnspent`, which

@@ -238,6 +238,18 @@ export function createWorker({
   nowImpl = () => Date.now(),
   sleepImpl = defaultSleep,
   runPipelineImpl = defaultRunPipeline,
+  /**
+   * Pipeline dependency overrides, handed straight to `runPipeline`.
+   *
+   * Empty here on purpose: this file must not know what any of them are. It
+   * exists so `worker-cli.mjs` can inject `imageModerateImpl` -- the image
+   * classifier seam `safety/moderate.mjs` has carried open since it was
+   * written -- without the worker growing a second opinion about moderation.
+   * Same shape and same reason as `providerCtx`: the CLI is the only place
+   * that reads the environment, so a test can never accidentally acquire a
+   * credential by constructing a worker.
+   */
+  deps = {},
   refundImpl = null,
   loadJobImpl = loadJob,
   saveJobImpl = saveJob,
@@ -607,6 +619,7 @@ export function createWorker({
           onProgress,
           stopAfter,
           providerCtx,
+          deps,
         });
       } catch (err) {
         syncSteps(job);

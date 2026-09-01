@@ -731,3 +731,23 @@ test('the worker CLI hands createWorker the owner-refund glue', () => {
     'worker-cli must wire refundImpl to createOwnerRefunds, or worker-side refunds exist only in tests');
   assert.match(source, /session-middleware\.mjs/, 'the glue comes from the module that owns the ownership index');
 });
+
+test('the worker CLI hands createWorker the image classifier, with an injected transport', () => {
+  // Same class of check as the two above, and for the reason CLAUDE.md section 8
+  // records: the bug that cost a day was a seam the module always accepted and
+  // no CLI ever passed. A unit test of the classifier cannot see the call site
+  // that forgot to wire it.
+  const source = fs.readFileSync(new URL('../scripts/worker/worker-cli.mjs', import.meta.url), 'utf8');
+
+  assert.match(source, /awsImageModeratorFromEnv\(\s*process\.env/,
+    'worker-cli must build the classifier from the environment, or configuring it does nothing');
+  assert.match(source, /deps:\s*\{\s*imageModerateImpl\s*\}/,
+    'the classifier must reach runPipeline through deps, or the seam stays null in production');
+  assert.match(source, /fetchImpl:\s*globalThis\.fetch\.bind\(globalThis\)/,
+    'the transport is injected HERE, so the module keeps no default and npm test cannot spend');
+
+  // And the worker itself has to forward what the CLI hands it.
+  const worker = fs.readFileSync(new URL('../scripts/worker/worker.mjs', import.meta.url), 'utf8');
+  assert.match(worker, /providerCtx,\s*\r?\n\s*deps,/,
+    'createWorker must pass deps through to runPipeline, beside providerCtx');
+});
