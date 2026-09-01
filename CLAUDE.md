@@ -6169,13 +6169,24 @@ from "this exists" would start missing real ones.
 
 ~~**ONE ITEM IS OPEN FROM THIS AUDIT AND IT IS NOT DESCRIBED HERE.** It is a
 MEDIUM, it is infrastructure rather than code, it needs a compose change and a
-deploy rather than a commit.~~ **CLOSED IN THE CODE 2026-09-01, `c49ac96` —
-each container now gets only the secrets its own process reads, three env files
-instead of one. IT IS NOT CLOSED ON THE BOX UNTIL THE FILES ARE SPLIT THERE:
-the runbook §1 step 3 carries the migration, and until it runs the deployed
-containers still share one file.** Which side each key belongs on was measured
-rather than reasoned — a worker with no secrets at all rendered a complete tape
-— and the write-up stays in `.gstack/security-reports/2026-09-01-101000.json`.
+deploy rather than a commit.~~ **CLOSED, IN THE CODE AND ON THE BOX, 2026-09-01
+(`c49ac96`, deployed the same hour).** Each container now receives only the
+secrets its own process reads: `.env.common`, `.env.web`, `.env.worker` in
+`/opt/timestamp`, all `chmod 600`, and the combined `.env` shredded.
+
+**PROVED ON THE RUNNING CONTAINERS, not by reading the config.** `printenv`
+inside each one reports `web FAL_KEY absent` and `worker STRIPE_SECRET_KEY
+absent`, which is the entire point of the change: a compromise of the
+internet-facing process is an identity incident again rather than a
+payments-and-spend one. Key names were reconciled first with a `comm -3` that
+came back empty, so nothing was lost in the split. Which side each key belongs
+on was measured rather than reasoned — a worker started with no secrets at all
+claimed a job and rendered a complete tape. The write-up stays in
+`.gstack/security-reports/2026-09-01-101000.json`.
+
+**THE BOX NOW HOLDS ITS SECRETS IN THREE FILES AND `npm run backup` STILL DOES
+NOT INCLUDE THEM.** §46F's warning is unchanged in substance: losing the server
+means re-fetching every credential from its own console.
 
 **SO EVERY FINDING FROM THAT AUDIT IS NOW EITHER CLOSED OR A RECORDED
 DECISION**, and the two that are decisions are the published commit messages
