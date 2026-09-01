@@ -31,6 +31,15 @@ assets/test-photos/*
 .gstack/
 .superpowers/
 
+# The same argument one directory over, and it had the same hole. `.claude/`
+# holds local agent state -- settings, hooks, worktrees, and whatever a future
+# MCP integration writes there. `.claude/worktrees/` was covered ONLY by
+# `.git/info/exclude`, which is local and never committed, so a fresh clone had
+# no protection and the first broad `git add .` publishes whatever is inside.
+# This repo tracks no skills or settings of its own, so nothing here wants
+# tracking; if that changes, negate the one path rather than dropping the rule.
+.claude/
+
 # Security reviews stay on this machine. This repo is public, and an accurate
 # list of a live system's open weaknesses is an attack roadmap. Publish a review
 # once its findings are closed, not while they are open.

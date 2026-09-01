@@ -66,6 +66,14 @@ const MUST_BE_IGNORED = [
   // An accurate list of a live system's open weaknesses is an attack roadmap.
   ['docs/security-review-2026-08-25.md', 'a security review'],
   ['docs/security-review-brief.md', 'a security review brief'],
+  // Local agent state. Nothing here is tracked today and this is pre-emptive:
+  // the directory already exists in the working tree, so whatever a future
+  // settings file, hook, or MCP credential written under it happens to hold is
+  // one broad `git add .` away from a public repository. The cost of the rule
+  // is one line; the cost of not having it is paid once and cannot be taken
+  // back. This repo ships no skills of its own, so nothing here wants tracking.
+  ['.claude/settings.local.json', 'local agent settings'],
+  ['.claude/worktrees/scratch/x', 'a scratch worktree'],
 ];
 
 test('every file that must never be published is ignored by git', () => {
