@@ -147,6 +147,54 @@ export const STEP_COPY = Object.freeze({
   publish: { title: 'Finishing', note: 'Almost there.' },
 });
 
+/**
+ * The eleven pipeline steps, grouped into the three things a customer is
+ * actually waiting for.
+ *
+ * WHY THIS EXISTS. `STEP_COPY` is the engine's vocabulary and it is good
+ * writing, but eleven rows naming `compose` and `moderate` is a build log, and
+ * a build log makes a wait feel longer than it is. This is the page somebody
+ * sits on for a minute or more after paying. The eleven are not deleted -- they
+ * are one disclosure away, because the detail genuinely reassures some people
+ * and a product that renders a stranger's face should not be coy about what it
+ * does to it.
+ *
+ * THE GROUPING IS BY WHAT IS HAPPENING TO THE PHOTOGRAPH, not by cost. `still`
+ * and `animate` are the two slow paid calls and they sit in the same phase for
+ * that reason -- a customer who reads "Filming" and waits two minutes has been
+ * told the truth, where one who watches `select` tick past in a millisecond has
+ * been shown a progress bar that lies about where the time goes.
+ *
+ * EVERY STEP MUST APPEAR IN EXACTLY ONE PHASE. A step missing from all three is
+ * invisible to `phaseIndexOf` and lands the customer on phase 1 forever; a step
+ * in two would count twice. `test/web-static.test.js` pins both.
+ */
+export const PHASES = Object.freeze([
+  Object.freeze({
+    title: 'Reading your photo',
+    note: 'Straightening it, removing the location and camera data, and writing the scene.',
+    steps: Object.freeze(['intake', 'moderate', 'expand', 'compose']),
+  }),
+  Object.freeze({
+    title: 'Filming',
+    note: 'The slowest part, and where the minutes go. A few of them.',
+    steps: Object.freeze(['still', 'select', 'animate', 'assemble']),
+  }),
+  Object.freeze({
+    title: 'Running it through the tape',
+    note: 'Grain, chroma bleed, and the date in the corner.',
+    steps: Object.freeze(['tape', 'verify', 'publish']),
+  }),
+]);
+
+/** Which phase a step belongs to. An unknown step answers 0 rather than -1:
+ *  a step this map has not been taught about is early work by definition,
+ *  and a negative index would paint the bar as finished. */
+export function phaseIndexOf(step) {
+  const i = PHASES.findIndex((p) => p.steps.includes(step));
+  return i === -1 ? 0 : i;
+}
+
 /** What each shape is FOR, in the words somebody choosing would use. The list
  *  of shapes itself comes from config/render.json -- only the human label for
  *  one lives here, the same division the resolution rows already follow. */
@@ -226,23 +274,43 @@ const STATUS_SCRIPT = `
 (function () {
   var root = document.getElementById('status');
   var id = root.dataset.job;
-  var copy = ${jsonInScript(STEP_COPY)};
   var words = ${jsonInScript(STATUS_COPY)};
+  var phases = ${jsonInScript(PHASES)};
+
+  // The same grouping the server rendered, from the same constant, so the
+  // first paint and every repaint after it agree. An unknown step answers 0
+  // for the reason phaseIndexOf gives: early work by definition, and a
+  // negative index would paint the bar as finished.
+  function phaseIndexOf(step) {
+    for (var i = 0; i < phases.length; i++) {
+      if (phases[i].steps.indexOf(step) !== -1) return i;
+    }
+    return 0;
+  }
 
   function paint(v) {
-    var c = copy[v.step] || null;
-    document.getElementById('headline').textContent = c ? c.title : (words[v.status] || v.status);
-    document.getElementById('subline').textContent = c ? c.note : '';
+    var idx = phaseIndexOf(v.step);
+    var p = phases[idx];
+    document.getElementById('headline').textContent = p.title;
+    document.getElementById('subline').textContent = p.note;
     document.getElementById('statusword').textContent = words[v.status] || v.status;
 
-    var done = v.steps.filter(function (s) { return s.status === 'done' || s.status === 'skipped'; }).length;
     document.getElementById('counter').firstChild.nodeValue =
-      Math.min(done + 1, v.steps.length) + ' of ' + v.steps.length + ' \\u00b7 ';
+      (idx + 1) + ' of ' + phases.length + ' \\u00b7 ';
+
+    // THE RECORD LIGHT STOPS WITH THE JOB. It is server-rendered only while
+    // running, so a job that fails mid-poll would otherwise keep blinking at
+    // somebody whose tape has already died.
+    var rec = document.querySelector('.reclight');
+    if (rec && v.status !== 'running' && v.status !== 'pending') rec.remove();
 
     var segs = document.querySelectorAll('#bar .seg');
+    for (var i = 0; i < segs.length; i++) {
+      segs[i].className = 'seg seg-' + (i < idx ? 'done' : i === idx ? 'running' : 'pending');
+    }
+
     var rows = document.querySelectorAll('#steps .step');
     v.steps.forEach(function (s, i) {
-      if (segs[i]) segs[i].className = 'seg seg-' + s.status;
       if (rows[i]) rows[i].className = 'step step-' + s.status + (s.name === v.step ? ' step-current' : '');
     });
 
@@ -1562,23 +1630,43 @@ function stepRow(step, isCurrent) {
  * this is a fallback rather than a lookup.
  */
 export function statusPage({ view, account = null, labels = {} }) {
-  const current = view.steps.find((s) => s.name === view.step);
-  const copy = STEP_COPY[view.step] ?? null;
-  const done = view.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length;
+  // `current` and a done-count used to live here. Both went with the
+  // step-by-step bar: the page counts phases now, and the per-step statuses
+  // are read straight off `view.steps` where the detail list renders them.
+  const phaseIdx = phaseIndexOf(view.step);
+  const phase = PHASES[phaseIdx];
 
   const body = `
 <main data-job="${h(view.jobId)}" data-status="${h(view.status)}" id="status">
   <section class="panel">
   <p class="stamp">${h(view.jobId)}</p>
 
-  <p class="eyebrow">Recording</p>
-  <h1 class="headline" id="headline">${h(copy ? copy.title : STATUS_COPY[view.status] ?? view.status)}</h1>
-  <p class="sub" id="subline">${h(copy ? copy.note : '')}</p>
+  ${/* THE RECORD LIGHT, ON THE ONE SCREEN IN THE PRODUCT THAT IS LITERALLY A
+       RECORDING IN PROGRESS. `--rec` has been a token since the mark landed
+       and appeared nowhere but the chrome. It is rendered only while the job
+       is actually running: a blinking REC over a finished or failed job is a
+       lie about what the machine is doing, and there is a test for it. The
+       blink honours prefers-reduced-motion in the stylesheet. */''}
+  ${view.status === 'running' || view.status === 'pending'
+    ? '<p class="reclight"><span class="dot" aria-hidden="true"></span>REC</p>'
+    : `<p class="eyebrow">${h(STATUS_COPY[view.status] ?? view.status)}</p>`}
+  <h1 class="headline" id="headline">${h(phase.title)}</h1>
+  <p class="sub" id="subline">${h(phase.note)}</p>
 
+  ${/* THREE SEGMENTS, ONE PER PHASE. This was one segment per pipeline step,
+       which spent four of its eleven on work that finishes in milliseconds and
+       two on the calls that take minutes -- a bar that moves fastest exactly
+       where the waiting is not. */''}
   <ol class="bar" id="bar" aria-label="Progress">
-    ${view.steps.map((s) => `<li class="seg seg-${h(s.status)}" title="${h((STEP_COPY[s.name] ?? {}).title ?? s.name)}"></li>`).join('')}
+    ${PHASES.map((p, i) => `<li class="seg seg-${i < phaseIdx ? 'done' : i === phaseIdx ? 'running' : 'pending'}" title="${h(p.title)}"></li>`).join('')}
   </ol>
-  <p class="counter" id="counter">${h(`${Math.min(done + 1, view.steps.length)} of ${view.steps.length}`)} &middot; <span id="statusword">${h(STATUS_COPY[view.status] ?? view.status)}</span></p>
+  <p class="counter" id="counter">${h(`${phaseIdx + 1} of ${PHASES.length}`)} &middot; <span id="statusword">${h(STATUS_COPY[view.status] ?? view.status)}</span></p>
+
+  ${/* THE MOST USEFUL SENTENCE ON A PAGE NOBODY WANTS TO SIT ON. The job is a
+       queue entry and a worker claims it, so closing the browser changes
+       nothing -- but the page never said so, and the honest reading of a live
+       progress bar is "stay here". Static, so the poller never touches it. */''}
+  <p class="hint">You can close this page and come back &mdash; the tape carries on without you.</p>
 
   ${''/* Both surfaces ALWAYS exist, hidden while empty: the poller repaints
         them, and a job that fails MID-POLL would otherwise never show its
@@ -1588,9 +1676,17 @@ export function statusPage({ view, account = null, labels = {} }) {
   <p class="alert" role="alert" id="alert"${view.error ? '' : ' hidden'}>${h(view.error?.message ?? '')}</p>
   <p class="hint creditnote" id="creditnote"${view.creditNote ? '' : ' hidden'}>${h(view.creditNote ?? '')}</p>
 
-  <ol class="steps" id="steps">
-    ${view.steps.map((s) => stepRow(s, s.name === view.step)).join('')}
-  </ol>
+  ${/* THE ELEVEN, ONE LINE AWAY. Native <details>, so this costs no script and
+       no fourth inline hash -- `script-src` names the shipped scripts by hash
+       and a new one would be dead in the browser. The poller still repaints
+       `#steps .step` inside here whether it is open or shut, so nothing about
+       the live update changes. */''}
+  <details class="stepdetail">
+    <summary>Show all ${h(String(view.steps.length))} steps</summary>
+    <ol class="steps" id="steps">
+      ${view.steps.map((s) => stepRow(s, s.name === view.step)).join('')}
+    </ol>
+  </details>
 
   <p class="inputs">
     <span class="k">Where</span> <span class="v">${h(labels.place ?? view.input.place)}</span><br>

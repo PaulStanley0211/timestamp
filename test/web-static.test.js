@@ -1202,3 +1202,79 @@ test('nothing in the soft tier is also ghosted', () => {
     'solved for --ink alone, and the product is about 2.45:1. Demote by size ' +
     `or position instead:\n${offenders.join('\n')}`);
 });
+
+/** A status view mid-render, with the eleven real pipeline steps. */
+function elevenStepView(current = 'animate') {
+  const names = ['intake', 'moderate', 'expand', 'compose', 'still', 'select',
+    'animate', 'assemble', 'tape', 'verify', 'publish'];
+  const at = names.indexOf(current);
+  return {
+    jobId: '20260901-143022-8f2a1c',
+    status: 'running',
+    step: current,
+    pct: 50,
+    steps: names.map((name, i) => ({
+      name,
+      status: i < at ? 'done' : i === at ? 'running' : 'pending',
+      attempts: 1, startedAt: null, endedAt: null, error: null,
+    })),
+    cost: { estimated: 2.08, actual: null, currency: 'USD' },
+    result: {},
+    error: null,
+    input: { place: 'schrebergarten-august', outfit: 'trainingsjacke' },
+  };
+}
+
+test('the wait is three phases, not eleven pipeline steps', () => {
+  // A CUSTOMER IS NOT WATCHING A BUILD. Eleven rows naming `compose` and
+  // `moderate` is a build log, and a build log makes a wait feel longer than it
+  // is -- this page is the minute-plus somebody sits through after paying. The
+  // eleven are the engine's own vocabulary and they stay in the detail list;
+  // what leads is the three things actually happening.
+  const html = statusPage({ view: elevenStepView() });
+
+  const segs = html.match(/<li class="seg[^"]*"/g) || [];
+  assert.equal(segs.length, 3,
+    `the progress bar still has ${segs.length} segments -- it must show phases, not steps`);
+
+  assert.match(html, /of 3/, 'the counter must count phases');
+});
+
+test('every pipeline step is still reachable, one line away', () => {
+  // HIDDEN, NOT DELETED. The detail genuinely reassures some people, and a
+  // product that renders somebody's face should not be coy about what it is
+  // doing to it. The eleven move behind a disclosure -- native <details>, so no
+  // script and no fourth inline hash.
+  const html = statusPage({ view: elevenStepView() });
+
+  assert.match(html, /<details/, 'the step detail must exist behind a disclosure');
+  for (const name of ['intake', 'moderate', 'expand', 'compose', 'still',
+    'select', 'animate', 'assemble', 'tape', 'verify', 'publish']) {
+    assert.match(html, new RegExp(`step-name-${name}|>${name}<|"${name}"`),
+      `step ${name} vanished from the page entirely`);
+  }
+});
+
+test('the record light is on the page it is for', () => {
+  // `--rec` HAS EXISTED AS A TOKEN SINCE THE MARK LANDED and appears nowhere
+  // but the chrome. A blinking REC beside the phase is the single most
+  // characteristic thing a camcorder does, it costs one element, and this is
+  // the one screen in the product that is literally a recording in progress.
+  const running = statusPage({ view: elevenStepView() });
+  assert.match(running, /class="reclight"/, 'the status page carries no record light');
+
+  // AND IT MUST NOT BLINK OVER A FINISHED OR FAILED JOB. A record light on a
+  // job that stopped is a lie about what the machine is doing.
+  const failed = statusPage({ view: { ...elevenStepView(), status: 'failed' } });
+  assert.ok(!/class="reclight"/.test(failed),
+    'the record light is still blinking on a job that is not running');
+});
+
+test('the page says the tape survives a closed tab', () => {
+  // THE MOST USEFUL SENTENCE ON A PAGE NOBODY WANTS TO SIT ON. The job is a
+  // queue entry and a worker claims it; closing the browser changes nothing.
+  // The page never said so, so the honest reading of it was "stay here".
+  const html = statusPage({ view: elevenStepView() });
+  assert.match(html, /close this page|leave this page|come back/i,
+    'the page never tells anybody they are allowed to leave');
+});

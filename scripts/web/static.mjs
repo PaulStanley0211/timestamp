@@ -1873,6 +1873,38 @@ input[type="file"]::file-selector-button {
 
 .counter { font-family: var(--osd); color: var(--faint); letter-spacing: 0.12em; font-size: var(--t-1); margin: 0 0 1.75rem; }
 
+/* THE RECORD LIGHT. Rendered only while the job is genuinely running -- see
+   statusPage -- so this never blinks over a tape that has already stopped.
+
+   NOT '.rec': that class is already the dot inside the wordmark SVG, and
+   sharing it would have made the brand mark and this indicator style each
+   other. Caught by a test before it shipped.
+
+   The blink is steps() rather than a fade, because a tally light is a lamp
+   being switched, not something that breathes. */
+.reclight {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-family: var(--osd); font-size: var(--t-1);
+  letter-spacing: 0.18em; color: var(--accent);
+  margin: 0 0 0.2rem;
+}
+.reclight .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: tally 1.6s steps(1, end) infinite; }
+@keyframes tally { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .reclight .dot { animation: none; } }
+
+/* THE ELEVEN STEPS, ONE LINE AWAY. Native <details>, so no script -- the CSP
+   names the shipped inline scripts by hash and a fourth would be dead in the
+   browser. The marker is left alone rather than restyled: the disclosure
+   triangle is the affordance somebody already knows, and DESIGN.md's borders
+   rule means there is nothing to draw around it anyway. */
+.stepdetail { margin: 0 0 1.2rem; }
+.stepdetail > summary {
+  cursor: pointer; color: var(--ink); opacity: var(--ghost);
+  font-size: var(--t-1); padding: 0.2rem 0;
+}
+.stepdetail > summary:hover { opacity: 1; }
+.stepdetail > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; opacity: 1; }
+
 .steps { list-style: none; padding: 0; margin: 0 0 1.75rem; }
 .step {
   display: grid;
