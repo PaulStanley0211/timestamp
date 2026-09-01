@@ -74,10 +74,14 @@ which needs the owner's taste and should start with mockups.
 
 **STILL THE OWNER'S, AND THE BLIND CHECK IS STILL THE ONE THAT MATTERS MOST.**
 Free, ten minutes, packet unsent at `out/blind-check/` for five sessions, and
-the only thing left that can tell us the product premise is wrong. Then an
+the only thing left that can tell us the product premise is wrong. ~~Then an
 image-moderation vendor — `imageModerateImpl` is an honest null seam and is the
-one genuinely unbuilt thing, needed before strangers upload faces. Backups are
-deliberately off until real money moves.
+one genuinely unbuilt thing~~ — **BUILT 2026-09-01, §52, AND DELIBERATELY OFF.**
+Rekognition sits behind the seam, tested, unconfigured. **DO NOT SET THE THREE
+AWS VARIABLES YET: the privacy page says the photograph goes to fal.ai "and to
+nobody else", and that sentence stops being true the moment they exist.** The
+page, a DPA and the processor list come first. Backups are deliberately off
+until real money moves.
 
 **THE SERVER COSTS €23.79/mo, NOT €5.** §34A's price table is stale by 5x: the
 CX line it quotes is "temporarily not available" everywhere, so the box is a
@@ -6176,6 +6180,102 @@ socket address, which behind Caddy is one address for the whole internet, and
 the auth limiter collapses into a single bucket where any one visitor locks out
 every other. One command answers it:
 `docker compose exec web printenv TIMESTAMP_TRUST_PROXY`.
+
+---
+
+### 52. THE PIXELS GET LOOKED AT, AND THE SWITCH IS DELIBERATELY OFF (2026-09-01)
+
+**1983 / 1981 -> 2015 / 2013 pass / 0 fail / 2 skipped.** +32 tests. Two
+commits, `0f60c86` (the signer) and `bfa5fe1` (the adapter and its wiring),
+both test-first, three sabotages caught and restored from a copy. All money
+guards re-run green afterwards.
+
+`imageModerateImpl` — the seam `safety/moderate.mjs` has carried open since it
+was written — now has an implementation. **It is not switched on, and §52B is
+the reason.**
+
+#### A — What was built
+
+`scripts/safety/aws-sigv4.mjs` is AWS request signing by hand over
+`node:crypto`. The alternative was `@aws-sdk/client-rekognition` and roughly
+forty transitive packages against a repo whose `dependencies` is `{}` with a CI
+guard enforcing it. Pure: no clock, no environment, no filesystem, no request.
+
+`scripts/safety/image-moderate-aws.mjs` is the adapter. **It is a paid call and
+is held to the rules `fal.mjs` is held to** — no default transport, demanded
+before credentials are read, credential scoped to one host derived from the
+region. `worker-cli.mjs` is the only place the credential is read, exactly as
+with `paidTransport`.
+
+**THE POLICY IS THE HALF THAT IS NOT GENERIC, and it protects shipped presets.**
+A stock block-list refuses `Swimwear or Underwear` — and `ostsee-strand` is a
+preset called "The beach, out of season", where a holiday photograph is the
+customer rather than the abuse case. Alcohol and tobacco pass for the same kind
+of reason: this is a nostalgia product set between 1999 and 2005 and refusing a
+cigarette would reject the most era-authentic photographs anyone sends. Refused
+is explicit content, violence, gore and hate symbols. **Both lists are exported
+and a test fails if a published category appears in neither**, so a new
+taxonomy version is visible instead of silently defaulting to allowed.
+
+#### B — DO NOT TURN IT ON YET, AND THIS IS THE LANDMINE
+
+**`/privacy` says the photograph is sent to fal.ai "and to nobody else".** That
+sentence stops being true the instant the three AWS variables exist, and
+nothing in the code can notice. Before switching it on: change that page, sign
+a DPA with AWS, and add them to the processor list. `eu-central-1` keeps the
+image in Frankfurt, the same jurisdiction as the Hetzner box that page already
+names, which is why that region and not a cheaper one.
+
+**The consent text survives unchanged** — it says "an AI service", singular and
+unspecified. It is `/privacy` that is specific, and specific is what breaks.
+
+#### C — What it does NOT do, because the name invites the assumption
+
+**It does not detect CSAM.** That is AWS's own documentation, not an opinion:
+"the image and video moderation APIs don't detect whether an image includes
+illegal content, such as CSAM." Known-CSAM detection is hash matching against a
+vetted database — PhotoDNA, Project Arachnid's Shield, Google CSAI Match — and
+those are programmes you apply to, on their own track, slow to start.
+
+**It cannot tell whether the person agreed to be in the photograph.** A model
+has no way to know whose face it is looking at. Someone uploading an
+ex-partner's photograph passes cleanly. **The consent checkbox is still the
+only control on that, before this file and after it**, and no purchase changes
+that.
+
+#### D — Decisions, so nobody re-argues them
+
+- **Failure THROWS rather than passing.** A missing `ModerationLabels` array is
+  the dangerous case, because `undefined` makes every filter report "nothing
+  found"; only an empty array means clean. So an AWS outage stops renders and
+  refunds them. Correct trade for a service that puts a stranger's face in a
+  video, and `moderate.mjs`'s own header already argued it: a silent pass reads,
+  a year later, exactly like a clean result from a classifier that was running.
+- **A half-configured environment refuses to start the worker.** Two variables
+  of three otherwise leaves an operator who believes photographs are checked.
+- **Confidence floor is 80, not AWS's default 50.** A false positive refuses a
+  paying customer's own photograph with an accusation attached.
+- **A vendor was chosen over a self-hosted sidecar** because the box is a
+  2-vCPU CPX22 already running ffmpeg and the owner is solo. The sidecar is the
+  only option that would keep the privacy sentence literally true; revisit it if
+  the processor disclosure ever becomes the binding problem.
+
+#### E — Things that will bite
+
+- **A HASH RECALLED FROM MEMORY IS NOT A TEST VECTOR.** The first version of
+  the signer's test pinned a signature from memory. It went red — and the fault
+  was the remembered value, not the code: the canonical-request assertion beside
+  it passed byte for byte. Two more doc fetches failed to produce a sourceable
+  vector, so the test now asserts the literal canonical request and string to
+  sign and checks the signature's PROPERTIES instead. **The HMAC chain order is
+  the one thing left unproven, and one live call settles it** — a 403 means the
+  signer, anything else means credentials or IAM policy.
+- **The `_` filter problem has a cousin here.** Rekognition returns L2 and L3
+  rows whose own `Name` is not in the policy; the parent is. Matching only on
+  `Name` lets "Exposed Buttocks or Anus" through because the policy names
+  `Explicit`. Both are checked, and a sabotage confirmed the test catches it.
+- **`AWS_*` are vendor-native names on purpose**, matching `FAL_KEY` and
+  `STRIPE_SECRET_KEY`. `TIMESTAMP_*` is for this product's own settings.
 
 ---
 
