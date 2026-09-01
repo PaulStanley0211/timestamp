@@ -6058,6 +6058,127 @@ result and status pages.
 
 ---
 
+### 51. THE gstack /cso AUDIT, AND THE DECISION ON THE PUBLISHED COMMIT MESSAGES (2026-09-01)
+
+**Suite 1982 / 1980 -> 1983 / 1981 pass / 0 fail / 2 skipped.** A full
+fifteen-phase `/cso` audit over the delta since §35, through the deployed state.
+Five independent auditors ran in parallel over account deletion and export,
+media authorisation, money integrity, the Stripe path, and session/XSS.
+**Four returned nothing above the confidence gate.** The fifth returned one
+LOW, which is closed below.
+
+**THE FINDINGS THEMSELVES ARE IN `.gstack/security-reports/`, WHICH IS
+GITIGNORED, AND THEY STAY THERE.** Same rule as `docs/security-review-*.md` and
+for the same reason. What is below is what the code now DOES and what was
+decided; it is not a list of what is open.
+
+#### A -- What is safe to say, because it is all good news
+
+`.env` has never been committed and no fal key, JWT, or private key appears in
+any commit. **The security review documents have never entered history** --
+verified twice over, by path log and by object enumeration across every commit.
+CI references no secrets at all and declares `permissions: contents: read`.
+`node:child_process` is imported in exactly ONE file and called with an args
+array and `shell: false`, so there is no command-injection surface. The fal
+transport re-checks every redirect hop against its allow-list and refuses to
+carry the credential anywhere but the queue host. All five money guards run
+green, including the behavioural one §35 wrote after finding its predecessor
+passing vacuously. Ten job and media routes carry ten ownership checks, and
+ownership is proved before disk is touched. The account export is a literal
+allow-list, so the scrypt hash and the session ids cannot ride out of it.
+Production headers were read off the live site and match the code exactly.
+
+**And retention keeps its promise, measured rather than assumed:** twelve-day-old
+jobs hold zero bytes of input against a seven-day photo window.
+
+#### B -- Three closed the same day
+
+| Commit | What it does |
+|---|---|
+| `3abcb9e` | A cross-site post cannot commit somebody's render |
+| `f9d076b` | Local agent state cannot be published by a fresh clone |
+| `0718abc` | The write-up stops leaking the thing the design protects |
+
+**The first was a real defect and not a formality.** `POST /api/jobs/:id/select`
+was the only one of fourteen state-changing POST routes with neither the
+same-origin gate nor the anti-forgery pair, and the test went **200 against the
+unfixed code** -- the forged request recorded a choice and enqueued the job.
+`SameSite=Lax` stops a real browser, which is exactly why it was invisible.
+
+**The second was worse than it looked.** `.claude/worktrees/` appeared protected
+and was covered only by `.git/info/exclude`, which is local and never committed,
+so a fresh clone had no protection at all -- the identical hole the `.gstack/`
+rule three lines above already documents in its own comment.
+
+#### C -- THE PUBLISHED COMMIT MESSAGES: THE DECISION IS ACCEPT, AND IT IS EVIDENCE-BASED
+
+§32 item 20 and §35D item 2 have carried this open since 2026-08-25. **Taken
+2026-09-01: the two real ones stay, and they are not rewritten.**
+
+Rewriting was assessed and rejected on measurement, not taste. **`refs/pull/1/head`
+is retained by GitHub independently of the branch**, and the commit still answers
+**HTTP 200 to an unauthenticated API request** -- both verified. So a force-push
+on an open PR reduces discoverability without erasing anything, and buys a false
+sense that the content is gone, which is the worst of the three outcomes. Only a
+GitHub Support garbage-collect actually retracts, and that is disproportionate
+here: **almost everything those messages describe is now CLOSED**, including the
+money item, which is shut by the `livemode !== true` gate.
+
+**What is still live in them is a single pointer at the `config/models.json`
+still-model edit -- the one this file already warns about in its own safe form,
+in the START HERE block and in §32 item 9. Nobody but the owner can make that
+edit, so it is intelligence rather than a path, and closing the thing it points
+at is the durable answer.** That has not moved and is still gated on the
+still-model choice, which is parked behind the paid runs.
+
+**`guards.yml`'s KNOWN list is annotated now, and the reason matters more than
+the tidy-up.** Three SHAs are listed and they are NOT three of a kind: two are
+real, and one is the guard's own FALSE POSITIVE, matching on a single phrase
+inside a sentence that describes a property the code GUARANTEES rather than a
+weakness. A reader who assumed all three were leaks would either waste an
+afternoon or decide the guard is noisy and weaken it. **The pattern is
+deliberately NOT narrowed** -- a regex that tried to tell "we prevented this"
+from "this exists" would start missing real ones.
+
+#### D -- Things that will bite
+
+- **A TERM-DENSITY GREP IS NOT A READ, and it produced a wrong finding in this
+  very audit.** The report inferred, from a keyword hit plus nearby
+  not-closed language, that a message disclosed a specific still-open item. Read
+  in full, that keyword sat in a sentence delivering GOOD news. **Characterising
+  a document by word frequency is a triage step, never a conclusion.**
+- **DO NOT APPROXIMATE A GUARD WHEN CHECKING IT** -- §42G, and it fired again
+  here. A hand-written stand-in for the commit-message guard's regex reported a
+  SHA as clean; the guard's own pattern matches it. Run the guard's literal
+  lines, every time.
+- **A PROBE WITH THE WRONG `Accept` HEADER LIES.** `curl` sends `Accept: */*`
+  and gated routes answer 401, not the documented 303 to `/login?next=`. The
+  local server read as stale when it was current. Pass `-H "Accept: text/html"`.
+- **TEST THE FILES, NOT THE DIRECTORY.** A retention check that asks whether
+  `input/` exists reports a false violation: the purge deletes the FILES and
+  leaves the empty directory for the life of the job. Count files and bytes.
+- **STOPPING AN `npm run worker` BACKGROUND TASK LEAVES THE NODE CHILD ALIVE**,
+  exactly as this file warns for `npm run web`. Kill by PID. The worker names
+  itself after its own PID, which makes it easy to find.
+
+#### E -- What is left of it
+
+**ONE ITEM IS OPEN FROM THIS AUDIT AND IT IS NOT DESCRIBED HERE.** It is a
+MEDIUM, it is infrastructure rather than code, it needs a compose change and a
+deploy rather than a commit, and it is written up in
+`.gstack/security-reports/2026-09-01-101000.json`. **Read that file before
+touching `compose.yaml`.**
+
+**And one verification is owed that could not be made from this machine:**
+confirm `TIMESTAMP_TRUST_PROXY=1` is genuinely set in `/opt/timestamp/.env` on
+the box. The runbook says to set it. If it is NOT set, `clientIpOf` returns the
+socket address, which behind Caddy is one address for the whole internet, and
+the auth limiter collapses into a single bucket where any one visitor locks out
+every other. One command answers it:
+`docker compose exec web printenv TIMESTAMP_TRUST_PROXY`.
+
+---
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT

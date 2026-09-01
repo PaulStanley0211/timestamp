@@ -107,18 +107,44 @@ jobs:
       # message is published exactly as effectively as a file.
       #
       # KNOWN EXCEPTIONS, and it is deliberate that they are loud rather than
-      # silent. THREE commits already carry review detail, and all three are
-      # reachable from pushed branches:
+      # silent. Three commits are listed, and READ 2026-09-01: they are not
+      # three of a kind. Two are real disclosures and one is this guard's own
+      # false positive, which matters because a reader who assumes all three are
+      # leaks will either waste an afternoon or decide the guard is noisy and
+      # weaken it. What each one actually matches on:
       #
-      #   18352f4  origin/supabase-identity-slice, origin/ui-redesign-signed-in-page
-      #   190a9ec  origin/supabase-identity-slice
-      #   6efb0e6  origin/supabase-identity-slice, origin/ui-redesign-signed-in-page
+      #   18352f4  REAL. "ONE CRITICAL", "THREE HIGH", "F13 are", "F31 arms".
+      #            A 43-line body describing the second review's findings with
+      #            mechanisms and a daily spend ceiling.
+      #            origin/supabase-identity-slice, origin/ui-redesign-signed-in-page
+      #   6efb0e6  REAL, and smaller. Matches on "one CRITICAL". It is the
+      #            commit that CORRECTED the leak and restates just enough of
+      #            the shape to explain what it was fixing.
+      #            origin/supabase-identity-slice, origin/ui-redesign-signed-in-page
+      #   190a9ec  FALSE POSITIVE. Matches on the single phrase "enumeration
+      #            oracle", in a sentence describing a property the code
+      #            GUARANTEES -- that a swallow answers identically across four
+      #            upstream outcomes, so a later rethrow would read as an oracle.
+      #            That is a defensive guarantee, not a weakness. It stays listed
+      #            only because the pattern cannot tell the two uses apart, and
+      #            the pattern is deliberately NOT narrowed: a regex that tries
+      #            to distinguish "we prevented an oracle" from "there is an
+      #            oracle" would start missing real ones.
+      #            origin/supabase-identity-slice
       #
-      # Rewriting published history is the owner's call, not CI's, so they are
-      # named here with their reason and CI stays green on everything else while
-      # that decision is pending. GitHub serves unreachable commits by SHA
-      # indefinitely, so a rewrite reduces discoverability without erasing it --
-      # closing the disclosed findings is the durable answer either way.
+      # THE DECISION ON THE TWO REAL ONES IS TAKEN, 2026-09-01: they stay.
+      # Rewriting was assessed and rejected on evidence rather than taste.
+      # `refs/pull/1/head` is retained by GitHub independently of the branch,
+      # and 18352f4 still answers HTTP 200 to an unauthenticated API request, so
+      # a force-push reduces discoverability without erasing anything and costs
+      # a rewrite on an open PR to do it. Only a GitHub Support garbage-collect
+      # actually retracts, which is disproportionate for content that is now
+      # almost entirely CLOSED findings -- the money CRITICAL it names is shut by
+      # the `livemode !== true` gate in server.mjs. What is still live in it is
+      # one pointer at the `config/models.json` still-model edit that CLAUDE.md
+      # already warns about in its own safe form. Nobody but the owner can make
+      # that edit, so it is intelligence rather than a path, and closing the
+      # thing it points at is the durable answer. See CLAUDE.md section 51.
       #
       # Delete a SHA from this list when its message is rewritten. An empty list
       # is the goal; a growing one means the rule is being worked around.
