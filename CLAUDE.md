@@ -5475,11 +5475,21 @@ public repository.
   Supabase keys, and the two Stripe secrets — and it is `chmod 600`, gitignored,
   and out of the image. `npm run backup` does NOT include it. Losing the server
   means re-fetching every one of them from its own console.
-- **`TIMESTAMP_LEGAL_ENTITY` lives only in that `.env`**, by design (§42D). The
-  street is **Keplerstraße**, not Kaplerstraße — this file and the live site
-  both carried the wrong spelling for about an hour because it was guessed from
-  a transcription and confirmed by a leading question. Stripe's copy is what
-  caught it.
+- **`TIMESTAMP_LEGAL_ENTITY` lives only in that `.env`**, by design (§42D), and
+  **THE ADDRESS IS NOT REPEATED IN THIS FILE.** It used to be. §42D keeps the
+  entity out of git precisely because a sole trader's disclosure address is a
+  home address and this repository is public — and then §46F named the street
+  here anyway, while writing up a spelling correction. **The write-up undid the
+  thing the design existed to do**, which is the failure mode worth remembering:
+  a value gets leaked by the prose explaining how careful you were with it.
+  Removed 2026-09-01 (§50 audit, finding 5). The street name stays in `.env` and
+  on the live Impressum, which is where it is supposed to be.
+- **The lesson that correction carried is still worth having.** The street was
+  misspelled in this file and on the live site for about an hour, because the
+  value was guessed from a transcription and then confirmed by asking a leading
+  question — which is how a wrong value survives the check that was supposed to
+  catch it. Stripe's copy of the entity is what actually caught it. Read a legal
+  value back from the authority that holds it, never from your own notes.
 - **A price on a browser-smoke screenshot is a fixture value** — §45D, and it
   came up again while reviewing the live pricing page. Real costs are
   21/28/46/61.
