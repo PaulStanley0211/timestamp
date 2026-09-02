@@ -31,11 +31,29 @@
 #     does not produce an image.
 
 ARG NODE_MAJOR=22
-FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
+# TRIXIE (Debian 13) RATHER THAN BOOKWORM, AND THE REASON IS THE FFMPEG BELOW.
+# Bookworm ships ffmpeg 5.1, and on 2026-09-02 the first tape ever rendered
+# inside this image came out ENTIRELY GREEN -- correct luma structure, correct
+# frame count, correct duration, correct loudness, and the colour of a fault.
+# The same commit on the same source clip rendered correctly against 8.1.1
+# outside the container. Trixie ships 7.1.
+FROM node:22-trixie-slim@sha256:7b8a0c89c54499bee567618f96578e1a12a800f062fbdbfd1fb6a443fa6f6284
 
-# The major version the look was calibrated against. Bump it deliberately,
-# after re-running `npm run look` and comparing the output.
-ARG FFMPEG_MAJOR=5
+# THE MAJOR VERSION THE LOOK IS CALIBRATED AGAINST, and this line was WRONG
+# from the day it was written until 2026-09-02. It said 5, with a comment
+# claiming 5 was what the look had been calibrated against; it never was. 5 is
+# what Debian 12 happened to ship. The look was tuned on this project's own
+# machine against 8.x, and nothing noticed for four days because the box had
+# never rendered a tape -- the queue read `done 0` until the supplier change.
+#
+# WHAT THE BUILD-TIME PREFLIGHT BELOW CANNOT SEE, and this is the lesson: it
+# checks that all 36 filters EXIST. They exist in 5.1. They behave differently,
+# and the grade/tape boundary is negotiated rather than pinned (see CLAUDE.md,
+# "The grade runs in RGB and the tape stage runs in YUV"). Presence is not
+# behaviour, and a green tape satisfies every assertion this project makes.
+#
+# Bump this deliberately, after re-rendering a real tape and LOOKING AT IT.
+ARG FFMPEG_MAJOR=7
 
 # ffmpeg is the whole texture half of this product; `tini` is here because node
 # as PID 1 does not reap children, and every render spawns one.
