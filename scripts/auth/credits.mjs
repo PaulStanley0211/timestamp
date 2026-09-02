@@ -636,14 +636,68 @@ export function providerWasCalled(job) {
   return steps.some((step) => PAID_STEPS.includes(step?.name) && Number(step?.attempts ?? 0) > 0);
 }
 
+/**
+ * The 4xx outcomes that mean the provider did no work there is anything to
+ * bill for: it read the request, understood it, and declined.
+ *
+ * `moderation_refused` and `bad_request` are the two shapes `classifyHttp`
+ * gives a 400 or 422; `credential` is a 401 or 403, where the request was
+ * never even authorised. None of them produces a generation, and CLAUDE.md §8
+ * records the same fact measured against fal directly: a 422 is not billed.
+ *
+ * DELIBERATELY NOT HERE: `upstream` (5xx), `rate_limited`, `timeout`, and the
+ * absence of any recorded error. Every one of those is a case where the
+ * request may have been served and billed while the answer was lost, which is
+ * exactly the ambiguity §37E refused to guess at.
+ */
+const UNBILLED_REFUSALS = Object.freeze(['moderation_refused', 'bad_request', 'credential']);
+
+/**
+ * Whether every paid attempt this job made ended in a provider refusal.
+ *
+ * THE CASE §37E DID NOT CONSIDER. Its reasoning was that nothing on disk can
+ * distinguish a pre-flight crash from an in-flight loss, so a paid step that
+ * was attempted must be assumed billed. That is right about ambiguity and this
+ * is the outcome that carries none: a 4xx refusal is a recorded answer FROM the
+ * provider saying it declined to run.
+ *
+ * Measured 2026-09-02 on the first real paid order: job 20260902-141334-34a7e4
+ * was refused on content grounds and the owner's balance went 21 to 0 for a
+ * tape that was never generated. On the free tier that is a customer's entire
+ * grant, spent on nothing.
+ *
+ * `attempts === 1` IS PART OF THE TEST AND NOT A DETAIL. Only the last
+ * attempt's error survives on the manifest, so a step tried twice could have
+ * been served once and refused once, and its recorded error would look
+ * identical to a clean refusal. One attempt is the only case where the recorded
+ * error describes everything that happened.
+ */
+function providerRefusedWithoutCharge(job) {
+  const steps = Array.isArray(job?.steps) ? job.steps : [];
+  const paid = steps.filter(
+    (step) => PAID_STEPS.includes(step?.name) && Number(step?.attempts ?? 0) > 0,
+  );
+  if (paid.length === 0) return false;
+  return paid.every((step) => (
+    Number(step.attempts) === 1
+    && step.status === 'failed'
+    && UNBILLED_REFUSALS.includes(step?.error?.code)
+  ));
+}
+
 /** The form worth copying: the rule applied rather than restated. Returns
  *  whether anything was given back, and never throws for the spent case --
  *  declining a refund is a normal outcome, not an error. */
 export function refundIfUnspent(account, job, { reason, nowImpl } = {}) {
-  if (providerWasCalled(job)) return false;
+  const refused = providerRefusedWithoutCharge(job);
+  if (providerWasCalled(job) && !refused) return false;
   refundCredits(account, {
     jobId: job.jobId,
-    reason: reason ?? 'refund:failed-before-provider',
+    // The two cases are different facts and the ledger says which: one never
+    // reached a provider, the other reached one and was turned away. A refund
+    // labelled "failed-before-provider" for a job that plainly did call fal is
+    // the kind of line that makes an audit trail stop being trusted.
+    reason: reason ?? (refused ? 'refund:provider-refused' : 'refund:failed-before-provider'),
     spent: false,
     nowImpl,
   });

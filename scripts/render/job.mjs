@@ -1039,6 +1039,18 @@ export function failStep(job, name, error) {
     code: error?.code ?? 'ERROR',
     message: error?.message ?? String(error ?? 'unknown error'),
     retriable: error?.retriable ?? null,
+    // WHAT THE PROVIDER ACTUALLY SAID, and it used to be dropped here. On
+    // 2026-09-02 fal refused the first real paid order on content grounds and
+    // the manifest recorded the code, the message and the clock -- everything
+    // except the one field naming what it objected to. `classifyHttp` builds
+    // the response body into `error.detail` and this line is where it went on
+    // the floor, so a refusal a customer can trigger was one an operator could
+    // not diagnose.
+    //
+    // It is safe on the manifest and it does not reach the browser: `jobView`
+    // projects errors through `customerError`, which is a two-field allow-list
+    // of code and message. The body is capped at 2000 characters upstream.
+    detail: error?.detail ?? null,
     step: name,
     at,
   };

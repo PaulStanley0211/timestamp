@@ -888,3 +888,40 @@ test('the chosen shape is recorded on the job, and an old manifest still means 4
   const { job: old } = makeJob({ input: baseInput() });
   assert.equal(old.input.aspect, '4:3');
 });
+
+test('a provider refusal keeps the reason it gave, or nobody can fix it', () => {
+  // MEASURED 2026-09-02, THE FIRST REAL PAID ORDER. fal answered HTTP 422 on
+  // content grounds and the manifest recorded code, message, retriable, step
+  // and time -- everything except the one field that says WHAT it objected to.
+  // `classifyHttp` builds that body into `error.detail` and `failStep` dropped
+  // it on the floor, so the only artefact that could have explained a refusal
+  // was gone by the time anybody went looking.
+  //
+  // A refusal a customer can trigger and an operator cannot diagnose is a
+  // support queue with no exit.
+  const { job } = makeJob();
+  beginStep(job, 'animate');
+  const err = Object.assign(new Error('fal: HTTP 422 -- the provider refused on content grounds'), {
+    code: 'moderation_refused',
+    retriable: false,
+    detail: { status: 422, body: '{"detail":"input image failed content policy"}' },
+  });
+
+  failStep(job, 'animate', err);
+
+  const step = job.steps.find((s) => s.name === 'animate');
+  assert.equal(step.error.code, 'moderation_refused', 'the code still records');
+  assert.ok(step.error.detail, 'the provider detail was discarded -- the refusal is undiagnosable');
+  assert.match(JSON.stringify(step.error.detail), /content policy/,
+    'the body fal actually sent must survive onto the manifest');
+  assert.equal(step.error.detail.status, 422, 'the status it answered with survives too');
+});
+
+test('a failure with no detail records null rather than inventing one', () => {
+  const { job } = makeJob();
+  beginStep(job, 'animate');
+  failStep(job, 'animate', Object.assign(new Error('socket hung up'), { code: 'upstream' }));
+  const step = job.steps.find((s) => s.name === 'animate');
+  assert.equal(step.error.detail, null,
+    'an error carrying no detail must say so, not carry undefined into the manifest');
+});

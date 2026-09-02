@@ -1293,3 +1293,119 @@ test('the refunds CLI refuses what it does not recognise, touching nothing', asy
     'a refusal must move no money');
   assert.equal(listMissedRefunds({ root }).length, 1, 'a refusal must not touch the record either');
 });
+
+// ---------------------------------------------------------------------------
+// the refusal that costs nothing, and used to cost a customer everything
+// ---------------------------------------------------------------------------
+
+/**
+ * MEASURED ON THE FIRST REAL PAID ORDER, 2026-09-02. Job
+ * 20260902-141334-34a7e4 reached `animate`, and fal answered HTTP 422 on
+ * content grounds 55 seconds later. `providerWasCalled` saw attempts > 0 on a
+ * paid step, declined the refund, and the owner's balance went 21 -> 0 for a
+ * render that never ran.
+ *
+ * THE GENERAL RULE IS RIGHT AND THIS IS THE CASE IT NEVER CONSIDERED. §37E
+ * chose to over-report deliberately -- "nothing on disk can distinguish a
+ * pre-flight crash from an in-flight loss", and under-reporting hands out free
+ * provider calls. Both halves still hold. What it did not consider is the
+ * outcome that is not ambiguous at all: a 4xx REFUSAL is the provider saying it
+ * understood the request and declined to run it. No generation happened, and
+ * CLAUDE.md §8 records the same fact from the uso experiment -- "a 422 is not
+ * billed".
+ *
+ * So the narrowing is exactly one shape: every paid attempt ended in a 4xx
+ * refusal. Anything ambiguous -- a 5xx, a timeout, a lost connection, a crash
+ * with no error recorded -- keeps the conservative answer, because those are
+ * the cases where the request may well have been served and billed.
+ */
+const failedPaidJob = (error, { attempts = 1, jobId = JOB(41) } = {}) => ({
+  jobId,
+  steps: [
+    { name: 'intake', status: 'done', attempts: 1 },
+    { name: 'still', status: 'skipped', attempts: 0 },
+    { name: 'animate', status: 'failed', attempts, error },
+  ],
+});
+
+test('a provider refusal gives the credits back, because nothing was generated', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  setBalance(account, 21, clock());
+
+  const job = failedPaidJob({
+    code: 'moderation_refused',
+    message: 'fal: HTTP 422 -- the provider refused on content grounds',
+  });
+  debitCredits(account, { jobId: job.jobId, credits: 21, reason: 'render', nowImpl: clock() });
+  assert.equal(balanceOf(account).credits, 0, 'the debit must land first');
+
+  const gave = refundIfUnspent(account, job, { reason: 'refund:provider-refused', nowImpl: clock() });
+  assert.equal(gave, true, 'a 4xx refusal must refund -- the provider did no work to bill for');
+  assert.equal(balanceOf(account).credits, 21, 'the customer is whole again');
+});
+
+test('a rejected request refunds too, and so does a rejected credential', async (t) => {
+  // Both are 4xx: the request never became a generation. A customer must not
+  // pay for our malformed request, nor for our expired key.
+  for (const code of ['bad_request', 'credential']) {
+    const root = makeRoot(t);
+    const account = await signUp(root);
+    setBalance(account, 21, clock());
+    const job = failedPaidJob({ code, message: `fal: ${code}` }, { jobId: JOB(42) });
+    debitCredits(account, { jobId: job.jobId, credits: 21, reason: 'render', nowImpl: clock() });
+
+    assert.equal(refundIfUnspent(account, job, { nowImpl: clock() }), true, `${code} must refund`);
+    assert.equal(balanceOf(account).credits, 21, `${code} left the customer short`);
+  }
+});
+
+test('an ambiguous failure still keeps the conservative answer', async (t) => {
+  // THE HALF THAT MUST NOT MOVE. A 5xx, a timeout or a dropped connection all
+  // mean the request may have been served and billed, and §37E's reasoning
+  // applies to every one: under-reporting hands out an unlimited supply of free
+  // provider calls, and the only place that shows up is the invoice.
+  for (const error of [
+    { code: 'upstream', message: 'fal: HTTP 503 -- the provider failed' },
+    { code: 'rate_limited', message: 'fal: HTTP 429' },
+    { code: 'timeout', message: 'no answer' },
+    null,
+  ]) {
+    const root = makeRoot(t);
+    const account = await signUp(root);
+    setBalance(account, 21, clock());
+    const job = failedPaidJob(error, { jobId: JOB(43) });
+    debitCredits(account, { jobId: job.jobId, credits: 21, reason: 'render', nowImpl: clock() });
+
+    assert.equal(refundIfUnspent(account, job, { nowImpl: clock() }), false,
+      `${error?.code ?? 'no error recorded'} must NOT refund -- it may have been billed`);
+    assert.equal(balanceOf(account).credits, 0, 'an ambiguous failure keeps the charge');
+  }
+});
+
+test('a refusal after a retry does not excuse the attempt before it', async (t) => {
+  // A step tried twice -- served once, then refused -- is not a clean refusal,
+  // and only the recorded error of the LAST attempt survives on the manifest.
+  // attempts > 1 is the cheapest honest signal that an earlier one may have run.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  setBalance(account, 21, clock());
+  const job = failedPaidJob(
+    { code: 'moderation_refused', message: 'refused' },
+    { attempts: 2, jobId: JOB(44) },
+  );
+  debitCredits(account, { jobId: job.jobId, credits: 21, reason: 'render', nowImpl: clock() });
+
+  assert.equal(refundIfUnspent(account, job, { nowImpl: clock() }), false,
+    'a second attempt means an earlier one may have run and been billed');
+  assert.equal(balanceOf(account).credits, 0);
+});
+
+test('providerWasCalled itself is unchanged -- it answers a different question', () => {
+  // It reports whether a paid step was ever ATTEMPTED, which is still true of a
+  // refused job and is still what the worker's own logging wants to know. The
+  // refund decision is what learned to be more precise; this did not move.
+  const job = failedPaidJob({ code: 'moderation_refused', message: 'refused' });
+  assert.equal(providerWasCalled(job), true,
+    'a refused job did reach the provider, and this function still says so');
+});
