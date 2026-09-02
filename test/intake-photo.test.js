@@ -33,6 +33,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -160,6 +161,55 @@ test('the byte cap is enforced before the file is decoded', async () => {
   assert.ok(err instanceof IntakeError);
   assert.equal(err.code, 'too-large');
   assert.equal(err.detail.bytes, LIMITS.maxBytes + 1);
+});
+
+test('the pixel cap is read off the stream header, before any frame is decoded', async () => {
+  // Decoding is where an attacker-shaped file does its work -- a 9000x9000
+  // declared frame is a 243 MB allocation before the cap has been consulted.
+  // The header alone says how big the picture claims to be, so that is what
+  // the cap reads first; a frame is asked for only from a file already inside
+  // every limit.
+  const calls = [];
+  const ffprobeImpl = async (args) => {
+    calls.push(args);
+    if (args.includes('-show_frames')) throw new Error('a frame was decoded from a file over the pixel cap');
+    return { stdout: JSON.stringify({ streams: [{ codec_name: 'mjpeg', width: 9000, height: 9000 }] }) };
+  };
+  const fsImpl = { statSync: () => ({ isFile: () => true, size: 1_000 }) };
+  const err = await inspectPhoto('huge.jpg', { fsImpl, ffprobeImpl }).catch((e) => e);
+  assert.ok(err instanceof IntakeError, `expected an IntakeError, got ${err?.message}`);
+  assert.equal(err.code, 'too-large');
+  assert.equal(err.detail.width, 9000);
+  assert.ok(calls.length >= 1, 'the header was probed');
+  assert.ok(calls.every((a) => !a.includes('-show_frames')), 'and no frame was ever asked for');
+});
+
+test('every ffprobe and ffmpeg call on an upload forbids every protocol but the local file', async () => {
+  // A stock ffmpeg already refuses network protocols for file-origin input;
+  // stating the whitelist makes that a property of this code rather than of
+  // whichever build is installed. It must precede `-i`, or it does not apply
+  // to the input at all.
+  const probes = [];
+  const encodes = [];
+  const ffprobeImpl = async (args) => { probes.push(args); return runFfprobe(args); };
+  const ffmpegImpl = async (args) => { encodes.push(args); return runFfmpeg(args); };
+  const src = path.join(FIX, 'portrait.jpg');
+  const dest = path.join(os.tmpdir(), `ts-intake-whitelist-${process.pid}.jpg`);
+  await ingestPhoto(src, dest, { ffprobeImpl, ffmpegImpl });
+  fs.rmSync(dest, { force: true });
+
+  assert.ok(probes.length >= 1 && encodes.length === 1, `${probes.length} probes, ${encodes.length} encodes`);
+  for (const args of [...probes, ...encodes]) {
+    const at = args.indexOf('-protocol_whitelist');
+    assert.notEqual(at, -1, `no whitelist on: ${args.join(' ')}`);
+    assert.equal(args[at + 1], 'file', 'the local file, and nothing else');
+    // ffmpeg names its input with `-i`; ffprobe takes it as the last argument
+    // -- and the ingest probes the DESTINATION too, so the last argument is
+    // the honest position rather than a search for the source path.
+    const input = args.indexOf('-i');
+    const file = args.length - 1;
+    assert.ok(at < (input === -1 ? file : input), 'the whitelist must come before the input it governs');
+  }
 });
 
 test('no IntakeError leaks a filesystem path to the user', { skip }, async () => {

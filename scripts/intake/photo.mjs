@@ -118,11 +118,42 @@ function sha256File(file, fsImpl) {
   return crypto.createHash('sha256').update(fsImpl.readFileSync(file)).digest('hex');
 }
 
-/** ffprobe args for a still. `-read_intervals` caps an animated WebP at its
- *  first frame so a 300-frame sticker does not become a 300-frame probe. */
+/**
+ * THE LOCAL FILE, AND NO OTHER PROTOCOL. These bytes came from a stranger,
+ * and ffmpeg's demuxers include several that follow references to other
+ * inputs -- a playlist, a concat script, a URL inside a container. A stock
+ * build already refuses network protocols for file-origin input; stating the
+ * whitelist makes that a property of this code rather than of whichever
+ * build is installed, and it must precede the input it governs or it does
+ * not apply to it. Shared by the probes and the re-encode so the three
+ * cannot disagree.
+ */
+const PROTOCOL_WHITELIST = ['-protocol_whitelist', 'file'];
+
+/** ffprobe args for the STREAM HEADER alone: codec and declared size, no
+ *  frame decoded. This is what the pixel cap reads, because decoding is where
+ *  an attacker-shaped file does its work -- a declared 9000x9000 frame is a
+ *  243 MB allocation, and the cap has to be consulted before that happens,
+ *  not after. */
+function headerArgs(file) {
+  return [
+    '-v', 'error',
+    ...PROTOCOL_WHITELIST,
+    '-select_streams', 'v:0',
+    '-show_entries', 'stream=codec_name,width,height',
+    '-of', 'json',
+    file,
+  ];
+}
+
+/** ffprobe args for the first FRAME, asked only of a file already inside
+ *  every limit. `-read_intervals` caps an animated WebP at its first frame so
+ *  a 300-frame sticker does not become a 300-frame probe; the frame is where
+ *  the EXIF and the real pixel size live, and a header can lie about both. */
 function probeArgs(file) {
   return [
     '-v', 'error',
+    ...PROTOCOL_WHITELIST,
     '-select_streams', 'v:0',
     '-read_intervals', '%+#1',
     '-show_entries', 'stream=codec_name,width,height',
@@ -138,6 +169,27 @@ function probeArgs(file) {
 function firstFrame(parsed) {
   const list = parsed.frames ?? parsed.packets_and_frames ?? [];
   return list.find((f) => (f.type ?? 'frame') === 'frame') ?? {};
+}
+
+/** The two edge limits, applied to a size -- the declared one first, then
+ *  the decoded one. One function so the two checks cannot drift apart. */
+function refuseOutsideEdges(srcPath, width, height, limits) {
+  const shortEdge = Math.min(width, height);
+  const longEdge = Math.max(width, height);
+  if (shortEdge < limits.minEdge) {
+    throw new IntakeError(`"${srcPath}" is ${width}x${height}, under the ${limits.minEdge}px minimum edge`, {
+      code: 'too-small',
+      userMessage: `That photo is ${width} by ${height} pixels. We need at least ${limits.minEdge} pixels on the shorter side, or the face is too small to work from.`,
+      detail: { width, height, minEdge: limits.minEdge },
+    });
+  }
+  if (longEdge > limits.maxEdge) {
+    throw new IntakeError(`"${srcPath}" is ${width}x${height}, over the ${limits.maxEdge}px maximum edge`, {
+      code: 'too-large',
+      userMessage: `That photo is ${width} by ${height} pixels, which is bigger than we can handle. Please export it at ${limits.maxEdge} pixels or less on the longest side.`,
+      detail: { width, height, maxEdge: limits.maxEdge },
+    });
+  }
 }
 
 /**
@@ -183,18 +235,26 @@ export async function inspectPhoto(srcPath, {
     });
   }
 
-  let parsed;
+  const undecodable = (err) => new IntakeError(`ffprobe could not decode "${srcPath}": ${err.message}`, {
+    code: 'undecodable',
+    userMessage: 'We could not open that file as an image. JPEG, PNG and WebP all work.',
+  });
+
+  // PHASE 1: THE HEADER, AND NOTHING DECODED. The codec and the declared
+  // size are enough to refuse a format this product does not take and a
+  // picture over the pixel cap -- and the cap has to be consulted BEFORE a
+  // frame is asked for, because decoding is where an attacker-shaped file
+  // does its work. A header can under-declare, which is why the frame's own
+  // size is checked again below; it cannot make the cap miss a picture that
+  // honestly declares itself enormous.
+  let header;
   try {
-    const { stdout } = await ffprobeImpl(probeArgs(srcPath));
-    parsed = JSON.parse(stdout);
+    header = JSON.parse((await ffprobeImpl(headerArgs(srcPath))).stdout);
   } catch (err) {
-    throw new IntakeError(`ffprobe could not decode "${srcPath}": ${err.message}`, {
-      code: 'undecodable',
-      userMessage: 'We could not open that file as an image. JPEG, PNG and WebP all work.',
-    });
+    throw undecodable(err);
   }
 
-  const stream = parsed.streams?.[0];
+  const stream = header.streams?.[0];
   const format = CODEC_MIME[stream?.codec_name];
   if (!format || !limits.accept.includes(format)) {
     throw new IntakeError(
@@ -206,6 +266,18 @@ export async function inspectPhoto(srcPath, {
       },
     );
   }
+  const declaredWidth = Number(stream.width ?? 0);
+  const declaredHeight = Number(stream.height ?? 0);
+  if (declaredWidth && declaredHeight) refuseOutsideEdges(srcPath, declaredWidth, declaredHeight, limits);
+
+  // PHASE 2: THE FIRST FRAME, from a file already inside every limit. This is
+  // where the EXIF and the real pixel size live.
+  let parsed;
+  try {
+    parsed = JSON.parse((await ffprobeImpl(probeArgs(srcPath))).stdout);
+  } catch (err) {
+    throw undecodable(err);
+  }
 
   const frame = firstFrame(parsed);
   const width = Number(frame.width ?? stream.width ?? 0);
@@ -216,23 +288,7 @@ export async function inspectPhoto(srcPath, {
       userMessage: 'We could not open that file as an image. JPEG, PNG and WebP all work.',
     });
   }
-
-  const shortEdge = Math.min(width, height);
-  const longEdge = Math.max(width, height);
-  if (shortEdge < limits.minEdge) {
-    throw new IntakeError(`"${srcPath}" is ${width}x${height}, under the ${limits.minEdge}px minimum edge`, {
-      code: 'too-small',
-      userMessage: `That photo is ${width} by ${height} pixels. We need at least ${limits.minEdge} pixels on the shorter side, or the face is too small to work from.`,
-      detail: { width, height, minEdge: limits.minEdge },
-    });
-  }
-  if (longEdge > limits.maxEdge) {
-    throw new IntakeError(`"${srcPath}" is ${width}x${height}, over the ${limits.maxEdge}px maximum edge`, {
-      code: 'too-large',
-      userMessage: `That photo is ${width} by ${height} pixels, which is bigger than we can handle. Please export it at ${limits.maxEdge} pixels or less on the longest side.`,
-      detail: { width, height, maxEdge: limits.maxEdge },
-    });
-  }
+  refuseOutsideEdges(srcPath, width, height, limits);
 
   const sideData = frame.side_data_list ?? [];
   const matrix = sideData.find((s) => s.side_data_type === '3x3 displaymatrix');
@@ -275,6 +331,8 @@ export async function ingestPhoto(srcPath, destPath, {
   try {
     await ffmpegImpl([
       '-hide_banner', '-nostdin', '-y',
+      // Before `-i`, or it does not govern the input. See PROTOCOL_WHITELIST.
+      ...PROTOCOL_WHITELIST,
       '-i', srcPath,
       // Container metadata, both global and per-stream. The per-stream form is
       // not redundant: a stream-level tag block survives the global one.
