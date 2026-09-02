@@ -78,8 +78,25 @@ let seq = 0;
  * The bytes are not empty. A test that writes zero-length files and then asserts
  * they are gone cannot tell deletion from a file that was never written.
  */
-function seedJob(root, { ageDays, withMedia = true } = {}) {
-  const at = new Date(Date.parse(AT) - ageDays * DAY);
+/**
+ * `from` EXISTS BECAUSE THE CLI TESTS CANNOT FREEZE THE CLOCK.
+ *
+ * Everything in-process is handed `nowImpl` and measured against the fixed AT,
+ * which is what makes those tests read as arithmetic rather than as luck. The
+ * three tests that spawn `purge-cli.mjs` cannot do that: it is a separate
+ * process reading the real wall clock, and no flag lets a caller override it.
+ *
+ * Seeding those against AT was therefore a bug with a fuse on it. A job seeded
+ * at `ageDays: 1` relative to AT is dated the 20th of August; it stayed inside
+ * the seven-day photo window until the real date reached the 27th, and then
+ * `purge` began deleting it -- correctly -- and the test that asserted it
+ * survived began failing, six days after anyone wrote it. Measured today: real
+ * now is 2026-08-27, AT is 2026-08-21, and the "one day old" photo is seven.
+ *
+ * So a CLI test seeds from real now, and its ages mean what they say.
+ */
+function seedJob(root, { ageDays, withMedia = true, from = Date.parse(AT) } = {}) {
+  const at = new Date(from - ageDays * DAY);
   seq += 1;
   const jobId = `${at.toISOString().slice(0, 10).replace(/-/g, '')}-120000-${String(seq).padStart(6, '0')}`;
   const job = createJob({
@@ -303,7 +320,7 @@ function runCli(root, args = []) {
 
 test('npm run purge reports what is due and deletes nothing without --apply', () => {
   const root = tmpRoot();
-  const { paths } = seedJob(root, { ageDays: 400 });
+  const { paths } = seedJob(root, { ageDays: 400, from: Date.now() });
 
   const run = runCli(root);
 
@@ -315,9 +332,9 @@ test('npm run purge reports what is due and deletes nothing without --apply', ()
 
 test('npm run purge -- --apply keeps the promise, both windows in one command', () => {
   const root = tmpRoot();
-  const { paths: old } = seedJob(root, { ageDays: 400 });
-  const { paths: middling } = seedJob(root, { ageDays: 10 });
-  const { paths: fresh } = seedJob(root, { ageDays: 1 });
+  const { paths: old } = seedJob(root, { ageDays: 400, from: Date.now() });
+  const { paths: middling } = seedJob(root, { ageDays: 10, from: Date.now() });
+  const { paths: fresh } = seedJob(root, { ageDays: 1, from: Date.now() });
 
   const run = runCli(root, ['--apply']);
 
@@ -330,7 +347,7 @@ test('npm run purge -- --apply keeps the promise, both windows in one command', 
 
 test('--execute is honoured too, because that is what the operator guide called it', () => {
   const root = tmpRoot();
-  const { paths } = seedJob(root, { ageDays: 400 });
+  const { paths } = seedJob(root, { ageDays: 400, from: Date.now() });
 
   const run = runCli(root, ['--execute']);
 
@@ -452,4 +469,133 @@ test('sweepRetention honours dryRun, so the CLI and the worker share one destruc
   assert.ok(fs.existsSync(paths.dir), 'nothing deleted');
   assert.equal(result.jobsDeleted, 1, 'but it still reports what would go');
   assert.equal(result.dryRun, true);
+});
+
+test('an unknown flag stops the sweep instead of being ignored', () => {
+  const root = tmpRoot();
+  const { paths } = seedJob(root, { ageDays: 400, from: Date.now() });
+
+  // `--job=<id>` DOES NOT EXIST, and on 2026-08-27 it was typed on a real
+  // machine alongside --apply. It was accepted in silence and the full
+  // retention sweep ran: the operator believed they were deleting one job and
+  // deleted every photograph past its window across twenty-six of them.
+  //
+  // Nothing was lost that was not already due -- which is exactly why this is
+  // worth a test rather than a shrug. The window is the only thing standing
+  // between "correct" and "deleted somebody's face six days early", and this is
+  // the one command in the product whose entire purpose is destroying data. An
+  // argument it does not understand is not a request it may reinterpret.
+  const run = runCli(root, ['--job=20260827-154509-4c79c6', '--apply']);
+
+  assert.notEqual(run.status, 0, 'an unknown flag was accepted');
+  assert.match(run.stderr, /--job/, 'the refusal does not say WHICH argument was wrong');
+  assert.ok(fs.existsSync(paths.dir), 'the sweep ran anyway');
+  assert.ok(fs.existsSync(`${paths.input}/photo.jpg`), 'a photograph was deleted by a refused command');
+});
+
+test('a typo in a real flag is refused rather than silently defaulted', () => {
+  const root = tmpRoot();
+  const { paths } = seedJob(root, { ageDays: 400, from: Date.now() });
+
+  // The dangerous shape is not an invented flag, it is a NEAR MISS: --photodays
+  // reads as --photo-days and is not, so the sweep would fall back to the
+  // configured window while the operator believed they had widened it.
+  const run = runCli(root, ['--photodays=999', '--apply']);
+
+  assert.notEqual(run.status, 0, 'a near-miss flag was accepted');
+  assert.ok(fs.existsSync(paths.dir), 'the sweep ran on the configured window, not the asked-for one');
+});
+
+test('the flags the command really has are all still accepted', () => {
+  const root = tmpRoot();
+  seedJob(root, { ageDays: 400, from: Date.now() });
+
+  // The guard must not become a second place the flag list can drift from.
+  const run = runCli(root, ['--photo-days=7', '--job-days=30', '--json', '--apply']);
+  assert.equal(run.status, 0, run.stderr);
+});
+
+/**
+ * A JOB WHOSE MANIFEST WILL NOT PARSE IS REPORTED, NOT INVISIBLE.
+ *
+ * `listJobs` swallows a parse failure with `catch { continue }`. That is right
+ * for the status page -- its own comment says one unreadable job must not hide
+ * the other two hundred -- and wrong for the module that keeps a deletion
+ * promise, which enumerates jobs through the same function.
+ *
+ * The consequence: the job is absent from the plan on every pass, forever, so
+ * `input/photo.jpg` outlives both the seven-day and thirty-day promises
+ * indefinitely. And because `errors` stays empty the worker suppresses its
+ * `purged` event entirely, so no operator line is ever printed. A silent
+ * unkept promise is exactly what this module exists to prevent.
+ *
+ * It is not hypothetical: the queue's own header advertises that these files
+ * are repaired with a text editor, and a half-copied backup or a disk fault
+ * produces the same thing.
+ *
+ * REPORTED, NEVER DELETED ON A GUESS. An unparseable manifest has no readable
+ * createdAt, so nothing knows whether its window has passed, and deleting
+ * somebody's photograph on a guess is the one failure this module refuses.
+ */
+test('a corrupt manifest is surfaced by the sweep instead of hiding a photograph', () => {
+  const root = tmpRoot();
+  const { jobId: healthy } = seedJob(root, { ageDays: 8 });
+  const { jobId: broken } = seedJob(root, { ageDays: 8 });
+
+  // A half-written manifest, which is what a killed copy or a bad sector leaves.
+  fs.writeFileSync(`${jobPaths(root, broken).dir}/manifest.json`, '{"jobId":"' + broken + '","stat');
+
+  const plan = planPurge({ root, olderThan: 7, photosOnly: true, nowImpl: NOW });
+
+  assert.deepEqual(plan.entries.map((e) => e.jobId), [healthy],
+    'the readable job is still planned exactly as before');
+  assert.deepEqual(plan.unreadable.map((r) => r.jobId), [broken],
+    'the corrupt job vanished from the plan instead of being reported');
+
+  const result = executePurge(plan, { dryRun: false });
+  const reported = result.errors.filter((e) => e.jobId === broken);
+  assert.equal(reported.length, 1,
+    'the sweep reported no error, so the worker prints nothing and the photograph is stranded silently');
+  assert.match(reported[0].message, /will not parse/);
+
+  // And the promise is still kept for the job that could be read.
+  assert.equal(result.photosDeleted, 1);
+  // The corrupt job's photograph is deliberately still there: it was reported,
+  // not guessed at.
+  assert.ok(fs.existsSync(jobPaths(root, broken).input),
+    'a job with no readable age must not be deleted on a guess');
+});
+
+test('the sweep tolerates an owners directory vanishing mid-scan -- account deletion now runs beside it', () => {
+  // Deletion spec §5's last bullet, verified rather than assumed: an account
+  // deletion removes `out/owners/<accountId>` whole while a sweep may be
+  // between its readdir of `out/owners` and its stat of the entry inside.
+  // The overlay stages exactly that: the directory is still listed, and every
+  // later touch of anything under it answers ENOENT.
+  const root = tmpRoot();
+  const { jobId, paths } = seedJob(root, { ageDays: 31 });
+  const accountId = 'a'.repeat(32);
+  fs.mkdirSync(`${root}/${OWNERS_DIR}/${accountId}`, { recursive: true });
+  fs.writeFileSync(`${root}/${OWNERS_DIR}/${accountId}/${jobId}.json`, JSON.stringify({ jobId, accountId }));
+
+  const vanished = `${path.resolve(root).split(path.sep).join('/')}/${OWNERS_DIR}/${accountId}`;
+  const enoent = (p) => {
+    const err = new Error(`ENOENT: no such file or directory, stat '${p}'`);
+    err.code = 'ENOENT';
+    throw err;
+  };
+  const under = (p) => String(p).split(path.sep).join('/').startsWith(vanished);
+  const fsImpl = {
+    ...fs,
+    statSync: (p, ...rest) => (under(p) ? enoent(p) : fs.statSync(p, ...rest)),
+    rmSync: (p, ...rest) => (under(p) ? enoent(p) : fs.rmSync(p, ...rest)),
+  };
+
+  const result = sweepRetention({
+    root, retention: { photoDays: 7, jobDays: 30 }, nowImpl: NOW, dryRun: false, fsImpl,
+  });
+
+  assert.equal(result.jobsDeleted, 1, 'a vanished ownership index must not stop the job deletion');
+  assert.equal(fs.existsSync(paths.dir), false, 'the job directory must still be deleted');
+  assert.deepEqual(result.errors, [], 'a directory that is already gone is the goal state, not a failure');
 });

@@ -22,7 +22,16 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-import { createServer, safeNext } from '../scripts/web/server.mjs';
+import {
+  createServer, safeNext, AUTH_RATE_LIMITS, IDENTITY_SWEEP_MS,
+  VERIFY_ATTEMPTS_DIR, CODE_COOLOFF_MS, chargeCodeAttempt,
+} from '../scripts/web/server.mjs';
+import { SupabaseAuthError } from '../scripts/auth/supabase-auth.mjs';
+import { BAD_CREDENTIALS_MESSAGE, emailHash } from '../scripts/auth/accounts.mjs';
+import { putPending, PENDING_DIR } from '../scripts/auth/pending-signup.mjs';
+import { putVerifier, OAUTH_DIR } from '../scripts/auth/oauth-store.mjs';
+import { DEFAULT_RETENTION_SWEEP_MS } from '../scripts/worker/worker.mjs';
+import { supabaseFromEnv } from '../scripts/web/server-cli.mjs';
 import { ROUTES, PUBLIC_ROUTES, isPublicRoute } from '../scripts/web/router.mjs';
 import {
   createSessions, parseCookies, serializeCookie, isSecureRequest,
@@ -202,6 +211,85 @@ function fakeAuth() {
       account.credits += -spent.delta;
       account.ledger.push({ jobId, delta: -spent.delta, at: new Date().toISOString() });
     },
+    /**
+     * Idempotent by `ref`, the way the real module is.
+     *
+     * ADDED 2026-08-25 with the Stripe webhook, and it is in this fake for one
+     * reason: `REQUIRED_AUTH` now names it, so a fake without it is a fake that
+     * no longer matches the documented surface -- which is the whole point of
+     * the assertion below. The REPLAY behaviour is tested against the real
+     * on-disk ledger in test/web-billing.test.js, because a fake that dedupes
+     * correctly would only ever prove that the fake dedupes correctly.
+     */
+    grantCredits(account, { credits, reason, ref = null }) {
+      if (ref !== null && account.ledger.some((e) => e.ref === ref)) {
+        return { granted: false, credits: 0, ref };
+      }
+      account.credits += credits;
+      account.ledger.push({ jobId: null, delta: credits, reason, ref, at: new Date().toISOString() });
+      return { granted: true, credits, ref };
+    },
+  };
+}
+
+/**
+ * `signup` (task 8) now asks Supabase before parking anything, so a server
+ * built here needs a `supabase` even though this file's own subject is the
+ * local `scripts/auth/` surface above, not identity. This is the smallest
+ * thing that satisfies `sb.signUp` -- it is not `createSupabaseAuth`, and it
+ * never touches a network; that shape is covered end to end, transport and
+ * all, in `test/web-auth-code.test.js`.
+ *
+ * `taken` names addresses this fake treats as already registered, so a test
+ * can reproduce the one upstream shape that matters here -- Supabase refusing
+ * a taken address -- without standing up the real HTTPS transport for it.
+ *
+ * TASK 9 ADDS `signInWithPassword` AND `revoke`, for the same reason: `login`
+ * now asks Supabase too. `FAKE_SUPABASE_PASSWORD` is the one password this
+ * fake accepts, which is already the fixed string nearly every test in this
+ * file uses as "the right one" -- so a genuine sign-in through `/login`
+ * succeeds exactly where it always did, and anything else (a typo, an
+ * unregistered address) is refused the same way Supabase refuses both: one
+ * `SupabaseAuthError`, indistinguishable from the caller's side. The identity
+ * it hands back is real enough for `resolveIdentity` (task 5) to resolve
+ * through the REAL `scripts/auth/identity.mjs` + `accounts.mjs` against this
+ * test's own temp root -- deliberately independent of the fake `auth` object
+ * above, which is why `signIn()` below no longer goes through this path for
+ * its own purposes.
+ */
+const FAKE_SUPABASE_PASSWORD = 'a long enough password';
+
+function fakeSupabaseIdentity({ taken = new Set() } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async signUp({ email, password, clientIp }) {
+      calls.push({ email, password, clientIp });
+      if (taken.has(String(email).toLowerCase())) {
+        throw new SupabaseAuthError('User already registered', { status: 422, code: 'user_already_exists' });
+      }
+      return { pending: true };
+    },
+    async signInWithPassword({ email, password, clientIp }) {
+      calls.push({ email, password, clientIp, kind: 'signIn' });
+      if (password !== FAKE_SUPABASE_PASSWORD) {
+        throw new SupabaseAuthError('Invalid login credentials', { status: 400, code: 'invalid_credentials' });
+      }
+      const address = String(email).toLowerCase();
+      return {
+        identity: {
+          supabaseUserId: `sb-${address.replace(/[^a-z0-9-]/g, '-')}`,
+          email: address,
+          emailVerified: true,
+          provider: 'email',
+          accessToken: `fake-access-token-${address}`,
+        },
+      };
+    },
+    async revoke({ accessToken }) {
+      calls.push({ accessToken, kind: 'revoke' });
+      return { ok: true };
+    },
   };
 }
 
@@ -232,27 +320,58 @@ const uploadParts = (salt = 'x', resolution = '480p') => ([
   { name: 'consent', body: 'yes' },
 ]);
 
-async function signIn(base, email, password) {
-  const res = await fetch(`${base}/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ email, password }),
-    redirect: 'manual',
-  });
-  if (res.status !== 200) return null;
-  return res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+/** GET the form first, the way a browser does: the anti-forgery pair -- the
+ *  cookie off the response and the hidden field out of the HTML -- is required
+ *  to post credentials at all. */
+async function csrfPair(base, path = '/login') {
+  const res = await fetch(`${base}${path}`, { headers: { accept: 'text/html' } });
+  const cookie = res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  const csrf = (await res.text()).match(/name="csrf" value="([^"]+)"/)?.[1] ?? '';
+  return { cookie, csrf };
 }
 
-async function withApp(run, { auth = fakeAuth(), queue = fakeQueue(), sessions = null } = {}) {
+/**
+ * Mint a session directly against the FAKE local `scripts/auth/` surface,
+ * rather than posting to `/login`.
+ *
+ * TASK 9 CHANGED WHAT `/login` DOES. It now asks Supabase and resolves the
+ * identity through the REAL `scripts/auth/identity.mjs` + `accounts.mjs`
+ * (`identityApi()` in `server.mjs` always imports those for real, whatever
+ * `auth` fake this file injects for every other route) -- so a session minted
+ * that way carries a real on-disk account id the fake `auth.loadAccount`
+ * below has never heard of, and every gated route in this file would 500 on
+ * it. This file's own subject is NOT login -- it is job ownership, credits
+ * and session mechanics against a controllable fake -- so the dozens of
+ * tests below that only need "a signed-in account" mint one directly against
+ * the same fake primitives `startSession` would have used, and stay exactly
+ * as they were. The login mechanics themselves -- Supabase exchange, CSRF,
+ * the rate limit, the one-sentence refusal -- are covered on their own terms
+ * further down this file (via the real `/login` route and
+ * `fakeSupabaseIdentity().signInWithPassword`) and end to end, transport and
+ * all, in `test/web-auth-code.test.js`.
+ */
+function signIn(auth, email, password) {
+  const account = auth.findAccountByEmail({ email });
+  if (!account || !auth.verifyPassword(account, password)) return null;
+  const { sessionId } = auth.createSession({ accountId: account.accountId });
+  return `${SESSION_COOKIE}=${auth.signCookie(sessionId, auth.sessionSecret())}`;
+}
+
+async function withApp(run, {
+  auth = fakeAuth(), queue = fakeQueue(), sessions = null, nowImpl = null, trustProxy = undefined,
+  supabase = fakeSupabaseIdentity(),
+} = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-auth-'));
   const app = createServer({
-    root, cfg: CFG, queue, port: 0, auth: sessions ? null : auth, sessions,
+    root, cfg: CFG, queue, port: 0, auth: sessions ? null : auth, sessions, supabase,
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
     logImpl: () => {},
+    ...(nowImpl ? { nowImpl } : {}),
+    ...(trustProxy === undefined ? {} : { trustProxy }),
   });
   const port = await app.listen();
   try {
-    await run({ base: `http://127.0.0.1:${port}`, root, app, auth, queue });
+    await run({ base: `http://127.0.0.1:${port}`, root, app, auth, queue, supabase });
   } finally {
     await app.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -341,7 +460,7 @@ test('the landing page carries nothing that belongs to an account', async () => 
 test('the same path signed in is the app, not the landing page', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     const html = await (await fetch(`${base}/`, { headers: { cookie, accept: 'text/html' } })).text();
     assert.ok(html.includes('form="tape"'), 'the signed-in page lost the upload form');
     assert.ok(!html.includes('Make a tape'), 'the landing call to action leaked into the app');
@@ -370,16 +489,33 @@ test('every gated route refuses an anonymous request', async () => {
   });
 });
 
+/**
+ * `auth.createAccount` above is the FAKE `scripts/auth/` this file injects for
+ * every gated route -- but `/login` resolves identity through the REAL
+ * `identity.mjs` + `accounts.mjs` against this test's own temp `root`
+ * (see the big comment on `fakeSupabaseIdentity`, above), so it is a
+ * SEPARATE, genuinely new account with no relation to the fake one and,
+ * absent this park, no consent on file. Since task 12, `login` routes such
+ * an account to `/onboarding` rather than `next` -- correctly, that is the
+ * whole point of this test file's own fix -- so a test of the `next`
+ * mechanic itself has to park a consent first, exactly as a real signup
+ * would have, or it is testing the consent redirect by accident. */
+function parkConsentFor(root, email) {
+  putPending({ root, email, consent: { granted: true, text: 'the wording' } });
+}
+
 test('a browser is sent back where it was going after signing in', async () => {
-  await withApp(async ({ base, auth }) => {
+  await withApp(async ({ base, auth, root }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    parkConsentFor(root, 'a@example.com');
     const res = await fetch(`${base}/j/${SHAPED_ID}`, { headers: { accept: 'text/html' }, redirect: 'manual' });
     assert.equal(res.headers.get('location'), `/login?next=${encodeURIComponent(`/j/${SHAPED_ID}`)}`);
 
+    const pair = await csrfPair(base);
     const login = await fetch(`${base}/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', next: `/j/${SHAPED_ID}` }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', next: `/j/${SHAPED_ID}`, csrf: pair.csrf }),
       redirect: 'manual',
     });
     assert.equal(login.status, 303);
@@ -397,12 +533,14 @@ test('next is only ever a same-origin absolute path', async () => {
   }
   assert.equal(safeNext('/j/abc'), '/j/abc');
 
-  await withApp(async ({ base, auth }) => {
+  await withApp(async ({ base, auth, root }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    parkConsentFor(root, 'a@example.com');
+    const pair = await csrfPair(base);
     const login = await fetch(`${base}/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', next: 'https://evil.example' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', next: 'https://evil.example', csrf: pair.csrf }),
       redirect: 'manual',
     });
     assert.equal(login.headers.get('location'), '/', 'an off-site next must be dropped, not followed');
@@ -422,21 +560,31 @@ test('the public pages answer without a session', async () => {
 // sign up, sign in, sign out
 // ---------------------------------------------------------------------------
 
-test('signing up creates the account, starts a session and lands on the shelf', async () => {
-  await withApp(async ({ base, auth }) => {
+/**
+ * Task 8 (2026-08-26): signup no longer creates a local account or a session.
+ * It asks Supabase to create the user, parks the consent record, and sends
+ * the person to `/verify` to type the code that proves the mailbox -- that is
+ * where the account is actually born (task 7). This test used to assert the
+ * account existed and a session cookie came back at this step; both are now
+ * wrong, on purpose, and are replaced below with the contract that succeeded
+ * it.
+ */
+test('signing up asks Supabase, parks the consent, and sends the person to verify -- no account and no session yet', async () => {
+  await withApp(async ({ base, auth, supabase }) => {
+    const pair = await csrfPair(base, '/signup');
     const res = await fetch(`${base}/signup`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'new@example.com', password: 'ten or more chars', consent: 'yes' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'new@example.com', password: 'ten or more chars', consent: 'yes', csrf: pair.csrf }),
       redirect: 'manual',
     });
     assert.equal(res.status, 303);
-    assert.equal(res.headers.get('location'), '/');
-    assert.ok(auth.findAccountByEmail({ email: 'new@example.com' }), 'the account was not created');
-
-    const cookie = res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
-    const home = await fetch(`${base}/`, { headers: { cookie } });
-    assert.equal(home.status, 200);
+    assert.equal(res.headers.get('location'), '/verify?email=new%40example.com');
+    assert.deepEqual(res.headers.getSetCookie(), [], 'nobody is signed in until the mailbox is proved');
+    assert.equal(auth.findAccountByEmail({ email: 'new@example.com' }), null,
+      'an account must not exist before the code is confirmed');
+    assert.equal(supabase.calls.length, 1, 'Supabase was never asked to create the user');
+    assert.equal(supabase.calls[0].email, 'new@example.com');
   });
 });
 
@@ -447,11 +595,12 @@ test('sign-up refuses a bad address, a short password and a missing consent', as
       { email: 'ok@example.com', password: 'short', consent: 'yes' },
       { email: 'ok@example.com', password: 'ten or more chars' },
     ];
+    const pair = await csrfPair(base, '/signup');
     for (const body of cases) {
       const res = await fetch(`${base}/signup`, {
         method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(body),
+        headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: pair.cookie },
+        body: new URLSearchParams({ ...body, csrf: pair.csrf }),
       });
       assert.equal(res.status, 400, `${JSON.stringify(body)} was accepted`);
     }
@@ -459,56 +608,369 @@ test('sign-up refuses a bad address, a short password and a missing consent', as
   });
 });
 
-test('a duplicate email is refused in the words of the auth module', async () => {
+/**
+ * Task 8, replacing the test above: a taken address used to be refused here,
+ * in these words, at 400 -- and that was the oracle. Supabase answers
+ * `user_already_exists` for a taken address unless phone confirmation is also
+ * on (it is not, on this project), so passing that refusal on would let
+ * anybody test an address for an existing account. Now both branches render
+ * the same page; the byte-identical version of this test, against the real
+ * `createSupabaseAuth` transport, lives in `test/web-auth-code.test.js`. This
+ * one keeps the local-`scripts/auth/`-shaped angle: no wording about an
+ * existing account ever reaches the response, and no local account is
+ * created by the taken-address attempt either.
+ */
+test('an address Supabase already has answers exactly like a fresh one -- no wording, no 400', async () => {
+  const supabase = fakeSupabaseIdentity({ taken: new Set(['taken@example.com']) });
   await withApp(async ({ base, auth }) => {
-    auth.createAccount({ email: 'taken@example.com', password: 'a long enough password' });
+    const pair = await csrfPair(base, '/signup');
     const res = await fetch(`${base}/signup`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'taken@example.com', password: 'another long one', consent: 'yes' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'taken@example.com', password: 'another long one', consent: 'yes', csrf: pair.csrf }),
+      redirect: 'manual',
     });
-    assert.equal(res.status, 400);
-    assert.ok((await res.text()).includes('That email already has an account.'));
-  });
+    assert.equal(res.status, 303, 'a taken address must not be a 400 any more');
+    assert.equal(res.headers.get('location'), '/verify?email=taken%40example.com');
+    const body = await res.text();
+    assert.ok(!body.toLowerCase().includes('already'), 'the old wording leaked back in');
+    assert.equal(auth.accounts.size, 0, 'signup must not create a local account, taken address or not');
+  }, { supabase });
 });
 
 /**
  * ONE MESSAGE FOR BOTH FAILURES. "No such account" and "wrong password" are
  * different facts and must be the same answer, or the login form is a free
  * account-enumeration oracle on a site that stores photographs of faces.
+ *
+ * RE-POINTED FOR TASK 9. `login` no longer asks the fake local `auth` at
+ * all -- there is no `auth.createAccount` call here any more, on purpose, and
+ * its former presence would now be misleading rather than merely unused. Both
+ * requests are refused by `fakeSupabaseIdentity().signInWithPassword`, which
+ * only accepts `FAKE_SUPABASE_PASSWORD`: a wrong password for a real-looking
+ * address and a password for an address Supabase has never heard of collapse
+ * into the identical upstream refusal, exactly the way `invalid_credentials`
+ * does for both cases against the real API. The page also echoes back
+ * whatever address was typed (not a leak -- it is the caller's own input),
+ * so the two responses cannot be byte-identical the way the signup pair
+ * above are; the message is what must match, and does.
  */
 test('a wrong password and an unknown email are the same 401 and the same sentence', async () => {
-  await withApp(async ({ base, auth }) => {
-    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-
+  await withApp(async ({ base }) => {
+    const pair = await csrfPair(base);
     const wrong = await fetch(`${base}/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'a@example.com', password: 'nope' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'nope', csrf: pair.csrf }),
     });
     const unknown = await fetch(`${base}/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
-      body: new URLSearchParams({ email: 'nobody@example.com', password: 'nope' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'nobody@example.com', password: 'nope', csrf: pair.csrf }),
     });
 
     assert.equal(wrong.status, 401);
     assert.equal(unknown.status, 401);
     const a = await wrong.text();
     const b = await unknown.text();
-    assert.ok(a.includes('That email and password do not match an account.'));
-    assert.ok(b.includes('That email and password do not match an account.'));
+    assert.ok(a.includes(BAD_CREDENTIALS_MESSAGE));
+    assert.ok(b.includes(BAD_CREDENTIALS_MESSAGE));
     assert.ok(!b.includes('no such account'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// the limiter
+// ---------------------------------------------------------------------------
+
+const login = (base, { email = 'a@example.com', password = 'nope', accept = 'application/json', pair = { cookie: '', csrf: '' } } = {}) =>
+  fetch(`${base}/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept, cookie: pair.cookie },
+    body: new URLSearchParams({ email, password, csrf: pair.csrf }),
+    redirect: 'manual',
+  });
+
+const signup = (base, email, { accept = 'application/json', pair = { cookie: '', csrf: '' } } = {}) =>
+  fetch(`${base}/signup`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept, cookie: pair.cookie },
+    body: new URLSearchParams({ email, password: 'a long enough password', consent: 'yes', csrf: pair.csrf }),
+    redirect: 'manual',
+  });
+
+/**
+ * The guessing has to stop being free. Password checks are deliberately
+ * expensive, both routes are public, and a script does not get tired -- so
+ * after enough attempts from one address inside one window, the only answer
+ * is 429, before any account work happens. The right password is refused too:
+ * the decision is made per address before credentials are looked at, which is
+ * what makes the refusal say nothing about any account.
+ */
+test('repeated login attempts from one address are refused, right password included', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const pair = await csrfPair(base);
+
+    for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) {
+      assert.equal((await login(base, { pair })).status, 401, `attempt ${i + 1} is an ordinary refusal`);
+    }
+    const over = await login(base, { pair });
+    assert.equal(over.status, 429);
+    assert.match(over.headers.get('retry-after') ?? '', /^[0-9]+$/, 'a 429 without Retry-After is a puzzle, not an answer');
+    const body = await over.json();
+    assert.equal(body.error.status, 429);
+    assert.ok(!body.error.message.includes('a@example.com'));
+
+    const right = await login(base, { password: 'a long enough password', pair });
+    assert.equal(right.status, 429, 'the limit must hold before credentials are examined, or it can be probed around');
+
+    // The browser form gets a page with the sentence on it, same as every other
+    // refusal on these routes.
+    const html = await login(base, { accept: 'text/html', pair });
+    assert.equal(html.status, 429);
+    assert.ok((await html.text()).includes('Too many'));
+  });
+});
+
+test('the login window closes, and a genuine sign-in works again', async () => {
+  let nowMs = Date.UTC(2026, 7, 25, 12, 0, 0);
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const pair = await csrfPair(base);
+
+    for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) await login(base, { pair });
+    assert.equal((await login(base, { pair })).status, 429);
+
+    nowMs += AUTH_RATE_LIMITS.login.windowMs + 1000;
+    const after = await login(base, { password: 'a long enough password', pair });
+    assert.equal(after.status, 200, 'a closed window must not keep refusing a genuine sign-in');
+  }, { nowImpl: () => new Date(nowMs) });
+});
+
+/** A login attempt wearing a forwarded-for identity, for the proxy tests. */
+const loginAs = (base, pair, xff) =>
+  fetch(`${base}/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      accept: 'application/json',
+      cookie: pair.cookie,
+      'x-forwarded-for': xff,
+    },
+    body: new URLSearchParams({ email: 'a@example.com', password: 'wrong', csrf: pair.csrf }),
+    redirect: 'manual',
+  });
+
+test('behind the proxy this deployment will have, the limiter tells visitors apart', async () => {
+  // Every connection behind a TLS-terminating proxy arrives on the proxy's
+  // own socket, so a limiter keyed on the socket address collapses the whole
+  // internet into ONE bucket: ten sign-ins a minute for everybody, and any
+  // single visitor can lock out every other one. The same trust switch that
+  // already governs `x-forwarded-proto` and the Supabase attribution header
+  // governs this: with TIMESTAMP_TRUST_PROXY=1 the operator is asserting the
+  // proxy overwrites `x-forwarded-for`, so the limiter may key on it.
+  await withApp(async ({ base }) => {
+    const pair = await csrfPair(base);
+    for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) {
+      assert.equal((await loginAs(base, pair, '203.0.113.9')).status, 401, `attempt ${i + 1} is ordinary`);
+    }
+    assert.equal((await loginAs(base, pair, '203.0.113.9')).status, 429,
+      'the exhausted visitor is refused');
+    assert.equal((await loginAs(base, pair, '198.51.100.7')).status, 401,
+      'a DIFFERENT visitor behind the same proxy socket must not inherit the refusal');
+  }, { trustProxy: true });
+});
+
+test('without the trust switch, the forwarded header buys nobody a fresh bucket', async () => {
+  // The other half, and the half that keeps this from being a bypass: with no
+  // trusted proxy, `x-forwarded-for` is whatever the client typed, and typing
+  // a new one per request must not hand a script its own unlimited lane.
+  await withApp(async ({ base }) => {
+    const pair = await csrfPair(base);
+    for (let i = 0; i < AUTH_RATE_LIMITS.login.max; i += 1) {
+      await loginAs(base, pair, `203.0.113.${i}`);
+    }
+    assert.equal((await loginAs(base, pair, '198.51.100.200')).status, 429,
+      'a typed header must not open a fresh bucket when no proxy is trusted');
+  });
+});
+
+/**
+ * Since task 8, signup never creates a local account at all -- the account is
+ * born at `/verify`, minutes or days later. What "the refusal happens before
+ * the handler runs" means now is that Supabase is never even ASKED past the
+ * bound, which is why the assertion moved from `auth.accounts.size` (always
+ * zero here) to the fake Supabase's own call count.
+ */
+test('signup attempts from one address are bounded, and Supabase is never asked past the bound', async () => {
+  await withApp(async ({ base, auth, supabase }) => {
+    const pair = await csrfPair(base, '/signup');
+    for (let i = 0; i < AUTH_RATE_LIMITS.signup.max; i += 1) {
+      assert.equal((await signup(base, `fresh-${i}@example.com`, { pair })).status, 202, `signup ${i + 1} is ordinary`);
+    }
+    const over = await signup(base, 'one-too-many@example.com', { pair });
+    assert.equal(over.status, 429);
+    assert.match(over.headers.get('retry-after') ?? '', /^[0-9]+$/);
+    assert.equal(supabase.calls.length, AUTH_RATE_LIMITS.signup.max, 'Supabase was asked past the refusal');
+    assert.equal(auth.accounts.size, 0, 'signup must never create a local account directly');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// signing in is something only this site's own form can do
+// ---------------------------------------------------------------------------
+
+/** The sign-in form as a browser would receive it: the anti-forgery cookie from
+ *  the response and the matching hidden field out of the HTML. */
+async function loginForm(base, path = '/login') {
+  const res = await fetch(`${base}${path}`, { headers: { accept: 'text/html' } });
+  assert.equal(res.status, 200);
+  const cookie = res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  const match = (await res.text()).match(/name="csrf" value="([^"]+)"/);
+  assert.ok(match, `the ${path} form carries no csrf field`);
+  return { cookie, csrf: match[1] };
+}
+
+/**
+ * `SameSite=Lax` stops a foreign page acting AS somebody's session; it does
+ * nothing to stop a foreign page CREATING one. A page that auto-submits a
+ * login form with the attacker's own credentials signs the victim in as the
+ * attacker, and the next photograph they upload lands on the attacker's
+ * shelf. So establishing a session takes proof the post came from this
+ * site's own form: a signed value that arrives twice, once as a cookie only
+ * this origin can set and once as a field only this origin's page carries.
+ */
+test('a login posted without the form is refused, and no session comes back', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+
+    // Right credentials, no form: exactly what a cross-site auto-submitting
+    // form delivers, since a foreign page can neither read our form nor set
+    // our cookie.
+    const bare = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password' }),
+      redirect: 'manual',
+    });
+    assert.equal(bare.status, 403);
+    assert.deepEqual(bare.headers.getSetCookie().filter((c) => c.startsWith(SESSION_COOKIE)), [],
+      'a session cookie was minted for a post that proved nothing');
+
+    // A harvested field without its cookie: an attacker can fetch our form
+    // themselves and copy the value out, but they cannot plant the matching
+    // cookie in the victim's browser.
+    const { csrf } = await loginForm(base);
+    const fieldOnly = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', csrf }),
+      redirect: 'manual',
+    });
+    assert.equal(fieldOnly.status, 403);
+  });
+});
+
+test('the form flow signs in: cookie plus matching field plus credentials', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const { cookie, csrf } = await loginForm(base);
+    const res = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', csrf }),
+      redirect: 'manual',
+    });
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.getSetCookie().some((c) => c.startsWith(SESSION_COOKIE)), 'no session came back from the genuine flow');
+  });
+});
+
+/**
+ * `login` relies on `sb.revoke` being best-effort, and the real
+ * `createSupabaseAuth` already swallows its own errors -- but that is a
+ * contract asserted only in prose, on a module this task could not modify.
+ * A `sb` whose `revoke` throws must not turn an already-completed sign-in
+ * into a failure: the session is live and the cookie is already computed by
+ * the time revoke is even attempted.
+ */
+test('a revoke that throws still leaves the person signed in, cookie and all', async () => {
+  await withApp(async ({ base, auth, supabase }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    supabase.revoke = async () => { throw new Error('supabase is unreachable'); };
+    const { cookie, csrf } = await loginForm(base);
+    const res = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', csrf }),
+      redirect: 'manual',
+    });
+    assert.equal(res.status, 200, 'a throwing revoke turned a completed sign-in into a failure');
+    assert.ok(res.headers.getSetCookie().some((c) => c.startsWith(SESSION_COOKIE)), 'a throwing revoke ate the cookie too');
+  });
+});
+
+/** The cheap second layer: a browser names where a post came from, and a post
+ *  that names somewhere else is refused before anything else is looked at. */
+test('a login or signup posted from another origin is refused whatever it carries', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const { cookie, csrf } = await loginForm(base);
+    for (const path of ['/login', '/signup']) {
+      const res = await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', cookie, origin: 'https://third-party.example' },
+        body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', consent: 'yes', csrf }),
+        redirect: 'manual',
+      });
+      assert.equal(res.status, 403, `${path} accepted a post that said it came from another site`);
+      assert.deepEqual(res.headers.getSetCookie().filter((c) => c.startsWith(SESSION_COOKIE)), []);
+    }
+  });
+});
+
+test('a signup posted without the form is refused and creates nothing', async () => {
+  await withApp(async ({ base, auth }) => {
+    const res = await fetch(`${base}/signup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ email: 'new@example.com', password: 'a long enough password', consent: 'yes' }),
+      redirect: 'manual',
+    });
+    assert.equal(res.status, 403);
+    assert.equal(auth.accounts.size, 0, 'an account was created for a post that proved nothing');
+  });
+});
+
+/**
+ * The other half of the same defence, and it is one line of HTML: the nav says
+ * WHOSE account this is. A takeover that signs the victim into somebody else's
+ * account is silent precisely when no page ever names the account -- with the
+ * email in the chrome, it is visible on every page instead.
+ */
+test('every signed-in page names the account it belongs to', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
+    for (const path of ['/', '/pricing']) {
+      const html = await (await fetch(`${base}${path}`, { headers: { cookie, accept: 'text/html' } })).text();
+      assert.ok(html.includes('a@example.com'), `${path} does not say whose account is signed in`);
+    }
+    // And never to a stranger.
+    const anon = await (await fetch(`${base}/`, { headers: { accept: 'text/html' } })).text();
+    assert.ok(!anon.includes('a@example.com'));
   });
 });
 
 test('the session cookie is HttpOnly, SameSite=Lax and not Secure over plain HTTP', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const pair = await csrfPair(base);
     const res = await fetch(`${base}/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password' }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: pair.cookie },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', csrf: pair.csrf }),
     });
     const [cookie] = res.headers.getSetCookie();
     assert.ok(cookie.startsWith(`${SESSION_COOKIE}=`));
@@ -521,12 +983,57 @@ test('the session cookie is HttpOnly, SameSite=Lax and not Secure over plain HTT
   });
 });
 
+/**
+ * A FOREIGN PAGE CANNOT SIGN SOMEBODY OUT.
+ *
+ * `/logout` was the one state-changing route with neither the same-origin check
+ * nor the anti-forgery pair. Every sibling form-backed POST opens with both.
+ *
+ * It is NOT a session-integrity break, and saying so is the point: `SameSite=Lax`
+ * withholds the cookie on a cross-site POST, so `endSession` finds nothing and
+ * no server-side record dies. But the 303 still carries the `Max-Age=0` clearing
+ * cookie, and a browser applies that on a top-level navigation to this origin --
+ * so the victim is signed out at a moment the attacker picks. Mid-upload on a
+ * 12 MB multipart POST, or as a ready-made phishing premise, which is worse here
+ * because `/login` already renders an unauthenticated notice a forged link can
+ * trigger -- the comment beside that notice names the premise explicitly.
+ *
+ * `sameOriginPost` rather than the full CSRF pair, deliberately: the nav form
+ * has no token to give it, threading one into every page render is a much larger
+ * change, and `Sec-Fetch-Site` is sent by every browser that can mount this
+ * attack. The token buys nothing extra against a request that must come from a
+ * browser to work at all.
+ */
+test('a cross-site POST cannot sign anybody out', async () => {
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
+    assert.equal(auth.sessions.size, 1);
+
+    for (const headers of [
+      { cookie, 'sec-fetch-site': 'cross-site' },
+      { cookie, 'sec-fetch-site': 'same-site' },
+      { cookie, origin: 'https://evil.example' },
+    ]) {
+      const res = await fetch(`${base}/logout`, { method: 'POST', headers, redirect: 'manual' });
+      assert.equal(res.status, 403, `a POST with ${JSON.stringify(headers)} was accepted`);
+      // THE CLEARING COOKIE IS THE PAYLOAD. A 403 that still sets it would
+      // sign the victim out anyway, which is the whole exploit.
+      const setCookie = res.headers.get('set-cookie') ?? '';
+      assert.ok(!/timestamp_session=;|timestamp_session=\s*;/.test(setCookie),
+        `the refusal still cleared the session cookie: ${setCookie}`);
+    }
+
+    assert.equal(auth.sessions.size, 1, 'a cross-site post destroyed the session record');
+  });
+});
+
 /** The server-side record is what makes logout actually log out. A JWT cannot be
  *  revoked, and this app can hand somebody else's face to whoever holds one. */
 test('signing out destroys the record, so the old cookie stops working', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     assert.equal((await fetch(`${base}/`, { headers: { cookie } })).status, 200);
     assert.equal(auth.sessions.size, 1);
 
@@ -546,10 +1053,41 @@ test('signing out destroys the record, so the old cookie stops working', async (
   });
 });
 
+test('signing out lands on the landing page, not on a sign-in form', async () => {
+  // REPORTED BY THE OWNER, 2026-08-31: signing out dropped him on /login.
+  //
+  // It is a small thing that says the wrong thing. Answering "I am leaving"
+  // with a password field reads as "sign back in", and for the one visitor who
+  // has just deliberately ended a session that is the least useful page in the
+  // product. /login also renders an unauthenticated notice, so somebody who
+  // signed out on purpose could be met by what looks like a failure.
+  //
+  // The landing is the honest destination: it is where a signed-out person
+  // belongs, it is the only page that sells, and its masthead already carries a
+  // Sign in link for anybody who did want to swap accounts.
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
+
+    const out = await fetch(`${base}/logout`, {
+      method: 'POST',
+      headers: { cookie, accept: 'text/html' },
+      redirect: 'manual',
+    });
+    assert.equal(out.status, 303);
+    assert.equal(out.headers.get('location'), '/',
+      'signing out still sends the customer to a sign-in form');
+    // The clearing cookie is the point of the response and must survive the
+    // change of destination -- a redirect that forgets it signs nobody out.
+    assert.match(out.headers.get('set-cookie') ?? '', /timestamp_session=/,
+      'the logout stopped clearing the session cookie');
+  });
+});
+
 test('a forged or tampered cookie is rejected before any filesystem lookup', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const real = await signIn(base, 'a@example.com', 'a long enough password');
+    const real = await signIn(auth, 'a@example.com', 'a long enough password');
     const forged = [
       `${SESSION_COOKIE}=sess-1`,
       `${SESSION_COOKIE}=sess-1.deadbeefdeadbeef`,
@@ -575,8 +1113,8 @@ test('account B gets a 404 on account A\'s job, on every job route', async () =>
   await withApp(async ({ base, root, app, auth }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
     auth.createAccount({ email: 'b@example.com', password: 'a different password' });
-    const cookieB = await signIn(base, 'b@example.com', 'a different password');
-    const cookieA = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookieB = await signIn(auth, 'b@example.com', 'a different password');
+    const cookieA = await signIn(auth, 'a@example.com', 'a long enough password');
 
     const job = seedJob(app, root, a, { status: 'done' });
     fs.writeFileSync(jobPaths(root, job.jobId).video, Buffer.alloc(64, 3));
@@ -624,7 +1162,7 @@ test('account B gets a 404 on account A\'s job, on every job route', async () =>
 test('a job with no owner is nobody\'s job', async () => {
   await withApp(async ({ base, root, app, auth }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     const job = seedJob(app, root, a);
     // Take the ownership entry away: a manifest with no index entry must not be
     // readable by the account that used to own it, let alone by anybody else.
@@ -636,7 +1174,7 @@ test('a job with no owner is nobody\'s job', async () => {
 test('uploading claims the job for the account that uploaded it', async () => {
   await withApp(async ({ base, app, auth }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     const res = await fetch(`${base}/api/jobs`, {
       method: 'POST',
       headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
@@ -662,7 +1200,7 @@ test('credits are spent when the job is enqueued, and the next one is refused', 
   await withApp(async ({ base, root, auth, queue }) => {
     // The free plan grants exactly one 480p tape.
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     assert.equal(auth.balanceOf(a).credits, 51);
     const first = await fetch(`${base}/api/jobs`, {
@@ -693,10 +1231,42 @@ test('credits are spent when the job is enqueued, and the next one is refused', 
   });
 });
 
+/**
+ * The debit lands at enqueue, so a cancel BEFORE any worker claimed the job is
+ * a purchase of nothing: the queue says no lease was ever held, the manifest's
+ * steps say no provider was ever asked, and the person is entitled to their
+ * credits back. Wrong photo, immediate cancel, full price was the shape of the
+ * loss.
+ */
+test('cancelling a job the queue never claimed gives the credits back', async () => {
+  await withApp(async ({ base, auth }) => {
+    const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
+    assert.equal(auth.balanceOf(a).credits, 51);
+
+    const made = await fetch(`${base}/api/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}`, cookie },
+      body: multipart(uploadParts()),
+    });
+    assert.equal(made.status, 201);
+    const { jobId } = await made.json();
+    assert.equal(auth.balanceOf(a).credits, 0, 'the tape was paid for at enqueue');
+
+    const cancelled = await fetch(`${base}/api/jobs/${jobId}`, { method: 'DELETE', headers: { cookie } });
+    assert.equal(cancelled.status, 200);
+    assert.equal(auth.balanceOf(a).credits, 51, 'a cancel before any render kept the money');
+    // As a new positive line, never an erased debit -- the ledger records both
+    // the charge and the return.
+    const rows = a.ledger.filter((e) => e.jobId === jobId);
+    assert.equal(rows.length, 2, 'the refund is a ledger line of its own');
+  });
+});
+
 test('a balance that covers 480p but not 720p refuses only the 720p tape', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 100 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     const dear = await fetch(`${base}/api/jobs`, {
       method: 'POST',
@@ -724,7 +1294,7 @@ test('a debit refusal at enqueue leaves no directory, no claim and no charge', a
   const auth = fakeAuth();
   await withApp(async ({ base, root, app }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     // Report a balance, then refuse to spend it -- the exact race the
     // enqueue-time debit exists to close.
@@ -760,7 +1330,7 @@ test('a failure after the debit refunds it, because nothing was ever rendered', 
   };
   await withApp(async ({ base, root, app }) => {
     const a = auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     const res = await fetch(`${base}/api/jobs`, {
       method: 'POST',
@@ -784,7 +1354,7 @@ test('a failure after the debit refunds it, because nothing was ever rendered', 
 test('the pricing page lists the plans in credits and marks the current one', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password', plan: 'shelf' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     const anon = await fetch(`${base}/pricing`);
     assert.equal(anon.status, 200);
@@ -796,7 +1366,15 @@ test('the pricing page lists the plans in credits and marks the current one', as
     // Credits are the honest unit -- "N tapes a month" stopped being true the
     // moment a tape had two prices -- but the translation is shown as well,
     // because "153 credits" on its own tells a first-time reader nothing.
-    assert.ok(anonHtml.includes('153 credits a month'));
+    //
+    // "a month" IS GONE AND MUST STAY GONE. Nothing on this page recurs: the
+    // rungs are one-off bundles bought through Stripe in `mode: payment`, and
+    // there is no code anywhere in scripts/billing/ that could charge a second
+    // time. A page that says "a month" next to a Buy button is describing a
+    // subscription this application cannot sell.
+    assert.ok(anonHtml.includes('153 credits'));
+    assert.ok(!/credits a month/.test(anonHtml), 'nothing on this page may claim to recur');
+    assert.ok(!/per month/.test(anonHtml), 'nothing on this page may claim to recur');
     assert.ok(anonHtml.includes('3 tapes at 480p'), 'shelf is three 480p tapes');
     assert.ok(anonHtml.includes('1 tape at 720p'), 'and one 720p tape, singular');
     assert.ok(!anonHtml.includes('1 tapes'), 'and nothing reads like a placeholder');
@@ -821,7 +1399,7 @@ test('the pricing page lists the plans in credits and marks the current one', as
 test('no page in this app contains anything that collects payment details', async () => {
   await withApp(async ({ base, auth }) => {
     auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
-    const cookie = await signIn(base, 'a@example.com', 'a long enough password');
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
 
     // Asserted against FORM CONTROLS, not against prose. The pricing page says
     // out loud that this application never sees a card number, and a test that
@@ -835,8 +1413,58 @@ test('no page in this app contains anything that collects payment details', asyn
       for (const tag of html.match(controls) ?? []) {
         assert.ok(!banned.test(tag), `${target} has a control that collects payment details: ${tag}`);
       }
-      assert.ok(!/<form[^>]*action="[^"]*(checkout|pay|billing|card)/i.test(html),
-        `${target} posts a form at something that sounds like payment`);
+      // A CHECKOUT FORM IS ALLOWED AND ITS CONTENTS ARE NOT.
+      //
+      // This assertion used to ban any form whose action mentioned checkout,
+      // billing or a card, and it was a proxy for "there is no way to pay from
+      // here" written while there was no way to pay from anywhere. Since
+      // 2026-08-25 there is one, by design: /pricing posts a pack id to
+      // /api/billing/checkout and the server answers 303 to Stripe's own
+      // domain, where the card is entered. Banning the form would ban the
+      // approved design.
+      //
+      // What replaces it is STRICTLY STRONGER than what it replaces. Rather
+      // than trusting a url not to sound like payment, this reads the form
+      // that exists and asserts it carries exactly one field, that the field
+      // is a pack id, and that the id is one the server sells. A future edit
+      // that adds an amount, a credit count or a price to that form fails
+      // here -- which the old regex, matching only on the action attribute,
+      // would have passed without a word.
+      for (const form of html.match(/<form\b[\s\S]*?<\/form>/gi) ?? []) {
+        if (!/action="[^"]*(checkout|pay|billing|card)/i.test(form)) continue;
+        assert.match(form, /action="\/api\/billing\/checkout"/,
+          `${target} posts at a payment-ish path that is not the checkout route: ${form}`);
+        // THE RULE IS "NOTHING HERE CAN CHANGE WHAT IS CHARGED", NOT "EXACTLY
+        // ONE FIELD" (2026-08-30). This asserted a field COUNT of one, which
+        // was a proxy for the real property and stopped being one the day the
+        // form gained the immediate-supply acknowledgement -- a checkbox that
+        // carries no amount, no credit count and no price, and gates the
+        // purchase on this server rather than telling Stripe anything.
+        //
+        // Stated directly, the guard is STRONGER than the count it replaces: an
+        // allow-list of field names, so a future edit adding `amount`,
+        // `credits`, `price` or anything else unnamed fails here exactly as it
+        // did before -- and a second hidden field called `pack2` would have
+        // sailed through a count of one only if it replaced something.
+        const fields = form.match(/<input\b[^>]*>/gi) ?? [];
+        const named = fields.map((f) => (/name="([^"]*)"/.exec(f) ?? [])[1]);
+        assert.deepEqual(named.slice().sort(), ['pack', 'withdrawal'],
+          `the checkout form on ${target} carries fields that are not the pack id and the acknowledgement: ${named.join(',')}`);
+
+        const pack = fields[named.indexOf('pack')];
+        assert.match(pack, /type="hidden"/, 'the pack id must not be typeable');
+        assert.match(pack, /value="[a-z0-9-]+"/i, 'the pack id is not a plain id');
+
+        const withdrawal = fields[named.indexOf('withdrawal')];
+        assert.match(withdrawal, /type="checkbox"/, 'the acknowledgement must be a real checkbox');
+        assert.match(withdrawal, /\brequired\b/, 'the acknowledgement must be required');
+
+        // The property the count was standing in for, asserted on its own terms.
+        for (const field of fields) {
+          assert.doesNotMatch(field, /name="(amount|credits|price|priceUSD|currency|quantity)"/i,
+            `the checkout form on ${target} carries something that could change what is charged: ${field}`);
+        }
+      }
     }
   });
 });
@@ -882,7 +1510,15 @@ test('a missing scripts/auth/ is a 503 with a sentence, and the assets still ser
     // The parts that do not need an account keep working.
     assert.equal((await fetch(`${base}/styles.css`)).status, 200);
     assert.equal((await fetch(`${base}/api/health`)).status, 200);
-    assert.equal((await fetch(`${base}/places/ostsee-strand.jpg`)).status, 404);
+    // NOT 503 is the assertion, and the status itself is deliberately not
+    // pinned. What this line exists to prove is that the place-photo route is
+    // not gated behind the accounts module -- it asserted 404 only because
+    // `assets/places/` happened to be empty, and it went red on 2026-08-23 when
+    // the eight photographs landed and it started answering 200. A 200 proves
+    // the point better than a 404 did; a 503 would be the actual regression.
+    const placeRes = await fetch(`${base}/places/ostsee-strand.jpg`);
+    assert.notEqual(placeRes.status, 503, 'the place route must not need the accounts module');
+    assert.ok([200, 404].includes(placeRes.status), `unexpected ${placeRes.status} from the place route`);
 
     // And the plans are public prose: 503-ing a marketing page because an
     // unrelated module will not load is a worse answer than showing it.
@@ -913,6 +1549,19 @@ test('cookies parse tolerantly and serialize strictly', () => {
   // that would log everybody out because of an unrelated cookie.
   assert.equal(parseCookies('junk=%E0%A4%A; ts_session=v').ts_session, 'v');
 
+  // FIRST VALUE WINS, and this is the parser that is actually on the request
+  // path -- `currentAccount` and every CSRF/OAuth read below call THIS one, not
+  // the careful duplicate in `session.mjs`. A browser sends the most specific
+  // cookie first, so an attacker who can set a cookie on a wider path or a
+  // parent domain gets to append a second value with the same name. Under
+  // last-wins theirs is the one that is read, which is a session-fixation
+  // primitive. `session.mjs:606` has always had this guard and a comment
+  // explaining it; the copy on the request path did not, which is the whole
+  // finding -- the careful implementation existing is not the same as it being
+  // the one that runs.
+  assert.equal(parseCookies('ts_session=real; ts_session=forged').ts_session, 'real');
+  assert.equal(parseCookies('a=first; b=x; a=second').a, 'first');
+
   const set = serializeCookie('n', 'v alue', { maxAge: 60, secure: true });
   assert.match(set, /^n=v%20alue;/);
   assert.match(set, /HttpOnly/);
@@ -921,13 +1570,62 @@ test('cookies parse tolerantly and serialize strictly', () => {
   assert.match(set, /Max-Age=60/);
 });
 
-test('Secure follows the actual protocol, and a forwarded header is believed exactly', () => {
+/**
+ * CHANGED DELIBERATELY, 2026-08-26, with Paul's sign-off. The old test pinned
+ * "a forwarded header is believed exactly" -- but a header is whatever the
+ * client typed unless something trusted rewrote it, so believing it by
+ * default let any request turn `Secure` on or off by asking. The decision now
+ * belongs to whoever configured the deployment: `trustProxy` is opt-in
+ * (TIMESTAMP_TRUST_PROXY=1 for a deployment behind a TLS-terminating proxy),
+ * and only then is the header believed, exactly as before. Same rule, same
+ * words, as the twin in scripts/auth/session.mjs.
+ */
+test('Secure follows the actual protocol; a forwarded header is believed only when the deployment says so', () => {
   assert.equal(isSecureRequest({ socket: { encrypted: true }, headers: {} }), true);
-  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https' } }), true);
-  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https, http' } }), true);
-  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'http' } }), false);
-  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'nothttps' } }), false);
-  assert.equal(isSecureRequest({ socket: {}, headers: {} }), false);
+  // Default: the header is client-typed bytes and is never believed.
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https' } }), false);
+  // Opted in, it is believed for the literal value https and nothing else.
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https' } }, { trustProxy: true }), true);
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'https, http' } }, { trustProxy: true }), true);
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'http' } }, { trustProxy: true }), false);
+  assert.equal(isSecureRequest({ socket: {}, headers: { 'x-forwarded-proto': 'nothttps' } }, { trustProxy: true }), false);
+  assert.equal(isSecureRequest({ socket: {}, headers: {} }, { trustProxy: true }), false);
+});
+
+/** The same rule at the HTTP boundary, where it actually decides a cookie. */
+test('a client-typed forwarded header cannot mark the session cookie Secure unless the deployment opted in', async () => {
+  const attempt = async (base) => {
+    const form = await fetch(`${base}/login`, { headers: { accept: 'text/html', 'x-forwarded-proto': 'https' } });
+    const formCookie = form.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+    const csrf = (await form.text()).match(/name="csrf" value="([^"]+)"/)?.[1] ?? '';
+    return fetch(`${base}/login`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        cookie: formCookie,
+        'x-forwarded-proto': 'https',
+      },
+      body: new URLSearchParams({ email: 'a@example.com', password: 'a long enough password', csrf }),
+      redirect: 'manual',
+    });
+  };
+
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const res = await attempt(base);
+    assert.equal(res.status, 200);
+    const [cookie] = res.headers.getSetCookie();
+    assert.ok(!/Secure/.test(cookie),
+      'a header any client can type turned Secure on, which silently breaks login for a plain-HTTP deployment');
+  });
+
+  await withApp(async ({ base, auth }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password' });
+    const res = await attempt(base);
+    assert.equal(res.status, 200);
+    const [cookie] = res.headers.getSetCookie();
+    assert.match(cookie, /Secure/, 'behind a proxy the operator vouched for, the header is believed');
+  }, { trustProxy: true });
 });
 
 test('the ownership index refuses ids that are not path-safe', () => {
@@ -980,6 +1678,203 @@ test('a missing auth module surfaces as AuthUnavailableError, and can recover', 
     present = true;
     assert.equal(await s.currentAccount({ headers: { cookie: 'ts_session=x' } }), null);
   } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Task 13 -- the three identity sweeps are wired into the server's OWN
+// lifecycle. `sweepOAuth`, `sweepPending` and `sweepVerifyAttempts` are each
+// unit-tested on their own terms elsewhere (`test/auth-oauth-store.test.js`,
+// `test/auth-pending-signup.test.js`, `test/web-auth-code.test.js`) -- expiry
+// logic, surviving a row that disappears mid-sweep, and so on. None of that
+// is retested here. What is under test in this section is the wiring itself:
+// whether `createServer` actually CALLS the three, on `listen()` and on a
+// repeat, cancels that repeat on `close()`, and cannot be brought down by a
+// sweep that fails.
+// ---------------------------------------------------------------------------
+
+test('listen() sweeps out/oauth, out/pending-signups and out/verify-attempts once, before anything else happens', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-sweep-'));
+  // Well past every one of the three stores' own TTL (10 min, 24h, 1h), so
+  // whichever `nowImpl` the real sweep uses -- the server's own default,
+  // real wall-clock time -- finds all three already expired.
+  const longAgo = () => new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  const hash = 'a'.repeat(64);
+
+  putVerifier({ root, state: 'expired-state', verifier: 'v', nowImpl: longAgo });
+  putPending({
+    root, email: 'stale@example.com',
+    consent: { granted: true, at: new Date().toISOString(), text: 'x' },
+    nowImpl: longAgo,
+  });
+  chargeCodeAttempt({ root, hash, nowImpl: longAgo });
+
+  const oauthFile = path.join(root, ...OAUTH_DIR.split('/'), 'expired-state.json');
+  const pendingFile = path.join(root, ...PENDING_DIR.split('/'), `${emailHash('stale@example.com')}.json`);
+  const verifyFile = path.join(root, ...VERIFY_ATTEMPTS_DIR.split('/'), `${hash}.json`);
+  // The seed must exist before the sweep can prove anything about removing it.
+  assert.ok(fs.existsSync(oauthFile));
+  assert.ok(fs.existsSync(pendingFile));
+  assert.ok(fs.existsSync(verifyFile));
+
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), supabase: null,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed', logImpl: () => {},
+  });
+  try {
+    await app.listen();
+    assert.ok(!fs.existsSync(oauthFile), 'sweepOAuth was not called from listen()');
+    assert.ok(!fs.existsSync(pendingFile), 'sweepPending was not called from listen()');
+    assert.ok(!fs.existsSync(verifyFile), 'sweepVerifyAttempts was not called from listen()');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the identity sweep repeats on the SAME cadence as the worker retention sweep, and close() cancels the repeat', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-sweep-'));
+  const calls = { set: [], clear: [] };
+  const fakeSetInterval = (fn, ms) => {
+    const token = { fn, ms };
+    calls.set.push(token);
+    return token;
+  };
+  const fakeClearInterval = (token) => { calls.clear.push(token); };
+
+  // Pinned to the worker's own constant rather than to a duplicated literal --
+  // a future edit to either number without the other is exactly the drift
+  // this assertion exists to catch.
+  assert.equal(IDENTITY_SWEEP_MS, DEFAULT_RETENTION_SWEEP_MS,
+    'a second cadence here would be a second answer to a question CLAUDE.md already settled');
+
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), supabase: null,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed', logImpl: () => {},
+    setIntervalImpl: fakeSetInterval, clearIntervalImpl: fakeClearInterval,
+  });
+  try {
+    await app.listen();
+    assert.equal(calls.set.length, 1, 'exactly one repeat is scheduled');
+    assert.equal(calls.set[0].ms, IDENTITY_SWEEP_MS);
+    await app.close();
+    assert.deepEqual(calls.clear, [calls.set[0]],
+      'close() must cancel the exact timer listen() started, or the repeat outlives the server');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a sweep that cannot even create its own directory does not take listen() down with it', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-sweep-'));
+  fs.mkdirSync(path.join(root, 'out'), { recursive: true });
+  // A plain FILE sitting exactly where `oauth-store.mjs` and
+  // `pending-signup.mjs` each want a directory. Both modules' `dirFor()` is
+  // an unconditional `mkdirSync(dir, { recursive: true })` with no try/catch
+  // of its own -- both files are out of scope for this task -- so this is
+  // what makes each of them throw, proving the server's OWN wrapping is what
+  // keeps that throw from reaching `listen()`.
+  fs.writeFileSync(path.join(root, 'out', 'oauth'), 'not a directory');
+  fs.writeFileSync(path.join(root, 'out', 'pending-signups'), 'not a directory');
+
+  const logs = [];
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), supabase: null,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed', logImpl: (line) => logs.push(line),
+  });
+  try {
+    await assert.doesNotReject(
+      () => app.listen(),
+      'a sweep that cannot create its own directory must not crash the server that hosts it',
+    );
+    assert.ok(logs.some((l) => l.includes('sweepOAuth failed')), 'the failure must reach the log, not vanish');
+    assert.ok(logs.some((l) => l.includes('sweepPending failed')), 'the failure must reach the log, not vanish');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Review finding, 2026-08-26: the test above proves a sweep TARGET failure is
+// contained, but its `logImpl` is `(line) => logs.push(line)`, which cannot
+// itself throw -- so it never exercised the RECOVERY path at all. The first
+// version of `sweepIdentityLitter` called `logImpl` directly from inside each
+// catch block, with nothing above it to catch a second throw; a `logImpl`
+// that itself threw escaped the function entirely, which the reviewer
+// reproduced as `listen()` rejecting outright (the port never binds) and,
+// worse, as an unhandled rejection on a later interval tick -- this codebase
+// installs no `process.on('unhandledRejection')` anywhere, so that crashes
+// the whole process, not just the sweep. This test uses a `logImpl` that
+// actually throws, and forces a real sweep-target failure so that `logImpl`
+// is genuinely invoked rather than merely present.
+test('a logImpl that itself throws while reporting a sweep failure cannot crash listen(), the repeating tick, or the process', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-sweep-'));
+  fs.mkdirSync(path.join(root, 'out'), { recursive: true });
+  // Force sweepOAuth to actually fail, so its catch block's logImpl call is
+  // exercised rather than this test proving nothing.
+  fs.writeFileSync(path.join(root, 'out', 'oauth'), 'not a directory');
+
+  let tick;
+  const fakeSetInterval = (fn) => {
+    tick = fn;
+    return { unref() {} };
+  };
+  const fakeClearInterval = () => {};
+
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), supabase: null,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
+    logImpl: () => { throw new Error('the logger itself is broken'); },
+    setIntervalImpl: fakeSetInterval, clearIntervalImpl: fakeClearInterval,
+  });
+
+  const unhandled = [];
+  const onUnhandledRejection = (err) => unhandled.push(err);
+  process.on('unhandledRejection', onUnhandledRejection);
+  try {
+    await assert.doesNotReject(
+      () => app.listen(),
+      'sweepIdentityLitter must not throw even when its OWN error-reporting throws',
+    );
+    assert.equal(typeof tick, 'function', 'the repeating sweep was never scheduled');
+    // Invoke the interval callback directly, exactly as the real timer would
+    // on the next hour -- proving the REPEAT is guarded too, not just the
+    // first pass inside listen().
+    tick();
+    // Let any rejection surface as `unhandledRejection` before asserting none did.
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(unhandled, [], 'a broken logger must never produce an unhandled rejection on a later tick');
+  } finally {
+    process.off('unhandledRejection', onUnhandledRejection);
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Coordinator ruling, 2026-08-26: a partial Supabase config must boot and
+// must keep serving everything that is not identity -- rendering, billing,
+// the shelf, every route. `supabaseFromEnv` degrading to `null` is only half
+// the proof; this is the other half, built the same way `createServer` is
+// built with `supabase: null` everywhere else in this file, except the null
+// here comes from a genuinely partial env rather than an absent one.
+test('a server built from a PARTIAL Supabase config still boots and still serves a non-identity route', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-partial-'));
+  const partialEnv = { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SECRET_KEY: 'sb_secret_x' };
+  const supabase = supabaseFromEnv(partialEnv);
+  assert.equal(supabase, null, 'a partial config must hand createServer null, not a half-built client');
+
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), supabase,
+    ffprobeImpl: async () => 'ffprobe version 7.1 stubbed', logImpl: () => {},
+  });
+  const port = await app.listen();
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/`, { headers: { accept: 'text/html' } });
+    assert.equal(res.status, 200, 'the landing page must still serve when identity is misconfigured, not merely absent');
+  } finally {
+    await app.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

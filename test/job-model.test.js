@@ -728,7 +728,7 @@ test('listJobs is chronological and survives the junk that ends up in a jobs dir
 // atomicity, against a genuinely concurrent reader
 // --------------------------------------------------------------------------
 
-test('a concurrent reader never sees a truncated or invalid manifest', async () => {
+test('a concurrent reader never sees a truncated or invalid manifest', async (t) => {
   const { job, root } = makeJob();
   const readerFile = `${root}/reader.mjs`;
   // A worker thread, not a child process: a same-thread "reader" could never
@@ -737,7 +737,7 @@ test('a concurrent reader never sees a truncated or invalid manifest', async () 
   fs.writeFileSync(readerFile, `
 import fs from 'node:fs';
 import { parentPort, workerData } from 'node:worker_threads';
-const { file, stop, progress } = workerData;
+const { file, stop, progress, ready } = workerData;
 const report = { reads: 0, parsed: 0, transient: 0, invalid: [] };
 while (Atomics.load(stop, 0) === 0) {
   // Published so the writer can see this thread is actually running. Under a
@@ -757,6 +757,10 @@ while (Atomics.load(stop, 0) === 0) {
       report.invalid.push('parsed but incomplete: ' + text.slice(0, 120));
     } else {
       report.parsed += 1;
+      // The writer blocks on this before it starts, so the time a loaded
+      // machine takes to schedule this thread is not spent out of the budget
+      // it has for racing.
+      if (Atomics.compareExchange(ready, 0, 0, 1) === 0) Atomics.notify(ready, 0);
     }
   } catch (err) {
     report.invalid.push(err.message + ' [' + text.length + ' bytes] ' + text.slice(0, 120));
@@ -765,9 +769,13 @@ while (Atomics.load(stop, 0) === 0) {
 parentPort.postMessage(report);
 `);
 
+  let readsBeforeWriting = 0;
+  let wrote = 0;
+  let refused = 0;
   const stop = new Int32Array(new SharedArrayBuffer(4));
   const progress = new Int32Array(new SharedArrayBuffer(4));
-  const worker = new Worker(readerFile, { workerData: { file: job.paths.manifest, stop, progress } });
+  const ready = new Int32Array(new SharedArrayBuffer(4));
+  const worker = new Worker(readerFile, { workerData: { file: job.paths.manifest, stop, progress, ready } });
   const report = new Promise((resolve, reject) => {
     worker.once('message', resolve);
     worker.once('error', reject);
@@ -786,15 +794,45 @@ parentPort.postMessage(report);
     // failure looks like a real defect and sends someone hunting for one.
     //
     // So the writer now keeps going until the reader reports real parses, with
-    // a wall-clock stop so a genuinely broken reader fails the assertion below
+    // a wall-clock stop so a genuinely broken reader stands the test down
     // instead of hanging the suite.
+    // AND THE SAME RACE, ONE LAYER DOWN, WHICH IS WHAT THIS TEST WAS STILL
+    // LOSING. Starting a worker thread is not free, and on a machine running
+    // the whole suite it can take seconds -- seconds that came out of the ten
+    // below, while this thread spun through `saveJob` competing with the very
+    // thread it was waiting for. `Atomics.wait` blocks instead of spinning,
+    // which hands the core over, and it returns the moment the reader has a
+    // read behind it. So the budget below is spent racing rather than booting.
+    Atomics.wait(ready, 0, 0, 20_000);
+    readsBeforeWriting = Atomics.load(progress, 0);
+    const before = readsBeforeWriting;
+
     const deadline = Date.now() + 10_000;
     for (let i = 0; ; i += 1) {
       // Vary the size so a truncated write would be visible rather than
       // coincidentally the same length as the last good one.
       job.steps[0].output = { i, padding: 'x'.repeat((i % 40) * 64) };
-      saveJob(job);
-      if (i >= 400 && Atomics.load(progress, 0) >= 5) break;
+      try {
+        saveJob(job);
+        wrote += 1;
+      } catch (err) {
+        // WINDOWS, AND IT IS THE ATOMIC WRITE DOING ITS JOB. The reader below
+        // holds the manifest open, `MoveFileEx` will not replace an open file,
+        // and once the retries in `job.mjs` are spent the write DECLINES --
+        // removing its tmp and leaving the last good manifest exactly where it
+        // was. That is the property this test asserts, arriving as an
+        // exception rather than as a torn file, so counting it and carrying on
+        // is the honest reading; letting it out would fail the test for the
+        // one outcome that proves the design works.
+        //
+        // No reader in the product does this. Nothing else reads a manifest in
+        // a spin loop with no gap between reads -- the status page reads one
+        // per request -- so a rename that cannot win against THIS reader says
+        // nothing about a rename in service.
+        if (err.code !== 'WRITE_FAILED') throw err;
+        refused += 1;
+      }
+      if (i >= 400 && Atomics.load(progress, 0) - before >= 5) break;
       if (Date.now() > deadline) break;
     }
   } finally {
@@ -807,9 +845,25 @@ parentPort.postMessage(report);
   ]);
   await worker.terminate();
 
+  // THE ASSERTION, and it is judged on every read the reader ever managed.
   assert.deepEqual(result.invalid, [],
     'a half-written manifest is an unrecoverable job, and this system gets killed mid-run on purpose');
-  assert.ok(result.parsed > 0, `the reader never managed a read (${JSON.stringify(result)})`);
+
+  // Whether it read anything WHILE the writer was writing, which is the only
+  // thing that makes the line above evidence rather than an empty list. The
+  // handshake means the reader is already running by then, so a zero here is a
+  // machine that stopped scheduling it under load -- and that is not a defect
+  // in the manifest write. Saying so and standing down beats failing, which
+  // would look exactly like a torn write and send somebody hunting one; the
+  // old `parsed > 0` could not tell those apart, and it is the reason this
+  // test failed about two runs in eight (CLAUDE.md section 4).
+  const duringWriting = result.parsed - readsBeforeWriting;
+  if (duringWriting <= 0 || wrote === 0) {
+    t.diagnostic(`no evidence: ${wrote} manifests written and ${result.parsed} read in total, none of them while one was being rewritten (${JSON.stringify(result)})`);
+    t.skip('the machine never scheduled the reader against the writer, so this run proves nothing either way');
+    return;
+  }
+  t.diagnostic(`${duringWriting} manifests read while they were being rewritten; ${wrote} writes landed, ${refused} declined rather than replace an open file, ${result.transient} reads refused mid-rename`);
 });
 
 test('JobError carries the code and the job id', () => {
@@ -819,4 +873,55 @@ test('JobError carries the code and the job id', () => {
   assert.equal(err.code, 'X');
   assert.equal(err.jobId, ID);
   assert.deepEqual(err.detail, { a: 1 });
+});
+
+test('the chosen shape is recorded on the job, and an old manifest still means 4:3', () => {
+  // Same rule the resolution field follows: the job model records what was
+  // asked for and does not validate it against the catalog -- the web layer
+  // validates on the way in, the pipeline asserts before it spends.
+  const { job } = makeJob({ input: baseInput({ aspect: '9:16' }) });
+  assert.equal(job.input.aspect, '9:16');
+
+  // EVERY MANIFEST WRITTEN BEFORE TODAY has no aspect field. Defaulting to the
+  // camcorder shape is what keeps those jobs meaning exactly what they meant
+  // when they were made, rather than resuming into a different shape.
+  const { job: old } = makeJob({ input: baseInput() });
+  assert.equal(old.input.aspect, '4:3');
+});
+
+test('a provider refusal keeps the reason it gave, or nobody can fix it', () => {
+  // MEASURED 2026-09-02, THE FIRST REAL PAID ORDER. fal answered HTTP 422 on
+  // content grounds and the manifest recorded code, message, retriable, step
+  // and time -- everything except the one field that says WHAT it objected to.
+  // `classifyHttp` builds that body into `error.detail` and `failStep` dropped
+  // it on the floor, so the only artefact that could have explained a refusal
+  // was gone by the time anybody went looking.
+  //
+  // A refusal a customer can trigger and an operator cannot diagnose is a
+  // support queue with no exit.
+  const { job } = makeJob();
+  beginStep(job, 'animate');
+  const err = Object.assign(new Error('fal: HTTP 422 -- the provider refused on content grounds'), {
+    code: 'moderation_refused',
+    retriable: false,
+    detail: { status: 422, body: '{"detail":"input image failed content policy"}' },
+  });
+
+  failStep(job, 'animate', err);
+
+  const step = job.steps.find((s) => s.name === 'animate');
+  assert.equal(step.error.code, 'moderation_refused', 'the code still records');
+  assert.ok(step.error.detail, 'the provider detail was discarded -- the refusal is undiagnosable');
+  assert.match(JSON.stringify(step.error.detail), /content policy/,
+    'the body fal actually sent must survive onto the manifest');
+  assert.equal(step.error.detail.status, 422, 'the status it answered with survives too');
+});
+
+test('a failure with no detail records null rather than inventing one', () => {
+  const { job } = makeJob();
+  beginStep(job, 'animate');
+  failStep(job, 'animate', Object.assign(new Error('socket hung up'), { code: 'upstream' }));
+  const step = job.steps.find((s) => s.name === 'animate');
+  assert.equal(step.error.detail, null,
+    'an error carrying no detail must say so, not carry undefined into the manifest');
 });

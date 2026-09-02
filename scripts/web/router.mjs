@@ -53,6 +53,13 @@ export const ROUTES = Object.freeze([
   { method: 'GET', pattern: '/styles.css', name: 'stylesheet' },
   { method: 'GET', pattern: '/tape-osd.ttf', name: 'font' },
   { method: 'GET', pattern: '/favicon.ico', name: 'favicon' },
+  // The brand marks. Listed one per row rather than served from a `/brand/:file`
+  // pattern on purpose: an explicit row cannot be talked into reading a path
+  // its author did not intend, and there are only ever going to be four.
+  { method: 'GET', pattern: '/icon.svg', name: 'iconSvg' },
+  { method: 'GET', pattern: '/icon-180.png', name: 'icon180' },
+  { method: 'GET', pattern: '/icon-192.png', name: 'icon192' },
+  { method: 'GET', pattern: '/icon-512.png', name: 'icon512' },
 
   // --- accounts (docs/interfaces-app.md B) --------------------------------
   // The GET and the POST of each form are separate rows rather than one row
@@ -66,6 +73,87 @@ export const ROUTES = Object.freeze([
   // <img src>, and `SameSite=Lax` sends the cookie on a cross-site GET.
   { method: 'POST', pattern: '/logout', name: 'logout' },
   { method: 'GET', pattern: '/pricing', name: 'pricingPage' },
+
+  // --- the legal pages -----------------------------------------------------
+  // Static prose from config/legal.json's entity (null renders an honest
+  // operator placeholder -- the stripePriceId:null shape). Public, because a
+  // privacy policy behind a login is not a privacy policy.
+  { method: 'GET', pattern: '/privacy', name: 'privacyPage' },
+  { method: 'GET', pattern: '/terms', name: 'termsPage' },
+  { method: 'GET', pattern: '/impressum', name: 'impressumPage' },
+  // Crawlers, and what the Impressum address is worth protecting from. Public
+  // and session-free like the stylesheet; see `indexable` in server.mjs for
+  // why the default refuses everything.
+  { method: 'GET', pattern: '/robots.txt', name: 'robots' },
+
+  // --- where a new account first lands (spec §10, task 12) ----------------
+  // BEHIND A SESSION, unlike everything else in this block: every route that
+  // opens an account -- the code confirmation, Google -- redirects here once
+  // one exists, so by the time this page is reached there is always somebody
+  // to be. Not in PUBLIC_ROUTES below, which is what makes a signed-out visit
+  // 303 to /login exactly like any other gated page, with no code of its own.
+  { method: 'GET', pattern: '/onboarding', name: 'onboardingPage' },
+  // The one obligation only this page can meet: an account can exist with
+  // `consent: null` (a code confirmed with nothing parked, or a login that
+  // created the account with nothing parked either) and nothing else ever
+  // asks again. This POST is that ask, and it is gated by the same
+  // anti-forgery pair as every other state-changing form on the site.
+  { method: 'POST', pattern: '/onboarding', name: 'onboardingConsent' },
+
+  // --- the account itself (deletion spec 2026-08-29, §3 and §4) -----------
+  // All three gated by the default (none is in PUBLIC_ROUTES below). The page
+  // and the export need only a session; the deletion POST additionally proves
+  // origin, carries the anti-forgery pair, and demands the account's own email
+  // typed back -- a one-way door gets a typed confirmation, not a checkbox.
+  // --- the tapes, somewhere of their own (2026-08-31) ---------------------
+  // Gated by the default, like /account: it lists what an account has made, so
+  // there is nothing on it for a stranger. The media it links to are the
+  // existing per-job routes, each already ownership-checked by `ownedJob`.
+  { method: 'GET', pattern: '/videos', name: 'videosPage' },
+
+  { method: 'GET', pattern: '/account', name: 'accountPage' },
+  { method: 'GET', pattern: '/api/account/export', name: 'accountExport' },
+  { method: 'POST', pattern: '/account/delete', name: 'accountDelete' },
+
+  // --- Google, the PKCE round trip (spec §3, §4.2) ------------------------
+  // NOT behind a session, for the same reason `/login` and `/signup` are not:
+  // both routes exist precisely to let somebody who has no session yet get
+  // one. `authGoogle` is a POST because it is state-changing -- it writes a
+  // verifier to disk before anything else happens -- and this repo has no
+  // client JavaScript, so the button is a form with a submit, never a link.
+  { method: 'POST', pattern: '/auth/google', name: 'authGoogle' },
+  { method: 'GET', pattern: '/auth/callback', name: 'authCallback' },
+
+  // --- confirming a mailbox with a six-digit code (spec §3, §4.5) ---------
+  // NOT behind a session, and deliberately. Signup mints nobody; the account
+  // does not exist until the code is typed, so a gate here would be a gate on
+  // a session that cannot exist yet. What proves anything on these three
+  // routes is possession of the CODE, which is why `/verify` is safe to
+  // bookmark and safe to reach after the tab that started it was closed.
+  { method: 'GET', pattern: '/verify', name: 'verifyPage' },
+  { method: 'POST', pattern: '/verify', name: 'verifyCode' },
+  { method: 'POST', pattern: '/verify/resend', name: 'verifyResend' },
+
+  // --- "forgot password?" (spec §5, task 11) ------------------------------
+  // NOT behind a session, and for the same reason `/verify` is not: a person
+  // who forgot their password has, by definition, no session to prove who
+  // they are with. `/auth/reset` sends the mail; `/auth/reset/complete` takes
+  // the same six-digit shape `/verify` does, plus the new password, and is
+  // the one route in this file that ends by destroying every session for the
+  // account rather than starting one.
+  { method: 'GET', pattern: '/auth/reset', name: 'resetPage' },
+  { method: 'POST', pattern: '/auth/reset', name: 'reset' },
+  { method: 'GET', pattern: '/auth/reset/complete', name: 'resetCompletePage' },
+  { method: 'POST', pattern: '/auth/reset/complete', name: 'resetComplete' },
+
+  // --- money (docs/superpowers/specs/2026-08-24-credit-packs-pricing-design.md)
+  // The browser posts a PACK ID and nothing else. Everything priced is resolved
+  // on the server against config/credits.json; there is no route here that
+  // accepts an amount, and there must not be one.
+  { method: 'POST', pattern: '/api/billing/checkout', name: 'checkout' },
+  // NOT authenticated by session -- authenticated by an HMAC over the raw body.
+  // Stripe holds no cookie and never will.
+  { method: 'POST', pattern: '/api/stripe/webhook', name: 'stripeWebhook' },
 
   // Place card imagery. `assets/places/<id>.jpg` does not exist yet; a 404 here
   // is the designed state, and the CSS falls through to the gradient layer.
@@ -104,8 +192,28 @@ export const ROUTES = Object.freeze([
  */
 export const PUBLIC_ROUTES = Object.freeze(new Set([
   'stylesheet', 'font', 'favicon', 'placeImage',
+  'iconSvg', 'icon180', 'icon192', 'icon512',
   'loginPage', 'login', 'signupPage', 'signup', 'logout',
+  // Google. Whoever lands on `/auth/callback` is, by definition, not signed
+  // in yet -- the session this app trusts does not exist until this route
+  // mints it -- so gating either of these behind a session that cannot exist
+  // yet would make the flow unreachable rather than safe.
+  'authGoogle', 'authCallback',
+  // The code-entry flow. See the comment beside these rows in ROUTES: the
+  // account they end in does not exist until they succeed, so requiring a
+  // session would make the flow unreachable rather than safe.
+  'verifyPage', 'verifyCode', 'verifyResend',
+  // The reset flow. Same reasoning as the code-entry flow immediately above:
+  // the whole point is to recover access with no session, so gating it behind
+  // one would make the flow unreachable rather than safe.
+  'resetPage', 'reset', 'resetCompletePage', 'resetComplete',
   'pricingPage',
+  // A privacy policy behind a login is not a privacy policy, and an Impressum
+  // exists precisely for people who are not customers yet.
+  'privacyPage', 'termsPage', 'impressumPage',
+  // A crawler holds no session, and a robots.txt that answered 303 to /login
+  // would be read as "no rules" -- the opposite of what it is for.
+  'robots',
   // PUBLIC SINCE 2026-08-21, AND IT IS THE ONE ENTRY HERE THAT SERVES TWO
   // DIFFERENT PAGES. `/` used to 303 a signed-out visitor to `/login`, which
   // made the entire product a password box: there was nowhere to say what this
@@ -120,6 +228,13 @@ export const PUBLIC_ROUTES = Object.freeze(new Set([
   // test/web-auth.test.js rather than implied by a redirect.
   'homePage',
   'health',
+  // PUBLIC BECAUSE STRIPE CANNOT LOG IN, and gated by something stronger than
+  // a session: an HMAC-SHA256 over the exact bytes of the request, keyed by a
+  // secret only Stripe and this server hold. A route in this list normally
+  // means "anybody may reach it"; here it means "the gate is not the session",
+  // and the gate that IS there refuses an unverified request before it can
+  // touch a ledger.
+  'stripeWebhook',
 ]));
 
 /** True when this route may be served to somebody with no session. */

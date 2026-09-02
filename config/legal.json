@@ -1,0 +1,10 @@
+{
+  "_comment": "Who is selling. `entity: null` is the DESIGNED state and on 2026-08-29 it became the PERMANENT state of this file: the owner is a sole trader, so the disclosure address is a home address, and this repository is public -- git history outlives any page you can take down. The real entity goes in TIMESTAMP_LEGAL_ENTITY in `.env` (gitignored, out of the image, passed to both containers by compose), which beats this file when set. See .env.example for the shape. THIS FILE IS STILL READ when that variable is unset, so it remains a working route for anyone whose address is already public -- but do not paste a home address here. SETTING EITHER IS SIGN-OFF on the page text in views.mjs. Both routes end at normaliseLegalEntity, which takes only the four fields that render and REFUSES a half-filled entity rather than publishing a legal page with a blank contact line -- h() renders undefined as the empty string, so that failure is invisible on the page and only the log names it. docs/deploy-runbook.md §4 step 7 is the smoke check that a value took. addressLines render one per line on /impressum and /privacy; email becomes the contact address on all three pages and must actually receive mail (the domain has no MX until Email Routing exists -- §37G). vatId may stay null until one exists.",
+  "entity": null,
+  "_entityShape": {
+    "name": "Full legal name or company name",
+    "addressLines": ["Street and number", "Postcode City", "Country"],
+    "email": "support@timestamptapes.com",
+    "vatId": null
+  }
+}

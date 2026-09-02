@@ -46,8 +46,10 @@ import {
   FAL_QUEUE_BASE,
   falStillBody,
   falVideoBody,
+  falReferenceVideoBody,
   falRequestId,
   falResolutionFor,
+  falAspectFor,
   falMimeType,
   falDataUri,
   falClipName,
@@ -222,7 +224,14 @@ export function testModels() {
     endpoint: 'test-ai/identity-still',
     capabilities: { stillSizes: [...FAL_CAPABILITIES.stillSizes], maxReferences: 2, supportsPlaceReference: true },
   };
-  models.defaults[FAL_ID] = { still: 'test/identity-still', video: models.defaults[FAL_ID].video };
+  models.defaults[FAL_ID] = {
+    still: 'test/identity-still',
+    video: models.defaults[FAL_ID].video,
+    // Carried through, not invented here: dropping it would make every direct
+    // request in this file fail with no_default_model instead of exercising
+    // the shape-follows-request rule against the real config.
+    videoDirect: models.defaults[FAL_ID].videoDirect,
+  };
   return models;
 }
 
@@ -256,9 +265,28 @@ export function falUnderTest({ transport = makeFalTransport(), models = testMode
 }
 
 let dirSeq = 0;
+/**
+ * A directory this process alone writes to.
+ *
+ * THE PID IS NOT DECORATION. `dirSeq` counts per process while the path it
+ * builds is shared, and `node --test` runs test FILES in parallel processes --
+ * `provider-contract.test.js` imports `falContractCase` from this file, so two
+ * processes run this module at once, both start the counter at zero and both
+ * walk the same `build/provider-fal/<label>-<n>` names. `mkdirSync` with
+ * `recursive` does not complain when the name is already there, so the
+ * collision is silent, and when the two processes reach the same media key at
+ * the same moment they are two ffmpegs writing one path: whoever reads between
+ * the truncate and the first byte gets zero bytes and the provider raises
+ * `empty_download`. That is the 720p pixel test failing about three runs in
+ * eight while passing every time in isolation (CLAUDE.md section 4) -- it is a
+ * collision between two test processes and never a defect in the provider.
+ *
+ * Same fix and same reason as the tmp name in `scripts/auth/accounts.mjs`,
+ * which carries a pid for the same class of shared-path race.
+ */
 function tmpDir(label) {
   dirSeq += 1;
-  const dir = path.join(REPO_ROOT, 'build', 'provider-fal', `${label}-${dirSeq}`);
+  const dir = path.join(REPO_ROOT, 'build', 'provider-fal', `${label}-${process.pid}-${dirSeq}`);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -468,6 +496,115 @@ test('[fal] the VIDEO model in the real config is verified and names its audio-o
   assert.equal(transport.posts()[0].body.generate_audio, false);
 });
 
+/**
+ * THE TOKEN-BILLED MODEL MUST BE PRICEABLE AFTER THE CALL, NOT ONLY BEFORE IT.
+ *
+ * `generateVideo` resolves `size` and then did not hand it to `estimateVideo`.
+ * That is harmless for a per-SECOND model and fatal for a per-TOKEN one, which
+ * needs the raster and throws without it -- so the submit succeeded, the poll
+ * completed, THE MP4 LANDED ON DISK, and then the cost line threw. fal is paid,
+ * `completeIntent` never runs, no tape ships, and on resume `decideIntent`
+ * cannot adopt the clip because `prior.result.clip.path` was never written: the
+ * job either hard-stops on INTENT_IN_FLIGHT or submits and pays a second time.
+ *
+ * `reference-to-video` is the ONLY video model the direct path uses and it is
+ * the one that is token-billed, so this was the shipped paid path.
+ *
+ * WHY THE SUITE MISSED IT: every provider here is built from
+ * `models.defaults[FAL_ID].video`, which is `image-to-video` -- unit `second`.
+ * The token branch was never reached. The reference-to-video tests all exercise
+ * the pure builder `falReferenceVideoBody`, never `provider.generateVideo`.
+ */
+test('[fal] a token-billed video model still prices itself after the call', async () => {
+  const transport = makeFalTransport();
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+  const provider = createFalProvider({
+    cfg, envImpl: FAKE_ENV, pricing: testPricing(), videoModel: model,
+  });
+
+  const res = await provider.generateVideo(
+    videoRequest({ imagePath: undefined, references: [{ role: 'face', path: writeImage(tmpDir('ref'), 'face.png') }] }),
+    { outDir: tmpDir('token-cost'), fetchImpl: transport.fetchImpl, sleepImpl: async () => {} },
+  );
+
+  assert.equal(res.meta.model, model);
+  assert.ok(Number.isFinite(res.cost.estimated), 'a token-billed model must return a finite estimate');
+  assert.ok(res.cost.estimated > 0, 'a paid provider estimating zero is not estimating');
+  assert.equal(typeof res.clip.path, 'string', 'the clip path is what a resume needs to adopt the download');
+});
+
+/** The raster is what the token formula multiplies by, so two tiers must not
+ *  price the same -- otherwise the assertion above passes on a constant. */
+test('[fal] a token-billed model prices 720p above 480p', async () => {
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+  const quote = async (size) => {
+    const transport = makeFalTransport();
+    const provider = createFalProvider({
+      cfg, envImpl: FAKE_ENV, pricing: testPricing(), videoModel: model,
+    });
+    const res = await provider.generateVideo(
+      videoRequest({ imagePath: undefined, references: [{ role: 'face', path: writeImage(tmpDir('ref2'), 'face.png') }], size }),
+      { outDir: tmpDir('token-tier'), fetchImpl: transport.fetchImpl, sleepImpl: async () => {} },
+    );
+    return res.cost.estimated;
+  };
+  const cheap = await quote(FAL_RESOLUTIONS['480p']);
+  const dear = await quote(FAL_RESOLUTIONS['720p']);
+  assert.ok(dear > cheap, `720p (${dear}) must cost more than 480p (${cheap}) on a token-billed model`);
+});
+
+test('[fal] the endpoint follows the request shape: references go to reference-to-video, a start frame to image-to-video', async () => {
+  // The 2026-08-26 resume defect (CLAUDE.md section 26), one layer down and
+  // still live in the worker path until this test existed: `generateVideo`
+  // builds the BODY from the request's shape (`references` present means
+  // `falReferenceVideoBody`) while the ENDPOINT came from construction-time
+  // state (`opts.videoModel ?? defaults.fal.video`, which is image-to-video).
+  // A worker constructs its provider once with no override, so a direct job's
+  // reference body was posted to the image-to-video endpoint -- fal answers
+  // 422, AFTER credits were debited. Body and endpoint must derive from the
+  // same fact: what the request carries.
+  const direct = falUnderTest({});
+  await direct.provider.generateVideo(
+    videoRequest({
+      imagePath: undefined,
+      references: [{ role: 'face', path: writeImage(tmpDir('shape-ref'), 'face.png') }],
+    }),
+    direct.ctx({ outDir: tmpDir('shape-direct') }),
+  );
+  const directSubmit = direct.transport.posts().find((r) => r.url.startsWith(FAL_QUEUE_BASE));
+  assert.ok(directSubmit, 'the direct request never reached the transport');
+  assert.match(directSubmit.url, /reference-to-video/,
+    `a references request must submit to the reference endpoint, not ${directSubmit.url}`);
+  assert.ok(!/(^|\/)image-to-video/.test(new URL(directSubmit.url).pathname.replace(/^.*seedance-2\.0/, '')),
+    `a reference body posted to the image-to-video endpoint is the 422 this test exists for: ${directSubmit.url}`);
+
+  const still = falUnderTest({});
+  await still.provider.generateVideo(
+    videoRequest({}),
+    still.ctx({ outDir: tmpDir('shape-start') }),
+  );
+  const startSubmit = still.transport.posts().find((r) => r.url.startsWith(FAL_QUEUE_BASE));
+  assert.ok(startSubmit, 'the start-frame request never reached the transport');
+  assert.match(startSubmit.url, /image-to-video/,
+    `a start-frame request must still submit to image-to-video, not ${startSubmit.url}`);
+});
+
+test('[fal] an explicit --video-model override still wins on a references request', async () => {
+  // The bake-off seam: a NAMED override is a human having chosen, and it beats
+  // the shape-derived default on both request shapes -- otherwise the CLI flag
+  // silently stops meaning what it says on direct runs.
+  const { provider, transport, ctx } = falUnderTest({ videoModel: 'bytedance/seedance-2.0/reference-to-video' });
+  await provider.generateVideo(
+    videoRequest({
+      imagePath: undefined,
+      references: [{ role: 'face', path: writeImage(tmpDir('ovr-ref'), 'face.png') }],
+    }),
+    ctx({ outDir: tmpDir('ovr-direct') }),
+  );
+  const submit = transport.posts().find((r) => r.url.startsWith(FAL_QUEUE_BASE));
+  assert.match(submit.url, /reference-to-video/);
+});
+
 // ---------------------------------------------------------------------------
 // the wire: what is actually sent
 // ---------------------------------------------------------------------------
@@ -501,13 +638,32 @@ test('[fal] duration is a STRING enum and the aspect ratio is always 4:3', () =>
 test('[fal] the resolution the customer paid for is the resolution on the wire', () => {
   assert.equal(falResolutionFor({ width: 640, height: 480 }), '480p');
   assert.equal(falResolutionFor({ width: 960, height: 720 }), '720p');
-  // No nearest-match: substituting 480p for a 720p order bills for one thing
-  // and renders another, and nobody downstream can see it.
-  assert.throws(() => falResolutionFor({ width: 1280, height: 720 }), (err) => {
+
+  // THE EXAMPLE IN THE REFUSAL BELOW CHANGED AND THE RULE DID NOT, so this is
+  // written out rather than quietly edited. It used to be 1280x720, chosen as
+  // "the 16:9 shape 720p usually names, which this provider does NOT offer" --
+  // and offering it is the entire point of the change that touched this file.
+  // Using it as the unsupported example would now assert the opposite of the
+  // feature.
+  //
+  // 1024x768 replaces it and is a STRONGER example, not a weaker one: it is a
+  // legitimate 4:3 shape and simply not a tier on offer, so it proves the check
+  // is on the RASTER rather than merely on the aspect -- and it is the
+  // fixture's own size, i.e. exactly the raster a careless substitution would
+  // reach for. It sits 1.14x from 960x720, which is the kind of near miss a
+  // nearest-match would swallow.
+  assert.throws(() => falResolutionFor({ width: 1024, height: 768 }), (err) => {
     assert.ok(err instanceof CapabilityError);
     assert.equal(err.code, 'unsupported_size');
     return true;
   });
+
+  // And the shape that used to be the counter-example is now a real offer, so
+  // the test covers more than it did rather than less.
+  assert.equal(falResolutionFor({ width: 1280, height: 720 }), '720p');
+  assert.equal(falAspectFor({ width: 1280, height: 720 }), '16:9');
+  assert.equal(falAspectFor({ width: 960, height: 720 }), '4:3');
+  assert.equal(falAspectFor({ width: 720, height: 1280 }), '9:16');
 });
 
 test('[fal] the still body carries the references, the seed and the raster', () => {
@@ -539,6 +695,199 @@ test('[fal] the credential goes to the queue host and never to the CDN', async (
   for (const call of queueCalls) assert.match(call.headers.Authorization, /^Key /);
   assert.equal(cdnCalls.length, 1);
   assert.equal(cdnCalls[0].headers.Authorization, undefined, 'the CDN does not want our key and must never see it');
+});
+
+/**
+ * The queue's answer names where to poll, and that answer is data. The
+ * allow-list already stops a wholly foreign host; this pins the tighter rule
+ * the ALLOWED_HOSTS comment states: hosts we merely download from are not
+ * hosts we authenticate to. A `status_url` steered at any of them -- here the
+ * multi-tenant storage host, where anyone can own a bucket -- must be refused
+ * outright, and above all must never be sent the key.
+ */
+test('[fal] a status url steered off the queue host is refused and never sees the credential', async () => {
+  const transport = makeFalTransport();
+  const hijacked = {
+    ...transport,
+    async fetchImpl(url, init = {}) {
+      const res = await transport.fetchImpl(url, init);
+      if ((init.method ?? 'GET').toUpperCase() !== 'POST') return res;
+      const body = { ...JSON.parse(await res.text()), status_url: 'https://storage.googleapis.com/somebody-elses-bucket/status' };
+      return { ...res, async text() { return JSON.stringify(body); } };
+    },
+  };
+  const { provider, ctx } = falUnderTest({ transport: hijacked });
+
+  await assert.rejects(
+    () => provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('hijack') })),
+    (err) => {
+      assert.equal(err.code, 'credential_scope', `refused for the wrong reason: ${err.code} -- ${err.message}`);
+      return true;
+    },
+  );
+  const offQueue = transport.requests.filter((r) => !r.url.startsWith(FAL_QUEUE_BASE));
+  for (const call of offQueue) {
+    assert.equal(call.headers.Authorization, undefined, `${call.url} was sent the credential`);
+  }
+});
+
+/**
+ * The allow-list gates the URL we DIAL. Until this test it did not gate where
+ * that URL sent us next.
+ *
+ * `assertAllowedHost` runs once, before the request. Node's global fetch
+ * defaults to `redirect: 'follow'` and will chase up to twenty hops, so an
+ * allowlisted host answering `302 Location: http://169.254.169.254/…` was
+ * followed without the list being consulted again. That address is the cloud
+ * instance metadata service on every major provider -- which this project is
+ * about to have one of -- and it serves instance credentials to anything that
+ * can make it a request.
+ *
+ * WHY THE FAKE HONOURS `init.redirect` INSTEAD OF JUST ASSERTING ON IT. A fake
+ * transport does not follow redirects by itself, so a test that hands one back
+ * proves nothing about the real bug: the defect is in what this code ASKS the
+ * platform to do. So the fake behaves as the platform does -- it follows when
+ * asked to follow, and hands the 3xx back when asked not to -- and the
+ * assertion is the outcome that matters: no request ever reaches a host that
+ * is not on the list. That fails before the fix for the right reason, because
+ * the fake really does make the metadata request.
+ *
+ * The Authorization header is stripped by the fetch spec on a cross-origin
+ * redirect, so `FAL_KEY` was never the thing at risk here. The request itself
+ * is.
+ */
+test('[fal] a redirect off the allow-list is refused, not followed', async () => {
+  const METADATA = 'http://169.254.169.254/latest/meta-data/iam/security-credentials/';
+  const base = makeFalTransport();
+  const seen = [];
+
+  const platformish = async (url, init = {}) => {
+    seen.push(String(url));
+    // The media CDN answers with a redirect that leaves the allow-list.
+    if (String(url).startsWith('https://v3.fal.media/')) {
+      const hop = {
+        ok: false, status: 302, redirected: false,
+        headers: { get: (h) => (h.toLowerCase() === 'location' ? METADATA : null) },
+        async text() { return ''; },
+        async arrayBuffer() { return new ArrayBuffer(0); },
+      };
+      // This is what Node does when `redirect` is unset or 'follow'.
+      if ((init.redirect ?? 'follow') === 'follow') return platformish(METADATA, { ...init, redirect: 'follow' });
+      return hop;
+    }
+    if (String(url) === METADATA) {
+      return {
+        ok: true, status: 200,
+        headers: { get: () => null },
+        async text() { return 'AccessKeyId=AKIA-STOLEN'; },
+        async arrayBuffer() { return new TextEncoder().encode('AccessKeyId=AKIA-STOLEN').buffer; },
+      };
+    }
+    return base.fetchImpl(url, init);
+  };
+
+  const { provider, ctx } = falUnderTest({ transport: { ...base, fetchImpl: platformish } });
+
+  await assert.rejects(
+    () => provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('redirect') })),
+    (err) => {
+      assert.ok(err, 'the redirect was followed and the render succeeded');
+      return true;
+    },
+  );
+
+  const offList = seen.filter((u) => {
+    try { return !/(^|\.)(fal\.run|fal\.media|storage\.googleapis\.com)$/.test(new URL(u).hostname); }
+    catch { return true; }
+  });
+  assert.deepEqual(offList, [],
+    `a redirect took a request to ${offList.join(', ')} -- the allow-list was consulted once and then bypassed`);
+});
+
+test('[fal] a redirect that stays on the allow-list is still followed', async () => {
+  // The refusal above must not become a refusal to redirect at all: fal's CDN
+  // legitimately 302s between its own hosts, and a fix that broke downloads
+  // would be caught here rather than on the first paid render.
+  const base = makeFalTransport();
+  const FINAL = 'https://storage.googleapis.com/fal-bucket/final.mp4';
+  let servedFinal = false;
+
+  const platformish = async (url, init = {}) => {
+    if (String(url).startsWith('https://v3.fal.media/')) {
+      const hop = {
+        ok: false, status: 302, redirected: false,
+        headers: { get: (h) => (h.toLowerCase() === 'location' ? FINAL : null) },
+        async text() { return ''; },
+        async arrayBuffer() { return new ArrayBuffer(0); },
+      };
+      if ((init.redirect ?? 'follow') === 'follow') return platformish(FINAL, { ...init, redirect: 'follow' });
+      return hop;
+    }
+    if (String(url) === FINAL) {
+      servedFinal = true;
+      const buf = Buffer.from('fake media bytes, and nobody probed them\n');
+      return {
+        ok: true, status: 200,
+        headers: { get: () => null },
+        async text() { return buf.toString('utf8'); },
+        async arrayBuffer() { return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength); },
+      };
+    }
+    return base.fetchImpl(url, init);
+  };
+
+  const { provider, ctx } = falUnderTest({ transport: { ...base, fetchImpl: platformish } });
+  await provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('redirect-ok') }));
+  assert.equal(servedFinal, true, 'a legitimate redirect within the allow-list was not followed');
+});
+
+test('[fal] the shape that was ordered is the shape that goes on the wire', async () => {
+  // THE HARDCODED CONSTANT WAS THE WHOLE BUG. `aspect_ratio: FAL_ASPECT_RATIO`
+  // was sent on every call, so a 9:16 order fetched a 4:3 source and the tape
+  // stage built a 9:16 frame around it -- and nothing downstream would notice,
+  // because every check reads the same resolved config the filtergraph does.
+  // That is why `resolveRaster` refused the shape outright rather than trusting
+  // this.
+  //
+  // Asserted on the REQUEST BODY, because a provider that parses a response
+  // perfectly while asking for the wrong shape is exactly the failure this
+  // file was written for.
+  for (const [aspect, expected] of [['4:3', '4:3'], ['16:9', '16:9'], ['9:16', '9:16']]) {
+    const { provider, transport, ctx } = falUnderTest();
+    const size = resolutionRaster('720p', aspect);
+    await provider.generateVideo(videoRequest({ size }), ctx({ outDir: tmpDir(`aspect-${aspect.replace(':', '-')}`) }));
+    const body = transport.posts()[0].body;
+    assert.equal(body.aspect_ratio, expected,
+      `ordered ${aspect} and asked fal for ${body.aspect_ratio}`);
+    assert.equal(body.resolution, '720p',
+      `ordered ${aspect} at 720p and asked fal for ${body.resolution}`);
+  }
+});
+
+test('[fal] every shape at every tier is on offer, and nothing else is', () => {
+  // `stillSizes` is what `resolveRaster` checks an order against, so a shape
+  // missing here is a shape the pipeline refuses however well the rest works.
+  const offered = new Set(FAL_CAPABILITIES.stillSizes.map((s) => `${s.width}x${s.height}`));
+  for (const id of AVAILABLE_RESOLUTIONS) {
+    for (const aspect of ['4:3', '16:9', '9:16']) {
+      const r = resolutionRaster(id, aspect);
+      assert.ok(offered.has(`${r.width}x${r.height}`),
+        `${id} at ${aspect} (${r.width}x${r.height}) is not offered, so the pipeline will refuse it`);
+    }
+  }
+  // The first offer is still 4:3 at the cheapest tier: `resolveRaster` hands
+  // `stillSizes[0]` to any caller with no order behind it, and a CLI render
+  // suddenly defaulting to portrait would be a surprise nobody asked for.
+  assert.deepEqual(
+    { width: FAL_CAPABILITIES.stillSizes[0].width, height: FAL_CAPABILITIES.stillSizes[0].height },
+    { width: 640, height: 480 },
+  );
+  // A raster nobody offers is still refused by name rather than rounded to the
+  // nearest, which would bill for one size and deliver another.
+  assert.throws(() => falResolutionFor({ width: 1234, height: 567 }), (err) => {
+    assert.equal(err.code, 'unsupported_size');
+    return true;
+  });
 });
 
 test('[fal] an idempotency key is sent with the submit', async () => {
@@ -834,6 +1183,81 @@ test('a resolution label means its 4:3 raster, everywhere it is written down', (
   assert.equal(DEFAULT_RESOLUTION, credits.defaults.resolution);
 });
 
+test('a resolution label holds the SHORT edge, so a shape changes the long one', () => {
+  // THE RULE IS SECTION 13'S, APPLIED ONE LAYER DOWN. The tape rasters already
+  // hold their short edge at 576 and vary only the long edge, which is what
+  // keeps ONE set of filtergraph constants correct in all three shapes -- a
+  // 14px head-switch band is 14px of a 576-high picture whichever shape it is
+  // in. The SOURCE raster ordered from the provider now follows the same rule,
+  // so "480p" means "the short edge is 480" rather than "640x480".
+  //
+  // Called with no aspect it still means 4:3, because every existing caller
+  // and the whole of config/credits.json depend on that.
+  assert.deepEqual(resolutionRaster('480p'), { id: '480p', width: 640, height: 480 });
+
+  const EXPECTED = {
+    '480p': { '4:3': [640, 480], '16:9': [854, 480], '9:16': [480, 854] },
+    '720p': { '4:3': [960, 720], '16:9': [1280, 720], '9:16': [720, 1280] },
+  };
+  for (const [id, shapes] of Object.entries(EXPECTED)) {
+    for (const [aspect, [width, height]] of Object.entries(shapes)) {
+      assert.deepEqual(resolutionRaster(id, aspect), { id, width, height },
+        `${id} at ${aspect}`);
+      // yuv420p subsamples chroma by two; an odd edge is a filtergraph error
+      // at the far end of a paid render.
+      assert.equal(width % 2, 0, `${id} ${aspect} width is odd`);
+      assert.equal(height % 2, 0, `${id} ${aspect} height is odd`);
+      assert.equal(Math.min(width, height), Math.min(...EXPECTED[id]['4:3']),
+        `${id} ${aspect} does not hold the short edge`);
+    }
+  }
+
+  // AN UNKNOWN SHAPE IS REFUSED, NEVER DEFAULTED. This assertion was missing
+  // on the first pass and a deliberate sabotage -- making a malformed aspect
+  // fall back to 4:3 -- went completely undetected, which is the failure this
+  // whole area exists to prevent: a render that quietly delivers a different
+  // thing from the one ordered, with the button, the ledger and the manifest
+  // all agreeing on the wrong answer.
+  // NEITHER `null` NOR `undefined` IS IN THIS LIST, and that is deliberate
+  // rather than an oversight. Both mean UNSPECIFIED here, exactly as they do
+  // everywhere else in this codebase -- `resolveRaster` declares `aspect =
+  // null` and hands it straight through, and `resolution: null` has always
+  // meant "no order behind this render". Refusing null would crash the
+  // ordinary path. `creditCost` treats them the same way, and the two agreeing
+  // is the point: a shape must not be priced by one rule and rendered by
+  // another.
+  assert.deepEqual(resolutionRaster('480p', null), { id: '480p', width: 640, height: 480 });
+  for (const bad of ['16x9', 'square', '', '0:1', '4:0', '16:9:1']) {
+    assert.throws(() => resolutionRaster('480p', bad), (err) => {
+      assert.equal(err.code, 'UNKNOWN_ASPECT', `${JSON.stringify(bad)} was not refused as an aspect`);
+      return true;
+    }, `${JSON.stringify(bad)} should not be renderable`);
+  }
+});
+
+test('a wide or tall shape is exactly 4/3 the pixels of a 4:3 one', () => {
+  // THE NUMBER THE PRICING DECISION RESTS ON, PINNED SO IT CANNOT DRIFT.
+  //
+  // 4:3 is the squarest shape this product ships, so holding the short edge
+  // makes every other shape exactly 4/3 the pixels. fal bills tokens as
+  // pixels x seconds -- config/credits.json carries the formula and it
+  // reproduces the invoice to seven figures -- so 4/3 the pixels is 4/3 the
+  // cost, at every tier, for both non-default shapes.
+  //
+  // This is the arithmetic the price rests on. What charges for it lives in
+  // `creditCost`, and `auth-credits.test.js` holds it to this same number.
+  for (const id of AVAILABLE_RESOLUTIONS) {
+    const base = resolutionRaster(id, '4:3');
+    const basePx = base.width * base.height;
+    for (const aspect of ['16:9', '9:16']) {
+      const r = resolutionRaster(id, aspect);
+      const ratio = (r.width * r.height) / basePx;
+      assert.ok(Math.abs(ratio - 4 / 3) < 0.005,
+        `${id} ${aspect} is ${ratio.toFixed(3)}x the pixels of 4:3, not 4/3`);
+    }
+  }
+});
+
 test('the endpoints named in fal.mjs are the ones recorded as VERIFIED in config/models.json', () => {
   // fal.mjs's header documents FAL_ENDPOINTS as mirroring the config. Two
   // copies of a route id is exactly the drift that produces an afternoon of
@@ -992,4 +1416,286 @@ test('[fal] a 720p request downloads a 960x720 clip from the url the queue named
   assert.equal(res.clip.path, path.join(outDir, 'seg-01.mp4'));
   assert.ok(fs.statSync(res.clip.path).size > 1000);
   assert.equal(res.meta.resolution, '720p');
+});
+
+// ---------------------------------------------------------------------------
+// reference-to-video: the path with no still in it
+//
+// Paul's product direction, restated three times and finally built: upload a
+// photo, pick an outfit, a place and a frame shape, get a tape. No generated
+// still, nothing to choose from, no picture the user ever meets.
+//
+// `bytedance/seedance-2.0/reference-to-video` was VERIFIED on 2026-08-20 and
+// never wired in, because `animate` started from the approved still. It takes
+// up to 9 reference images as `image_urls` and refers to them from the prompt
+// as @Image1, @Image2 -- so the face photo goes in directly and the still stage
+// stops existing rather than being hidden.
+// ---------------------------------------------------------------------------
+
+test('[fal] the reference video body carries the photos, not a start frame', () => {
+  const body = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'face.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    dataUriImpl: (f) => `data:image/jpeg;base64,${f}`,
+  });
+
+  assert.deepEqual(body.image_urls, ['data:image/jpeg;base64,face.jpg']);
+  // SENDING BOTH WOULD BE AMBIGUOUS. `image_url` is image-to-video's start
+  // frame; this endpoint has no start frame at all, and a body carrying both
+  // invites the model to pick one.
+  assert.ok(!Object.hasOwn(body, 'image_url'), 'no singular start frame on this endpoint');
+});
+
+test('[fal] a second reference is the place, and it rides in the same array', () => {
+  // The strongest version of this product -- "your actual childhood garden" --
+  // and the reason the endpoint was recorded in the first place.
+  const body = falReferenceVideoBody({
+    prompt: 'p',
+    references: [{ role: 'face', path: 'f.jpg' }, { role: 'place', path: 'p.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    dataUriImpl: (f) => `data:x;base64,${f}`,
+  });
+  assert.deepEqual(body.image_urls, ['data:x;base64,f.jpg', 'data:x;base64,p.jpg'],
+    'order is the @Image1/@Image2 contract the prompt refers to');
+});
+
+test('[fal] the reference field name is per-model, exactly as it is for stills', () => {
+  // BUG 3, 2026-08-23: `fal-ai/uso` answered 422 because the field was called
+  // `input_image_urls`. Three vendors, no reason to assume they agree, and a
+  // 422 costs a round trip to discover. The name lives in config/models.json.
+  const body = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    referencesParam: 'input_image_urls',
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  assert.deepEqual(body.input_image_urls, ['data:x;base64,AA==']);
+  assert.ok(!Object.hasOwn(body, 'image_urls'), 'one field, never both');
+});
+
+test('[fal] the reference video body keeps every guard the image path already had', () => {
+  const body = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['720p'], nativeAudio: false,
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  // Layer 1 on the wire. `generate_audio` DEFAULTS TO TRUE on this endpoint too
+  // -- the config's own note says "the same parameter with the same TRUE
+  // default" -- so omitting it ships the model's ambience under our bed.
+  assert.equal(body.generate_audio, false);
+  assert.ok(Object.hasOwn(body, 'generate_audio'), 'omitted is not the same as false');
+  assert.equal(body.duration, '15', 'a STRING enum, not a number');
+  assert.equal(typeof body.duration, 'string');
+  assert.equal(body.resolution, '720p');
+  assert.equal(body.seed, 7);
+});
+
+// ---------------------------------------------------------------------------
+// THE SECOND VENDOR, 2026-09-02, and what it exposed.
+//
+// `bytedance/seedance-2.0/reference-to-video` began refusing every reference
+// image containing a real person -- 422 content_policy_violation,
+// `partner_validation_failed` -- eight days after it had rendered three tapes
+// from the same photograph. ByteDance closed likeness in VIDEO; their IMAGE
+// endpoints still accept it, and so does `alibaba/wan-3.0/reference-to-video`,
+// which is where the product went.
+//
+// Wan disagrees with Seedance on three fields, and TWO of the three were
+// hardcoded here rather than read from config -- so they would have gone out
+// wrong on the wire and been discovered by an invoice.
+// ---------------------------------------------------------------------------
+
+test('[fal] the audio-off field is NAMED by the model entry, not assumed', () => {
+  // THE ONE THAT WOULD HAVE SHIPPED SOUND. config/models.json has recorded an
+  // `audioOffParam` {name, value} since the three-layer guard was written, and
+  // assertAudioOff refuses a video model that does not carry one -- but the
+  // body builder ignored the recorded NAME and always wrote `generate_audio`.
+  // Wan's parameter is `audio` and it DEFAULTS TO TRUE, so the request would
+  // have carried a field Wan does not read while Wan's own audio stayed on,
+  // and every tape would have shipped the model's soundtrack under a bed whose
+  // whole specification is "quiet". Layer 3 (the ffprobe zero-audio-streams
+  // assertion) would have caught it -- after the render was paid for.
+  const body = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    audioOffParam: { name: 'audio', value: false },
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  assert.equal(body.audio, false);
+  assert.ok(Object.hasOwn(body, 'audio'), 'omitted is not the same as false');
+  assert.ok(!Object.hasOwn(body, 'generate_audio'),
+    'one audio field, never both -- the other vendor does not read this one');
+});
+
+test('[fal] duration goes out in the type the endpoint documents', () => {
+  // Seedance's `duration` is a STRING enum of '4'..'15'. Wan's is an INTEGER
+  // 2..30. Sending the wrong one is a 422 at best and a silently coerced
+  // duration at worst, which would break the 375-frame delivery contract
+  // without failing anything.
+  const wan = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    durationType: 'integer',
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  assert.equal(wan.duration, 15);
+  assert.equal(typeof wan.duration, 'number');
+
+  // The default stays the string, so the Seedance path is untouched by this.
+  const seedance = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  assert.equal(seedance.duration, '15');
+  assert.equal(typeof seedance.duration, 'string');
+});
+
+test('[fal] per-model extras ride along, and they cannot overwrite what the builder owns', () => {
+  // Wan needs `enable_prompt_expansion: false`. Its default is TRUE, and an
+  // "intelligent prompt rewriter" would rewrite the prompts sections 14, 17 and
+  // 19 were built on -- and destroy reproducibility, since the same seed and
+  // the same prompt would no longer be the same request.
+  const body = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    extraParams: { enable_prompt_expansion: false },
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  assert.equal(body.enable_prompt_expansion, false);
+
+  // A free-form merge is a hole: a config edit could turn the model's audio
+  // back on, or replace the references, from a file nobody reads on the way to
+  // a paid call. The builder owns those fields and says so.
+  assert.throws(
+    () => falReferenceVideoBody({
+      prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+      seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+      extraParams: { generate_audio: true },
+      dataUriImpl: () => 'data:x;base64,AA==',
+    }),
+    /cannot override/i);
+});
+
+test('[fal] a reference video request with no references is refused before it is sent', () => {
+  // The face IS the product. A body with an empty array is a paid call that
+  // cannot possibly return the right person, and it would look like a model
+  // failure rather than a caller bug.
+  assert.throws(
+    () => falReferenceVideoBody({
+      prompt: 'p', references: [], seconds: 15, seed: 1,
+      size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    }),
+    /at least one reference/i);
+});
+
+/**
+ * THE HOP CAP, which nothing proved until now.
+ *
+ * The two tests above cover the allow-list decision on a redirect: off the
+ * list is refused, on the list is still followed. Neither reaches the OTHER
+ * refusal in that loop. An allowlisted host that redirects to another
+ * allowlisted host passes the list check every time, so the only thing
+ * standing between this provider and an endless chase is `hop >= 3` -- and an
+ * off-by-one there, or a deleted line, would be invisible: the visible
+ * behaviour of the two tests above does not change at all.
+ *
+ * FOUR REQUESTS AND NOT THREE, and the number is the assertion rather than a
+ * detail. The loop dials, reads the Location, and only then checks the hop
+ * count, so hops 0, 1 and 2 each dial and continue, and hop 3 dials and
+ * throws. Asserting the count is what distinguishes a cap that fires from a
+ * loop that happened to end because the fake ran out of patience.
+ */
+test('[fal] a redirect loop inside the allow-list is capped, not chased', async () => {
+  const base = makeFalTransport();
+  const LOOP = 'https://v3.fal.media/going-in-circles';
+  const dialled = [];
+
+  const platformish = async (url, init = {}) => {
+    if (String(url).startsWith('https://v3.fal.media/')) {
+      dialled.push(String(url));
+      // Always somewhere else on the allow-list, so the list check can never
+      // be the thing that stops this. Only the cap can.
+      return {
+        ok: false,
+        status: 302,
+        redirected: false,
+        headers: { get: (h) => (h.toLowerCase() === 'location' ? LOOP : null) },
+        async text() { return ''; },
+        async arrayBuffer() { return new ArrayBuffer(0); },
+      };
+    }
+    return base.fetchImpl(url, init);
+  };
+
+  const { provider, ctx } = falUnderTest({ transport: { ...base, fetchImpl: platformish } });
+
+  await assert.rejects(
+    () => provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('redirect-loop') })),
+    (err) => {
+      assert.equal(err.code, 'too_many_redirects',
+        `refused for the wrong reason: ${err.code} -- ${err.message}`);
+      return true;
+    },
+  );
+
+  assert.equal(dialled.length, 4,
+    `the cap let ${dialled.length} requests out; three hops plus the one that trips it is four, `
+    + 'and any other number means the bound moved');
+});
+
+/**
+ * A REDIRECT IS THE OTHER WAY TO STEER AN AUTHORIZED REQUEST, and the existing
+ * test does not cover it.
+ *
+ * "a status url steered off the queue host" covers the sibling path: a
+ * `status_url` out of a RESPONSE BODY. This is the same attack one layer down
+ * -- the queue host itself answering `302 Location:` with a host that is on
+ * the allow-list but is not the queue. The list check passes, because
+ * storage.googleapis.com is genuinely allowlisted for downloads; what must
+ * refuse it is the narrower rule that hosts we merely download from are not
+ * hosts we authenticate to.
+ *
+ * THE ASSERTION IS THAT THE HOST IS NEVER DIALLED AT ALL, not merely that the
+ * header was absent. The fetch spec strips Authorization across an origin, so
+ * checking the header would pass even with the guard deleted; checking that no
+ * request was made is what actually fails without it.
+ */
+test('[fal] a redirect to an allowlisted non-queue host is refused on an authorized call', async () => {
+  const base = makeFalTransport();
+  const OFF_QUEUE = 'https://storage.googleapis.com/somebody-elses-bucket/status';
+  const seen = [];
+
+  const platformish = async (url, init = {}) => {
+    seen.push({ url: String(url), auth: (init.headers ?? {}).Authorization ?? null });
+    if (String(url).startsWith(FAL_QUEUE_BASE) && (init.method ?? 'GET').toUpperCase() === 'POST') {
+      return {
+        ok: false,
+        status: 302,
+        redirected: false,
+        headers: { get: (h) => (h.toLowerCase() === 'location' ? OFF_QUEUE : null) },
+        async text() { return ''; },
+        async arrayBuffer() { return new ArrayBuffer(0); },
+      };
+    }
+    return base.fetchImpl(url, init);
+  };
+
+  const { provider, ctx } = falUnderTest({ transport: { ...base, fetchImpl: platformish } });
+
+  await assert.rejects(
+    () => provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('redirect-scope') })),
+    (err) => {
+      assert.equal(err.code, 'credential_scope',
+        `refused for the wrong reason: ${err.code} -- ${err.message}`);
+      return true;
+    },
+  );
+
+  // PRESENT FIRST: the submit really was attempted, so the absence below is a
+  // refusal rather than a test that never got started.
+  assert.ok(seen.some((r) => r.url.startsWith(FAL_QUEUE_BASE)),
+    'the submit never happened, so nothing was refused');
+  assert.deepEqual(seen.filter((r) => r.url.startsWith('https://storage.googleapis.com/')), [],
+    'the redirect was followed onto a host this provider authenticates nothing to');
 });

@@ -1,0 +1,1293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>THE PRINT — Timestamp, light UI direction 1</title>
+
+<!-- THE ONLY EXTERNAL REQUEST IN THIS FILE. VT323 is bundled in the real repo at
+     assets/fonts/tape-osd.ttf; a standalone mockup cannot reach it, so it comes
+     from Google Fonts here and every rule that names it also names a real
+     fallback stack. Nothing else on this page is fetched. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================================================
+   THE PRINT — direction 1 of 3, light world, no JavaScript.
+
+   PALETTE. Every value below is either declared in
+   docs/superpowers/design/2026-08-25-light-ui-directions.md under THE PRINT, or
+   derived from one of those six values by a stated rule. Nothing else has a
+   colour.
+
+     --paper       #F7F5F1  declared. The page. Print stock, warm-neutral.
+     --paper-lift  #FFFFFF  declared. The print itself. Depth goes UP.
+     --ink         #1A1714  declared. Body and display. 16.39:1 on paper.
+     --ink-dim     #6B645C  declared. Labels. 5.35:1 on paper, 5.87:1 on white.
+     --stamp       #E4581F  declared. Date-back orange. LARGE numerals and marks
+                            only: 3.40:1 on paper, 3.70:1 on white, so it clears
+                            the 3:1 large-text bar on both grounds and clears
+                            nothing else.
+     --stamp-ink   #B03A0B  declared. The same orange at text weight. 5.62:1 on
+                            paper, 6.12:1 on white.
+     ghost         ink @ .6 declared, and it is the CORRECTED figure: the
+                            directions doc measured DESIGN.md's .5 at 3.32:1 on
+                            this paper (FAIL) and .6 at 4.54:1. Re-measured here
+                            against the same hexes: 4.57:1 on paper, 4.67:1 on a
+                            white print. Opacity .5 appears nowhere on this page.
+
+   ORANGE HAS EXACTLY TWO JOBS ON THIS PAGE AND THEY ARE THE SAME JOB: the
+   printed date, and the mark stamped on a struck value. It is not used for
+   links, labels, prices, hints, the focus ring, the credit meter or the record
+   button. Where the direction would have permitted orange and it was not
+   needed, it was left in ink rather than spent — see the DELIBERATELY-INK notes.
+
+   THE SHEET MAKES THE TWO-VALUE ACCENT IMPOSSIBLE TO GET WRONG, which is what
+   the direction asks for. --stamp appears in exactly two declarations and both
+   are checkable with a grep for `var(--stamp)`:
+
+     `.numeral`  large numerals, never set below 24px anywhere in this file
+     `.tick`     the 12px solid mark on a struck value — not text, so it is
+                 measured against SC 1.4.11's 3:1 for a UI component, which it
+                 clears on paper (3.40:1) and on a white print (3.70:1)
+
+   Everything else orange is `.stamped`, which uses --stamp-ink and is legal at
+   any size. Anything that reaches for --stamp at body size is a bug you can
+   find with one grep.
+   =========================================================================== */
+
+:root {
+  /* declared */
+  --paper: #F7F5F1;
+  --paper-lift: #FFFFFF;
+  --ink: #1A1714;
+  --ink-dim: #6B645C;
+  --stamp: #E4581F;
+  --stamp-ink: #B03A0B;
+  --ghost: .6;
+
+  /* DERIVED — the printed edge. The direction says "borders: none drawn; the
+     printed edge — --paper-lift on --paper plus a soft shadow". A shadow needs a
+     value the palette does not name, so it is --ink (26,23,20) at low alpha: the
+     shadow a print casts is its own ink seen through paper, not a new grey. Two
+     depths only: 1 = lying on the paper, 2 = picked up. */
+  --edge-1: 0 1px 1px rgba(26,23,20,.05), 0 2px 6px rgba(26,23,20,.06);
+  --edge-2: 0 1px 2px rgba(26,23,20,.08), 0 8px 22px rgba(26,23,20,.12);
+
+  /* DERIVED — the credit ring's unfilled track and the underline under a link:
+     --ink at 14% alpha. A ring needs a value between ink and paper and the
+     palette names none. */
+  --ink-track: rgba(26,23,20,.14);
+
+  /* DERIVED — the eight place tones, used ONLY as the fallback layer behind each
+     place photograph so this file is finished even when opened away from the
+     repo and the .jpg does not resolve. Each is --ink mixed into --paper at a
+     stated percentage: 10/14/18/22/26/30/34/38. They are ink densities on the
+     same stock, not new hues. This is the two-layer trick static.mjs already
+     plays (image first, tone behind); the photographs are never tinted. */
+  --tone-10: #E1DFDB;
+  --tone-14: #D8D6D2;
+  --tone-18: #CFCDC9;
+  --tone-22: #C6C4C0;
+  --tone-26: #BEBBB8;
+  --tone-30: #B5B2AF;
+  --tone-34: #ACAAA6;
+  --tone-38: #A3A19D;
+
+  /* THE 4px SCALE, structural, carried unchanged from DESIGN.md. */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
+
+  --display: 'VT323', 'Courier New', Courier, ui-monospace, SFMono-Regular, monospace;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  /* 16px. The direction moves body prose up because paper is a reading surface,
+     which also closes the Readable Font Size item in CLAUDE.md §6c. */
+  font-size: 16px;
+  line-height: 1.55;
+  /* NO TEXTURE. No grain plate, no paper fibre, no fleck. Texture belongs to the
+     tape; a light world wearing paper grain fails for exactly the reason the
+     dark one wearing scanlines failed. */
+}
+
+/* THE FIRST OF THE TWO PERMITTED BORDERS, and it is never removed. Ink rather
+   than orange — DELIBERATELY-INK #1: orange here means "stamped", and a focus
+   ring is not a mark a machine burned into a print. Ink measures 16.39:1 against
+   paper and 15.6:1 against a white print, where SC 1.4.11 asks 3:1. */
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+img { max-width: 100%; display: block; }
+
+/* ---------------------------------------------------------------------------
+   the two orange classes, and nothing else on this page may be orange
+   --------------------------------------------------------------------------- */
+
+/* LARGE NUMERALS. --stamp is 3.40:1 on paper and 3.70:1 on white, which is the
+   large-text bar and not the body bar, so this class is never set below 24px. */
+.numeral {
+  font-family: var(--display);
+  color: var(--stamp);
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: .04em;
+}
+
+/* THE SAME ORANGE AT TEXT WEIGHT. Legal at any size: 5.62:1 on paper. */
+.stamped { color: var(--stamp-ink); }
+
+/* ---------------------------------------------------------------------------
+   the mockup's own header strip — not part of the product
+   --------------------------------------------------------------------------- */
+
+.mockhead {
+  background: var(--paper-lift);
+  box-shadow: var(--edge-1);
+  padding: var(--s-5) var(--s-4);
+  margin-bottom: var(--s-7);
+}
+.mockhead-in { max-width: 64rem; margin: 0 auto; }
+.mockhead .kicker {
+  margin: 0 0 var(--s-2);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  color: var(--ink-dim);
+}
+.mockhead h1 {
+  font-family: var(--display);
+  font-size: clamp(30px, 7vw, 44px);
+  line-height: 1;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  margin: 0 0 var(--s-3);
+  color: var(--ink);
+}
+.mockhead .thesis { margin: 0; max-width: 52ch; font-size: 16px; }
+.mockhead .meta { margin: var(--s-3) 0 0; font-size: 14px; color: var(--ink-dim); }
+
+/* ---------------------------------------------------------------------------
+   the hoisted radios — the world's central mechanic, untouched
+   --------------------------------------------------------------------------- */
+
+/* Fixed rather than absolute, exactly as scripts/web/static.mjs does it: an
+   input at document offset -1 makes every click scroll the page back to the top.
+   1x1 with clip-path rather than display:none, because that is what keeps every
+   option in the tab order. pointer-events:none so the 1px boxes cannot swallow a
+   click at the top-left corner of the page. */
+.statehook {
+  position: fixed;
+  top: 0; left: 0;
+  pointer-events: none;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   shell
+   --------------------------------------------------------------------------- */
+
+.wrap {
+  /* 64rem = 1024, and the 16px of padding each side makes the content box 992 —
+     which is exactly 320 + 32 + 640, the sticky anchor, one gap and the flow
+     column. The ratio is 1:2 on the nose at any width above the break. */
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 0 var(--s-4) var(--s-8);
+}
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-4);
+  padding-bottom: var(--s-7);
+}
+.wordmark {
+  font-family: var(--display);
+  font-size: 30px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+  line-height: 1;
+}
+/* DELIBERATELY-INK #2: the record dot in the wordmark. It is a camcorder cue,
+   not a stamp, and it does not blink — paper does not blink, and the 420ms decay
+   this world inherits from is one of the things the direction kills. */
+.wordmark .rec { margin-right: .35em; font-size: .68em; vertical-align: .14em; }
+
+.nav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  font-size: 15px;
+}
+.nav a, .nav button {
+  font: inherit;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 1px 0 var(--ink-track);
+}
+.nav a:hover, .nav button:hover { box-shadow: 0 1px 0 var(--ink); }
+
+/* THE CREDIT METER — DELIBERATELY-INK #3. A balance is not a choice, and
+   STRUCK's recorded failure was letting the accent be the meter, the CTA and the
+   read-out as well as the selection. The arc still answers "how far through",
+   which is the question a person actually has before pressing Record. */
+.creds { display: inline-flex; align-items: center; gap: var(--s-2); }
+.creds .ring { width: 26px; height: 26px; transform: rotate(-90deg); }
+.ring-track { fill: none; stroke: var(--ink-track); stroke-width: 3; }
+.ring-fill  { fill: none; stroke: var(--ink); stroke-width: 3; }
+.creds-n { font-family: var(--display); font-size: 24px; line-height: 1; }
+.creds-u { font-size: 12px; letter-spacing: .12em; color: var(--ink-dim); }
+
+/* THE DATE-BACK STAMP. The direction's own idiom: the date printed in the corner
+   in orange, because that is where a date-back camera put it. 34px, so it is a
+   large numeral and --stamp is legal. */
+.datestamp { margin-left: var(--s-2); font-size: 34px; }
+
+.app-head { margin-bottom: var(--s-7); }
+.app-h1 {
+  font-family: var(--display);
+  font-size: clamp(38px, 9vw, 64px);
+  line-height: .95;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  margin: 0 0 var(--s-4);
+  max-width: 17ch;
+  /* HEADLINES ARE INK, NOT ORANGE, so the page's loudest voice is print rather
+     than light. VT323 recast from cathode to dot-matrix: it stops glowing and
+     starts printing. No halo, no text-shadow, anywhere in this file. */
+  color: var(--ink);
+}
+.lede { margin: 0; max-width: 62ch; font-size: 17px; }
+
+/* ---------------------------------------------------------------------------
+   the two-column layout, kept from the 2026-08-22 redesign: a sticky anchor
+   column and a flow column at 1:2, breaking at exactly 1024px (64rem), which is
+   on the device list CLAUDE.md §6c settled on.
+   --------------------------------------------------------------------------- */
+
+#tape { display: block; }
+.panel { margin-bottom: var(--s-7); }
+.panel--archive { margin-top: var(--s-8); }
+
+@media (min-width: 64rem) {
+  #tape {
+    display: grid;
+    /* minmax(0, 40rem) rather than a flat 40rem, and it is not a nicety: at a
+       viewport of exactly 1024 a 15px scrollbar leaves 977px of content box, a
+       rigid 320+32+640 needs 992, and the page scrolls sideways at precisely the
+       width the breakpoint was chosen for. Measured, not guessed. */
+    grid-template-columns: 20rem minmax(0, 40rem);
+    gap: var(--s-6);
+    align-items: start;
+  }
+  .panel--anchor { grid-column: 1; grid-row: 1 / span 3; position: sticky; top: var(--s-5); }
+  .panel--choice, .panel--commit { grid-column: 2; }
+}
+
+/* ---------------------------------------------------------------------------
+   step heads
+   --------------------------------------------------------------------------- */
+
+.step-head { display: flex; gap: var(--s-4); align-items: baseline; margin-bottom: var(--s-5); }
+.stepno { margin: 0; display: flex; flex-direction: column; align-items: flex-start; min-width: 3rem; }
+.stepno-k { font-size: 11px; text-transform: uppercase; letter-spacing: .16em; color: var(--ink-dim); }
+/* THE 44px NUMERAL, kept from the redesign. Ink and not stamp: it is the page's
+   own typography, not something a machine burned into a print, and keeping it
+   ink is what holds orange to two jobs. */
+.stepno-n { font-family: var(--display); font-size: 44px; line-height: .8; color: var(--ink); }
+.step-say { flex: 1; min-width: 0; }
+.title {
+  font-family: var(--display);
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  margin: 0 0 var(--s-2);
+}
+.sub { margin: 0; font-size: 15px; color: var(--ink-dim); max-width: 56ch; }
+.hint { margin: var(--s-3) 0 0; font-size: 15px; color: var(--ink-dim); max-width: 62ch; }
+.eyebrow {
+  margin: var(--s-6) 0 var(--s-3);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  color: var(--ink-dim);
+}
+
+/* ---------------------------------------------------------------------------
+   THE GHOST, and what "struck" is in this world.
+
+   THE GHOST IS THE INK, NOT THE PICTURE. DESIGN.md's ghost put the whole control
+   at half opacity, photograph included. Two things change that here. First the
+   number: .5 measures 3.32:1 on this paper and fails, so the ghost is .6.
+   Second the scope: "imported photographs stay untinted" is one of the rules the
+   directions doc lists as STRUCTURAL, and fading a photograph toward white IS
+   tinting it. So the ghost applies to type and marks. Cards carrying only ink
+   (looks, frames, quality) ghost whole; place cards ghost their caption and
+   leave the photograph alone.
+
+   STRUCK IS FULL AND STAMPED: the print is picked up off the paper —
+   --paper-lift under it, --edge-2 beneath it, two pixels of lift — its name is
+   set in --stamp-ink, and a --stamp mark is burned into the corner. Three
+   signals, only one of which is colour.
+
+   VALUES SNAP. There is no transition on any of this. The 420ms decay modelled a
+   phosphor letting go and nothing on paper has a phosphor, so a fade here would
+   be unmotivated — which is why there is no prefers-reduced-motion block in this
+   file: there is nothing to cancel.
+   --------------------------------------------------------------------------- */
+
+.lookcard, .framecard, .qualitycard, .placecard {
+  display: block;
+  position: relative;
+  padding: var(--s-3);
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink);
+  opacity: var(--ghost);
+}
+.lookcard .name, .framecard .ratio, .qualitycard .name {
+  display: block;
+  font-family: var(--display);
+  font-size: 24px;
+  line-height: 1.05;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.lookcard .detail, .framecard .detail, .qualitycard .detail {
+  display: block;
+  font-size: 14px;
+  color: var(--ink-dim);
+  margin-top: var(--s-1);
+}
+.qualitycard .cr { display: block; font-family: var(--display); font-size: 21px; color: var(--ink-dim); line-height: 1.1; }
+/* VT323 draws a tilde as a small raised squiggle that reads as a diacritic
+   rather than as "about", so the approximation sign comes from the sans face
+   while the number stays in the printing face. The tilde is not decoration:
+   every credit figure in this product is an estimate against a metered price
+   and dropping it would be the page claiming more than it knows. */
+.approx { font-family: var(--sans); font-size: .62em; vertical-align: .18em; margin-right: .08em; }
+.qualitycard .flag, .framecard .flag {
+  display: inline-block;
+  margin-top: var(--s-2);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  color: var(--ink-dim);
+}
+.qualitycard--soon, .framecard--soon { cursor: default; }
+
+/* THE STAMP MARK. A solid 12px square of --stamp in the corner — a mark, which
+   is exactly what --stamp is for. Hidden until struck. It is redundant with the
+   lift and with the stamp-ink name, so colour is never the only channel
+   carrying the selection. */
+.tick {
+  position: absolute;
+  top: var(--s-2); right: var(--s-2);
+  width: 12px; height: 12px;
+  background: var(--stamp);
+  display: none;
+}
+
+/* --- struck: the card lifts --- */
+#of-fleecepulli:checked    ~ .wrap .lookcard--of-fleecepulli,
+#of-hemd-jeans:checked     ~ .wrap .lookcard--of-hemd-jeans,
+#of-sommerkleid:checked    ~ .wrap .lookcard--of-sommerkleid,
+#of-strickjacke:checked    ~ .wrap .lookcard--of-strickjacke,
+#of-trainingsjacke:checked ~ .wrap .lookcard--of-trainingsjacke,
+#of-winterjacke:checked    ~ .wrap .lookcard--of-winterjacke,
+#a-4x3:checked  ~ .wrap .framecard--a-4x3,
+#a-16x9:checked ~ .wrap .framecard--a-16x9,
+#a-9x16:checked ~ .wrap .framecard--a-9x16,
+#q-480p:checked ~ .wrap .qualitycard--q-480p,
+#q-720p:checked ~ .wrap .qualitycard--q-720p {
+  opacity: 1;
+  background: var(--paper-lift);
+  box-shadow: var(--edge-2);
+  transform: translateY(-2px);
+}
+
+/* --- struck: the name is printed in orange at text weight --- */
+#of-fleecepulli:checked    ~ .wrap .lookcard--of-fleecepulli .name,
+#of-hemd-jeans:checked     ~ .wrap .lookcard--of-hemd-jeans .name,
+#of-sommerkleid:checked    ~ .wrap .lookcard--of-sommerkleid .name,
+#of-strickjacke:checked    ~ .wrap .lookcard--of-strickjacke .name,
+#of-trainingsjacke:checked ~ .wrap .lookcard--of-trainingsjacke .name,
+#of-winterjacke:checked    ~ .wrap .lookcard--of-winterjacke .name,
+#a-4x3:checked  ~ .wrap .framecard--a-4x3 .ratio,
+#a-16x9:checked ~ .wrap .framecard--a-16x9 .ratio,
+#a-9x16:checked ~ .wrap .framecard--a-9x16 .ratio,
+#q-480p:checked ~ .wrap .qualitycard--q-480p .name,
+#q-720p:checked ~ .wrap .qualitycard--q-720p .name {
+  color: var(--stamp-ink);
+}
+
+/* --- struck: the mark --- */
+#of-fleecepulli:checked    ~ .wrap .lookcard--of-fleecepulli .tick,
+#of-hemd-jeans:checked     ~ .wrap .lookcard--of-hemd-jeans .tick,
+#of-sommerkleid:checked    ~ .wrap .lookcard--of-sommerkleid .tick,
+#of-strickjacke:checked    ~ .wrap .lookcard--of-strickjacke .tick,
+#of-trainingsjacke:checked ~ .wrap .lookcard--of-trainingsjacke .tick,
+#of-winterjacke:checked    ~ .wrap .lookcard--of-winterjacke .tick,
+#a-4x3:checked  ~ .wrap .framecard--a-4x3 .tick,
+#a-16x9:checked ~ .wrap .framecard--a-16x9 .tick,
+#a-9x16:checked ~ .wrap .framecard--a-9x16 .tick,
+#q-480p:checked ~ .wrap .qualitycard--q-480p .tick,
+#q-720p:checked ~ .wrap .qualitycard--q-720p .tick,
+#pl-autobahn-raststaette:checked     ~ .wrap .placecard--pl-autobahn-raststaette .tick,
+#pl-balkon-waesche:checked           ~ .wrap .placecard--pl-balkon-waesche .tick,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .placecard--pl-hallenbad-nachmittag .tick,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .placecard--pl-kuechentisch-fruehstueck .tick,
+#pl-ostsee-strand:checked            ~ .wrap .placecard--pl-ostsee-strand .tick,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .placecard--pl-plattenbau-treppenhaus .tick,
+#pl-schrebergarten-august:checked    ~ .wrap .placecard--pl-schrebergarten-august .tick,
+#pl-wohnzimmer-abend:checked         ~ .wrap .placecard--pl-wohnzimmer-abend .tick,
+#pl-own:checked ~ .wrap .placecard--own .tick {
+  display: block;
+}
+
+/* THE FOCUS RING ON A HOISTED RADIO. The visible control is the <label> further
+   down the page, so the indicator has to be drawn there or 19 of the page's
+   keyboard stops have no visible focus at all. It also lifts the ghost to full
+   opacity, because an outline inherits its element's opacity and a ring drawn on
+   a .6 ghost is drawn at .6 — on exactly the controls that most need it. */
+#of-fleecepulli:focus-visible    ~ .wrap .lookcard--of-fleecepulli,
+#of-hemd-jeans:focus-visible     ~ .wrap .lookcard--of-hemd-jeans,
+#of-sommerkleid:focus-visible    ~ .wrap .lookcard--of-sommerkleid,
+#of-strickjacke:focus-visible    ~ .wrap .lookcard--of-strickjacke,
+#of-trainingsjacke:focus-visible ~ .wrap .lookcard--of-trainingsjacke,
+#of-winterjacke:focus-visible    ~ .wrap .lookcard--of-winterjacke,
+#a-4x3:focus-visible  ~ .wrap .framecard--a-4x3,
+#a-16x9:focus-visible ~ .wrap .framecard--a-16x9,
+#a-9x16:focus-visible ~ .wrap .framecard--a-9x16,
+#q-480p:focus-visible ~ .wrap .qualitycard--q-480p,
+#q-720p:focus-visible ~ .wrap .qualitycard--q-720p,
+#pl-autobahn-raststaette:focus-visible     ~ .wrap .placecard--pl-autobahn-raststaette,
+#pl-balkon-waesche:focus-visible           ~ .wrap .placecard--pl-balkon-waesche,
+#pl-hallenbad-nachmittag:focus-visible     ~ .wrap .placecard--pl-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:focus-visible ~ .wrap .placecard--pl-kuechentisch-fruehstueck,
+#pl-ostsee-strand:focus-visible            ~ .wrap .placecard--pl-ostsee-strand,
+#pl-plattenbau-treppenhaus:focus-visible   ~ .wrap .placecard--pl-plattenbau-treppenhaus,
+#pl-schrebergarten-august:focus-visible    ~ .wrap .placecard--pl-schrebergarten-august,
+#pl-wohnzimmer-abend:focus-visible         ~ .wrap .placecard--pl-wohnzimmer-abend,
+#pl-own:focus-visible ~ .wrap .placecard--own {
+  opacity: 1;
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* THE SECOND PERMITTED BORDER: the aspect glyph. A rectangle drawn at the real
+   ratio, because "tall" and "wide" read from it faster than from two numbers. It
+   is a glyph depicting a shape, not a device for separating two things, and
+   DESIGN.md already argued it onto the list. */
+.framecard .shape {
+  display: block;
+  border: 1px solid var(--ink-dim);
+  margin-bottom: var(--s-3);
+  background: transparent;
+}
+.framecard--a-4x3  .shape { width: 40px; height: 30px; }
+.framecard--a-16x9 .shape { width: 48px; height: 27px; }
+.framecard--a-9x16 .shape { width: 24px; height: 43px; }
+#a-4x3:checked  ~ .wrap .framecard--a-4x3 .shape,
+#a-16x9:checked ~ .wrap .framecard--a-16x9 .shape,
+#a-9x16:checked ~ .wrap .framecard--a-9x16 .shape { border-color: var(--stamp-ink); }
+
+.looks   { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: var(--s-3); }
+.frames  { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));  gap: var(--s-3); }
+.quality { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--s-3); }
+
+/* ---------------------------------------------------------------------------
+   place cards — prints lying on the paper
+   --------------------------------------------------------------------------- */
+
+/* THE RAIL BECAME A GRID, and it is the one structural change to the page.
+   The world's mechanic is "every value present, one struck"; a horizontally
+   scrolling rail hides six of the eight values behind a gesture, which is why
+   the escape hatch at the far end of it had to be signposted in prose in the
+   first place. On paper the eight prints are laid out at once, the way they come
+   back from the lab. The carousel dots go with the rail. */
+.places { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: var(--s-4); }
+
+.placecard { padding: var(--s-2); opacity: 1; }
+/* Every print carries the printed edge whether it is struck or not, which is the
+   answer to the direction's own warning: a Soul Cinema vignette sitting straight
+   on white reads as dirt on the paper unless the print has an edge under it. */
+.placecard .thumb {
+  display: block;
+  aspect-ratio: 16 / 9;
+  background-size: cover;
+  background-position: center;
+  box-shadow: var(--edge-1);
+}
+.placecard .cap { display: block; margin-top: var(--s-2); opacity: var(--ghost); }
+.placecard .name {
+  display: block;
+  font-family: var(--display);
+  font-size: 21px;
+  line-height: 1.1;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.placecard .when { display: block; font-size: 13px; color: var(--ink-dim); }
+
+#pl-autobahn-raststaette:checked     ~ .wrap .placecard--pl-autobahn-raststaette,
+#pl-balkon-waesche:checked           ~ .wrap .placecard--pl-balkon-waesche,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .placecard--pl-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .placecard--pl-kuechentisch-fruehstueck,
+#pl-ostsee-strand:checked            ~ .wrap .placecard--pl-ostsee-strand,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .placecard--pl-plattenbau-treppenhaus,
+#pl-schrebergarten-august:checked    ~ .wrap .placecard--pl-schrebergarten-august,
+#pl-wohnzimmer-abend:checked         ~ .wrap .placecard--pl-wohnzimmer-abend,
+#pl-own:checked ~ .wrap .placecard--own {
+  background: var(--paper-lift);
+  box-shadow: var(--edge-2);
+  transform: translateY(-2px);
+}
+#pl-autobahn-raststaette:checked     ~ .wrap .placecard--pl-autobahn-raststaette .cap,
+#pl-balkon-waesche:checked           ~ .wrap .placecard--pl-balkon-waesche .cap,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .placecard--pl-hallenbad-nachmittag .cap,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .placecard--pl-kuechentisch-fruehstueck .cap,
+#pl-ostsee-strand:checked            ~ .wrap .placecard--pl-ostsee-strand .cap,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .placecard--pl-plattenbau-treppenhaus .cap,
+#pl-schrebergarten-august:checked    ~ .wrap .placecard--pl-schrebergarten-august .cap,
+#pl-wohnzimmer-abend:checked         ~ .wrap .placecard--pl-wohnzimmer-abend .cap,
+#pl-own:checked ~ .wrap .placecard--own .cap { opacity: 1; }
+#pl-autobahn-raststaette:checked     ~ .wrap .placecard--pl-autobahn-raststaette .name,
+#pl-balkon-waesche:checked           ~ .wrap .placecard--pl-balkon-waesche .name,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .placecard--pl-hallenbad-nachmittag .name,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .placecard--pl-kuechentisch-fruehstueck .name,
+#pl-ostsee-strand:checked            ~ .wrap .placecard--pl-ostsee-strand .name,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .placecard--pl-plattenbau-treppenhaus .name,
+#pl-schrebergarten-august:checked    ~ .wrap .placecard--pl-schrebergarten-august .name,
+#pl-wohnzimmer-abend:checked         ~ .wrap .placecard--pl-wohnzimmer-abend .name,
+#pl-own:checked ~ .wrap .placecard--own .name { color: var(--stamp-ink); }
+
+/* THE PHOTOGRAPHS, UNTINTED. Two layers, image first: when
+   ../../../../assets/places/<id>.jpg resolves — this file opened from its place
+   in the repo — the real photograph paints; when it does not, the browser drops
+   that layer and the derived ink tone behind it shows, so the mockup is finished
+   either way. No filter, no tint, no overlay is applied to any of them; that
+   rule is structural and survives the world change. */
+.thumb--pl-autobahn-raststaette     { background-image: url('../../../../assets/places/autobahn-raststaette.jpg'),     linear-gradient(var(--tone-22), var(--tone-22)); }
+.thumb--pl-balkon-waesche           { background-image: url('../../../../assets/places/balkon-waesche.jpg'),           linear-gradient(var(--tone-10), var(--tone-10)); }
+.thumb--pl-hallenbad-nachmittag     { background-image: url('../../../../assets/places/hallenbad-nachmittag.jpg'),     linear-gradient(var(--tone-14), var(--tone-14)); }
+.thumb--pl-kuechentisch-fruehstueck { background-image: url('../../../../assets/places/kuechentisch-fruehstueck.jpg'), linear-gradient(var(--tone-18), var(--tone-18)); }
+.thumb--pl-ostsee-strand            { background-image: url('../../../../assets/places/ostsee-strand.jpg'),            linear-gradient(var(--tone-26), var(--tone-26)); }
+.thumb--pl-plattenbau-treppenhaus   { background-image: url('../../../../assets/places/plattenbau-treppenhaus.jpg'),   linear-gradient(var(--tone-30), var(--tone-30)); }
+.thumb--pl-schrebergarten-august    { background-image: url('../../../../assets/places/schrebergarten-august.jpg'),    linear-gradient(var(--tone-34), var(--tone-34)); }
+.thumb--pl-wohnzimmer-abend         { background-image: url('../../../../assets/places/wohnzimmer-abend.jpg'),         linear-gradient(var(--tone-38), var(--tone-38)); }
+.placecard--own .thumb {
+  background-image: linear-gradient(var(--paper), var(--paper));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--display); font-size: 38px; color: var(--ink-dim);
+}
+
+/* ---------------------------------------------------------------------------
+   the anchor column: your photo, and the chosen place as a print
+   --------------------------------------------------------------------------- */
+
+.drop {
+  display: block;
+  position: relative;
+  background: var(--paper-lift);
+  box-shadow: var(--edge-1);
+  padding: var(--s-6) var(--s-4);
+  text-align: center;
+  cursor: pointer;
+}
+.drop:hover { box-shadow: var(--edge-2); }
+.drop:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 3px; }
+.drop input[type="file"] {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+.drop .plus {
+  display: block;
+  font-family: var(--display);
+  font-size: 30px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.drop .say { display: block; margin-top: var(--s-3); font-size: 14px; color: var(--ink-dim); }
+
+/* THE FULL-BLEED PLACE BACKGROUND DIES, AND THIS IS WHAT REPLACES IT. In the
+   dark world the chosen place ran past every edge under a near-black scrim. A
+   scrim is one of the things this direction kills — a dark scrim over a light
+   page is a bruise — and paper is opaque, so the chosen place becomes what the
+   direction says the product is: a print, in a white matte, with the date
+   printed in the margin the way the lab printed it. The date sits ON THE MATTE
+   and not on the photograph, so --stamp is measured against white rather than
+   against whatever the picture happens to be underneath it. */
+.chosenprint {
+  margin-top: var(--s-6);
+  background: var(--paper-lift);
+  box-shadow: var(--edge-2);
+  padding: var(--s-3);
+}
+.chosenprint .win { position: relative; aspect-ratio: 4 / 3; overflow: hidden; }
+.chosenprint .pp {
+  position: absolute; inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+/* The eight place layers are stacked over the none-state and painted only when
+   struck, so no rule has to hide the base layer. */
+.chosenprint .pp--set { display: none; }
+.chosenprint .margin {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3);
+  padding-top: var(--s-3);
+}
+.chosenprint .lab { font-size: 11px; text-transform: uppercase; letter-spacing: .16em; color: var(--ink-dim); }
+
+#pl-autobahn-raststaette:checked     ~ .wrap .pp--pl-autobahn-raststaette,
+#pl-balkon-waesche:checked           ~ .wrap .pp--pl-balkon-waesche,
+#pl-hallenbad-nachmittag:checked     ~ .wrap .pp--pl-hallenbad-nachmittag,
+#pl-kuechentisch-fruehstueck:checked ~ .wrap .pp--pl-kuechentisch-fruehstueck,
+#pl-ostsee-strand:checked            ~ .wrap .pp--pl-ostsee-strand,
+#pl-plattenbau-treppenhaus:checked   ~ .wrap .pp--pl-plattenbau-treppenhaus,
+#pl-schrebergarten-august:checked    ~ .wrap .pp--pl-schrebergarten-august,
+#pl-wohnzimmer-abend:checked         ~ .wrap .pp--pl-wohnzimmer-abend,
+#pl-own:checked ~ .wrap .pp--own { display: block; }
+/* ...except the own-place layer, which centres its own lettering and therefore
+   has to come back as flex rather than block. Ordered after the reveal above so
+   it wins on source order at equal specificity. */
+#pl-own:checked ~ .wrap .pp--own { display: flex; }
+
+.pp--none, .pp--own {
+  background: var(--paper);
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  font-family: var(--display); font-size: 21px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-dim);
+  padding: var(--s-4);
+}
+
+/* ---------------------------------------------------------------------------
+   form furniture — no borders anywhere; a field is a small white print
+   --------------------------------------------------------------------------- */
+
+input[type="text"], select {
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  background: var(--paper-lift);
+  border: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow: var(--edge-1);
+  padding: var(--s-3);
+  width: 100%;
+  max-width: 30rem;
+  border-radius: 0;
+}
+input::placeholder { color: var(--ink-dim); }
+
+.selectwrap { position: relative; display: inline-block; }
+.selectwrap select { width: 7rem; padding-right: var(--s-6); }
+.selectwrap .caret { position: absolute; right: var(--s-3); top: 50%; transform: translateY(-50%); color: var(--ink-dim); pointer-events: none; }
+
+.aside { margin-top: var(--s-5); }
+.aside summary { cursor: pointer; font-size: 15px; color: var(--ink); }
+.aside input[type="text"] { margin-top: var(--s-3); }
+
+.linky {
+  cursor: pointer;
+  color: var(--ink);
+  box-shadow: 0 1px 0 var(--ink);
+  padding-bottom: 1px;
+}
+.escape { max-width: 62ch; }
+
+.ownplace { display: none; margin-top: var(--s-4); }
+#pl-own:checked ~ .wrap .ownplace { display: block; }
+.ownplace input[type="file"] { font: inherit; font-size: 15px; }
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s-3) var(--s-5);
+  margin: var(--s-6) 0 0;
+}
+.facts dt { font-size: 11px; text-transform: uppercase; letter-spacing: .16em; color: var(--ink-dim); align-self: center; }
+.facts dd { margin: 0; font-family: var(--display); font-size: 26px; line-height: 1; }
+
+/* ONE COST PER RESOLUTION, switched by the same :checked rule that strikes the
+   card. A cost that only updated with JavaScript would be blank on the one page
+   where a number decides whether somebody spends. */
+.cost { display: none; }
+#q-480p:checked ~ .wrap .cost--q-480p,
+#q-720p:checked ~ .wrap .cost--q-720p { display: inline; }
+
+.field { margin-top: var(--s-6); }
+.field > label { display: block; font-size: 15px; margin-bottom: var(--s-2); }
+
+.check { display: flex; gap: var(--s-3); margin-top: var(--s-6); cursor: pointer; align-items: flex-start; }
+/* 24x24, because WCAG 2.2 SC 2.5.8 asks 24x24 and this is the control that gates
+   spending credits. margin-top is 0 deliberately: the 0.35rem that used to be
+   here was compensating for a box 8px shorter. */
+.check input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 1.5rem; height: 1.5rem;
+  flex: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--paper-lift);
+  box-shadow: var(--edge-1);
+  cursor: pointer;
+}
+/* Checked is a filled block, not a drawn tick: a tick built from two rotated
+   borders would be a border, and this world permits exactly two. */
+.check input[type="checkbox"]:checked { background: var(--ink); }
+.consent-text { font-size: 15px; color: var(--ink); max-width: 62ch; }
+.consent-text span { display: block; }
+.consent-text span + span { margin-top: var(--s-3); }
+
+/* THE RECORD BUTTON — DELIBERATELY-INK #4. Ink on paper, inverted: the only
+   filled black block on the page, which is how the commit panel carries its
+   weight without a box, a rule or a third border. NOT ORANGE: a CTA is not a
+   struck value, and letting the accent be the button as well is precisely the
+   failure DESIGN.md's palette rule was written against. */
+.record {
+  display: inline-block;
+  margin-top: var(--s-6);
+  font-family: var(--display);
+  font-size: 30px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--ink);
+  border: 0;
+  border-radius: 0;
+  padding: var(--s-3) var(--s-6);
+  cursor: pointer;
+  box-shadow: var(--edge-2);
+}
+.record:hover { transform: translateY(-1px); }
+.record .dot { font-size: .58em; vertical-align: .2em; margin-right: .4em; }
+.reason { margin: var(--s-3) 0 0; font-size: 15px; color: var(--ink-dim); max-width: 62ch; }
+.why { display: none; }
+#q-720p:checked ~ .wrap .why--q-720p { display: block; }
+.quiet { color: var(--ink); box-shadow: 0 1px 0 var(--ink-track); text-decoration: none; }
+
+/* ---------------------------------------------------------------------------
+   THE SIGNATURE — the archive becomes an index print.
+
+   One sheet back from the lab: every tape you have made as a frame on it, its
+   date printed underneath in orange. The gutters between the frames are the
+   sheet showing through, which is how grouping happens in this world — never a
+   line drawn between two things. .panel--archive is already in views.mjs and is
+   already the most under-used part of the page.
+   --------------------------------------------------------------------------- */
+
+.indexsheet {
+  background: var(--paper-lift);
+  box-shadow: var(--edge-2);
+  padding: var(--s-6);
+}
+.indexsheet .sheethead {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-4);
+  margin-bottom: var(--s-6);
+}
+.indexsheet .sheethead .lab { font-size: 11px; text-transform: uppercase; letter-spacing: .16em; color: var(--ink-dim); }
+.indexsheet .sheethead .who { margin-left: auto; font-size: 14px; color: var(--ink-dim); }
+
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: var(--s-5); }
+.tape { display: block; text-decoration: none; color: var(--ink); }
+.tape .win {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background-size: cover;
+  background-position: center;
+  box-shadow: var(--edge-1);
+  display: flex; align-items: center; justify-content: center;
+}
+.tape .state {
+  font-family: var(--display);
+  font-size: 19px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.tape .cap { display: flex; align-items: baseline; gap: var(--s-2); margin-top: var(--s-2); }
+/* THE DATE PRINTED UNDERNEATH IN ORANGE — the direction's stated signature. It
+   is small, so it takes --stamp-ink at 5.62:1 rather than --stamp at 3.40:1.
+   That is the two-value accent doing the exact job it exists for. */
+.tape .when { font-family: var(--display); font-size: 20px; line-height: 1; }
+.tape .no { margin-left: auto; font-family: var(--display); font-size: 16px; color: var(--ink-dim); line-height: 1; }
+.tape .what { display: block; font-size: 13px; color: var(--ink-dim); margin-top: 2px; }
+.tape:hover .win { box-shadow: var(--edge-2); }
+
+.win--pl-schrebergarten-august { background-image: url('../../../../assets/places/schrebergarten-august.jpg'),  linear-gradient(var(--tone-34), var(--tone-34)); }
+.win--pl-ostsee-strand         { background-image: url('../../../../assets/places/ostsee-strand.jpg'),          linear-gradient(var(--tone-26), var(--tone-26)); }
+.win--pl-plattenbau-treppenhaus{ background-image: url('../../../../assets/places/plattenbau-treppenhaus.jpg'), linear-gradient(var(--tone-30), var(--tone-30)); }
+.win--pl-wohnzimmer-abend      { background-image: url('../../../../assets/places/wohnzimmer-abend.jpg'),       linear-gradient(var(--tone-38), var(--tone-38)); }
+.win--unfinished               { background-color: var(--paper); }
+
+.foot { margin-top: var(--s-8); font-size: 14px; color: var(--ink-dim); max-width: 62ch; }
+.foot p { margin: 0 0 var(--s-2); }
+
+/* On a phone the index sheet's own margin is the thing eating the frames, so it
+   narrows. The sheet is still a sheet; it just has less border around it, which
+   is what a smaller print has. */
+@media (max-width: 40rem) {
+  .indexsheet { padding: var(--s-4); }
+}
+
+@media (max-width: 24rem) {
+  .datestamp { font-size: 28px; }
+  .masthead { gap: var(--s-3); }
+}
+</style>
+</head>
+<body>
+
+<!-- ===================================================================
+     THE MOCKUP'S OWN HEADER STRIP. Not part of the product; it is here so
+     this file is identifiable when it is stood beside the other two
+     directions.
+     =================================================================== -->
+<header class="mockhead">
+  <div class="mockhead-in">
+    <p class="kicker">Timestamp &middot; light UI direction 1 of 3</p>
+    <h1>The Print</h1>
+    <p class="thesis">The interface is the photograph you had developed, and the paper it came back on.</p>
+    <p class="meta">Light world &middot; no JavaScript &middot; every choice below is a real control — click one.</p>
+  </div>
+</header>
+
+<!-- ===================================================================
+     THE HOISTED RADIOS. Exactly the mechanic scripts/web/views.mjs uses:
+     the inputs sit at the top of <body> so that `#id:checked ~ .wrap ...`
+     can reach the cards, and `form="tape"` puts them back into the
+     submission. Nothing here is a picture of a control.
+
+     MOCKUP-ONLY: one look and one place start `checked`. The real page
+     starts with neither, which is correct for a person filling a form in
+     and unhelpful for somebody being shown a world — the struck state is
+     the whole point and it should be visible before the first click.
+     =================================================================== -->
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-fleecepulli"    value="fleecepulli">
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-hemd-jeans"     value="hemd-jeans">
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-sommerkleid"    value="sommerkleid">
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-strickjacke"    value="strickjacke">
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-trainingsjacke" value="trainingsjacke" checked>
+<input class="statehook" type="radio" form="tape" name="outfit" id="of-winterjacke"    value="winterjacke">
+
+<input class="statehook" type="radio" form="tape" name="place" id="pl-autobahn-raststaette"     value="autobahn-raststaette">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-balkon-waesche"           value="balkon-waesche">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-hallenbad-nachmittag"     value="hallenbad-nachmittag">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-kuechentisch-fruehstueck" value="kuechentisch-fruehstueck">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-ostsee-strand"            value="ostsee-strand">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-plattenbau-treppenhaus"   value="plattenbau-treppenhaus">
+<input class="statehook" type="radio" form="tape" name="place" id="pl-schrebergarten-august"    value="schrebergarten-august" checked>
+<input class="statehook" type="radio" form="tape" name="place" id="pl-wohnzimmer-abend"         value="wohnzimmer-abend">
+<!-- The escape hatch posts an empty `place`, which the server reads as "there is
+     no text, so the photograph had better be there". -->
+<input class="statehook" type="radio" form="tape" name="place" id="pl-own" value="">
+
+<!-- Only the AVAILABLE resolutions get a radio. 1080p renders as a span with no
+     control behind it, so it is not merely disabled in a browser — there is
+     nothing for a hand-written POST to name either. -->
+<input class="statehook" type="radio" form="tape" name="resolution" id="q-480p" value="480p" checked>
+<input class="statehook" type="radio" form="tape" name="resolution" id="q-720p" value="720p">
+
+<input class="statehook" type="radio" form="tape" name="aspect" id="a-4x3"  value="4:3" checked>
+<input class="statehook" type="radio" form="tape" name="aspect" id="a-16x9" value="16:9">
+<input class="statehook" type="radio" form="tape" name="aspect" id="a-9x16" value="9:16">
+
+<div class="wrap">
+
+<header class="masthead">
+  <a class="wordmark" href="#"><span class="rec" aria-hidden="true">&#9679;</span>Timestamp</a>
+  <!-- THE DATE-BACK STAMP, beside the wordmark, in orange, because that is where
+       a date-back camera put it. It rides with the wordmark rather than in the
+       far corner so that a 375px masthead is two lines and not three. -->
+  <span class="numeral datestamp" aria-label="25 August 2026">25.08.2026</span>
+  <nav class="nav">
+    <span class="creds" title="21 CR — about 1 more tape">
+      <svg class="ring" viewBox="0 0 24 24" role="img" aria-label="21 CR — about 1 more tape">
+        <circle class="ring-track" cx="12" cy="12" r="9"></circle>
+        <circle class="ring-fill" cx="12" cy="12" r="9" pathLength="100" stroke-dasharray="50 50"></circle>
+      </svg>
+      <span class="creds-n">21</span><span class="creds-u">CR</span>
+    </span>
+    <a href="#">Plans</a>
+    <button type="button">Sign out</button>
+  </nav>
+</header>
+
+<main>
+
+<div class="app-head">
+  <h1 class="app-h1">One photo, one look, one place.</h1>
+  <p class="lede">Fifteen seconds that look like they came off a camcorder tape in a
+  German suburb, some time around 2003.</p>
+</div>
+
+<form id="tape" method="post" action="/api/jobs" enctype="multipart/form-data">
+
+  <section class="panel panel--anchor">
+    <div class="step-head">
+      <p class="stepno"><span class="stepno-k">Step</span><span class="stepno-n">01</span></p>
+      <div class="step-say">
+        <h2 class="title">Your photo</h2>
+        <p class="sub">Uploaded once, kept in your library — the person in every tape.</p>
+      </div>
+    </div>
+
+    <label class="drop" for="photo">
+      <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp" required>
+      <span class="plus">+ Add photo</span>
+      <span class="say">A clear photo of your face. JPEG, PNG or WebP, up to 12&nbsp;MB.
+      The location and camera data are stripped before anything else happens.</span>
+    </label>
+
+    <!-- The chosen place, as a print. This is what replaces the full-bleed
+         background layer, which cannot survive on opaque paper. -->
+    <div class="chosenprint">
+      <div class="win">
+        <span class="pp pp--none" aria-hidden="true">No place chosen</span>
+        <span class="pp pp--set pp--pl-autobahn-raststaette     thumb--pl-autobahn-raststaette"     aria-hidden="true"></span>
+        <span class="pp pp--set pp--pl-balkon-waesche           thumb--pl-balkon-waesche"           aria-hidden="true"></span>
+        <span class="pp pp--set pp--pl-hallenbad-nachmittag     thumb--pl-hallenbad-nachmittag"     aria-hidden="true"></span>
+        <span class="pp pp--set pp--pl-kuechentisch-fruehstueck thumb--pl-kuechentisch-fruehstueck" aria-hidden="true"></span>
+        <span class="pp pp--set pp--pl-ostsee-strand            thumb--pl-ostsee-strand"            aria-hidden="true"></span>
+        <span class="pp pp--set pp--pl-plattenbau-treppenhaus   thumb--pl-plattenbau-treppenhaus"   aria-hidden="true"></span>
+        <span class="pp pp--set pp--pl-schrebergarten-august    thumb--pl-schrebergarten-august"    aria-hidden="true"></span>
+        <span class="pp pp--set pp--pl-wohnzimmer-abend         thumb--pl-wohnzimmer-abend"         aria-hidden="true"></span>
+        <span class="pp pp--set pp--own" aria-hidden="true">Your own photograph</span>
+      </div>
+      <div class="margin">
+        <span class="lab">Your tape</span>
+        <span class="numeral">25.08.2026</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel panel--choice">
+    <div class="step-head">
+      <p class="stepno"><span class="stepno-k">Step</span><span class="stepno-n">02</span></p>
+      <div class="step-say">
+        <h2 class="title">The look</h2>
+        <p class="sub">Only what is on the body — the place carries everything else.</p>
+      </div>
+    </div>
+
+    <div class="looks">
+      <label class="lookcard lookcard--of-fleecepulli" for="of-fleecepulli">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="name">Half-zip fleece</span>
+        <span class="detail">an oversized half-zip fleece pullover in marl grey</span>
+      </label>
+      <label class="lookcard lookcard--of-hemd-jeans" for="of-hemd-jeans">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="name">Checked shirt and jeans</span>
+        <span class="detail">a checked flannel shirt with the sleeves rolled…</span>
+      </label>
+      <label class="lookcard lookcard--of-sommerkleid" for="of-sommerkleid">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="name">Cotton summer dress</span>
+        <span class="detail">a thin cotton sundress with a small floral print</span>
+      </label>
+      <label class="lookcard lookcard--of-strickjacke" for="of-strickjacke">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="name">Knitted cardigan</span>
+        <span class="detail">a knitted wool cardigan in burgundy</span>
+      </label>
+      <label class="lookcard lookcard--of-trainingsjacke" for="of-trainingsjacke">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="name">Tracksuit jacket</span>
+        <span class="detail">a zip-up tracksuit jacket in navy</span>
+      </label>
+      <label class="lookcard lookcard--of-winterjacke" for="of-winterjacke">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="name">Padded winter jacket</span>
+        <span class="detail">a quilted padded jacket in deep blue</span>
+      </label>
+    </div>
+
+    <details class="aside">
+      <summary>Or describe what you are wearing</summary>
+      <p class="hint">Used only when no card above is chosen.</p>
+      <input type="text" name="outfitText" maxlength="200" autocomplete="off" spellcheck="false"
+             placeholder="a green anorak">
+    </details>
+  </section>
+
+  <section class="panel panel--choice">
+    <div class="step-head">
+      <p class="stepno"><span class="stepno-k">Step</span><span class="stepno-n">03</span></p>
+      <div class="step-say">
+        <h2 class="title">The place</h2>
+        <p class="sub">Somewhere ordinary. That is the whole idea.</p>
+      </div>
+    </div>
+
+    <div class="places">
+      <label class="placecard placecard--pl-autobahn-raststaette" for="pl-autobahn-raststaette">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="thumb thumb--pl-autobahn-raststaette" aria-hidden="true"></span>
+        <span class="cap"><span class="name">Autobahn rest stop at dusk</span><span class="when">dusk</span></span>
+      </label>
+      <label class="placecard placecard--pl-balkon-waesche" for="pl-balkon-waesche">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="thumb thumb--pl-balkon-waesche" aria-hidden="true"></span>
+        <span class="cap"><span class="name">Balcony, washing on the line</span><span class="when">midday</span></span>
+      </label>
+      <label class="placecard placecard--pl-hallenbad-nachmittag" for="pl-hallenbad-nachmittag">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="thumb thumb--pl-hallenbad-nachmittag" aria-hidden="true"></span>
+        <span class="cap"><span class="name">Indoor swimming pool</span><span class="when">afternoon</span></span>
+      </label>
+      <label class="placecard placecard--pl-kuechentisch-fruehstueck" for="pl-kuechentisch-fruehstueck">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="thumb thumb--pl-kuechentisch-fruehstueck" aria-hidden="true"></span>
+        <span class="cap"><span class="name">Tiled kitchen at breakfast</span><span class="when">early morning</span></span>
+      </label>
+      <label class="placecard placecard--pl-ostsee-strand" for="pl-ostsee-strand">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="thumb thumb--pl-ostsee-strand" aria-hidden="true"></span>
+        <span class="cap"><span class="name">Baltic beach, out of season</span><span class="when">afternoon</span></span>
+      </label>
+      <label class="placecard placecard--pl-plattenbau-treppenhaus" for="pl-plattenbau-treppenhaus">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="thumb thumb--pl-plattenbau-treppenhaus" aria-hidden="true"></span>
+        <span class="cap"><span class="name">Concrete stairwell</span><span class="when">midday</span></span>
+      </label>
+      <label class="placecard placecard--pl-schrebergarten-august" for="pl-schrebergarten-august">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="thumb thumb--pl-schrebergarten-august" aria-hidden="true"></span>
+        <span class="cap"><span class="name">Allotment garden, late August</span><span class="when">late afternoon</span></span>
+      </label>
+      <label class="placecard placecard--pl-wohnzimmer-abend" for="pl-wohnzimmer-abend">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="thumb thumb--pl-wohnzimmer-abend" aria-hidden="true"></span>
+        <span class="cap"><span class="name">Living room, television on</span><span class="when">night</span></span>
+      </label>
+      <label class="placecard placecard--own" for="pl-own">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="thumb" aria-hidden="true">+</span>
+        <span class="cap"><span class="name">Use my own place</span><span class="when">Your photograph</span></span>
+      </label>
+    </div>
+
+    <!-- THE ESCAPE HATCHES, NAMED WHERE SOMEBODY WILL SEE THEM. The <label> is
+         the whole trick: it targets #pl-own exactly as the card does, so one
+         line of prose selects the card and reveals the upload, with no
+         JavaScript anywhere. -->
+    <p class="hint escape">Somewhere else in mind?
+      <label class="linky" for="pl-own">Upload a photo of it</label>
+      or <label class="linky" for="pl-own">describe it below</label> &mdash;
+      your actual childhood garden beats any description of one.</p>
+
+    <div class="ownplace">
+      <p class="hint">A second photograph, used as a reference alongside your face.</p>
+      <input type="file" id="placePhoto" name="placePhoto" accept="image/jpeg,image/png,image/webp">
+    </div>
+
+    <details class="aside">
+      <summary>Or describe the place</summary>
+      <p class="hint">Used only when no card above is chosen.</p>
+      <input type="text" name="placeText" maxlength="200" autocomplete="off" spellcheck="false"
+             placeholder="my grandmother&#39;s kitchen">
+    </details>
+  </section>
+
+  <section class="panel panel--commit">
+    <div class="step-head">
+      <p class="stepno"><span class="stepno-k">Step</span><span class="stepno-n">04</span></p>
+      <div class="step-say">
+        <h2 class="title">The tape</h2>
+        <p class="sub">One of these is a choice. The rest is what a camcorder tape is.</p>
+      </div>
+    </div>
+
+    <p class="eyebrow">Frame</p>
+    <div class="frames">
+      <label class="framecard framecard--a-4x3" for="a-4x3">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="shape" aria-hidden="true"></span>
+        <span class="ratio">4:3</span>
+        <span class="detail">The camcorder shape</span>
+      </label>
+      <label class="framecard framecard--a-16x9" for="a-16x9">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="shape" aria-hidden="true"></span>
+        <span class="ratio">16:9</span>
+        <span class="detail">Widescreen</span>
+      </label>
+      <label class="framecard framecard--a-9x16" for="a-9x16">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="shape" aria-hidden="true"></span>
+        <span class="ratio">9:16</span>
+        <span class="detail">Phone</span>
+      </label>
+    </div>
+    <p class="hint">Every tape is <strong>fifteen seconds</strong>. 4:3 is what a camcorder
+    actually recorded; 9:16 fills a phone screen for Reels and TikTok, and 16:9 is the
+    landscape shape YouTube wants.</p>
+
+    <p class="eyebrow">Quality</p>
+    <div class="quality">
+      <label class="qualitycard qualitycard--q-480p" for="q-480p">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="name">480p</span>
+        <span class="cr"><span class="approx">~</span>21 CR</span>
+        <span class="detail">Cheaper. Slightly softer, because it sits just under the tape&rsquo;s own resolution.</span>
+        <span class="flag">Recommended</span>
+      </label>
+      <label class="qualitycard qualitycard--q-720p" for="q-720p">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="name">720p</span>
+        <span class="cr"><span class="approx">~</span>46 CR</span>
+        <span class="detail">The native fit — nothing is thrown away.</span>
+      </label>
+      <span class="qualitycard qualitycard--soon">
+        <span class="name">1080p</span>
+        <span class="cr"><span class="approx">~</span>103 CR</span>
+        <span class="detail">Nothing gained over 720p: the tape discards everything above its own raster.</span>
+        <span class="flag">Coming soon</span>
+      </span>
+    </div>
+    <p class="hint">Every option delivers the same 1080&times;1920 file. What changes is how much detail
+    exists before the tape &mdash; and the tape works at 720&times;576, so above that there is
+    nothing left to keep.</p>
+
+    <dl class="facts">
+      <dt>Length</dt><dd>15 SEC</dd>
+      <dt>Estimated cost</dt>
+      <dd><span class="cost cost--q-480p"><span class="approx">~</span>21 CR</span><span class="cost cost--q-720p"><span class="approx">~</span>46 CR</span></dd>
+      <dt>Credits</dt><dd>21 CR</dd>
+    </dl>
+
+    <div class="field">
+      <label for="stillCount">How many looks to choose from</label>
+      <p class="hint">We make this many photos of you in the scene first. You pick your
+      favourite &mdash; only then is the video made, so a likeness you do not like
+      never costs you a tape.</p>
+      <span class="selectwrap">
+        <select id="stillCount" name="stillCount">
+          <option value="1">1</option>
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+        </select>
+        <span class="caret" aria-hidden="true">&#9662;</span>
+      </span>
+    </div>
+
+    <label class="check">
+      <input type="checkbox" id="consent" name="consent" value="yes" required>
+      <span class="consent-text">
+        <span>I confirm that the person in this photo is me, or is an adult who has agreed to
+        appear in a video made from it. I will not upload a photo of anyone who has not agreed,
+        and I will not upload a photo of a child.</span>
+        <span>I understand that this photo is sent to an AI service to generate the video, that
+        its location and camera information are removed first, that the photo is deleted after
+        7 days and the finished video after 30 days, and that I can ask for either to be
+        deleted sooner.</span>
+      </span>
+    </label>
+
+    <button type="button" class="record"><span class="dot" aria-hidden="true">&#9679;</span>Record the tape</button>
+    <p class="reason">Upload a photo first</p>
+    <p class="reason"><span class="why why--q-720p">Not enough credits — a 720p tape costs ~46 CR and you have 21 CR.</span></p>
+    <p class="reason"><a class="quiet" href="#">See the plans</a></p>
+  </section>
+
+</form>
+
+<!-- ===================================================================
+     THE SIGNATURE: the archive shelf as an index print.
+     =================================================================== -->
+<section class="panel panel--archive">
+  <div class="step-head">
+    <p class="stepno"><span class="stepno-k">Archive</span><span class="stepno-n">&#9679;</span></p>
+    <div class="step-say">
+      <h2 class="title">Your tapes</h2>
+      <p class="sub">Every recording stays on the shelf. One sheet, one frame each, the date printed underneath.</p>
+    </div>
+  </div>
+
+  <div class="indexsheet">
+    <div class="sheethead">
+      <span class="lab">Index print</span>
+      <span class="numeral">08&ndash;2026</span>
+      <span class="who">5 tapes &middot; 15 sec each</span>
+    </div>
+
+    <div class="shelf">
+      <a class="tape" href="#">
+        <span class="win win--pl-schrebergarten-august"></span>
+        <span class="cap"><span class="when stamped">24.08.2026</span><span class="no">01</span></span>
+        <span class="what">Allotment garden, late August</span>
+      </a>
+      <a class="tape" href="#">
+        <span class="win win--pl-ostsee-strand"></span>
+        <span class="cap"><span class="when stamped">24.08.2026</span><span class="no">02</span></span>
+        <span class="what">Baltic beach, out of season</span>
+      </a>
+      <a class="tape" href="#">
+        <span class="win win--pl-plattenbau-treppenhaus"></span>
+        <span class="cap"><span class="when stamped">24.08.2026</span><span class="no">03</span></span>
+        <span class="what">Concrete stairwell</span>
+      </a>
+      <a class="tape" href="#">
+        <span class="win win--pl-wohnzimmer-abend"></span>
+        <span class="cap"><span class="when stamped">23.08.2026</span><span class="no">04</span></span>
+        <span class="what">Living room, television on</span>
+      </a>
+      <!-- A tape that has not come back from the lab yet. A grid of identical
+           frames tells you nothing about which one stopped, so the unfinished
+           one says so in the frame instead of showing a picture it does not
+           have. -->
+      <a class="tape" href="#">
+        <span class="win win--unfinished"><span class="state">Working</span></span>
+        <span class="cap"><span class="when stamped">25.08.2026</span><span class="no">05</span></span>
+        <span class="what">Indoor swimming pool</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <p>Your photo is deleted after 7 days and the video after 30. You can ask for either sooner.</p>
+  <p>Date-stamp lettering is VT323 by Peter Hull, under the SIL Open Font Licence 1.1.</p>
+</footer>
+
+</div>
+</body>
+</html>

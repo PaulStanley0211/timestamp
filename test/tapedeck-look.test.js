@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildVideoFilter, loadLookProfile, mergeLook, dropFrameExpr, get, set, CLAMPS } from '../scripts/tapedeck/look.mjs';
+import { resolveAspect } from '../scripts/tapedeck/frame.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/render.json'), 'utf8'));
@@ -178,6 +179,60 @@ test('dotted get and set address nested values', () => {
   set(o, 'a.b.c', 5);
   assert.equal(get(o, 'a.b.c'), 5);
   assert.equal(get(o, 'a.missing.c'), undefined);
+});
+
+/**
+ * The crop that squares the source must follow the SHAPE, not a literal.
+ *
+ * It was `4/3` hardcoded while only the `scale` target followed `cfg.tape`, so
+ * every 16:9 and 9:16 render cropped its source to 4:3 and then let `scale`
+ * stretch it back out. Measured against the raster fal actually returns, a 9:16
+ * tape discarded 58% of the frame and stretched what was left 2.33x vertically,
+ * and the customer paid the 4/3 shape premium for the privilege.
+ *
+ * NOTHING EXISTING COULD SEE IT. The golden and invariant tests above build the
+ * graph for 4:3 only; every pipeline test runs the fixture, whose source is
+ * 1024x768 -- itself 4:3, so the crop is a no-op there and only the (correct)
+ * SAR squeeze remains. The end-to-end 9:16 check measured frames, duration,
+ * LUFS and edge luma, and anamorphic distortion moves none of those.
+ *
+ * DISPLAY aspect, not pixel aspect: the source has square pixels and the 4:3
+ * tape does not (SAR 16/15), so cropping on `width/height` would be 1.25 and
+ * would break the one shape that was always right.
+ */
+test('the source crop follows the tape shape, in every shape', () => {
+  const { look } = loadLookProfile(base);
+  const profile = { ...look, osd: { ...look.osd, enabled: false } };
+
+  // display aspect = (width * sar) / height, reduced
+  const expected = {
+    '4:3': [4, 3],     // 720 * 16/15 / 576 -- unchanged, which is the point
+    '16:9': [16, 9],   // 1024 * 1/1  / 576
+    '9:16': [9, 16],   // 576  * 1/1  / 1024
+  };
+
+  for (const [aspect, [w, h]] of Object.entries(expected)) {
+    const acfg = resolveAspect(cfg, aspect);
+    const graph = buildVideoFilter(profile, acfg, { burnIn: [] });
+    assert.ok(
+      graph.includes(`crop=w='min(iw,ih*${w}/${h})':h='min(ih,iw*${h}/${w})'`),
+      `${aspect}: the crop must square the source to ${w}:${h}, not to a hardcoded 4:3. ` +
+      `Graph carried: ${graph.match(/crop=[^,]+,[^,]+/)?.[0] ?? '(no crop)'}`,
+    );
+  }
+});
+
+/** The shapes must not all crop the same way -- the assertion above would pass
+ *  vacuously if `resolveAspect` ever stopped varying the tape block. */
+test('the three shapes really do produce three different crops', () => {
+  const { look } = loadLookProfile(base);
+  const profile = { ...look, osd: { ...look.osd, enabled: false } };
+  const crops = new Set(
+    ['4:3', '16:9', '9:16'].map((a) => (
+      buildVideoFilter(profile, resolveAspect(cfg, a), { burnIn: [] }).match(/crop=[^,]+,[^,]+/)?.[0]
+    )),
+  );
+  assert.equal(crops.size, 3, 'each shape needs its own crop expression');
 });
 
 test('the shipped base profile satisfies every invariant', () => {

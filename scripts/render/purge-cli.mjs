@@ -33,13 +33,26 @@ import process from 'node:process';
 import { REPO_ROOT } from '../ffmpeg/run.mjs';
 import { sweepRetention } from './purge.mjs';
 
+/**
+ * Every argument this command understands. Bare switches and `key=value`
+ * settings are listed apart because confusing the two is its own typo:
+ * `--apply=yes` is not this command's `--apply`.
+ */
+const SWITCHES = new Set(['help', 'h', 'apply', 'execute', 'json']);
+const SETTINGS = new Set(['root', 'photo-days', 'job-days']);
+
 function parseArgs(argv) {
-  const args = { flags: new Set() };
+  const args = { flags: new Set(), unknown: [] };
   for (const raw of argv) {
-    if (!raw.startsWith('--')) continue;
+    if (!raw.startsWith('--')) { args.unknown.push(raw); continue; }
     const [key, ...value] = raw.slice(2).split('=');
-    if (value.length === 0) args.flags.add(key);
-    else args[key] = value.join('=');
+    if (value.length === 0) {
+      if (!SWITCHES.has(key)) { args.unknown.push(raw); continue; }
+      args.flags.add(key);
+    } else {
+      if (!SETTINGS.has(key)) { args.unknown.push(raw); continue; }
+      args[key] = value.join('=');
+    }
   }
   return args;
 }
@@ -79,6 +92,29 @@ function retentionFrom(root) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.flags.has('help') || args.flags.has('h')) { usage(); return 0; }
+
+  // AN ARGUMENT THIS COMMAND DOES NOT UNDERSTAND IS NOT A REQUEST IT MAY
+  // REINTERPRET, and that rule is worth more here than anywhere else in the
+  // product: this is the one command whose entire purpose is deleting somebody
+  // else's photographs, and `--apply` has already been given by the time it
+  // matters.
+  //
+  // MEASURED, on 2026-08-27: `npm run purge -- --job=<id> --apply` was run on a
+  // real machine. There is no `--job`. It was accepted in silence, the full
+  // retention sweep ran, and six uploads went from twenty-six jobs while the
+  // operator believed they were clearing exactly one. Nothing was lost that was
+  // not already past its window -- which is luck, not design. The near-miss is
+  // worse than the invention: `--photodays=999` reads like `--photo-days` and
+  // would have swept on the CONFIGURED window while the operator believed they
+  // had widened it.
+  if (args.unknown.length > 0) {
+    console.error(`\n  not an argument this command has: ${args.unknown.join(' ')}`);
+    console.error('  nothing was deleted. purge takes only the whole-disk retention windows:');
+    console.error(`    switches  ${[...SWITCHES].map((f) => `--${f}`).join(' ')}`);
+    console.error(`    settings  ${[...SETTINGS].map((f) => `--${f}=<value>`).join(' ')}`);
+    console.error('  there is NO per-job flag. To delete one job, use DELETE /api/jobs/<id>.\n');
+    return 2;
+  }
 
   const root = args.root ?? REPO_ROOT;
   const configured = retentionFrom(root);

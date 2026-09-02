@@ -599,6 +599,36 @@ test('a reaper that finds the lease already marked repairs it but stays silent',
   assert.equal(queue.claim({ workerId: 'w' }).jobId, JOB_A, 'and the job is not stranded');
 });
 
+test('a fresh mark means the drop is someone else\'s: the lock waits a full lease before takeover', (t) => {
+  const { queue, clock, P } = makeQueue(t, { leaseMs: 1000 });
+  queue.enqueue(JOB_A);
+  const claim = queue.claim({ workerId: 'renderer-crashed' });
+  clock.now += 2000;
+
+  // A mark stamped just now belongs to a reaper that is mid-drop THIS INSTANT
+  // -- possibly parked between its check and its unlink. Dropping the lock for
+  // it reopens the race where a stale unlink lands on a successor's live lock
+  // and one job goes to two workers. So the entry half of the repair happens,
+  // and the lock half waits.
+  fs.writeFileSync(`${P.claimed}/${JOB_A}.${claim.token}.reaped`, JSON.stringify({
+    jobId: JOB_A, generation: claim.token, seq: claim.seq, priority: 0,
+    enqueuedAt: new Date(T0).toISOString(), attempts: 1, reapedAt: new Date(clock.now).toISOString(),
+  }));
+
+  assert.deepEqual(queue.reapExpired(), [], 'not the reaper of record');
+  assert.equal(fs.existsSync(lockFile(P, JOB_A)), true, 'the lock is the mark holder\'s to drop');
+  assert.equal(queue.stats().pending, 1, 'the entry half of the repair is done');
+  assert.equal(queue.claim({ workerId: 'w' }), null, 'and the job is not claimable past the lock');
+
+  // Past a full lease the mark holder is dead by the same rule workers die by,
+  // and the drop is anyone's to finish.
+  clock.now += 1001;
+  assert.deepEqual(queue.reapExpired(), [], 'the takeover is a repair, not a reap');
+  assert.equal(fs.existsSync(lockFile(P, JOB_A)), false, 'now the lock is cleared');
+  assert.equal(queue.claim({ workerId: 'w' }).jobId, JOB_A, 'and the job runs again');
+  assert.equal(queue.peek({ state: 'claimed' })[0].attempts, 1);
+});
+
 test('a reaped job keeps its place in the queue, where a failed one goes to the back', (t) => {
   const { queue, clock } = makeQueue(t, { leaseMs: 1000 });
   queue.enqueue(JOB_A);

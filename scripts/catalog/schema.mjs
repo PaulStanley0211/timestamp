@@ -354,6 +354,16 @@ export function assertLookOverride(override, baseLook, { kind, id }) {
  *  props, and an outfit is responsible for none of them. */
 export const PLACE_FRAGMENTS = Object.freeze(['scene', 'light', 'lens', 'framing', 'eraProps']);
 
+/** Fragments a place MAY own. Optional rather than required because
+ *  `composeStillPrompt` carries a generic floor for each of them, so adding one
+ *  here breaks no shipped preset and a place typed as free text still gets the
+ *  clause. They are validated exactly as the required ones are when present --
+ *  an optional field that skips the vocabulary rules is a hole in rule 1.
+ *
+ *  `moment`: what is HAPPENING, as opposed to what is in frame. A brief with no
+ *  action in it is a portrait brief, and the model answers it with a portrait. */
+export const PLACE_OPTIONAL_FRAGMENTS = Object.freeze(['moment']);
+
 /**
  * @param {object} raw    parsed JSON
  * @param {object} opts
@@ -391,6 +401,10 @@ export function validatePlace(raw, { id, baseLook } = {}) {
 
   const prompt = {};
   for (const key of PLACE_FRAGMENTS) prompt[key] = requireString(raw.prompt, key, { kind, id });
+  for (const key of PLACE_OPTIONAL_FRAGMENTS) {
+    if (raw.prompt[key] === undefined) continue;
+    prompt[key] = requireString(raw.prompt, key, { kind, id });
+  }
 
   const place = {
     id,

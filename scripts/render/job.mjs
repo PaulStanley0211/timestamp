@@ -502,6 +502,10 @@ function newStep(name) {
     // `error` -- a skip is a decision, and the UI and ledger key off `error`
     // being null.
     skipReason: null,
+    // Whether the most recent `retryStep` was a human's decision rather than
+    // the worker's automatic revive. `decideIntent` reads it before re-sending
+    // anything paid; see `retryStep`.
+    deliberateRetry: false,
     cost: { estimated: 0, actual: null, currency: 'USD' },
   };
 }
@@ -530,6 +534,18 @@ function normalizeInput(input, jobId) {
   // first eight have already been generated.
   if (!Number.isInteger(stillCount) || stillCount < 1 || stillCount > 8) {
     throw new JobError(`input.stillCount must be an integer 1..8, got ${JSON.stringify(stillCount)}`,
+      { code: 'BAD_INPUT', jobId });
+  }
+
+  // DIRECT MODE: the tape is generated from the photographs, with no still and
+  // no gate. It lives on the INPUT rather than in `resolved` because it is a
+  // product choice the user made, not something the pipeline worked out -- and
+  // because the manifest is the ONLY channel between the web process and the
+  // worker. A mode that lived in a CLI flag could not survive into the renderer
+  // and a resumed job would silently change shape halfway through.
+  const direct = input.direct ?? false;
+  if (typeof direct !== 'boolean') {
+    throw new JobError(`input.direct must be a boolean, got ${JSON.stringify(direct)}`,
       { code: 'BAD_INPUT', jobId });
   }
 
@@ -568,6 +584,7 @@ function normalizeInput(input, jobId) {
       value: outfit.value ?? null,
     },
     stillCount,
+    direct,
     // What was asked for, and therefore what was charged for. These have to
     // survive into the manifest because the manifest is the ONLY channel
     // between the web process and the worker -- the worker never sees the
@@ -582,6 +599,12 @@ function normalizeInput(input, jobId) {
     // manifests. The web layer validates on the way in and the pipeline
     // asserts before it spends; this field just has to arrive intact.
     resolution: input.resolution ?? null,
+    // WHICH SHAPE, and why the default is not null the way resolution's is.
+    // Every manifest written before 2026-08-23 has no aspect field at all, and
+    // a null here would resume those jobs into "no shape decided" rather than
+    // into the shape they were actually rendered in. `4:3` is not a fallback,
+    // it is what those jobs mean.
+    aspect: input.aspect ?? '4:3',
     tier: input.tier ?? null,
     // Nullable, and null is the honest value for a CLI render: `npm run render`
     // has no account behind it. Ownership for web jobs is additionally indexed
@@ -716,7 +739,7 @@ export function saveJob(job, { root } = {}) {
  * One unreadable job must not be able to hide the other two hundred from the
  * status page; `loadJob` on that id still reports exactly what is wrong.
  */
-export function listJobs({ root }) {
+export function listJobs({ root, includeUnreadable = false }) {
   if (typeof root !== 'string' || root.length === 0) {
     throw new JobError('root must be a non-empty string', { code: 'BAD_ROOT' });
   }
@@ -735,7 +758,28 @@ export function listJobs({ root }) {
     let manifest;
     try {
       manifest = readJsonWithRetry(`${dir}/${entry.name}/manifest.json`, entry.name, { missingOk: true });
-    } catch {
+    } catch (err) {
+      // SWALLOWING IS RIGHT FOR A LISTING AND WRONG FOR A PROMISE.
+      //
+      // The status page must not let one unreadable job hide the other two
+      // hundred, which is why this catch exists. But `planPurge` enumerates
+      // jobs through this same function, and a job it cannot see is a job whose
+      // photograph outlives the seven-day promise indefinitely -- with `errors`
+      // empty, so the worker's `purged` event is suppressed and no operator
+      // line is ever printed. A silent unkept promise is precisely what
+      // purge.mjs exists to prevent, one layer below where it was prevented.
+      //
+      // Opt-in rather than always-on, so the listing keeps the behaviour it
+      // needs and the caller that keeps a promise asks for the truth.
+      if (includeUnreadable) {
+        out.push({
+          jobId: entry.name,
+          status: null,
+          createdAt: null,
+          updatedAt: null,
+          unreadable: { message: err.message, code: err.code ?? null },
+        });
+      }
       continue;
     }
     if (!manifest) continue;
@@ -948,6 +992,42 @@ function recomputeCost(job) {
   return job.cost;
 }
 
+/**
+ * Records what a step ACTUALLY cost, long after it finished.
+ *
+ * WHY THIS IS NOT `finishStep`. `finishStep` is the only public way to price a
+ * step and it also MOVES the step, and `running -> done` is the only finish
+ * this state machine allows. Metering happens days later against an invoice, on
+ * a step that is already `done` -- so routing it through `finishStep` would
+ * either be refused or, worse, would have to relax the transition table for a
+ * bookkeeping entry. The state machine is the thing that stops a resume turning
+ * into a second bill; it does not get loosened so a number can be written down.
+ *
+ * WHY IT GOES THROUGH `priceStep` AND `recomputeCost` ANYWAY. Those two are
+ * where "a step's price is valid" and "the job total is the sum of its steps"
+ * are decided, and a second implementation of either -- in a CLI, reaching into
+ * a manifest -- is how a job comes to disagree with its own arithmetic.
+ *
+ * A `skipped` step is refused by name. Its own comment in STEP_STATUSES says a
+ * skipped step "produced nothing and cost nothing", which is exactly the claim
+ * a recorded charge against it would contradict. A `failed` step is allowed:
+ * a request that went out and never came back is billable, and the intent
+ * record exists precisely because that case is real.
+ */
+export function meterStep(job, name, actual) {
+  const step = stepOf(job, name);
+  if (step.status !== 'done' && step.status !== 'failed') {
+    throw new JobError(
+      `cannot meter ${name}: it is ${step.status}, and only a step that actually ran can have been billed`,
+      { code: 'STEP_NOT_BILLABLE', jobId: job.jobId, detail: { step: name, status: step.status } },
+    );
+  }
+  // Validated before it is stored, same as every other price in this file.
+  step.cost = priceStep(job, step, { actual });
+  recomputeCost(job);
+  return step;
+}
+
 /** Records the failure on the step AND on the job. The two always move together,
  *  so there is no state in which a job looks runnable while the step it died on
  *  is failed. */
@@ -959,6 +1039,18 @@ export function failStep(job, name, error) {
     code: error?.code ?? 'ERROR',
     message: error?.message ?? String(error ?? 'unknown error'),
     retriable: error?.retriable ?? null,
+    // WHAT THE PROVIDER ACTUALLY SAID, and it used to be dropped here. On
+    // 2026-09-02 fal refused the first real paid order on content grounds and
+    // the manifest recorded the code, the message and the clock -- everything
+    // except the one field naming what it objected to. `classifyHttp` builds
+    // the response body into `error.detail` and this line is where it went on
+    // the floor, so a refusal a customer can trigger was one an operator could
+    // not diagnose.
+    //
+    // It is safe on the manifest and it does not reach the browser: `jobView`
+    // projects errors through `customerError`, which is a two-field allow-list
+    // of code and message. The body is capped at 2000 characters upstream.
+    detail: error?.detail ?? null,
     step: name,
     at,
   };
@@ -991,7 +1083,18 @@ export function skipStep(job, name, reason) {
  * `recordIntent` rotates it and mints a fresh key, which is what a *deliberate*
  * resubmission should look like.
  */
-export function retryStep(job, name) {
+/**
+ * @param {object} job
+ * @param {string} name
+ * @param {{deliberate?: boolean}} [opts]  `deliberate` means a HUMAN asked, via
+ *   `--retry-step`. The worker's automatic revive does NOT pass it, and that
+ *   distinction is load-bearing rather than cosmetic: `decideIntent` may only
+ *   re-send a paid request whose intent record is still open when somebody
+ *   decided to. Without it, the revive rewrote `failed -> pending`, the
+ *   pipeline read that as a deliberate act, and a retriable timeout on a submit
+ *   bought the same generation up to `maxAttempts` times.
+ */
+export function retryStep(job, name, { deliberate = false } = {}) {
   const step = stepOf(job, name);
   if (job.status === 'done' || job.status === 'cancelled') {
     throw new JobError(`cannot retry ${name} on a ${job.status} job`, {
@@ -1002,6 +1105,11 @@ export function retryStep(job, name) {
   step.error = null;
   step.skipReason = null;
   step.endedAt = null;
+  // Set on EVERY retry, true or false, so the flag can never be inherited from
+  // an earlier deliberate one. Same reasoning as `skipReason` living here: the
+  // schema block in docs/interfaces.md does not name it and the behaviour needs
+  // somewhere to live.
+  step.deliberateRetry = deliberate === true;
   if (job.status === 'failed') {
     setJobStatus(job, 'queued');
     job.error = null;

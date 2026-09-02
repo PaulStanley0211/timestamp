@@ -177,7 +177,7 @@ test('killed between segment 1 and segment 2, only segment 2 is bought', async (
   // A death on the way in is not an in-flight request; the operator retries the
   // step and the recorded segment is kept rather than re-bought.
   const job = loadJob({ root: w.root, jobId: w.jobId });
-  retryStep(job, 'animate');
+  retryStep(job, 'animate', { deliberate: true });  // the operator, exactly as --retry-step does
   saveJob(job);
   await attempt(w);
 
@@ -197,7 +197,7 @@ test('a recorded segment whose clip was deleted IS bought again -- that is the e
   fs.rmSync(`${jobPaths(w.root, w.jobId).segments}/seg-01.mp4`, { force: true });
 
   const job = loadJob({ root: w.root, jobId: w.jobId });
-  retryStep(job, 'animate');
+  retryStep(job, 'animate', { deliberate: true });  // the operator, exactly as --retry-step does
   saveJob(job);
   await attempt(w);
 
@@ -290,7 +290,7 @@ test('and a deliberate --retry-step re-submits exactly once, keeping the old rec
   armed = false;
 
   const job = loadJob({ root: w.root, jobId: w.jobId });
-  retryStep(job, 'still');
+  retryStep(job, 'still', { deliberate: true });  // the operator, exactly as --retry-step does
   saveJob(job);
   await attempt(w);
 
@@ -304,6 +304,63 @@ test('and a deliberate --retry-step re-submits exactly once, keeping the old rec
   const rotated = JSON.parse(fs.readFileSync(`${intent}/still.1.json`, 'utf8'));
   assert.equal(rotated.result.unresolved, true);
   assert.equal(JSON.parse(fs.readFileSync(`${intent}/still.json`, 'utf8')).attempt, 2);
+});
+
+/**
+ * THE WORKER'S AUTOMATIC REVIVE IS NOT A HUMAN DECIDING.
+ *
+ * `runOne` revives a failed job by calling `retryStep` on every failed step.
+ * That rewrites `failed -> pending`, and `decideIntent` told a crash from a
+ * deliberate retry purely by whether the step was still `running` -- so after
+ * the revive, CASE 2 could not fire. CASE 3 ran instead: it closed the open
+ * intent as unresolved, minted a fresh key, and sent the paid request again.
+ *
+ * The chain that gets there is ordinary. A TimeoutError on a submit is
+ * `retriable` by its own class, and its comment says why: "a timeout on a
+ * submit may have created work on the far side, which is why the pipeline
+ * writes an intent record before the request." The pipeline catches it and
+ * calls `failStep`, so the step is `failed` rather than `running`; the queue
+ * puts the job back in `pending`; the worker claims it and revives it. Repeat
+ * to `maxAttempts: 4` -- four independently-keyed billed generations, about
+ * $18 at the measured 720p rate, for one fifteen-second tape, with no human
+ * ever seeing INTENT_IN_FLIGHT.
+ *
+ * The header's stated invariant -- "A human decides, because only a human can
+ * go and look at the provider's dashboard" -- held only for a hard kill, which
+ * is the one case the tests exercised.
+ *
+ * A two-module interaction: a unit test of `decideIntent` cannot see the caller
+ * that rewrote the status before it looked.
+ */
+test('an automatic revive does NOT re-submit an open intent -- only a human does', async () => {
+  const w = world({
+    afterSubmit: (kind, calls) => {
+      if (kind === 'still' && calls.still === 1) throw new Error('kill -9 mid-flight');
+    },
+  });
+
+  await attempt(w);
+  assert.equal(w.calls.still, 1);
+
+  // The open record: a request went out and nothing came back.
+  const record = JSON.parse(fs.readFileSync(`${jobPaths(w.root, w.jobId).intent}/still.json`, 'utf8'));
+  assert.equal(record.result, null);
+
+  // Exactly what the worker does on its next claim: retryStep on every failed
+  // step, with nobody having asked for it.
+  const job = loadJob({ root: w.root, jobId: w.jobId });
+  for (const step of job.steps) {
+    if (step.status === 'failed') retryStep(job, step.name);
+  }
+  saveJob(job);
+
+  const second = await attempt(w);
+  assert.equal(second.error?.code, 'INTENT_IN_FLIGHT',
+    'an automatic revive re-submitted a request that may already have been charged');
+  assert.equal(w.calls.still, 1,
+    'the paid call went out a second time without anyone deciding to');
+  assert.match(second.error.message, /--retry-step=still/,
+    'the refusal must name the deliberate way forward');
 });
 
 test('killed inside generateVideo for segment 2, the resume refuses and segment 1 is untouched', async () => {
@@ -328,7 +385,7 @@ test('killed inside generateVideo for segment 2, the resume refuses and segment 
 
   armed = false;
   const job = loadJob({ root: w.root, jobId: w.jobId });
-  retryStep(job, 'animate');
+  retryStep(job, 'animate', { deliberate: true });  // the operator, exactly as --retry-step does
   saveJob(job);
   await attempt(w);
 

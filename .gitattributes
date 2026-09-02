@@ -1,0 +1,25 @@
+# Files whose line endings are load-bearing.
+#
+# `core.autocrlf` is true on the machine this project is developed on, so a
+# fresh clone rewrites LF to CRLF. That is harmless for everything in this
+# repository except the two files below, and for the Dockerfile it is fatal:
+# fed CRLF, BuildKit answers
+#
+#   dockerfile parse error on line 3: unknown instruction: echo
+#
+# because a `\` line continuation followed by a carriage return is not a
+# continuation. There are four of them in the layer that installs and
+# version-gates ffmpeg, so a fresh Windows clone simply cannot build the image.
+# Measured against a real build, not assumed.
+#
+# `.dockerignore` is pinned for a weaker reason and pinned anyway: BuildKit was
+# tested and DOES strip the CR there, so a CRLF ignore file still keeps `.env`
+# out. Depending on that stripping to keep seven secrets out of a published
+# image is a thinner guarantee than not needing it.
+Dockerfile      text eol=lf
+.dockerignore   text eol=lf
+# The deploy topology, pinned for the weaker `.dockerignore` reason: YAML and
+# Caddy both tolerate CRLF today, and depending on that tolerance is a thinner
+# guarantee than not needing it.
+compose.yaml    text eol=lf
+Caddyfile       text eol=lf

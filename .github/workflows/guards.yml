@@ -26,7 +26,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # FULL HISTORY, BECAUSE ONE OF THE GUARDS BELOW WALKS IT. checkout
+      # defaults to fetch-depth: 1, and in a depth-1 clone `origin/main` does
+      # not exist at all -- so the commit-message guard's
+      # `git rev-list origin/main..HEAD` fails, its fallback
+      # `git rev-list -n 50 HEAD` returns exactly ONE commit, and on a
+      # pull_request that one commit is GitHub's own generated merge commit
+      # ("Merge <sha> into <sha>"). The guard written to read every commit
+      # message would have read none of them, on every PR, silently.
+      #
+      # Measured, not assumed: cloned at --depth 1 and ran the guard's loop
+      # verbatim -- 1 commit scanned. With full history, 165.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # `npm test` must not be able to spend money. CLAUDE.md names four
       # independent guards; this is the one a well-meaning edit can undo in a
@@ -51,6 +64,34 @@ jobs:
             exit 1
           fi
 
+      # THE GUARD ABOVE WAS PASSING VACUOUSLY, and this is the one that binds.
+      #
+      # It greps fal.mjs for a default fetchImpl -- but the guard it protects
+      # does not live there. `requireFetchImpl` is in contract.mjs and fal.mjs
+      # only CALLS it, so the regex matched nothing and the check named "the fal
+      # adapter has no default fetch" could not fail. Four independent money
+      # guards were quietly three.
+      #
+      # Asserted BEHAVIOURALLY rather than by regex, because the regex form is
+      # evadable in-file anyway (`fetchImpl ??= fetch`, `globalThis["fetch"]`).
+      # The question is "does this throw when nobody injected a transport", and
+      # that is a question only running it can answer.
+      - name: a paid provider still refuses to invent a transport
+        run: |
+          node -e "
+            import('./scripts/providers/contract.mjs').then(({ requireFetchImpl }) => {
+              try {
+                requireFetchImpl({}, { provider: 'guard' });
+              } catch (err) {
+                if (err instanceof TypeError) { console.log('ok: requireFetchImpl throws with no transport'); return; }
+                throw err;
+              }
+              console.error('::error::requireFetchImpl returned a default instead of throwing.');
+              console.error('::error::Every paid provider can now reach the network from a test that forgot to inject one.');
+              process.exit(1);
+            }).catch((err) => { console.error('::error::' + err.message); process.exit(1); });
+          "
+
       # This repository is public. An accurate list of a live system's open
       # weaknesses is a roadmap; publish a review once its findings are closed.
       - name: no security review in version control
@@ -60,11 +101,85 @@ jobs:
             exit 1
           fi
 
+      # AND NOT IN A COMMIT MESSAGE EITHER, which is the layer the check above
+      # cannot see. The file was kept out of the repo by path; its CONTENTS went
+      # out in a message, and the path check stayed green throughout. A commit
+      # message is published exactly as effectively as a file.
+      #
+      # KNOWN EXCEPTIONS, and it is deliberate that they are loud rather than
+      # silent. Three commits are listed, and READ 2026-09-01: they are not
+      # three of a kind. Two are real disclosures and one is this guard's own
+      # false positive, which matters because a reader who assumes all three are
+      # leaks will either waste an afternoon or decide the guard is noisy and
+      # weaken it. What each one actually matches on:
+      #
+      #   18352f4  REAL. "ONE CRITICAL", "THREE HIGH", "F13 are", "F31 arms".
+      #            A 43-line body describing the second review's findings with
+      #            mechanisms and a daily spend ceiling.
+      #            origin/supabase-identity-slice, origin/ui-redesign-signed-in-page
+      #   6efb0e6  REAL, and smaller. Matches on "one CRITICAL". It is the
+      #            commit that CORRECTED the leak and restates just enough of
+      #            the shape to explain what it was fixing.
+      #            origin/supabase-identity-slice, origin/ui-redesign-signed-in-page
+      #   190a9ec  FALSE POSITIVE. Matches on the single phrase "enumeration
+      #            oracle", in a sentence describing a property the code
+      #            GUARANTEES -- that a swallow answers identically across four
+      #            upstream outcomes, so a later rethrow would read as an oracle.
+      #            That is a defensive guarantee, not a weakness. It stays listed
+      #            only because the pattern cannot tell the two uses apart, and
+      #            the pattern is deliberately NOT narrowed: a regex that tries
+      #            to distinguish "we prevented an oracle" from "there is an
+      #            oracle" would start missing real ones.
+      #            origin/supabase-identity-slice
+      #
+      # THE DECISION ON THE TWO REAL ONES IS TAKEN, 2026-09-01: they stay.
+      # Rewriting was assessed and rejected on evidence rather than taste.
+      # `refs/pull/1/head` is retained by GitHub independently of the branch,
+      # and 18352f4 still answers HTTP 200 to an unauthenticated API request, so
+      # a force-push reduces discoverability without erasing anything and costs
+      # a rewrite on an open PR to do it. Only a GitHub Support garbage-collect
+      # actually retracts, which is disproportionate for content that is now
+      # almost entirely CLOSED findings -- the money CRITICAL it names is shut by
+      # the `livemode !== true` gate in server.mjs. What is still live in it is
+      # one pointer at the `config/models.json` still-model edit that CLAUDE.md
+      # already warns about in its own safe form. Nobody but the owner can make
+      # that edit, so it is intelligence rather than a path, and closing the
+      # thing it points at is the durable answer. See CLAUDE.md section 51.
+      #
+      # Delete a SHA from this list when its message is rewritten. An empty list
+      # is the goal; a growing one means the rule is being worked around.
+      - name: no security review in a commit message
+        run: |
+          KNOWN='18352f4 190a9ec 6efb0e6'
+          bad=""
+          for sha in $(git rev-list origin/main..HEAD 2>/dev/null || git rev-list -n 50 HEAD); do
+            skip=""
+            for k in $KNOWN; do case "$sha" in "$k"*) skip=1 ;; esac; done
+            [ -n "$skip" ] && continue
+            if git log -1 --format='%B' "$sha" | grep -qiE \
+              '[0-9]+ (CRITICAL|HIGH|MEDIUM)\b|\b(ONE|TWO|THREE|FOUR) (CRITICAL|HIGH)\b|enumeration oracle|\bF[0-9]{1,2}\b (is|are|still|arms)'; then
+              bad="$bad $sha"
+            fi
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::these commit messages reprint security-review detail, and this repo is public:"
+            for sha in $bad; do echo "  $sha $(git log -1 --format='%s' "$sha")"; done
+            echo "::error::Describe a fix by what it DOES, never by the hole it closed."
+            exit 1
+          fi
+
       # Nothing that holds a credential, and nothing from out/ -- which is where
       # photographs of real people's faces live.
       - name: no secrets and no user data tracked
         run: |
-          bad="$(git ls-files | grep -E '(^|/)\.env$|^out/' || true)"
+          # `(^|/)\.env$` matched only the LITERAL name, so `.env.production`
+          # and `.env.local` were tracked-able -- and the deploy that is next
+          # writes exactly those, alongside a TLS key and certificate. The
+          # pattern now covers the family, the key material, and the real faces
+          # in assets/test-photos that had no CI backstop the way out/ does.
+          bad="$(git ls-files \
+            | grep -E '(^|/)\.env($|\.)|\.(pem|key|p12|pfx)$|^out/|^assets/test-photos/' \
+            | grep -vE '^\.env\.example$|^assets/test-photos/README\.md$' || true)"
           if [ -n "$bad" ]; then
             echo "::error::tracked files that must never be committed:"
             echo "$bad"

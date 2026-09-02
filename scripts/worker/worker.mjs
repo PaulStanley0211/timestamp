@@ -208,6 +208,11 @@ const isAbortError = (err) => err?.name === 'AbortError' || err?.code === 'ABORT
  * @param {Function} [opts.nowImpl]           () => epoch ms (a Date is accepted)
  * @param {Function} [opts.sleepImpl]         (ms, signal) => Promise
  * @param {Function} [opts.runPipelineImpl]   injected in tests; never spends
+ * @param {Function} [opts.refundImpl]        async (job, {reason}) => {refunded, credits?, accountId?};
+ *                                            consulted when a job ends with no tape -- terminal failure
+ *                                            or cancellation. Null means this worker cannot refund
+ *                                            (no accounts wired), which is every test rig and the
+ *                                            direct-CLI render.
  * @param {Function} [opts.loadJobImpl]
  * @param {Function} [opts.saveJobImpl]
  * @param {Function} [opts.setIntervalImpl]
@@ -233,6 +238,19 @@ export function createWorker({
   nowImpl = () => Date.now(),
   sleepImpl = defaultSleep,
   runPipelineImpl = defaultRunPipeline,
+  /**
+   * Pipeline dependency overrides, handed straight to `runPipeline`.
+   *
+   * Empty here on purpose: this file must not know what any of them are. It
+   * exists so `worker-cli.mjs` can inject `imageModerateImpl` -- the image
+   * classifier seam `safety/moderate.mjs` has carried open since it was
+   * written -- without the worker growing a second opinion about moderation.
+   * Same shape and same reason as `providerCtx`: the CLI is the only place
+   * that reads the environment, so a test can never accidentally acquire a
+   * credential by constructing a worker.
+   */
+  deps = {},
+  refundImpl = null,
   loadJobImpl = loadJob,
   saveJobImpl = saveJob,
   setIntervalImpl = setInterval,
@@ -471,7 +489,42 @@ export function createWorker({
       }
     };
 
-    const failOnQueue = (err, retriable, step) => {
+    /**
+     * The customer's money, decided at the moment a job ends without a tape.
+     *
+     * The debit landed at enqueue, in the web process; the worker is where a
+     * job can die AFTER that, so the worker is where the case for giving the
+     * credits back gets raised. The seam reads the manifest's steps and
+     * declines on its own when a paid step was ever attempted -- this side
+     * only decides WHEN to ask: a terminal failure or a cancellation, never a
+     * retry the queue still owes an attempt. A refund that cannot be recorded
+     * is emitted rather than thrown, because the queue transition it rides on
+     * has already happened and must stand -- but it is emitted LOUDLY, since
+     * a missed refund is a person's money and somebody has to credit it by
+     * hand.
+     */
+    const tryRefund = async (jobArg, reason) => {
+      if (!refundImpl || !jobArg) return;
+      try {
+        const result = await refundImpl(jobArg, { reason });
+        if (result?.refunded) {
+          emit('refunded', {
+            jobId, reason, credits: result.credits ?? null, accountId: result.accountId ?? null,
+          });
+        } else if (result?.accountId) {
+          // Declined as spent, with a real owner: the seam read a paid attempt
+          // and kept the money. This used to be the SILENT outcome -- and it is
+          // the one where a customer may have been charged for nothing. The
+          // glue records it durably (out/refunds/); this line is the terminal's
+          // half of the same witness.
+          emit('refund-declined', { jobId, reason, accountId: result.accountId });
+        }
+      } catch (err) {
+        emit('refund-failed', { jobId, reason, error: brief(err) });
+      }
+    };
+
+    const failOnQueue = async (err, retriable, step) => {
       try {
         const result = queue.fail(jobId, token, { error: err, retriable });
         emit('failed', {
@@ -484,6 +537,10 @@ export function createWorker({
           ms: now() - jobStartedAt,
           error: brief(err),
         });
+        // Only once the queue has said this was the LAST attempt. A refund
+        // while a retry is still owed pays the customer back for a tape they
+        // may yet receive.
+        if (result?.state === 'failed') await tryRefund(job, 'refund:failed-before-provider');
       } catch (queueErr) {
         if (queueErr?.code === 'LEASE_LOST') { loseLease(queueErr); return; }
         throw queueErr;
@@ -515,7 +572,7 @@ export function createWorker({
         // A queue pointer to a job with no readable manifest is the one state
         // this system cannot recover from -- there is nothing to resume and
         // retrying cannot make the file appear. Terminal, by name, in failed/.
-        failOnQueue(err, false, null);
+        await failOnQueue(err, false, null);
         return;
       }
 
@@ -532,6 +589,7 @@ export function createWorker({
         // A cancellation is not a failure. It must not burn a retry and it must
         // not land in failed/, or every cancelled job looks like a bug.
         completeOnQueue('cancelled', { reason: job.error?.message ?? null });
+        if (!leaseLost) await tryRefund(job, 'refund:cancelled-before-provider');
         return;
       }
       if (job.status === 'done') {
@@ -561,6 +619,7 @@ export function createWorker({
           onProgress,
           stopAfter,
           providerCtx,
+          deps,
         });
       } catch (err) {
         syncSteps(job);
@@ -574,7 +633,7 @@ export function createWorker({
           releaseOnQueue('no-pipeline');
           throw err;
         }
-        failOnQueue(err, isRetriable(err), job.error?.step ?? openStep);
+        await failOnQueue(err, isRetriable(err), job.error?.step ?? openStep);
         return;
       }
 
@@ -588,6 +647,7 @@ export function createWorker({
           return;
         case 'cancelled':
           completeOnQueue('cancelled', { reason: final.error?.message ?? null });
+          if (!leaseLost) await tryRefund(final, 'refund:cancelled-before-provider');
           return;
         case 'awaiting-selection':
           // Parked in front of a human, and deliberately taken off the queue:
@@ -597,7 +657,7 @@ export function createWorker({
           completeOnQueue('awaiting-selection', { stillCount: final.input?.stillCount ?? null });
           return;
         case 'failed':
-          failOnQueue(final.error ?? new Error('pipeline reported a failed job'),
+          await failOnQueue(final.error ?? new Error('pipeline reported a failed job'),
             final.error?.retriable === true, final.error?.step ?? null);
           return;
         default:
@@ -608,7 +668,7 @@ export function createWorker({
           // straight back on the board and spin; failing retriably makes the
           // bug visible in `queue-cli peek --state=failed` after maxAttempts
           // instead of burning a CPU all night.
-          failOnQueue(
+          await failOnQueue(
             new WorkerError(
               `pipeline returned ${jobId} as ${final.status} with no stopAfter and no shutdown`,
               { code: 'PIPELINE_INCOMPLETE', jobId, detail: { status: final.status } },
@@ -634,10 +694,55 @@ export function createWorker({
      * is what recovers jobs stranded by a previous crash -- and its absence
      * looks exactly like "the queue is stuck".
      */
-    reap() {
+    /**
+     * Return every expired lease, and REFUND THE ONES THAT WILL NEVER RUN AGAIN.
+     *
+     * The debit lands at enqueue, in the web process. The only refund trigger
+     * used to be inside `runOne`'s own failure path -- but a lease that expires
+     * for the last time is made terminal by `reapExpired` itself, in a module
+     * that holds no token and knows nothing about accounts. So a job killed by
+     * four lease expiries (a worker hard-killed four times, or simply stalled
+     * past its lease) left the customer down 21 CR with no provider ever
+     * called, no `refunded` event, and no `REFUND MISSED` line either. Silence,
+     * which is the one outcome this design says it will not produce.
+     *
+     * `refundIfUnspent` still decides: it reads the manifest and declines if a
+     * paid step ever ran, so this cannot refund a tape somebody received. And
+     * `refundCredits` is idempotent per job, so asking twice is a no-op rather
+     * than a second payout.
+     *
+     * ASYNC NOW, because refunding is. Both callers await it.
+     */
+    async reap() {
       hasReaped = true;
-      const jobIds = queue.reapExpired();
-      emit('reaped', { jobIds, count: jobIds.length });
+      const failed = [];
+      const jobIds = queue.reapExpired({ onTerminal: (jobId) => failed.push(jobId) });
+      // The split is reported, not just the total: "back to pending" was
+      // printed for jobs that went straight to failed/, and an operator then
+      // looked for them in the wrong directory.
+      emit('reaped', { jobIds, count: jobIds.length, failed, pending: jobIds.filter((id) => !failed.includes(id)) });
+
+      for (const jobId of failed) {
+        if (!refundImpl) break;
+        const reason = 'refund:lease-expired';
+        try {
+          const job = loadJob({ root, jobId, nowImpl });
+          const result = await refundImpl(job, { reason });
+          if (result?.refunded) {
+            emit('refunded', {
+              jobId, reason, credits: result.credits ?? null, accountId: result.accountId ?? null,
+            });
+          } else if (result?.accountId) {
+            // Same witness as tryRefund's: a spent decline with an owner must
+            // never pass silently, on this path least of all -- a reaped job is
+            // one nobody was watching.
+            emit('refund-declined', { jobId, reason, accountId: result.accountId });
+          }
+        } catch (err) {
+          // The one witness. A missed refund must never be silent.
+          emit('refund-failed', { jobId, reason, error: brief(err) });
+        }
+      }
       return jobIds;
     },
 
@@ -752,7 +857,7 @@ export function createWorker({
       stopSignal = new AbortController();
       stopped = deferred();
 
-      if (!hasReaped) this.reap();
+      if (!hasReaped) await this.reap();
       this.sweepRetention();
       // Unref'd where the runtime supports it: a retention timer must never be
       // the reason a worker asked to stop is still alive.

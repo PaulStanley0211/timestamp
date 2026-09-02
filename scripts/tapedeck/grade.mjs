@@ -40,8 +40,13 @@ function inputArgs(input) {
  * @param {object}   args.cfg            config/render.json
  * @param {string}   [args.outLabel]     the graph's video out label
  * @param {string[]} [args.audioArgs]    M2 replaces the default -an
+ * @param {string[]} [args.metadataArgs] container tags; default NONE, because
+ *   this builder also renders real footage (the look CLI takes any clip in
+ *   assets/stock) and a tag is a claim about the content. The delivered tape's
+ *   AI-provenance tags come in through here from muxedArgs, which is the one
+ *   caller whose output is always synthetic.
  */
-export function gradeArgs({ input, output, filterComplex, cfg, outLabel = 'vout', audioArgs = ['-an'] }) {
+export function gradeArgs({ input, output, filterComplex, cfg, outLabel = 'vout', audioArgs = ['-an'], metadataArgs = [] }) {
   const { encode } = cfg;
   return [
     '-y', '-hide_banner', '-loglevel', 'error',
@@ -58,6 +63,7 @@ export function gradeArgs({ input, output, filterComplex, cfg, outLabel = 'vout'
     '-crf', String(encode.crf),
     '-preset', encode.preset,
     '-x264-params', encode.x264Params,
+    ...metadataArgs,
     '-movflags', '+faststart',
     output,
   ];
@@ -133,9 +139,17 @@ export function regionStatsArgs({ input, region, frame = 12 }) {
     '-v', 'error',
     '-f', 'lavfi',
     '-i', `movie=${file}${crop},signalstats`,
-    '-show_entries', 'frame_tags=lavfi.signalstats.YAVG,lavfi.signalstats.YMIN,lavfi.signalstats.YMAX,lavfi.signalstats.SATAVG',
+    // NAMED OUTPUT, NOT POSITIONAL, AND THIS WAS A REAL BUG UNTIL 2026-09-02.
+    // ffprobe emits frame_tags in SIGNALSTATS' OWN ORDER, not the order they
+    // are requested in -- measured: asking for YAVG,YMIN,YMAX,SATAVG returns
+    // YMIN,YAVG,YMAX,SATAVG. So the positional read here had YAVG and YMIN
+    // SWAPPED from the day it was written, which meant assertTapeGrade's black
+    // floor was checking the AVERAGE luma and assertComposite's surround was
+    // checking the MINIMUM. Both still passed, on the wrong statistic.
+    // A csv row cannot say which number is which; json can.
+    '-show_entries', 'frame_tags=lavfi.signalstats.YAVG,lavfi.signalstats.YMIN,lavfi.signalstats.YMAX,lavfi.signalstats.SATAVG,lavfi.signalstats.UAVG,lavfi.signalstats.VAVG',
     '-read_intervals', `%+#${frame}`,
-    '-of', 'csv=p=0',
+    '-of', 'json',
   ];
 }
 

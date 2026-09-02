@@ -1,29 +1,51 @@
 {
-  "_comment": "Grey Baltic, out of season. The temptation with a beach is to make it a holiday; this one is deliberately not. Flat overcast, nobody else, everything packed away -- a family walk in October, which is the version people actually have on tape.",
+  "_comment": "An empty beach out of season. The temptation with a beach is to make it a holiday; this one is deliberately not. Flat overcast, nobody else, everything packed away -- a family walk in October, which is the version people actually have on tape. DE-NATIONALISED 2026-08-29: this was a Baltic beach and its strongest details (Strandkorb, groyne, marram dune) were northern-European landmarks. The specificity did not go, it MOVED -- from country to ERA. A shuttered kiosk and a chained bin say out-of-season anywhere on earth; a thermos, a paper map and a disposable camera say 2003 anywhere on earth. That swap is the whole rule for this catalog now.",
   "id": "ostsee-strand",
-  "label": "Baltic beach, out of season",
+  "label": "The beach, out of season",
   "climate": "cold",
   "timeOfDay": "afternoon",
   "prompt": {
-    "_comment": "Strandkorb -- the roofed wicker beach chair -- is the detail that says Baltic rather than any grey coast in Europe. Turned away from the water is what says out of season.",
-    "scene": "a wide grey Baltic beach out of season, wet packed sand, a line of roofed wicker beach chairs turned away from the water, marram grass on the dune behind, a groyne of black timber posts running out into the sea",
+    "_comment": "The kiosk with its shutters down is the detail that carries this preset -- it says the season is over without naming a coast, and it exists on every coastline in the world. One line of footprints does the same work the empty beach chairs used to: somebody is here, and nobody else is.",
+    "scene": "a wide empty beach out of season, wet packed sand holding a single line of footprints, a shuttered kiosk with its awning rolled up and padlocked, stacked plastic beach loungers under a weighted tarpaulin, a litter bin chained to its post",
     "light": "flat overcast with no shadow at all, the water and the sky nearly the same grey, the sand slightly brighter than both",
     "lens": "wide and low with a lot of sky, the horizon almost straight across the frame",
-    "framing": "waist-up against the empty sand, the groyne running away over one shoulder",
-    "eraProps": "roofed wicker beach chairs, a striped canvas wind-break, a metal thermos flask, a fold-out paper map weighted down with a stone"
+    "framing": "waist-up against the empty sand, the shuttered kiosk small over one shoulder",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "walking back up the sand and only just noticing the camera, one arm still out for balance",
+    "eraProps": "a metal thermos flask, a fold-out paper map weighted down with a stone, a disposable camera with a wind-on wheel, a portable radio with a telescopic aerial"
   },
   "negatives": [
     "sunshine",
-    "tropical water",
+    "crowds",
     "modern beach bar",
     "smartphone",
     "aerial view"
   ],
-  "motionHint": "the water moves in slow flat lines up the sand, the marram grass bends steadily, and the canvas of the wind-break snaps",
+  "motionHint": "the water moves in slow flat lines up the sand, the loose corner of the tarpaulin lifts and snaps, and the padlock swings against the shutter",
   "lookOverride": {
     "_comment": "The coldest and flattest thing in the menu. Saturation well down, warmth backed almost out (remember bm negative = yellow, so raising cbBlueMid towards zero cools it), halation nearly off because a flat overcast sky has no specular highlight to halate, and the least grain of any preset because there is nothing here for it to hide in.",
-    "grade": { "saturation": 0.7, "cbRedMid": 0.02, "cbBlueMid": -0.01 },
-    "tape": { "grainStrength": 15 },
-    "optics": { "bloomStrength": 0.3 }
+    "grade": {
+      "saturation": 0.7,
+      "cbRedMid": 0.02,
+      "cbBlueMid": -0.01
+    },
+    "tape": {
+      "grainStrength": 15
+    },
+    "optics": {
+      "bloomStrength": 0.3
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "Surf and onshore wind. The swell is the waves: 0.18 Hz is about one every five and a half seconds, which is what the preset means by \"slow flat lines up the sand\". Lowpassed hard because a camcorder mic in wind has no top end left.",
+        "amplitude": 0.3,
+        "color": "brown",
+        "highpass": 200,
+        "lowpass": 900,
+        "volume": 0.2,
+        "swellHz": 0.18,
+        "swellDepth": 0.7
+      }
+    }
   }
 }

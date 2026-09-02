@@ -33,6 +33,7 @@
  * in: the alternative default hands one stranger's face to another.
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -58,6 +59,40 @@ export const SESSION_MAX_AGE_S = 30 * 24 * 60 * 60;
  *  gets written every time. */
 export const ACCOUNT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
+/**
+ * The anti-forgery cookie for the two routes that ESTABLISH a session.
+ *
+ * `SameSite=Lax` on the session cookie stops a foreign page acting AS a
+ * session; it does nothing to stop a foreign page CREATING one, because the
+ * login post needs no cookie at all. So `/login` and `/signup` demand a signed
+ * value that arrives twice -- once in this cookie, which a foreign origin
+ * cannot set, and once in a hidden field, which a foreign origin cannot read.
+ * A page that auto-submits somebody's credentials can supply neither half.
+ */
+export const CSRF_COOKIE = 'timestamp_csrf';
+
+/**
+ * The cookie that ties `/auth/callback`'s `state` to the browser
+ * `/auth/google` sent to Supabase.
+ *
+ * SPEC §4.2'S OWN FILE-BASED STORE ANSWERS "WAS THIS STATE EVER ISSUED, AND
+ * HAS IT ALREADY BEEN SPENT" -- AND NOTHING ELSE. It says nothing about WHO is
+ * presenting it. Without this cookie: an attacker starts their own round trip,
+ * captures Supabase's redirect to `/auth/callback?state=&code=` instead of
+ * following it, and hands that URL to a victim as an ordinary link. The
+ * victim's browser redeems a `state` this server genuinely issued -- to the
+ * attacker -- and the victim is signed into the attacker's account, exactly
+ * the harm spec §4.2 names, just with one extra step the file-only store
+ * cannot see. This is a spec gap, not an implementation one; see the ruling
+ * beside `oauthStateCheck` below.
+ *
+ * `HttpOnly` because a script has no business reading it. `SameSite=Lax`, NOT
+ * `Strict` -- the callback arrives as a cross-site TOP-LEVEL GET navigation
+ * from Supabase, and `Strict` would suppress the cookie on exactly the
+ * request it exists to protect, breaking every legitimate sign-in.
+ */
+export const OAUTH_STATE_COOKIE = 'timestamp_oauth_state';
+
 export class AuthUnavailableError extends Error {
   constructor(cause) {
     super('the accounts module is not available');
@@ -77,6 +112,19 @@ export class AuthUnavailableError extends Error {
  * Tolerant on purpose: a browser will happily send a cookie set by something
  * else on the same host with a value we cannot decode, and throwing on it would
  * log everybody out because of an unrelated cookie.
+ *
+ * TOLERANT IS NOT THE SAME AS LAST-WINS. Later values do not overwrite earlier
+ * ones: a browser sends the most specific cookie first, so an attacker able to
+ * set a cookie on a PARENT DOMAIN or a WIDER PATH can append a second value
+ * under the same name. Read last-wins, theirs is the one that counts, which is
+ * a session-fixation primitive on `timestamp_session` and defeats the CSRF
+ * double-submit on `timestamp_csrf` in the same stroke.
+ *
+ * `scripts/auth/session.mjs:606` has carried this guard and this reasoning
+ * since it was written. THIS is the parser on the request path -- every
+ * `currentAccount`, CSRF and OAuth-state read below calls it -- so the guard
+ * has to be here too. The careful implementation existing somewhere is not the
+ * same as it being the one that runs; keep the two in step.
  */
 export function parseCookies(header) {
   const out = Object.create(null);
@@ -85,7 +133,7 @@ export function parseCookies(header) {
     const eq = pair.indexOf('=');
     if (eq < 1) continue;
     const name = pair.slice(0, eq).trim();
-    if (!name) continue;
+    if (!name || Object.hasOwn(out, name)) continue;
     const raw = pair.slice(eq + 1).trim();
     try {
       out[name] = decodeURIComponent(raw);
@@ -115,11 +163,23 @@ export function serializeCookie(name, value, { maxAge = null, secure = false, ex
   return parts.join('; ');
 }
 
-/** Did this request arrive over TLS? Behind a proxy the socket is plain, so the
- *  forwarded header is the only evidence -- and it is only believed for the
- *  literal value `https`, never for anything that merely contains it. */
-export function isSecureRequest(req) {
+/**
+ * Did this request arrive over TLS?
+ *
+ * `x-forwarded-proto` is a header, which means it is whatever the client
+ * typed unless something trusted rewrote it. Believing it by default let any
+ * request turn `Secure` on or off by asking, so `trustProxy` is OPT-IN and
+ * belongs to whoever configured the deployment (TIMESTAMP_TRUST_PROXY=1,
+ * threaded through `createServer`), never to the request. Opted in, the
+ * header is believed for the literal value `https` and nothing that merely
+ * contains it. Same rule, same words, as the twin in
+ * `scripts/auth/session.mjs` -- this copy exists because that module is
+ * imported lazily and a cookie decision cannot be async; the two must not
+ * drift.
+ */
+export function isSecureRequest(req, { trustProxy = false } = {}) {
   if (req?.socket?.encrypted) return true;
+  if (!trustProxy) return false;
   const proto = String(req?.headers?.['x-forwarded-proto'] ?? '').split(',')[0].trim().toLowerCase();
   return proto === 'https';
 }
@@ -143,6 +203,12 @@ export const REQUIRED_AUTH = Object.freeze([
   // with a price tag on it, so the unit the user spends is a credit and the
   // price of a tape is computed from the resolution it is rendered at.
   'creditCost', 'balanceOf', 'debitCredits', 'refundCredits',
+  // ADDED 2026-08-25 WITH THE STRIPE WEBHOOK. It is in this list rather than
+  // called optimistically because the caller is the one route in the app that
+  // is holding somebody's money: a `grantCredits` that is missing must fail as
+  // "the accounts module is not available", which Stripe retries, and never as
+  // `undefined is not a function` inside a handler that has already answered.
+  'grantCredits',
   // `authenticate` returns the SAME error and the same message for an unknown
   // email and a wrong password, and burns equal work either way. The web layer
   // renders what it is given rather than deciding for itself, because the two
@@ -181,6 +247,205 @@ export function missingAuthFunctions(auth) {
 }
 
 // ---------------------------------------------------------------------------
+// the reconciliation ledger: a missed refund is a record, never only a line
+// ---------------------------------------------------------------------------
+
+/**
+ * `out/refunds/<jobId>.json` -- one file per job whose money did not make it
+ * back on its own. Two kinds land here: `declined-spent`, where
+ * `refundIfUnspent` declined because a paid step had attempts (correct and
+ * conservative -- nothing on disk can tell a pre-flight crash from an
+ * in-flight loss, and guessing wrong hands out free provider calls), and
+ * `error`, where the refund machinery itself threw. Until these existed, the
+ * first kind was SILENT -- the worker emits on success and on a throw, and a
+ * quiet decline is precisely the case where a customer was charged for
+ * nothing -- and the second was one stdout line in a terminal nobody watches
+ * once this runs on a server.
+ *
+ * The record is the operator's queue, not the decision: a human reads fal's
+ * dashboard, sees whether the call was actually billed, and settles by hand.
+ * `settleMissedRefund` goes through `refundCredits`, which computes the owed
+ * amount from the ledger itself and is idempotent per job -- a double settle
+ * moves nothing.
+ */
+function refundsDir(root) {
+  return path.resolve(root, 'out', 'refunds').split(path.sep).join('/');
+}
+
+export function recordMissedRefund({
+  root, jobId, accountId = null, reason = null, kind = 'error', credits = null, error = null,
+  nowImpl = () => new Date(), fsImpl = fs,
+} = {}) {
+  const dir = refundsDir(root);
+  fsImpl.mkdirSync(dir, { recursive: true });
+  const record = {
+    jobId,
+    accountId,
+    reason,
+    kind,
+    credits,
+    error: error ? { code: error.code ?? null, message: error.message ?? String(error) } : null,
+    at: nowImpl().toISOString(),
+    settled: null,
+  };
+  // Torn-write safety, not concurrency control: the lease rules already keep
+  // two workers off one job, so last-write-wins is acceptable here.
+  const tmp = `${dir}/${jobId}.json.tmp`;
+  fsImpl.writeFileSync(tmp, JSON.stringify(record, null, 2));
+  fsImpl.renameSync(tmp, `${dir}/${jobId}.json`);
+  return record;
+}
+
+export function clearMissedRefund({ root, jobId, fsImpl = fs } = {}) {
+  try { fsImpl.rmSync(`${refundsDir(root)}/${jobId}.json`); } catch { /* nothing pending */ }
+}
+
+/** The pending queue, oldest first. Settled records are kept on disk as the
+ *  audit trail and filtered here; a file that will not parse is reported as
+ *  its own entry rather than skipped -- invisible is how money gets lost. */
+export function listMissedRefunds({ root, fsImpl = fs } = {}) {
+  let names;
+  try {
+    names = fsImpl.readdirSync(refundsDir(root)).filter((n) => n.endsWith('.json'));
+  } catch {
+    return [];
+  }
+  const records = [];
+  for (const name of names.sort()) {
+    try {
+      const record = JSON.parse(fsImpl.readFileSync(`${refundsDir(root)}/${name}`, 'utf8'));
+      if (record.settled === null || record.settled === undefined) records.push(record);
+    } catch {
+      records.push({
+        jobId: name.replace(/\.json$/, ''), accountId: null, reason: null,
+        kind: 'unreadable', credits: null, error: { code: 'UNREADABLE', message: `could not parse ${name}` },
+        at: null, settled: null,
+      });
+    }
+  }
+  return records;
+}
+
+/**
+ * The human's half of the conservative decline. `refundCredits` is asked with
+ * `spent: false` DELIBERATELY: the operator has checked the provider's own
+ * dashboard and is overriding the machine's caution, which is the one
+ * authority that may. The owed amount comes from the ledger, so nothing here
+ * takes a number from a command line, and asking twice is a no-op.
+ */
+export async function settleMissedRefund({
+  root, jobId, loadAuthImpl = loadAuth, fsImpl = fs, nowImpl = () => new Date(),
+} = {}) {
+  const file = `${refundsDir(root)}/${jobId}.json`;
+  const record = JSON.parse(fsImpl.readFileSync(file, 'utf8'));
+  const mod = await loadAuthImpl();
+  const accountId = record.accountId;
+  if (!accountId) {
+    throw new Error(`missed-refund record for ${jobId} names no account; find the owner in out/owners and settle by hand`);
+  }
+  const account = mod.loadAccount({ root, accountId });
+  const before = mod.balanceOf(account).credits;
+  mod.refundCredits(account, { jobId, reason: 'refund:manual-reconciliation', spent: false, nowImpl });
+  const credits = mod.balanceOf(mod.loadAccount({ root, accountId })).credits - before;
+  const settled = { ...record, settled: { at: nowImpl().toISOString(), credits } };
+  const tmp = `${file}.tmp`;
+  fsImpl.writeFileSync(tmp, JSON.stringify(settled, null, 2));
+  fsImpl.renameSync(tmp, file);
+  return { jobId, accountId, credits };
+}
+
+// ---------------------------------------------------------------------------
+// refunds for a job that ended with no tape, raised by the worker
+// ---------------------------------------------------------------------------
+
+/**
+ * The glue between the worker and the ledger.
+ *
+ * The debit lands at enqueue, in the web process, which has the account in its
+ * hand. The worker is where a job can die AFTER that, and the worker knows
+ * only a job id -- so this module, which owns the ownership index's layout,
+ * is the one that can walk from a job back to the account that paid for it.
+ * The index is `out/owners/<accountId>/<jobId>.json` and the file's existence
+ * is the fact, so the walk is one readdir and one stat per account.
+ *
+ * WHY IT DECLINES QUIETLY WHEN NO OWNER EXISTS. A job with no ownership entry
+ * is every direct-CLI render -- there is no ledger to give anything back to,
+ * and a worker that crashed over it would stop rendering for the customers
+ * who do have one.
+ *
+ * The refund decision itself is NOT made here: `refundIfUnspent` reads the
+ * manifest's steps and declines on its own when a paid step was ever
+ * attempted. This function only finds whose money it was.
+ */
+export function createOwnerRefunds({ root, loadAuthImpl = loadAuth, fsImpl = fs, nowImpl = () => new Date() } = {}) {
+  if (typeof root !== 'string' || root.length === 0) {
+    throw new TypeError('createOwnerRefunds needs a root');
+  }
+  const ownersRoot = path.resolve(root, 'out', 'owners').split(path.sep).join('/');
+
+  function ownerOf(jobId) {
+    let names;
+    try {
+      names = fsImpl.readdirSync(ownersRoot);
+    } catch {
+      return null; // nobody has ever claimed anything
+    }
+    for (const accountId of names) {
+      if (!ACCOUNT_ID_RE.test(accountId)) continue;
+      try {
+        if (fsImpl.statSync(`${ownersRoot}/${accountId}/${jobId}.json`).isFile()) return accountId;
+      } catch { /* not this account's job */ }
+    }
+    return null;
+  }
+
+  return {
+    /** @returns {Promise<{refunded: boolean, accountId: string|null, credits?: number}>} */
+    async refund(job, { reason } = {}) {
+      const accountId = ownerOf(job?.jobId);
+      if (accountId === null) return { refunded: false, accountId: null };
+      try {
+        const mod = await loadAuthImpl();
+        const account = mod.loadAccount({ root, accountId });
+        const before = mod.balanceOf(account).credits;
+        const refunded = mod.refundIfUnspent(account, job, { reason }) === true;
+        const credits = refunded ? mod.balanceOf(account).credits - before : 0;
+        if (refunded) {
+          // Money that came back is not a reconciliation item -- including a
+          // revive-and-retry that succeeded after an earlier decline.
+          clearMissedRefund({ root, jobId: job.jobId, fsImpl });
+        } else {
+          // Declined as spent, with a real owner: the exact case that used to
+          // be silent. The owed amount comes off the ledger the same way
+          // refundCredits computes it, so the record names real money.
+          const owed = -mod.ledgerFor(account)
+            .filter((e) => e.jobId === job.jobId)
+            .reduce((n, e) => n + e.delta, 0);
+          if (owed > 0) {
+            recordMissedRefund({
+              root, jobId: job.jobId, accountId, reason,
+              kind: 'declined-spent', credits: owed, nowImpl, fsImpl,
+            });
+          }
+        }
+        return { refunded, accountId, ...(refunded ? { credits } : {}) };
+      } catch (err) {
+        // The throw still travels -- the worker's REFUND MISSED line and this
+        // record are two witnesses, not one. Recording is best-effort: the
+        // bookkeeping must never turn a refund failure into a worker crash.
+        try {
+          recordMissedRefund({
+            root, jobId: job.jobId, accountId, reason,
+            kind: 'error', credits: null, error: err, nowImpl, fsImpl,
+          });
+        } catch { /* the stdout line is the remaining witness */ }
+        throw err;
+      }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // the middleware
 // ---------------------------------------------------------------------------
 
@@ -189,8 +454,10 @@ export function missingAuthFunctions(auth) {
  * @param {string} opts.root         data root; `out/sessions` and `out/owners` live under it
  * @param {object} [opts.auth]       an injected auth object; omit to import `scripts/auth/`
  * @param {Function} [opts.loadAuthImpl]  seam for tests that want to prove the lazy path
+ * @param {boolean} [opts.trustProxy]  believe `x-forwarded-proto` for the Secure
+ *                                     decision; the operator's call, never the request's
  */
-export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsImpl = fs } = {}) {
+export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsImpl = fs, trustProxy = false } = {}) {
   if (typeof root !== 'string' || root.length === 0) {
     throw new TypeError('createSessions needs a root');
   }
@@ -278,7 +545,7 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
     const { sessionId } = mod.createSession({ root, accountId });
     return serializeCookie(SESSION_COOKIE, mod.signCookie(sessionId, await secret()), {
       maxAge: SESSION_MAX_AGE_S,
-      secure: isSecureRequest(req),
+      secure: isSecureRequest(req, { trustProxy }),
     });
   }
 
@@ -298,7 +565,105 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
         if (sessionId) mod.destroySession({ root, sessionId });
       } catch { /* the cookie is being cleared regardless */ }
     }
-    return serializeCookie(SESSION_COOKIE, '', { maxAge: 0, secure: isSecureRequest(req) });
+    return serializeCookie(SESSION_COOKIE, '', { maxAge: 0, secure: isSecureRequest(req, { trustProxy }) });
+  }
+
+  // -------------------------------------------------------------------------
+  // proving a credential post came from this site's own form
+  // -------------------------------------------------------------------------
+
+  /**
+   * The pair for a form about to be rendered: the value for the hidden field,
+   * and the `Set-Cookie` that plants its twin -- or `setCookie: null` when the
+   * request already carries a valid one, which is what keeps a form opened in
+   * a second tab submittable after the first tab rendered a newer page.
+   */
+  async function csrfIssue(req) {
+    const mod = await api();
+    const sec = await secret();
+    const raw = parseCookies(req?.headers?.cookie)[CSRF_COOKIE];
+    if (typeof raw === 'string' && raw.length > 0 && mod.verifyCookie(raw, sec)) {
+      return { token: raw, setCookie: null };
+    }
+    const token = mod.signCookie(crypto.randomBytes(16).toString('hex'), sec);
+    return {
+      token,
+      setCookie: serializeCookie(CSRF_COOKIE, token, { secure: isSecureRequest(req, { trustProxy }) }),
+    };
+  }
+
+  /**
+   * Both halves present, the cookie half provably ours, and the two equal in
+   * constant time. The signature check comes first: an attacker who can plant
+   * arbitrary cookies from a sibling context still has to plant one WE minted,
+   * and the comparison after it leaks nothing about how close a guess came.
+   */
+  async function csrfCheck(req, token) {
+    if (typeof token !== 'string' || token.length === 0) return false;
+    const mod = await api();
+    const raw = parseCookies(req?.headers?.cookie)[CSRF_COOKIE];
+    if (typeof raw !== 'string' || raw.length === 0) return false;
+    if (!mod.verifyCookie(raw, await secret())) return false;
+    const ours = Buffer.from(raw, 'utf8');
+    const theirs = Buffer.from(token, 'utf8');
+    if (ours.length !== theirs.length) return false;
+    return crypto.timingSafeEqual(ours, theirs);
+  }
+
+  // -------------------------------------------------------------------------
+  // binding a Google round trip's state to the browser that started it
+  // -------------------------------------------------------------------------
+
+  /**
+   * Plant the binding cookie alongside the file `putVerifier` writes.
+   *
+   * `maxAgeS` is the caller's oauth-store TTL (spec §4.2's own ten minutes),
+   * passed in rather than duplicated here -- this file has no business
+   * knowing that number, only how long to keep a cookie alive for it.
+   */
+  async function oauthStateIssue(req, state, { maxAgeS = null } = {}) {
+    const mod = await api();
+    const sec = await secret();
+    return serializeCookie(OAUTH_STATE_COOKIE, mod.signCookie(state, sec), {
+      secure: isSecureRequest(req, { trustProxy }),
+      ...(maxAgeS !== null ? { maxAge: maxAgeS } : {}),
+    });
+  }
+
+  /**
+   * True only when THIS request's cookie is a value this server signed AND
+   * that value is the exact `state` being redeemed right now.
+   *
+   * TWO SEPARATE CONSTANT-TIME CHECKS, NOT ONE. `verifyCookie`'s own
+   * `timingSafeEqual` proves the cookie was not tampered with; it says
+   * nothing about whether the state INSIDE it is the one this request is
+   * trying to spend. A valid signature over a DIFFERENT state proves only
+   * that this browser started *some* round trip, which is exactly the gap
+   * the module doc above names -- so the plaintext is compared again, in
+   * constant time, against the query's own `state`.
+   *
+   * CALLED BEFORE `takeVerifier`, BY THE CALLER'S CONTRACT. A mismatch here
+   * must never consume the single-use row a legitimate request is still
+   * entitled to.
+   */
+  async function oauthStateCheck(req, state) {
+    if (typeof state !== 'string' || state.length === 0) return false;
+    const mod = await api();
+    const raw = parseCookies(req?.headers?.cookie)[OAUTH_STATE_COOKIE];
+    if (typeof raw !== 'string' || raw.length === 0) return false;
+    const bound = mod.verifyCookie(raw, await secret());
+    if (typeof bound !== 'string' || bound.length === 0) return false;
+    const ours = Buffer.from(bound, 'utf8');
+    const theirs = Buffer.from(state, 'utf8');
+    if (ours.length !== theirs.length) return false;
+    return crypto.timingSafeEqual(ours, theirs);
+  }
+
+  /** Unconditional, on every exit `/auth/callback` takes -- the round trip
+   *  this cookie was minted for is over, whichever way it ended, and nothing
+   *  about clearing it depends on whether it turns out to have been valid. */
+  function oauthStateClear(req) {
+    return serializeCookie(OAUTH_STATE_COOKIE, '', { maxAge: 0, secure: isSecureRequest(req, { trustProxy }) });
   }
 
   // -------------------------------------------------------------------------
@@ -313,8 +678,8 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
   /** What one tape costs, in credits. Computed the same way the debit is,
    *  because a quote computed differently from the charge is a quote that will
    *  one day differ from the charge. */
-  async function cost({ resolution, seconds, tier } = {}) {
-    return (await api()).creditCost({ resolution, seconds, tier });
+  async function cost({ resolution, seconds, tier, aspect } = {}) {
+    return (await api()).creditCost({ resolution, seconds, tier, aspect });
   }
 
   /**
@@ -333,17 +698,86 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
    * measurement attached, and turning it on later has to be that field and
    * nothing else.
    */
-  async function resolutions() {
+  async function resolutions(aspects = [], seconds = undefined) {
     const mod = await api();
-    return Object.values(mod.CREDIT_COSTS ?? {}).map((row) => ({
-      id: row.resolution,
-      width: row.width,
-      height: row.height,
-      // Absent means available: a resolution added without the field is offered
-      // rather than silently swallowed.
-      available: row.available !== false,
-      credits: row.creditsPerReference,
-    }));
+    return Object.values(mod.CREDIT_COSTS ?? {}).map((row) => {
+      // THE SHAPE IS PART OF THE PRICE, so a row that carries one number per
+      // resolution cannot describe what the button will charge.
+      //
+      // `creditsPerReference` is computed with an aspect multiplier of 1, while
+      // the charge at enqueue is `costOf(resolution, aspect)` and applies 4/3
+      // for 16:9 and 9:16. The page quoted ~21 CR and the ledger took 28. This
+      // seam's own header names that hazard -- "a quote computed differently
+      // from the charge is a quote that will one day differ from the charge" --
+      // so the quote is computed HERE by asking the same function the charge
+      // asks, once per shape, rather than by reading a precomputed field.
+      //
+      // A shape the pricing refuses is simply absent from the map rather than
+      // defaulted, exactly as `creditCost` refuses it: the page must not offer
+      // a number for something that cannot be bought.
+      const creditsByAspect = {};
+      for (const aspect of aspects) {
+        try {
+          creditsByAspect[aspect] = mod.creditCost({
+            resolution: row.resolution, seconds, aspect,
+          });
+        } catch (err) {
+          // An unpriced or unavailable pair simply has no quote -- that is the
+          // designed refusal and the page renders without it. ANYTHING ELSE IS
+          // A BUG AND MUST NOT READ AS ONE: a bare catch here would answer an
+          // unforeseen throw with an empty map for every row, and the quality
+          // cards would render with no price at all on a page that still looked
+          // finished. This seam's own header says a quote computed differently
+          // from the charge is a quote that will one day differ from it; a
+          // quote that silently vanishes is the same failure, quieter.
+          if (err?.code !== 'UNKNOWN_ASPECT' && err?.code !== 'RESOLUTION_UNAVAILABLE') throw err;
+        }
+      }
+      return {
+        id: row.resolution,
+        width: row.width,
+        height: row.height,
+        // Absent means available: a resolution added without the field is offered
+        // rather than silently swallowed.
+        available: row.available !== false,
+        credits: row.creditsPerReference,
+        creditsByAspect,
+      };
+    });
+  }
+
+  /**
+   * Add credits, from a payment that has already been verified.
+   *
+   * NOT REACHABLE FROM A FORM. `credits.mjs` makes this rule in capitals and
+   * this seam does not soften it: the only caller is the Stripe webhook, after
+   * an HMAC over the raw request body has proved Stripe sent it, and the
+   * `ref` it passes is the Stripe event id so a redelivery is a no-op rather
+   * than a second payout.
+   *
+   * Returns `{granted, credits, ref}` -- `granted: false` means this exact
+   * event has already been honoured, which is a 200 and not an error.
+   */
+  async function grant(account, { credits, reason, ref }) {
+    return (await api()).grantCredits(account, { credits, reason, ref });
+  }
+
+  /**
+   * An account by id, for a request that has no session to resolve.
+   *
+   * The id is checked against `ACCOUNT_ID_RE` first for the same reason
+   * `ownerDir` checks it: it came from a webhook payload and it is about to
+   * become a path component, and "it came from Stripe" is how directory
+   * traversal gets written the second time.
+   */
+  async function accountById(accountId) {
+    if (!ACCOUNT_ID_RE.test(String(accountId ?? ''))) return null;
+    const mod = await api();
+    try {
+      return mod.loadAccount({ root, accountId }) ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -468,9 +902,16 @@ export function createSessions({ root, auth = null, loadAuthImpl = loadAuth, fsI
     currentAccount,
     startSession,
     endSession,
+    csrfIssue,
+    csrfCheck,
+    oauthStateIssue,
+    oauthStateCheck,
+    oauthStateClear,
     balance,
     cost,
     resolutions,
+    grant,
+    accountById,
     debit,
     refund,
     claimJob,

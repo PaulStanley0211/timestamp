@@ -1,0 +1,46 @@
+<!--
+  Timestamp - Supabase "Confirm signup" template.
+
+  THE ONE RULE: this template must contain the Token variable and must NOT
+  contain the ConfirmationURL variable, a button, or any link that signs
+  somebody in. The app asks for six digits on /verify. A template that mails a
+  link instead strands the person in front of a field they have nothing to type
+  into, and NOTHING IN THE APP CAN DETECT THAT THE TEMPLATE IS WRONG - no
+  request arrives to be wrong about. Supabase's default template is exactly
+  that wrong template.
+
+  NO TEMPLATE SYNTAX IN THIS COMMENT, AND THAT IS DELIBERATE. The whole file is
+  pasted into the dashboard, and Supabase substitutes its variables by scanning
+  text -- an HTML comment is not a hiding place, it is just more text. A comment
+  naming ConfirmationURL in its real syntax would therefore MINT A WORKING
+  MAGIC LINK and bury it in the source of every confirmation email: invisible
+  when rendered, extractable by anyone who reads the source or receives a
+  forward. THIS COMMENT USED TO DO EXACTLY THAT (fixed 2026-08-30), so the
+  version pasted into the dashboard on 2026-08-27 must be replaced with this
+  one. The one variable this file may spell literally is the code itself, once,
+  in the box below. Say the others in words.
+
+  Paste into: Supabase dashboard -> Authentication -> Emails -> Confirm signup.
+  Subject line for that same screen is in README.md next to this file.
+
+  Plain inline styles and a system font stack on purpose: no <style> block (Gmail
+  strips parts of it), no web font, no image, nothing to load. The six digits are
+  the message; everything else is one sentence of context.
+-->
+<div style="margin:0;padding:32px 24px;background:#f4f1ec;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="max-width:420px;margin:0 auto;background:#fffdf9;border:1px solid #e2dcd2;padding:32px 28px;">
+
+    <p style="margin:0 0 24px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#8a8175;">Timestamp</p>
+
+    <h1 style="margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:600;color:#2b2723;">Type these six digits</h1>
+
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#5c554c;">Enter them on the page that asked for them.</p>
+
+    <p style="margin:0 0 24px;padding:16px 0;font-size:32px;line-height:1;letter-spacing:0.22em;font-weight:600;text-align:center;color:#2b2723;background:#f4f1ec;border:1px solid #e2dcd2;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">{{ .Token }}</p>
+
+    <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#5c554c;">The code lasts an hour. Nobody is signed in until it is typed.</p>
+
+    <p style="margin:0;font-size:13px;line-height:1.5;color:#8a8175;">If you did not ask for this, you can ignore it. Without the code, nothing happens.</p>
+
+  </div>
+</div>

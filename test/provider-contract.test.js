@@ -53,9 +53,14 @@ import {
   PROGRESS_PHASES,
   FIRST_INDEX,
   CURRENCY,
+  PAID_PROVIDER_IDS,
+  SHIPPED_ASPECTS,
+  aspectOf,
   assertProvider,
+  assertStillRequest,
   assertStillResult,
   assertVideoResult,
+  assertVideoRequest,
   assertProgressEvent,
   requireFetchImpl,
 } from '../scripts/providers/contract.mjs';
@@ -64,13 +69,13 @@ import {
   TerminalError,
   CapabilityError,
 } from '../scripts/providers/errors.mjs';
-import { createProvider, loadModels, modelEntry, PROVIDER_IDS } from '../scripts/providers/index.mjs';
+import { createProvider, loadModels, modelEntry, paidTransport, PROVIDER_IDS } from '../scripts/providers/index.mjs';
 // The fal case, transport fake and all, lives with the rest of fal's tests.
 // Importing it here is the ONLY change this file needed to cover a second
 // provider -- one import and one array entry, and the shared body below
 // untouched. If that ever stops being true, the edit is the bug report.
 import { falContractCase } from './provider-fal.test.js';
-import { loadPricing, assertPricingTable, estimateStill, estimateVideo, divergence, diverges } from '../scripts/providers/pricing.mjs';
+import { loadPricing, assertPricingTable, estimateStill, estimateVideo, estimateJob, priceEntry, divergence, diverges } from '../scripts/providers/pricing.mjs';
 
 const cfg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config', 'render.json'), 'utf8'));
 
@@ -93,7 +98,9 @@ const skip = HAVE ? false : `ffmpeg not found (${findFfmpeg().ffmpeg}) -- provid
  *  NOT deleted afterwards: when a still looks wrong the first thing anyone
  *  wants is to open it. */
 function workdir(...parts) {
-  const dir = path.join(REPO_ROOT, 'build', 'provider-contract', ...parts);
+  // The pid goes on the DIRECTORY, above `parts`, so every caller of workdir()
+  // is process-private without knowing it -- same fix as `c897845`.
+  const dir = path.join(REPO_ROOT, 'build', 'provider-contract', String(process.pid), ...parts);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -543,6 +550,132 @@ test('the registry refuses an unknown provider rather than falling back', () => 
   assert.deepEqual(PROVIDER_IDS, ['fixture', 'fal']);
 });
 
+test('the shapes the contract accepts are the shapes the tape stage has a frame for', () => {
+  // `requireShippedAspect` used to be `requireFourThree`, and its reasoning --
+  // "the tape raster is 720x576, i.e. DAR 4:3" -- was true when written and
+  // went stale the day section 13 gave every shape its own tape raster. The
+  // check is still doing the same job: a still arriving at an aspect nobody
+  // planned gets cropped or pillared downstream without anyone deciding where.
+  // It just has to know which shapes ARE planned.
+  //
+  // config/render.json is the authority, so this is the cross-check that stops
+  // the two drifting. Adding a shape there without pricing and planning it is
+  // exactly the sort of half-landing this repo has been bitten by.
+  const shipped = [cfg.defaultAspect, ...Object.keys(cfg.aspects ?? {}).filter((k) => !k.startsWith('_'))];
+  assert.deepEqual([...SHIPPED_ASPECTS].sort(), shipped.sort(),
+    'the provider contract and config/render.json disagree about which shapes exist');
+
+  // The rule is a tolerance, because 854x480 -- the standard 480p widescreen
+  // raster -- is 0.08% off exact 16:9 and no integer width fixes that at a
+  // height of 480. It must still refuse a shape that is genuinely not ours.
+  assert.equal(aspectOf({ width: 854, height: 480 }), '16:9');
+  assert.equal(aspectOf({ width: 640, height: 480 }), '4:3');
+  assert.equal(aspectOf({ width: 480, height: 854 }), '9:16');
+  for (const bad of [{ width: 480, height: 480 }, { width: 1024, height: 430 }, { width: 100, height: 3 }]) {
+    assert.equal(aspectOf(bad), null, `${bad.width}x${bad.height} is not a shape this product ships`);
+  }
+
+  // AND THE REFUSAL IS ACTUALLY WIRED, which nothing asserted until a sabotage
+  // walked straight through it: disabling the check in `requireShippedAspect`
+  // left every test green. `aspectOf` returning null is only useful if
+  // something acts on it, and this is the something.
+  const wellFormed = {
+    prompt: 'a person by a fence',
+    negativePrompt: 'text, watermark',
+    references: [{ role: 'face', path: path.join(REPO_ROOT, 'face.png') }],
+    seed: 4242,
+    count: 1,
+    idempotencyKey: 'shape-check',
+  };
+  for (const size of [{ width: 480, height: 480 }, { width: 1024, height: 430 }]) {
+    assert.throws(() => assertStillRequest({ ...wellFormed, size }), (err) => {
+      assert.equal(err.code, 'invalid_request');
+      assert.match(err.message, /4:3, 16:9, 9:16/);
+      return true;
+    }, `${size.width}x${size.height} was accepted as a still request`);
+  }
+  // An ODD edge is refused too: yuv420p subsamples chroma by two, so it is a
+  // filtergraph failure at the far end of a paid render rather than here.
+  assert.throws(() => assertStillRequest({ ...wellFormed, size: { width: 641, height: 480 } }), (err) => {
+    assert.equal(err.code, 'invalid_request');
+    assert.match(err.message, /even/);
+    return true;
+  });
+  // The three real shapes still pass, so this cannot go green by refusing all.
+  for (const size of [{ width: 640, height: 480 }, { width: 854, height: 480 }, { width: 720, height: 1280 }]) {
+    assert.doesNotThrow(() => assertStillRequest({ ...wellFormed, size }));
+  }
+});
+
+test('the paid-provider list agrees with what the providers themselves say', () => {
+  // WHY THE LIST EXISTS AT ALL. The web layer must know whether the configured
+  // provider spends money -- it offers a menu of frame shapes and only some of
+  // them are renderable on a paid path -- and it deliberately CANNOT ask a
+  // provider, because `providers/index.mjs` statically imports `fal.mjs` and
+  // loading that into the web process is the thing four separate money guards
+  // exist to prevent. So the fact is duplicated into a leaf module.
+  //
+  // A DUPLICATED FACT DRIFTS, so this is the test that stops it. It builds
+  // every real provider and compares. A provider added later that nobody adds
+  // to the list turns this red rather than quietly being treated as free.
+  for (const id of PROVIDER_IDS) {
+    const provider = createProvider(id, id === 'fixture' ? { latencyMs: 0 } : {});
+    assert.equal(
+      PAID_PROVIDER_IDS.includes(id), provider.paid,
+      `PAID_PROVIDER_IDS ${PAID_PROVIDER_IDS.includes(id) ? 'claims' : 'denies'} ${id} spends money, and the provider says ${provider.paid}`,
+    );
+  }
+  assert.deepEqual([...PAID_PROVIDER_IDS].sort(), ['fal']);
+});
+
+test('no paid provider is reachable from the web layer by a static import', () => {
+  // A FIFTH MONEY GUARD, AND IT IS STRUCTURAL RATHER THAN A CONVENTION.
+  //
+  // `npm test` cannot spend money four independent ways, and one of them is
+  // that `fal.mjs` has no default `fetchImpl`. That guard is only as good as
+  // the module never being loaded somewhere it can be handed a real transport.
+  // `server-cli.mjs` goes to the trouble of a LAZY import of
+  // `providers/index.mjs` for exactly this reason -- and `index.mjs` statically
+  // imports `fal.mjs`, so any static import of it from the web layer would
+  // quietly undo that care.
+  //
+  // The web layer needs one fact from the provider layer -- whether a provider
+  // spends money -- and takes it from `contract.mjs`, a leaf. This walks the
+  // real static import graph and proves that is still all it takes.
+  const walk = (entry) => {
+    const seen = new Set();
+    const stack = [entry];
+    while (stack.length > 0) {
+      const file = path.normalize(stack.pop());
+      if (seen.has(file) || !fs.existsSync(file)) continue;
+      seen.add(file);
+      const src = fs.readFileSync(file, 'utf8');
+      // Static `import ... from './x.mjs'` only. A dynamic import() is the
+      // sanctioned escape hatch and is deliberately not followed -- that is
+      // the whole difference this test is here to preserve.
+      for (const m of src.matchAll(/^\s*import\s[^'"]*['"](\.[^'"]+)['"]/gm)) {
+        stack.push(path.join(path.dirname(file), m[1]));
+      }
+    }
+    return seen;
+  };
+
+  const graph = walk(path.join(REPO_ROOT, 'scripts', 'web', 'server.mjs'));
+  const loaded = [...graph].filter((f) => f.includes(`${path.sep}providers${path.sep}`));
+  const paid = loaded.filter((f) => /fal\.mjs$/.test(f));
+
+  assert.deepEqual(paid, [],
+    `the web layer statically imports a paid provider: ${paid.join(', ')}`);
+  // Not asserting the graph is EMPTY of provider modules -- it legitimately
+  // reaches contract.mjs for the paid-provider list. Naming what is allowed
+  // means adding another one is a decision rather than an accident.
+  assert.deepEqual(
+    loaded.map((f) => path.basename(f)).sort(),
+    ['contract.mjs', 'errors.mjs'],
+    'the web layer reaches a provider module it did not before -- check it pulls in no transport',
+  );
+});
+
 test('requireFetchImpl is a TypeError, not a ProviderError', () => {
   // Deliberate: a ProviderError is something the pipeline catches, records and
   // may retry. A missing transport is a wiring bug and it should crash.
@@ -553,6 +686,67 @@ test('requireFetchImpl is a TypeError, not a ProviderError', () => {
   assert.match(thrown.message, /NO DEFAULT/);
 });
 
+test('paidTransport carries a bound fetch for a paid provider and nothing for a free one', () => {
+  // The other half of the money guard. `requireFetchImpl` refusing to default
+  // is only useful if something injects on the real path, and for a day
+  // nothing did.
+  const free = paidTransport({ id: 'fixture', paid: false });
+  assert.deepEqual(free, {}, 'the fixture must be handed no transport at all');
+  assert.ok(!('fetchImpl' in free), 'not even an undefined key -- requireFetchImpl reads typeof');
+
+  // Bound to globalThis: a detached `fetch` throws "Illegal invocation" in some
+  // runtimes, and the symptom would surface deep inside a retry loop.
+  const fake = function () { return this === globalThis; };
+  const paid = paidTransport({ id: 'fal', paid: true }, { globalFetch: fake });
+  assert.equal(typeof paid.fetchImpl, 'function');
+  assert.equal(paid.fetchImpl(), true, 'the transport must be bound to globalThis');
+
+  // And the real one, unbound, is not handed through by reference.
+  const real = paidTransport({ id: 'fal', paid: true });
+  assert.equal(typeof real.fetchImpl, 'function');
+  assert.notEqual(real.fetchImpl, globalThis.fetch, 'bind returns a new function');
+});
+
+test('paidTransport refuses rather than handing a paid provider no transport', () => {
+  // Unreachable on Node 22 and written anyway: the one thing that must never
+  // happen here is returning `{}` for a paid provider, because that lands as
+  // the money guard's TypeError eleven steps later and reads like a test bug.
+  // `null` rather than `undefined`: an explicit `undefined` takes the
+  // destructuring default, which is the real `globalThis.fetch`. Either value
+  // reaches the same typeof check in production.
+  let thrown;
+  try { paidTransport({ id: 'fal', paid: true }, { globalFetch: null }); } catch (e) { thrown = e; }
+  assert.ok(thrown instanceof TerminalError, 'a paid provider with nowhere to send a request must not get {}');
+  assert.equal(thrown.code, 'no_fetch');
+});
+
+test('every command that can spend injects the transport', () => {
+  // THE BUG THIS TEST EXISTS FOR was a missing wire, not a wrong function, and
+  // no unit test of `paidTransport` would have caught it: `render.mjs` was
+  // fixed on 2026-08-23 and `worker-cli.mjs` -- the only path the web app has
+  // to the network -- kept the identical hole because the fix lived inside the
+  // file that no longer had it. Reading the source is the only check that
+  // covers a call site nobody has written yet.
+  for (const file of ['scripts/render/render.mjs', 'scripts/worker/worker-cli.mjs']) {
+    const source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8');
+    const sites = source.match(/providerCtx:/g) ?? [];
+    // A renamed option would make the greps below pass vacuously, which is the
+    // one way a read-the-source test quietly stops testing anything.
+    assert.ok(sites.length > 0, `${file} hands no providerCtx to anything -- did the option get renamed?`);
+    // ANY IDENTIFIER, not the literal word "provider". On 2026-08-25 the resume
+    // branch grew its own provider -- built from what the MANIFEST froze rather
+    // than from CLI defaults -- and this test went red for a call site that
+    // injects the transport perfectly, because the variable is called
+    // `resumedProvider`. What is guarded is that every site injects
+    // `paidTransport`, not that a variable is spelled a particular way; pinning
+    // the name makes the next correct call site look like a bug.
+    const wired = source.match(/providerCtx: paidTransport\([A-Za-z_$][\w$]*\)/g) ?? [];
+    assert.equal(wired.length, sites.length,
+      `${file} has ${sites.length} providerCtx call site(s) and ${wired.length} of them inject the transport. `
+      + 'A paid provider with no fetchImpl dies at the still step with the TypeError from requireFetchImpl.');
+  }
+});
+
 test('FAL_KEY is not in the process during a test run', () => {
   // Guard 3 of four: `"test": "node --test"` is bare and does NOT load .env.
   // If this ever fails, someone added --env-file to the test script and the
@@ -560,29 +754,61 @@ test('FAL_KEY is not in the process during a test run', () => {
   assert.equal(process.env.FAL_KEY, undefined);
 });
 
-test('every price in config/pricing.json is marked as an estimate', () => {
+test('every price in config/pricing.json says which of the two things it is', () => {
+  // Until 2026-08-24 this asserted that EVERY non-zero price was an estimate,
+  // because none had ever been checked against an invoice. Two now have been.
+  // The rule that survives is the one that was always the point: a number here
+  // either admits it is a guess, or names the invoice that proved it. What is
+  // still forbidden is a number doing neither.
   const pricing = loadPricing();
   for (const [model, entry] of Object.entries(pricing.models)) {
     assert.ok(entry._comment?.length > 0, `${model} has no _comment saying where the number came from`);
     assert.equal(typeof entry.estimate, 'boolean', `${model}.estimate`);
-    if (entry.usd !== 0) {
-      assert.equal(entry.estimate, true, `${model} is non-zero and must be marked as an ESTIMATE`);
+    if (entry.usd === 0) continue;
+    if (entry.estimate === true) {
       assert.match(entry._comment, /ESTIMATE/, `${model}'s _comment must say ESTIMATE in as many words`);
+    } else {
+      assert.match(entry.meteredOn ?? '', /^\d{4}-\d{2}-\d{2}$/, `${model} claims to be measured and must say when`);
+      assert.ok((entry.meteredFrom ?? '').length > 0, `${model} claims to be measured and must say where from`);
+      assert.match(entry._comment, /MEASURED/, `${model}'s _comment must say MEASURED in as many words`);
     }
   }
 });
 
-test('a non-zero price may not claim to be a fact', () => {
-  // Zero is the only price that cannot drift. Everything else is an estimate
-  // until a --meter run proves it -- see CLAUDE.md, "Common mistakes".
-  assert.throws(() => assertPricingTable({
+test('a non-zero price may claim to be a fact only by naming the invoice', () => {
+  // Zero is the only price that cannot drift, and it needs no evidence. Every
+  // other number either says ESTIMATE or says where it was measured; the word
+  // "measured" in a comment is not evidence, it is a claim about one.
+  const table = (over) => ({
     currency: 'USD',
-    models: { 'fal/x': { _comment: 'measured, honest', estimate: false, unit: 'image', usd: 0.04 } },
-  }), (err) => {
+    models: { 'fal/x': { _comment: 'measured, honest', estimate: false, unit: 'image', usd: 0.04, ...over } },
+  });
+
+  assert.throws(() => assertPricingTable(table({})), (err) => {
     assert.equal(err.code, 'unmarked_price');
+    assert.match(err.message, /meteredOn/);
+    assert.match(err.message, /meteredFrom/);
     return true;
   });
 
+  // Half the evidence is not evidence.
+  assert.throws(() => assertPricingTable(table({ meteredOn: '2026-08-24' })), (err) => {
+    assert.equal(err.code, 'unmarked_price');
+    assert.match(err.message, /meteredFrom/);
+    return true;
+  });
+  // Nor is a date that is not one.
+  assert.throws(() => assertPricingTable(table({ meteredOn: 'yesterday', meteredFrom: "fal's usage page" })),
+    (err) => {
+      assert.equal(err.code, 'unmarked_price');
+      assert.match(err.message, /meteredOn/);
+      return true;
+    });
+
+  // Both, and it is allowed to stop calling itself a guess.
+  assert.ok(assertPricingTable(table({ meteredOn: '2026-08-24', meteredFrom: "fal's usage page" })));
+
+  // And an entry with no provenance at all is still refused, measured or not.
   assert.throws(() => assertPricingTable({
     currency: 'USD',
     models: { 'fal/x': { estimate: true, unit: 'image', usd: 0.04 } },
@@ -646,4 +872,435 @@ test('an UNVERIFIED fal model cannot be handed out', () => {
   assert.equal(video.audioOffParam.name, 'generate_audio');
   assert.equal(video.audioOffParam.value, false);
   assert.equal(video.capabilities.maxClipSeconds, 15, 'fifteen seconds in one call is why there is no seam');
+});
+
+// ---------------------------------------------------------------------------
+// a video request with no start frame
+//
+// `reference-to-video` has no start frame at all: it takes the photographs and
+// generates the whole take from them. So `imagePath` -- which has always meant
+// "the still somebody approved" -- stops being the only way to describe a video
+// request, and EXACTLY ONE of the two must be present.
+// ---------------------------------------------------------------------------
+
+const aVideoReq = (over = {}) => ({
+  prompt: 'p',
+  negativePrompt: '',
+  imagePath: path.resolve('still-01.png'),
+  seconds: 15,
+  seed: 1,
+  nativeAudio: false,
+  idempotencyKey: 'k',
+  ...over,
+});
+
+test('a video request may carry references instead of a start frame', () => {
+  const req = aVideoReq({
+    imagePath: undefined,
+    references: [{ role: 'face', path: path.resolve('face.jpg') }],
+  });
+  assert.doesNotThrow(() => assertVideoRequest(req),
+    'the direct path has no still, so imagePath cannot be mandatory');
+});
+
+test('a video request with neither a start frame nor references is refused', () => {
+  // Not a default and not a guess: a request that names no picture at all
+  // cannot produce the right person, and it must fail before it is billed.
+  assert.throws(() => assertVideoRequest(aVideoReq({ imagePath: undefined })),
+    /imagePath|references/i);
+});
+
+test('a video request carrying BOTH a start frame and references is refused', () => {
+  // The two describe different endpoints. Sending both leaves which one the
+  // model honours up to the model, and the answer would differ per vendor --
+  // exactly the class of ambiguity that cost a 422 and a round trip in BUG 3.
+  assert.throws(
+    () => assertVideoRequest(aVideoReq({ references: [{ role: 'face', path: path.resolve('f.jpg') }] })),
+    /both|exactly one/i);
+});
+
+test('references on a video request are held to the same shape as on a still', () => {
+  assert.throws(() => assertVideoRequest(aVideoReq({ imagePath: undefined, references: [] })),
+    /at least one|references/i);
+  assert.throws(
+    () => assertVideoRequest(aVideoReq({ imagePath: undefined, references: [{ role: 'face', path: 'relative.jpg' }] })),
+    /absolute/i);
+});
+
+test('a job with no still stage is estimated without a still line', () => {
+  // DIRECT MODE. Quoting a still line on a job that will never make one
+  // overstates the price of every direct render, and an estimate that names a
+  // call nobody will be billed for is worse than no estimate at all -- the
+  // whole point of `--dry-run` is authorising a spend against real numbers.
+  const pricing = loadPricing();
+  // THE SIZE IS PART OF A SEGMENT, and it was missing from this fixture only
+  // because nothing read it: video was priced per second, with no raster
+  // dimension at all. `planSegments` has always produced it. Since 2026-08-25
+  // the estimator refuses to quote a token-billed model without it, which is
+  // why this line grew a size rather than the estimator growing a default.
+  const segments = [{ index: 1, seconds: 15, startsFrom: 'references', size: { width: 640, height: 480 } }];
+  const est = estimateJob({
+    pricing,
+    videoModel: 'bytedance/seedance-2.0/reference-to-video',
+    stillCount: 0,
+    segments,
+  });
+
+  assert.equal(est.lines.filter((l) => l.step === 'still').length, 0, 'no still line at all');
+  assert.equal(est.lines.length, 1, 'one call, and it is the video');
+  assert.equal(est.estimated, est.lines[0].usd, 'the total is the video and nothing else');
+});
+
+// ---------------------------------------------------------------------------
+// video is billed by tokens, and tokens are pixels x frames
+// ---------------------------------------------------------------------------
+
+/**
+ * THE DEFECT THIS CLOSES. `--dry-run` quoted the identical $2.079 at 480p and
+ * at 720p, because the video entry was flattened to a per-second rate with no
+ * raster dimension at all -- so the one command whose entire purpose is
+ * authorising a spend could not tell apart two orders that differ by 2.2x.
+ *
+ * fal bills tokens: w * h * seconds * 24 / 1024, at $0.014 per 1000. The rate
+ * was never wrong; the table's flattening of it was, and the entry's own
+ * comment said so before this was fixed.
+ */
+test('the estimator prices video by the raster, not by the second alone', () => {
+  const pricing = loadPricing();
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+
+  const cheap = estimateVideo({ pricing, model, seconds: 15, size: { width: 640, height: 480 } });
+  const dear = estimateVideo({ pricing, model, seconds: 15, size: { width: 960, height: 720 } });
+
+  assert.ok(dear > cheap, `720p (${dear}) must cost more than 480p (${cheap})`);
+  assert.ok(Math.abs((dear / cheap) - 2.2) < 0.1,
+    `720p is ${(dear / cheap).toFixed(2)}x 480p in price; the delivered pixel ratio is 2.20x`);
+});
+
+/**
+ * THE SECOND VENDOR BILLS DIFFERENTLY, AND FLATTENING IT WOULD REPEAT THE BUG
+ * DIRECTLY ABOVE.
+ *
+ * `alibaba/wan-3.0/reference-to-video` (2026-09-02) is per SECOND, not per
+ * token -- but the rate is per quality tier: $0.05/s at 480p, $0.10/s at 720p,
+ * $0.20/s at 1080p. A single `usd` would quote 480p's price for a 720p order
+ * and understate it by half, which is section 26's defect in a new file.
+ *
+ * The table is keyed on the SHORT EDGE because that is this product's own
+ * invariant (section 13): a resolution label holds the short edge and only the
+ * long edge varies with the shape.
+ */
+test('a tiered per-second model is priced by its tier, not by one flat rate', () => {
+  const pricing = loadPricing();
+  const model = 'alibaba/wan-3.0/reference-to-video';
+
+  const cheap = estimateVideo({ pricing, model, seconds: 15, size: { width: 640, height: 480 } });
+  const dear = estimateVideo({ pricing, model, seconds: 15, size: { width: 960, height: 720 } });
+
+  assert.ok(Math.abs(cheap - 0.75) < 0.0001, `15s at 480p should be $0.75, got ${cheap}`);
+  assert.ok(Math.abs(dear - 1.50) < 0.0001, `15s at 720p should be $1.50, got ${dear}`);
+});
+
+/**
+ * AND THE FRAME SHAPE IS FREE ON THIS MODEL, which is a real pricing change
+ * rather than a detail. Section 34D derived a 4/3 surcharge for 16:9 and 9:16
+ * because Seedance billed TOKENS -- pixels x seconds -- and holding the short
+ * edge makes a wide shape exactly 4/3 the pixels. Wan bills seconds at a tier
+ * rate with no pixel term at all, so a wide tape costs precisely what a 4:3
+ * tape costs. Anything that still charges 4/3 on this model is overcharging.
+ */
+test('the frame shape does not move the price on a tiered per-second model', () => {
+  const pricing = loadPricing();
+  const model = 'alibaba/wan-3.0/reference-to-video';
+  const square = estimateVideo({ pricing, model, seconds: 15, size: { width: 640, height: 480 } });
+  const wide = estimateVideo({ pricing, model, seconds: 15, size: { width: 854, height: 480 } });
+  const tall = estimateVideo({ pricing, model, seconds: 15, size: { width: 480, height: 854 } });
+
+  assert.equal(wide, square, '16:9 costs what 4:3 costs at the same tier');
+  assert.equal(tall, square, '9:16 costs what 4:3 costs at the same tier');
+});
+
+/** A TIER NOBODY PRICED IS A REFUSAL, NOT A GUESS -- the same ruling the token
+ *  path already carries. Falling back to the cheapest rate would quote a 1080p
+ *  order at the 480p price and sell it at a quarter of cost. */
+test('a per-second tier with no rate in the table is refused rather than guessed', () => {
+  const pricing = loadPricing();
+  assert.throws(
+    () => estimateVideo({
+      pricing,
+      model: 'alibaba/wan-3.0/reference-to-video',
+      seconds: 15,
+      size: { width: 5760, height: 2160 },
+    }),
+    /tier|short edge|2160/i);
+});
+
+/** Tokens scale with pixels AND frames, so twice the seconds is twice the
+ *  price at the same raster -- the one part the per-second rate got right, and
+ *  it has to survive the change. */
+test('video price is linear in seconds at a fixed raster', () => {
+  const pricing = loadPricing();
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+  const size = { width: 960, height: 720 };
+  const short = estimateVideo({ pricing, model, seconds: 5, size });
+  const long = estimateVideo({ pricing, model, seconds: 15, size });
+  assert.ok(Math.abs(long - short * 3) < 0.01, `${long} is not 3x ${short}`);
+});
+
+/**
+ * THE CROSS-FILE ASSERTION, and it is the point of the whole change.
+ *
+ * `config/pricing.json` prices what a render will cost us; `config/credits.json`
+ * prices what a customer is charged for it. They are two files because they
+ * answer two questions, and they are derived from ONE measurement -- so a
+ * metered run that corrects one and not the other must go red here rather than
+ * quietly leaving the estimator and the invoice disagreeing. This is the same
+ * guard the models.json / plan.mjs / fal.mjs raster agreement already uses.
+ */
+test('the estimator and the credit price agree, because they come from one measurement', async () => {
+  const { creditConfig } = await import('../scripts/auth/accounts.mjs');
+  const pricing = loadPricing();
+  const cfg = creditConfig();
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+
+  for (const [id, res] of Object.entries(cfg.resolutions)) {
+    if (res.available !== true) continue;
+    const quoted = estimateVideo({
+      pricing, model, seconds: cfg.referenceSeconds, size: res.raster,
+    });
+    assert.ok(
+      Math.abs(quoted - res.estimatedUSDPer15s) < 0.01,
+      `${id}: --dry-run quotes $${quoted.toFixed(4)} and the customer is charged against $${res.estimatedUSDPer15s}`,
+    );
+  }
+});
+
+/** An estimate that does not know the raster cannot price a token-billed
+ *  model, and quietly falling back to a per-second guess is exactly the
+ *  flattening that produced the identical quote at both tiers. */
+test('a token-billed model refuses to quote without a raster', () => {
+  const pricing = loadPricing();
+  assert.throws(
+    () => estimateVideo({ pricing, model: 'bytedance/seedance-2.0/reference-to-video', seconds: 15 }),
+    (err) => /size|raster/i.test(err.message),
+  );
+});
+
+/** An ordered raster nobody has metered still gets a price, and it is
+ *  deliberately on the HIGH side: fal has upscaled every delivery so far, and
+ *  overstating cost understates margin, which is the safe direction. */
+test('an unmetered raster is quoted above the ordered size, not at it', () => {
+  const pricing = loadPricing();
+  const model = 'bytedance/seedance-2.0/reference-to-video';
+  const size = { width: 1440, height: 1080 };
+  const quoted = estimateVideo({ pricing, model, seconds: 15, size });
+  const entry = pricing.models[model];
+  const atOrdered = (size.width * size.height * 15 * entry.tokensPerPixelSecond)
+    / entry.tokenDivisor * entry.usd;
+  assert.ok(quoted > atOrdered,
+    `an unmetered raster quoted $${quoted} against $${atOrdered.toFixed(4)} at the ordered size -- that understates it`);
+});
+
+/**
+ * THE THIRD PASS-THROUGH BUG IN ONE MORNING, and the reason this is a
+ * source-reading test rather than a unit test.
+ *
+ * On 2026-08-25, in the space of an hour: `--resume` rebuilt the provider from
+ * CLI defaults and ignored the `fal` its own manifest froze; it did the same to
+ * `--video-model`, so the request body was built for one endpoint and posted to
+ * another (fal answered 422); and `--dry-run` built its input WITHOUT
+ * `resolution`, so the one command whose purpose is authorising a spend priced
+ * every tier as 480p. `dryRun()` had read `input.resolution` correctly the
+ * whole time. Every one of these is a value that exists, is correct, and is
+ * simply not handed on -- and no unit test of the function that receives it can
+ * see the call site that forgot to pass it.
+ *
+ * CLAUDE.md section 24 diagnosed the identical-quote defect as the pricing
+ * table having no raster dimension. It was that AND this, and fixing only the
+ * table left --dry-run still quoting one number at both tiers.
+ */
+test('the dry run is given the resolution it was asked for', () => {
+  const source = fs.readFileSync(path.join(REPO_ROOT, 'scripts/render/render.mjs'), 'utf8');
+  const calls = source.match(/dryRun\(\{[\s\S]*?\n {4}\}\)/g) ?? [];
+  assert.ok(calls.length > 0, 'render.mjs calls dryRun nowhere -- did it get renamed?');
+  for (const call of calls) {
+    assert.match(call, /resolution/,
+      'a dryRun call that does not pass the resolution prices every tier the same, '
+      + 'which is exactly the defect --dry-run exists to prevent');
+    // THE SAME GUARD, TAUGHT THE DIMENSION THAT ARRIVED AFTER IT WAS WRITTEN.
+    // The shape became part of the price -- a label names the SHORT edge, so a
+    // non-default shape is 4/3 the pixels and fal bills tokens as pixels x
+    // seconds. This test was the one thing standing between that and a repeat
+    // of the resolution defect, and it only knew the word `resolution`.
+    assert.match(call, /aspect/,
+      'a dryRun call that does not pass the aspect prices every shape as 4:3, '
+      + 'which under-quotes 16:9 and 9:16 by 25% on the one command whose whole '
+      + 'job is authorising a spend');
+  }
+});
+
+/** And the seam itself: two resolutions, two prices. This is what the source
+ *  test above is protecting -- it works, and it worked before, and nothing was
+ *  reaching it. */
+test('a dry run prices 720p above 480p', async () => {
+  const { dryRun } = await import('../scripts/render/pipeline.mjs');
+  const { createProvider } = await import('../scripts/providers/index.mjs');
+  const provider = createProvider('fal', {
+    videoModel: 'bytedance/seedance-2.0/reference-to-video',
+  });
+
+  const quote = async (resolution) => (await dryRun({
+    provider,
+    input: {
+      place: { kind: 'preset', value: 'schrebergarten-august' },
+      outfit: { kind: 'preset', value: 'trainingsjacke' },
+      stillCount: 0,
+      direct: true,
+      resolution,
+    },
+    videoModelOverride: 'bytedance/seedance-2.0/reference-to-video',
+  })).estimate.estimated;
+
+  const cheap = await quote('480p');
+  const dear = await quote('720p');
+  assert.ok(dear > cheap, `720p quoted $${dear} against 480p at $${cheap}`);
+});
+
+/** And the same seam for the shape. A label holds the SHORT edge, so 16:9 and
+ *  9:16 are exactly 4/3 the pixels at the same tier -- and fal bills tokens as
+ *  pixels x seconds, so the quote has to move with them or --dry-run says
+ *  $4.5646 for a render that bills $6.2625. */
+test('a dry run prices a wide shape above 4:3 at the same tier', async () => {
+  const { dryRun } = await import('../scripts/render/pipeline.mjs');
+  const { createProvider } = await import('../scripts/providers/index.mjs');
+  const provider = createProvider('fal', {
+    videoModel: 'bytedance/seedance-2.0/reference-to-video',
+  });
+
+  const quote = async (aspect) => (await dryRun({
+    provider,
+    input: {
+      place: { kind: 'preset', value: 'schrebergarten-august' },
+      outfit: { kind: 'preset', value: 'trainingsjacke' },
+      stillCount: 0,
+      direct: true,
+      resolution: '720p',
+      aspect,
+    },
+    videoModelOverride: 'bytedance/seedance-2.0/reference-to-video',
+  })).estimate.estimated;
+
+  const square = await quote('4:3');
+  for (const wide of ['16:9', '9:16']) {
+    const quoted = await quote(wide);
+    assert.ok(quoted > square,
+      `${wide} quoted $${quoted} against 4:3 at $${square} -- a wide shape is 4/3 the pixels and must quote above it`);
+  }
+});
+
+/**
+ * `--dry-run` PROMISES TO CHARGE NOTHING, AND ON A RESUME IT USED TO RUN THE
+ * JOB FOR REAL.
+ *
+ * The `--resume` branch returns before the dry-run branch further down is ever
+ * reached, so the flag was silently ignored on exactly the path where somebody
+ * is most likely to reach for it: a parked job they do not want to pay for by
+ * accident. On 2026-08-25 that ran a job against the wrong provider and marked
+ * a job parked for a metered run as `failed`. With `--provider=fal` it would
+ * have been a paid call made by somebody who believed they were pricing it.
+ *
+ * Asserted by POSITION rather than presence: a dry-run check that sits after
+ * the pipeline call is not a check. The comparison is against the FIRST
+ * `runPipeline` in the file, which is the resume one.
+ */
+test('a resumed render checks the dry-run flag before it runs anything', () => {
+  const source = fs.readFileSync(path.join(REPO_ROOT, 'scripts/render/render.mjs'), 'utf8');
+  const resumeAt = source.indexOf('if (args.resume)');
+  const firstRun = source.indexOf('runPipeline(', resumeAt);
+  const dryCheck = source.indexOf("flags.has('dry-run')", resumeAt);
+
+  assert.ok(resumeAt > -1, 'render.mjs has no resume branch -- did it move?');
+  assert.ok(firstRun > -1, 'the resume branch runs no pipeline -- did runPipeline get renamed?');
+  assert.ok(dryCheck > -1, 'the resume branch never looks at --dry-run, so the flag is ignored on a resume');
+  assert.ok(dryCheck < firstRun,
+    'the resume branch checks --dry-run AFTER calling runPipeline, which means it has already spent the money');
+});
+
+// ---------------------------------------------------------------------------
+// the frozen quantity is the one the ledger divides by
+// ---------------------------------------------------------------------------
+
+/**
+ * THE DEFECT THIS CLOSES, and it is the section 26 shape exactly: a value that
+ * exists, is correct, and is simply not handed on.
+ *
+ * `quantityFor` computes tokens for a token-billed model and `estimateVideo`
+ * prices against them, but the frozen line wrote `quantity: seg.seconds` no
+ * matter what the model was billed in. Nothing in the estimate looked wrong --
+ * the USD was right -- and the damage landed one file away, in `npm run
+ * ledger`, which divides REAL INVOICE DOLLARS by that frozen quantity to imply
+ * a rate. Dividing by 45 seconds instead of 622,142 tokens implied
+ * $0.1941/token against $0.000014 configured, flagged it OVER, and printed an
+ * instruction to edit config/pricing.json BY A FACTOR OF ~13,825. Following the
+ * tool would have priced a 480p tape at about $28,700.
+ *
+ * The invariant that makes that impossible is the one the ledger already
+ * assumes and nothing asserted: THE FROZEN QUANTITY, AT THE CONFIGURED RATE,
+ * MUST REPRODUCE THE FROZEN PRICE. If those two disagree the line is not a
+ * reconcilable record of anything.
+ */
+test('the frozen quantity, at the configured rate, reproduces the frozen price', () => {
+  const pricing = loadPricing();
+  const videoModel = 'bytedance/seedance-2.0/reference-to-video';
+  const entry = priceEntry(pricing, videoModel);
+  assert.equal(entry.unit, 'token', 'this test is about the token-billed path');
+
+  // 960x720 is the 720p order -- the tier whose real invoice is now recorded.
+  const segments = [{ index: 1, seconds: 15, startsFrom: 'references', size: { width: 960, height: 720 } }];
+  const est = estimateJob({ pricing, videoModel, stillCount: 0, segments });
+  const line = est.lines.find((l) => l.step === 'animate');
+
+  assert.ok(line.quantity > 0, 'a billed line has a quantity');
+  const implied = entry.usd * line.quantity;
+  assert.ok(
+    Math.abs(implied - line.usd) < 0.0001,
+    `rate x frozen quantity must equal the frozen price: ${entry.usd} x ${line.quantity} = ${implied}, line says ${line.usd}`,
+  );
+});
+
+/** The unit travels with the number, so nothing downstream has to assume it. */
+test('a frozen line names the unit its quantity is counted in', () => {
+  const pricing = loadPricing();
+  const videoModel = 'bytedance/seedance-2.0/reference-to-video';
+  const segments = [{ index: 1, seconds: 15, startsFrom: 'references', size: { width: 960, height: 720 } }];
+  const est = estimateJob({ pricing, videoModel, stillCount: 0, segments });
+
+  assert.equal(est.lines.find((l) => l.step === 'animate').unit, 'token');
+});
+
+test('the unverified refusal names the flag that gets through it legitimately', () => {
+  // MEASURED, 2026-08-27. A job parked at compose with an unverified still
+  // model frozen into its manifest was resumed with
+  // `--resume=<id> --stop-after=select`. The resume restored the provider, the
+  // video model and the still model -- and not `--allow-unverified-model`,
+  // which is arguably right: that flag is a SECOND, deliberate opt-in, and a
+  // per-invocation gate that survives into a resume is not much of a gate.
+  //
+  // What was wrong is what the operator was then told. "Verify it, edit the
+  // entry, then use it" sends somebody to config/models.json to change a
+  // `verified` field to a value nobody has earned -- which is precisely the
+  // poisoning of that signal the gate exists to prevent -- when the real answer
+  // is a flag they typed five minutes earlier on the run that created the job.
+  // A refusal that hides its own escape hatch pushes people through the wall
+  // instead.
+  const models = loadModels();
+  assert.throws(() => modelEntry(models, 'fal/UNVERIFIED-identity-still'), (err) => {
+    assert.equal(err.code, 'unverified_model');
+    assert.match(err.message, /--allow-unverified-model/,
+      'the refusal does not name the supported way through it');
+    // And it must still say what verifying MEANS, or the flag reads as the
+    // ordinary way to use an unverified endpoint rather than the deliberate one.
+    assert.match(err.message, /schema page/, 'the refusal stopped explaining what verified means');
+    return true;
+  });
 });

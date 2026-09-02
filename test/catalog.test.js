@@ -201,3 +201,47 @@ test('the shipped catalog loads, and every combination is composable', () => {
     }
   }
 });
+
+test('the tracksuit refuses the three-stripe mark, not just a logo', () => {
+  // THIS IS A RISK CONTROL, NOT TASTE, which is why it is pinned rather than
+  // left to whoever next tidies the preset.
+  //
+  // Measured twice, on two paid renders a fortnight apart: the wardrobe line
+  // asks for TWO white stripes and seedream drew THREE both times. Three
+  // stripes on a navy tracksuit is not a generic sportswear cue, it is adidas's
+  // registered trade dress, and it is among the more aggressively enforced
+  // marks in the EU -- which is exactly where every place in this catalog is
+  // set. `large brand logo` does not catch it, because three stripes is not a
+  // logo applied to the garment; it IS the garment.
+  //
+  // The product generates commercial images of real people wearing whatever
+  // this line asks for, so the exposure is not hypothetical and not the user's.
+  // Two stripes carries the period on its own -- that is the preset's own
+  // comment, and it is why the number was two in the first place.
+  const outfit = getOutfit(loadCatalog(), 'trainingsjacke');
+  const negatives = outfit.negatives.join(' | ').toLowerCase();
+  const wardrobe = outfit.wardrobe.toLowerCase();
+
+  // ASKING FOR TWO WAS TRIED AND IT DOES NOT WORK. Three renders, three times
+  // three stripes -- with the count written as "exactly two", the pair named
+  // again on the leg, and two negatives aimed at three. Every one ignored.
+  //
+  // The pattern across those runs is that this model honours PRESENCE and
+  // ignores COUNT: the crest came off, the jacket zipped, the collar and the
+  // trousers arrived, all first time. So the fix is a garment with no number in
+  // it. One stripe is a thing to draw or not draw, which is the instruction
+  // seedream has never once disobeyed here.
+  assert.match(wardrobe, /single broad white stripe/,
+    'the wardrobe line stopped asking for one stripe');
+  assert.doesNotMatch(wardrobe, /two|three|pair/,
+    'the wardrobe line reintroduced a count, which is the thing the model overrides');
+  assert.match(negatives, /three[- ]stripe/,
+    'nothing in the tracksuit negatives pushes back on the three-stripe mark');
+  assert.match(negatives, /parallel stripes/,
+    'nothing guards against the sleeve becoming multi-striped again');
+
+  // And the four that keep it in its decade must not be traded away for it.
+  for (const guard of ['modern performance wear', 'technical fabric', 'sharply tailored cut']) {
+    assert.ok(negatives.includes(guard), `the tracksuit lost its period guard: ${guard}`);
+  }
+});

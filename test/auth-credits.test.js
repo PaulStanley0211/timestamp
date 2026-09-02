@@ -37,6 +37,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 
+import { aspectIds } from '../scripts/tapedeck/frame.mjs';
 import {
   PLANS,
   createAccount,
@@ -64,6 +65,9 @@ import {
   refundCredits,
   refundIfUnspent,
 } from '../scripts/auth/credits.mjs';
+import {
+  createOwnerRefunds, listMissedRefunds, settleMissedRefund,
+} from '../scripts/web/session-middleware.mjs';
 
 const ACCOUNTS_URL = new URL('../scripts/auth/accounts.mjs', import.meta.url).href;
 const CREDITS_URL = new URL('../scripts/auth/credits.mjs', import.meta.url).href;
@@ -73,9 +77,28 @@ const clock = (ms = T0) => () => new Date(ms);
 const iso = (ms) => new Date(ms).toISOString();
 const JOB = (n) => `20260820-1445${String(n).padStart(2, '0')}-a3f19c`;
 
+/** The shapes the order form actually offers. Read from the same file the page
+ *  reads, so a shape added there joins the free-grant check without an edit. */
+const RENDER_CFG = JSON.parse(fs.readFileSync(new URL('../config/render.json', import.meta.url), 'utf8'));
+
 /** One 15-second tape at the default resolution: the unit the whole plan ladder
  *  is built out of. */
 const TAPE = creditCost();
+/** What a new account opens with. DERIVED, never spelled: this number moved
+ *  from 16 to 42 on 2026-08-25 when a metered delivery put a 480p tape at 21
+ *  credits, and every test below that had written it as a literal broke. */
+const FREE = PLANS.free.creditsPerPeriod;
+
+/** Put an account on an exact balance, with a ledger line saying why. The race
+ *  tests below need a balance that covers exactly N renders, and BORROWING one
+ *  from a plan couples a concurrency guard to the price list -- which is how
+ *  they all failed when the price list was corrected. */
+function setBalance(account, target, nowImpl) {
+  const delta = target - balanceOf(account).credits;
+  if (delta !== 0) grantCredits(account, { credits: delta, reason: 'test:set-balance', nowImpl });
+  assert.equal(balanceOf(account).credits, target);
+  return account;
+}
 
 function makeRoot(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'timestamp-credits-'));
@@ -105,30 +128,82 @@ const grab = (fn) => {
 // what a render costs
 // --------------------------------------------------------------------------
 
-test('the 720p anchor still matches the formula it was derived from', () => {
+/**
+ * THE ANCHOR SURVIVES; ITS DERIVATION DID NOT.
+ *
+ * This test used to pin 720p's price to the formula applied to 1280x720 -- a
+ * 16:9 frame this product never orders and fal has never sent. It passed for
+ * five days because two errors cancelled: the nominal frame was too big and the
+ * ignored upscale was too small, and the answer landed within three cents of
+ * the truth. On 2026-08-25 the delivered raster was measured at 1112x834 and
+ * the real figure is $4.5646, so the coincidence broke by 2.9 cents.
+ *
+ * What replaces the formula assertion is the one in 'every offered tier is
+ * priced from the raster fal actually delivered', which pins the same link to
+ * a measurement rather than to a nominal frame. What is kept here is the part
+ * that was never about the arithmetic: every number in the money path has to
+ * say what KIND of number it is, and the vocabulary now includes MEASURED.
+ */
+test('every number in the money path says what kind of number it is', async () => {
   const cfg = creditConfig();
   assert.equal(cfg.provider.anchorResolution, '720p');
-  const res = cfg.resolutions['720p'];
-  // The published fal formula, spelled out here so that an edit which breaks the
-  // link between the anchor and its derivation is caught rather than absorbed:
-  // tokens = h * w * seconds * 24 / 1024, at $0.014 per 1000 tokens.
-  const tokens = (res.width * res.height * cfg.referenceSeconds * cfg.provider.tokensPerPixelSecond)
-    / cfg.provider.tokenDivisor;
-  const usd = (tokens / 1000) * cfg.provider.usdPerThousandTokens;
-  assert.ok(Math.abs(usd - res.estimatedUSDPer15s) < 0.01,
-    `720p: formula says $${usd.toFixed(2)}, config says $${res.estimatedUSDPer15s}`);
-
-  // The other two are RATIOS to that anchor and not the formula, because pixel
-  // count is not the whole rate -- the fast Seedance tier tops out at 720p and
-  // the tiers are priced differently. By pixels alone 480p would be 0.44 of
-  // 720p; it is estimated at a third.
   for (const id of ALL_RESOLUTIONS) {
-    assert.match(cfg.resolutions[id]._comment, /ESTIMATE|DEFERRED/,
-      'every number in the money path says what kind of number it is');
+    assert.match(cfg.resolutions[id]._comment, /MEASURED|ESTIMATE|DEFERRED/,
+      `${id} does not say whether its price was measured or guessed`);
+  }
+  // And a tier that is actually on sale may not still call itself a guess.
+  for (const id of RESOLUTIONS) {
+    assert.match(cfg.resolutions[id]._comment, /MEASURED/,
+      `${id} is on offer and its price is still a guess`);
   }
 });
 
-test('the numbers: 16 credits at 480p, 46 at 720p, and the ratios Paul specified', () => {
+test('the free grant buys the default shape, and nothing it cannot buy is a surprise', () => {
+  // THE OWNER FIXED THIS NUMBER AT 21 ON 2026-08-31 -- "for a free video, make
+  // it 21 credits. It's final." It was briefly 42 earlier the same day, for the
+  // reason below, and he overruled it. So this test does NOT assert that a free
+  // account can afford every shape: it cannot, by his decision. It asserts the
+  // two things that must hold WHATEVER the number is.
+  //
+  // ONE: A NEW ACCOUNT IS NEVER STRANDED. The grant must buy at least the
+  // default shape at the cheapest tier. That is section 26 finding 4, which is
+  // the whole reason the grant had to move off 16 credits: at 16 an account
+  // could "sign up, see a balance, and be refused at the button", with no tape
+  // reachable at all. A grant that buys nothing is the one state that is always
+  // a bug rather than a pricing choice.
+  //
+  // TWO: WHAT IT CANNOT BUY IS PRICED, NOT HIDDEN. 21 buys one 480p tape in 4:3
+  // and nothing in 16:9 or 9:16, which cost 28 -- a non-4:3 shape is 4/3 the
+  // pixels because a resolution label holds the short edge. That is legitimate
+  // and it is the shape of the free tier. What would NOT be legitimate is the
+  // page showing 21 CR and letting somebody choose the phone shape, upload a
+  // photograph, and only then meet a 402. So every shape the order form offers
+  // must have a computable price for the warning to quote -- the surfaces that
+  // print it are pinned in web-static and web-api, and this is the arithmetic
+  // they rest on.
+  const free = PLANS.free.creditsPerPeriod;
+  const cheapest = creditCost({ resolution: '480p' });
+
+  assert.ok(free >= cheapest,
+    `the free grant of ${free} cannot buy even the cheapest tape (${cheapest} CR) -- a balance `
+    + 'that buys nothing is section 26 finding 4 all over again');
+
+  for (const aspect of aspectIds(RENDER_CFG)) {
+    const cost = creditCost({ resolution: '480p', aspect });
+    assert.ok(Number.isFinite(cost) && cost > 0,
+      `480p in ${aspect} has no price, so the order page cannot warn about it before the upload`);
+  }
+
+  // The free tier is the CHEAP tier on purpose: the free tape proves the
+  // likeness at 480p and the paid rungs are what a person buys once they
+  // believe it. A grant that reached 720p would be giving the paid tier away.
+  const cheapest720 = creditCost({ resolution: '720p' });
+  assert.ok(free < cheapest720,
+    `the free grant of ${free} reaches a 720p tape (${cheapest720} CR); the free tier is the `
+    + 'cheap tier on purpose');
+});
+
+test('the numbers: 21 credits at 480p, 46 at 720p, measured', async () => {
   // RESCALED 2026-08-21, when creditUSD moved from $0.03 to $0.10 at Paul's
   // direction. The reason was legibility, not economics: 51 and 152 are ugly
   // numbers that read as arbitrary. Every plan's creditsPerPeriod moved in the
@@ -137,16 +212,79 @@ test('the numbers: 16 credits at 480p, 46 at 720p, and the ratios Paul specified
   // ones that matter: they encode the cost relationships, and a rescale must
   // not touch them. If a future edit changes a ratio, that is a pricing
   // decision and not a rescale, and it should be argued rather than absorbed.
-  assert.equal(creditCost({ resolution: '480p' }), 16);
+  assert.equal(creditCost({ resolution: '480p' }), 21);
   assert.equal(creditCost({ resolution: '720p' }), 46);
-  assert.equal(TAPE, 16, 'the default is 480p, the cheap tier');
+  assert.equal(TAPE, 21, 'the default is 480p, the cheap tier');
+
+  // A SHAPE THAT IS NOT 4:3 COSTS 4/3, AND THE PRICE SAYS SO.
+  //
+  // 4:3 is the squarest shape this product ships and a resolution label holds
+  // the SHORT edge, so 16:9 and 9:16 are exactly 4/3 the pixels at the same
+  // tier -- 854x480 against 640x480. fal bills tokens as pixels x seconds, so
+  // that is 4/3 the provider cost, and charging the 4:3 price for it would
+  // sell every wide tape a third below cost.
+  //
+  // THIS IS NOT A HYPOTHETICAL FAILURE MODE. 480p sat at 16 CR against a real
+  // 21 for weeks, invisible from both ends, because the button, the ledger and
+  // the manifest all agreed on the same wrong number. The only thing that
+  // catches it is an assertion tying the price to the pixels.
+  // 61 AND NOT 62, AND THE DIFFERENCE IS WHERE THE ROUNDING HAPPENS. The
+  // multiplier applies to the DOLLAR figure and the ceiling is taken once, at
+  // the end: $4.5646 x 4/3 / $0.10 = 60.86 -> 61. Multiplying the already-
+  // rounded 46 CR instead gives 61.33 -> 62, which charges a credit for a
+  // rounding step rather than for pixels. Rounding twice always inflates, and
+  // `creditsFor` has taken the ceiling once since it was written.
+  assert.equal(creditCost({ resolution: '480p', aspect: '16:9' }), 28);
+  assert.equal(creditCost({ resolution: '480p', aspect: '9:16' }), 28);
+  assert.equal(creditCost({ resolution: '720p', aspect: '16:9' }), 61);
+  assert.equal(creditCost({ resolution: '720p', aspect: '9:16' }), 61);
+  assert.equal(creditCost({ resolution: '480p', aspect: '4:3' }), 21,
+    'naming the default shape must cost the same as not naming it');
+
+  // The two non-default shapes cost the same as each other: a portrait tape and
+  // a landscape one are the same pixels turned ninety degrees.
+  for (const id of ['480p', '720p']) {
+    assert.equal(creditCost({ resolution: id, aspect: '16:9' }), creditCost({ resolution: id, aspect: '9:16' }),
+      `${id}: a shape and its rotation are priced differently`);
+  }
+
+  // An unknown shape is REFUSED, never quietly charged at the 4:3 price. Same
+  // reasoning as an unknown resolution directly below: a silent fallback bills
+  // for one thing and renders another.
+  // `1:1` is in this list on purpose. It is not a nonsense string -- it is a
+  // shape somebody could plausibly add to config/render.json tomorrow -- and it
+  // must be refused until it is PRICED, because holding the short edge makes a
+  // square tape 0.75x the pixels of 4:3, not 4/3. That is why the multiplier is
+  // per shape rather than one number for "not the default".
+  for (const bad of ['16x9', 'square', '1:1']) {
+    const e = grab(() => creditCost({ resolution: '480p', aspect: bad }));
+    assert.equal(e.code, 'UNKNOWN_ASPECT', `${JSON.stringify(bad)} was priced instead of refused`);
+  }
+  // null means UNSPECIFIED, not malformed, and takes the default -- matching
+  // `resolutionRaster`, so a shape cannot be priced by one rule and rendered
+  // by another.
+  assert.equal(creditCost({ resolution: '480p', aspect: null }), 21);
   assert.deepEqual(CREDIT_DEFAULTS, { resolution: '480p', seconds: 15, tier: 'standard' });
 
   const cr = (id) => CREDIT_COSTS[id].creditsPerReference;
-  // 480p is roughly a third of 720p; 1080p roughly 2.25x of it. Both are
-  // ESTIMATES and the tolerance says so -- published third-party figures
-  // disagree with each other and only a --meter run settles it.
-  assert.ok(Math.abs(cr('480p') / cr('720p') - 1 / 3) < 0.02, `480p:720p is ${(cr('480p') / cr('720p')).toFixed(3)}`);
+
+  // THE RATIO CHANGED, AND THAT IS A FINDING RATHER THAN A RESCALE. This
+  // assertion used to require 480p to be about a THIRD of 720p, on the stated
+  // theory that pixel count is not the whole rate because fal's fast Seedance
+  // tier tops out at 720p and the tiers are priced differently. Three metered
+  // deliveries say otherwise: 752x560 costs $2.0727 and 1112x834 costs $4.5646,
+  // a ratio of 0.454, which is the PIXEL ratio to three decimal places. fal
+  // bills tokens, tokens are pixels x seconds, and there is no separate tier
+  // rate hiding in it. The old comment reasoned its way to a third and the
+  // invoice says otherwise.
+  const px = (id) => {
+    const d = creditConfig().resolutions[id].delivered;
+    return d.width * d.height;
+  };
+  assert.ok(
+    Math.abs((cr('480p') / cr('720p')) - (px('480p') / px('720p'))) < 0.01,
+    `credits are billed by pixels: 480p:720p is ${(cr('480p') / cr('720p')).toFixed(3)} in credits and ${(px('480p') / px('720p')).toFixed(3)} in pixels`,
+  );
   assert.ok(Math.abs(cr('1080p') / cr('720p') - 2.25) < 0.05, `1080p:720p is ${(cr('1080p') / cr('720p')).toFixed(3)}`);
 
   // The consequence, asserted so that nobody quotes a price without meeting it:
@@ -154,9 +292,16 @@ test('the numbers: 16 credits at 480p, 46 at 720p, and the ratios Paul specified
   // reach of every plan there is.
   assert.ok(cr('720p') <= PLANS.shelf.creditsPerPeriod);
   assert.ok(cr('1080p') > PLANS.archive.creditsPerPeriod);
+
+  // AND THE ONE A CUSTOMER MEETS FIRST: the free grant buys 480p tapes and no
+  // 720p one. That is the shape of the free tier rather than an oversight --
+  // the free tape proves the likeness, and the paid tier is what somebody buys
+  // once they believe it.
+  assert.ok(FREE >= cr('480p'), 'the free grant does not cover a single tape');
+  assert.ok(FREE < cr('720p'), 'the free grant reaches the paid tier');
 });
 
-test('480p and 720p ship; 1080p is present, deferred, and refused rather than substituted', () => {
+test('480p and 720p ship; 1080p is present, deferred, and refused rather than substituted', async () => {
   assert.deepEqual(ALL_RESOLUTIONS, ['480p', '720p', '1080p'], 'the deferred row stays, with its reasoning');
   assert.deepEqual(RESOLUTIONS, ['480p', '720p'], 'and only these two may be ordered');
   assert.equal(CREDIT_COSTS['1080p'].available, false);
@@ -181,21 +326,38 @@ test('480p and 720p ship; 1080p is present, deferred, and refused rather than su
     '480p is upscaled, and that is the one thing about it that is not obvious');
 });
 
-test('cost is linear in seconds and rounds up', () => {
-  // 16 is a rounded-up 15.1, so two 15-second tapes cost one credit more than
-  // one 30-second one. Rounding up is deliberate: rounding down gives away a
-  // fraction of a credit on every render, in the same direction every time, and
-  // no line item ever explains it. The property this asserts survived the
-  // 2026-08-21 rescale unchanged, which is the point of testing the behaviour
-  // rather than the arithmetic: 31 < 32 for the same reason 101 < 102 did.
-  assert.equal(creditCost({ resolution: '480p', seconds: 30 }), 31);
-  assert.equal(creditCost({ resolution: '480p', seconds: 15 }) * 2, 32);
-  assert.equal(creditCost({ resolution: '720p', seconds: 7.5 }), 23);
+test('cost is linear in seconds and rounds up', async () => {
+  // THE PROPERTY, NOT AN EXAMPLE. This test used to assert 31 < 32 at 480p --
+  // a genuine consequence of rounding when a tape cost 15.1 credits. At the
+  // measured price a tape is exactly 20.727, the two figures come out equal,
+  // and the old assertion failed while the behaviour it was defending was
+  // completely intact. An example that only holds for one price is a test of
+  // that price. So: assert that every quote is the exact cost rounded UP, at
+  // every duration, and that splitting a render never costs less than not
+  // splitting it.
+  //
+  // Rounding up is deliberate. Rounding down gives away a fraction of a credit
+  // on every render, in the same direction every time, and no line item ever
+  // explains it.
+  const cfg = creditConfig();
+  for (const id of RESOLUTIONS) {
+    const per15 = cfg.resolutions[id].estimatedUSDPer15s;
+    for (const seconds of [4, 7.5, 15, 30, 61]) {
+      const exact = (per15 * (seconds / cfg.referenceSeconds)) / cfg.creditUSD;
+      const quoted = creditCost({ resolution: id, seconds });
+      assert.equal(quoted, Math.ceil(exact),
+        `${id} at ${seconds}s: quoted ${quoted}, exact ${exact.toFixed(4)}`);
+      assert.ok(quoted >= exact, `${id} at ${seconds}s rounds DOWN, which gives credits away silently`);
+    }
+    // Two halves are never cheaper than the whole, whatever the price is.
+    assert.ok(creditCost({ resolution: id, seconds: 15 }) * 2
+      >= creditCost({ resolution: id, seconds: 30 }));
+  }
   assert.equal(CREDIT_COSTS['720p'].creditsPerReference, 46);
   assert.equal(estimatedUSD(16).toFixed(2), '1.60');
 });
 
-test('an unknown tier or duration is refused rather than defaulted', () => {
+test('an unknown tier or duration is refused rather than defaulted', async () => {
   assert.deepEqual(TIERS, ['standard'], 'a second tier needs a MEASURED multiplier, not an invented one');
 
   assert.equal(grab(() => creditCost({ tier: 'pro' })).code, 'UNKNOWN_TIER');
@@ -211,9 +373,9 @@ test('an unknown tier or duration is refused rather than defaulted', () => {
 // the ledger
 // --------------------------------------------------------------------------
 
-test('a new account opens with its plan first grant, and the balance is that sum', (t) => {
+test('a new account opens with its plan first grant, and the balance is that sum', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'shelf' });
+  const account = await signUp(root, { plan: 'shelf' });
 
   assert.deepEqual(balanceOf(account), {
     credits: PLANS.shelf.creditsPerPeriod,
@@ -224,14 +386,18 @@ test('a new account opens with its plan first grant, and the balance is that sum
     planId: 'shelf',
   });
   assert.deepEqual(ledgerFor(account), [
-    { at: iso(T0), delta: 48, jobId: null, reason: 'grant:signup', balance: 48 },
+    // `ref: null` since 2026-08-24: grants gained an idempotency key so a
+    // redelivered Stripe webhook cannot pay out twice. A signup grant has no
+    // event behind it and nothing to key on, so null is the honest value and
+    // the row is pinned WITH it rather than loosened to ignore the field.
+    { at: iso(T0), delta: 48, jobId: null, reason: 'grant:signup', ref: null, balance: 48 },
   ]);
   assert.equal(balanceForId({ root, accountId: account.accountId }).credits, 48);
 });
 
-test('the balance is the sum of the ledger and is never stored as a number', (t) => {
+test('the balance is the sum of the ledger and is never stored as a number', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'archive' });
+  const account = await signUp(root, { plan: 'archive' });
   debitCredits(account, { jobId: JOB(1), credits: TAPE, nowImpl: clock(T0 + 1000) });
 
   const onDisk = JSON.parse(fs.readFileSync(`${root}/out/accounts/${account.accountId}/account.json`, 'utf8'));
@@ -244,9 +410,9 @@ test('the balance is the sum of the ledger and is never stored as a number', (t)
   assert.equal(onDisk.ledger.reduce((n, e) => n + e.delta, 0), balanceOf(account).credits);
 });
 
-test('a malformed ledger entry is refused, not skipped', (t) => {
+test('a malformed ledger entry is refused, not skipped', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  const account = await signUp(root);
   for (const bad of [
     { at: iso(T0), delta: 'ten', jobId: null, reason: 'x' },
     { at: 'whenever', delta: 5, jobId: null, reason: 'x' },
@@ -271,15 +437,15 @@ test('a malformed ledger entry is refused, not skipped', (t) => {
 // debiting
 // --------------------------------------------------------------------------
 
-test('a debit spends credits durably and refreshes the caller copy', (t) => {
+test('a debit spends credits durably and refreshes the caller copy', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'shelf' });
+  const account = await signUp(root, { plan: 'shelf' });
 
   debitCredits(account, { jobId: JOB(1), credits: TAPE, reason: 'render:480p', nowImpl: clock(T0 + 1000) });
 
   assert.equal(balanceOf(account).credits, PLANS.shelf.creditsPerPeriod - TAPE);
   assert.deepEqual(account.ledger.at(-1), {
-    at: iso(T0 + 1000), delta: -16, jobId: JOB(1), reason: 'render:480p',
+    at: iso(T0 + 1000), delta: -TAPE, jobId: JOB(1), reason: 'render:480p',
   });
   // And another process reading the record sees the same thing. Derived from
   // the plan and the tape rather than written as a literal, so that a rescale
@@ -289,29 +455,31 @@ test('a debit spends credits durably and refreshes the caller copy', (t) => {
     PLANS.shelf.creditsPerPeriod - TAPE);
 });
 
-test('a debit larger than the balance is refused, with a shortfall the page can act on', (t) => {
+test('a debit larger than the balance is refused, with a shortfall the page can act on', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root); // free: 16 credits, exactly one 480p tape
+  const account = await signUp(root); // free: two 480p tapes, and no 720p one
 
   const err = grab(() => debitCredits(account, {
     jobId: JOB(1), credits: creditCost({ resolution: '720p' }), nowImpl: clock(),
   }));
   assert.equal(err.code, 'INSUFFICIENT_CREDITS');
-  assert.deepEqual(err.detail, { required: 46, balance: 16, shortfall: 30, planId: 'free' });
+  assert.deepEqual(err.detail, {
+    required: 46, balance: FREE, shortfall: 46 - FREE, planId: 'free',
+  });
   assert.match(err.userMessage, /Not enough credits/);
   assert.ok(!err.userMessage.includes(root), 'a user message must never leak a path');
 
   // A refused debit must not have half-spent anything.
   assert.equal(loadAccount({ root, accountId: account.accountId }).ledger.length, 1);
-  assert.equal(balanceOf(account).credits, 16);
+  assert.equal(balanceOf(account).credits, FREE);
   // And the affordable version still goes through.
   debitCredits(account, { jobId: JOB(1), credits: TAPE, nowImpl: clock() });
-  assert.equal(balanceOf(account).credits, 0);
+  assert.equal(balanceOf(account).credits, FREE - TAPE);
 });
 
-test('debiting the same jobId twice charges once, at the price it was quoted', (t) => {
+test('debiting the same jobId twice charges once, at the price it was quoted', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'archive' });
+  const account = await signUp(root, { plan: 'archive' });
 
   debitCredits(account, { jobId: JOB(1), credits: TAPE, nowImpl: clock(T0) });
   // POST /api/jobs/:id/select re-enqueues after the human picks a still, and a
@@ -326,9 +494,9 @@ test('debiting the same jobId twice charges once, at the price it was quoted', (
   assert.equal(loadAccount({ root, accountId: account.accountId }).ledger.length, 2);
 });
 
-test('a debit needs a real account, a real jobId and a positive whole number', (t) => {
+test('a debit needs a real account, a real jobId and a positive whole number', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  const account = await signUp(root);
 
   for (const jobId of [undefined, null, '', '   ', 42]) {
     assert.equal(grab(() => debitCredits(account, { jobId, credits: 1, nowImpl: clock() })).code, 'BAD_JOB_ID');
@@ -348,26 +516,26 @@ test('a debit needs a real account, a real jobId and a positive whole number', (
 // granting
 // --------------------------------------------------------------------------
 
-test('a grant is one more line, and a negative grant is a correction', (t) => {
+test('a grant is one more line, and a negative grant is a correction', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  const account = await signUp(root);
 
   grantCredits(account, { credits: 200, reason: 'grant:manual', nowImpl: clock(T0 + 1000) });
-  assert.equal(balanceOf(account).credits, 216);
+  assert.equal(balanceOf(account).credits, FREE + 200);
   assert.equal(balanceOf(account).grantedAt, iso(T0 + 1000));
 
   // The honest way to fix a ledger is another line, never an edit to an
   // existing one.
   grantCredits(account, { credits: -200, reason: 'correction:granted twice', nowImpl: clock(T0 + 2000) });
-  assert.equal(balanceOf(account).credits, 16);
+  assert.equal(balanceOf(account).credits, FREE);
   assert.equal(ledgerFor(account).length, 3);
-  assert.deepEqual(ledgerFor(account).map((e) => e.balance), [16, 216, 16]);
+  assert.deepEqual(ledgerFor(account).map((e) => e.balance), [FREE, FREE + 200, FREE]);
 
   // A negative balance is a debt this product has no way to collect and no page
   // that could explain it.
-  const err = grab(() => grantCredits(account, { credits: -100, reason: 'oops', nowImpl: clock() }));
+  const err = grab(() => grantCredits(account, { credits: -(FREE + 1), reason: 'oops', nowImpl: clock() }));
   assert.equal(err.code, 'GRANT_BELOW_ZERO');
-  assert.equal(balanceOf(account).credits, 16);
+  assert.equal(balanceOf(account).credits, FREE);
 
   for (const credits of [0, 1.5, '10', undefined]) {
     assert.equal(grab(() => grantCredits(account, { credits, reason: 'x' })).code, 'BAD_CREDITS');
@@ -377,13 +545,13 @@ test('a grant is one more line, and a negative grant is a correction', (t) => {
   assert.equal(grab(() => grantCredits(account, { credits: 10 })).code, 'NO_REASON');
 });
 
-test('grantPlanPeriod grants exactly what the plan says, by name', (t) => {
+test('grantPlanPeriod grants exactly what the plan says, by name', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root);
+  const account = await signUp(root);
   setPlan(account, 'archive');
 
   assert.equal(grantPlanPeriod(account, { planId: 'archive', nowImpl: clock(T0 + 1000) }), 64);
-  assert.equal(balanceOf(account).credits, 16 + 64);
+  assert.equal(balanceOf(account).credits, FREE + 64);
   assert.equal(account.ledger.at(-1).reason, 'grant:period:archive');
   assert.equal(grab(() => grantPlanPeriod(account, { planId: 'gold' })).code, 'BAD_PLAN');
 });
@@ -392,9 +560,9 @@ test('grantPlanPeriod grants exactly what the plan says, by name', (t) => {
 // refunds
 // --------------------------------------------------------------------------
 
-test('a job that died before the provider was called gets exactly what it paid', (t) => {
+test('a job that died before the provider was called gets exactly what it paid', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'shelf' });
+  const account = await signUp(root, { plan: 'shelf' });
   debitCredits(account, { jobId: JOB(1), credits: TAPE, nowImpl: clock(T0) });
 
   // intake, moderate, expand and compose are free. A job that fails in one of
@@ -402,18 +570,19 @@ test('a job that died before the provider was called gets exactly what it paid',
   // ours.
   refundCredits(account, { jobId: JOB(1), reason: 'refund:intake-failed', spent: false, nowImpl: clock(T0 + 5000) });
 
-  assert.equal(balanceOf(account).credits, 48);
+  assert.equal(balanceOf(account).credits, PLANS.shelf.creditsPerPeriod);
   assert.deepEqual(account.ledger.at(-1), {
-    at: iso(T0 + 5000), delta: 16, jobId: JOB(1), reason: 'refund:intake-failed',
+    at: iso(T0 + 5000), delta: TAPE, jobId: JOB(1), reason: 'refund:intake-failed',
   });
   // Nothing was edited: the debit is still there, and the ledger explains itself.
   assert.equal(account.ledger.length, 3);
-  assert.deepEqual(ledgerFor(account).map((e) => e.delta), [48, -16, 16]);
+  assert.deepEqual(ledgerFor(account).map((e) => e.delta),
+    [PLANS.shelf.creditsPerPeriod, -TAPE, TAPE]);
 });
 
-test('a job that failed AFTER the provider was called is refused a refund, loudly', (t) => {
+test('a job that failed AFTER the provider was called is refused a refund, loudly', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'shelf' });
+  const account = await signUp(root, { plan: 'shelf' });
   debitCredits(account, { jobId: JOB(1), credits: TAPE, nowImpl: clock() });
 
   const err = grab(() => refundCredits(account, { jobId: JOB(1), spent: true }));
@@ -427,9 +596,9 @@ test('a job that failed AFTER the provider was called is refused a refund, loudl
   assert.equal(loadAccount({ root, accountId: account.accountId }).ledger.length, 2);
 });
 
-test('a refund gives back what was charged, not what it would cost today', (t) => {
+test('a refund gives back what was charged, not what it would cost today', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'archive' });
+  const account = await signUp(root, { plan: 'archive' });
   // Charged at the 480p price.
   debitCredits(account, { jobId: JOB(1), credits: 16, nowImpl: clock() });
   refundCredits(account, { jobId: JOB(1), spent: false, nowImpl: clock(T0 + 1000) });
@@ -445,7 +614,7 @@ test('a refund gives back what was charged, not what it would cost today', (t) =
   assert.equal(account.ledger.length, 3, 'a no-op refund writes no line at all');
 });
 
-test('providerWasCalled is the line between the two, and it errs towards not refunding', () => {
+test('providerWasCalled is the line between the two, and it errs towards not refunding', async () => {
   assert.deepEqual(PAID_STEPS, ['still', 'animate']);
 
   assert.equal(providerWasCalled(jobWith([['intake', 1], ['moderate', 1], ['compose', 3], ['still', 0]])), false);
@@ -462,9 +631,9 @@ test('providerWasCalled is the line between the two, and it errs towards not ref
   assert.equal(providerWasCalled(jobWith([['animate', 2]])), true);
 });
 
-test('refundIfUnspent applies the rule instead of restating it', (t) => {
+test('refundIfUnspent applies the rule instead of restating it', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'archive' });
+  const account = await signUp(root, { plan: 'archive' });
   debitCredits(account, { jobId: JOB(1), credits: TAPE, nowImpl: clock() });
   debitCredits(account, { jobId: JOB(2), credits: TAPE, nowImpl: clock() });
 
@@ -493,9 +662,9 @@ function rng(seed) {
   };
 }
 
-test('replaying a long random sequence: the balance always equals the sum of the ledger', (t) => {
+test('replaying a long random sequence: the balance always equals the sum of the ledger', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'archive' });
+  const account = await signUp(root, { plan: 'archive' });
   const next = rng(0xC0FFEE);
 
   // An independent model of the balance, computed by a completely different
@@ -588,12 +757,12 @@ const PEAK = 2;
  */
 const THREAD_SOURCE = `
 const { workerData, parentPort } = require('node:worker_threads');
-const { accountsUrl, creditsUrl, root, accountId, jobId, credits, index, nowMs, shared } = workerData;
+const { accountsUrl, creditsUrl, root, accountId, jobId, credits, index, nowMs, shared, op, ref } = workerData;
 const flags = new Int32Array(shared);
 
 (async () => {
   const { loadAccount } = await import(accountsUrl);
-  const { debitCredits } = await import(creditsUrl);
+  const { debitCredits, grantCredits } = await import(creditsUrl);
   const nowImpl = () => new Date(nowMs);
   const account = loadAccount({ root, accountId, nowImpl });
 
@@ -610,8 +779,13 @@ const flags = new Int32Array(shared);
 
   let result;
   try {
-    debitCredits(account, { jobId, credits, nowImpl });
-    result = { index, jobId, ok: true, code: null };
+    // A GRANT RACES EXACTLY AS A DEBIT DOES, and it is the shape Stripe
+    // actually produces: a redelivered webhook can arrive while the first
+    // delivery is still inside the handler.
+    const out = op === 'grant'
+      ? grantCredits(account, { credits, reason: 'grant:pack:test', ref, nowImpl })
+      : debitCredits(account, { jobId, credits, nowImpl });
+    result = { index, jobId, ok: true, code: null, granted: out ? out.granted : null };
   } catch (err) {
     result = { index, jobId, ok: false, code: err.code || err.message };
   } finally {
@@ -624,7 +798,7 @@ const flags = new Int32Array(shared);
 /** Boots `count` threads, waits until every one is parked at the barrier, then
  *  releases them all with a single notify. One starting gun, and every
  *  contender is inside the operation within microseconds. */
-function stampede({ count, root, accountId, jobIdFor, credits, nowMs = T0 }) {
+function stampede({ count, root, accountId, jobIdFor, credits, nowMs = T0, op = 'debit', ref = null }) {
   const shared = new SharedArrayBuffer(3 * Int32Array.BYTES_PER_ELEMENT);
   const view = new Int32Array(shared);
   const results = [];
@@ -637,7 +811,7 @@ function stampede({ count, root, accountId, jobIdFor, credits, nowMs = T0 }) {
         eval: true,
         workerData: {
           accountsUrl: ACCOUNTS_URL, creditsUrl: CREDITS_URL,
-          root, accountId, index, jobId: jobIdFor(index), credits, nowMs, shared,
+          root, accountId, index, jobId: jobIdFor(index), credits, nowMs, shared, op, ref,
         },
       });
       workers.push(worker);
@@ -661,11 +835,110 @@ function stampede({ count, root, accountId, jobIdFor, credits, nowMs = T0 }) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// grants are idempotent by `ref` -- the webhook's whole safety net
+// ---------------------------------------------------------------------------
+
+test('a grant with a ref already in the ledger is a no-op, not a second grant', async (t) => {
+  // STRIPE REDELIVERS EVENTS. That is documented behaviour, not an edge case,
+  // and until 2026-08-24 `grantCredits` had no key of any kind -- debits are
+  // idempotent by jobId, grants wrote `jobId: null` -- so a replayed
+  // checkout.session.completed granted the credits a second time, free.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const before = balanceOf(account).credits;
+
+  const first = grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: 'evt_1', nowImpl: clock() });
+  const second = grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: 'evt_1', nowImpl: clock() });
+
+  assert.equal(first.granted, true);
+  assert.equal(second.granted, false, 'the replay must report that it granted nothing');
+  assert.equal(balanceOf(account).credits, before + 40, 'the balance moved once');
+  const refs = ledgerFor(account).filter((e) => e.ref === 'evt_1');
+  assert.equal(refs.length, 1, 'exactly one row carries the ref');
+});
+
+test('two different refs both land, because they are two different payments', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const before = balanceOf(account).credits;
+
+  grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: 'evt_1', nowImpl: clock() });
+  grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: 'evt_2', nowImpl: clock() });
+
+  assert.equal(balanceOf(account).credits, before + 80, 'somebody buying twice is not a replay');
+});
+
+test('a grant with no ref is not deduplicated, and that is deliberate', async (t) => {
+  // The signup grant and `npm run accounts -- grant` have no event behind them
+  // and nothing to key on. Silently collapsing two identical hand grants would
+  // be a different bug: an operator granting twice on purpose gets one.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const before = balanceOf(account).credits;
+
+  grantCredits(account, { credits: 5, reason: 'grant:goodwill', nowImpl: clock() });
+  grantCredits(account, { credits: 5, reason: 'grant:goodwill', nowImpl: clock() });
+
+  assert.equal(balanceOf(account).credits, before + 10);
+});
+
+test('the ref survives the round trip through the ledger file', async (t) => {
+  // THE TRAP THIS TEST EXISTS FOR. `entriesOf` projects a fixed shape and drops
+  // everything it does not name, so a ref written to disk and not read back
+  // would leave the dedupe check looking at undefined forever -- an
+  // implementation that passes an in-memory test and is not idempotent at all.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: 'evt_round_trip', nowImpl: clock() });
+
+  const reloaded = loadAccount({ root, accountId: account.accountId, nowImpl: clock() });
+  assert.ok(ledgerFor(reloaded).some((e) => e.ref === 'evt_round_trip'),
+    'the ref must come back off disk or the dedupe reads nothing');
+
+  // And a second grant against the RELOADED account is still refused.
+  const again = grantCredits(reloaded, { credits: 40, reason: 'grant:pack:40', ref: 'evt_round_trip', nowImpl: clock() });
+  assert.equal(again.granted, false);
+});
+
+test('a ref that is not a usable key is refused rather than ignored', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  for (const bad of ['', '   ', 42, {}]) {
+    const err = grab(() => grantCredits(account, { credits: 40, reason: 'grant:pack:40', ref: bad, nowImpl: clock() }));
+    assert.equal(err?.code, 'BAD_REF', `ref ${JSON.stringify(bad)} should be refused, not silently dropped`);
+  }
+});
+
+test('8 threads grant the SAME ref at once: it lands once', async (t) => {
+  // The sequential test above is not enough. Stripe retries can OVERLAP -- a
+  // redelivery arriving while the first delivery is still inside the handler --
+  // and a check that reads before the lock would let both through. This is the
+  // same barrier harness the debit race uses, for the same reason.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const before = balanceOf(account).credits;
+
+  const { results } = await stampede({
+    count: 8, root, accountId: account.accountId, jobIdFor: () => JOB(1),
+    credits: 40, op: 'grant', ref: 'evt_stampede',
+  });
+
+  assert.equal(results.filter((r) => r.ok).length, 8, 'every thread should succeed -- a replay is a no-op, not an error');
+  assert.equal(results.filter((r) => r.granted === true).length, 1, 'exactly one thread actually granted');
+
+  const reloaded = loadAccount({ root, accountId: account.accountId, nowImpl: clock() });
+  assert.equal(balanceOf(reloaded).credits, before + 40, 'the balance moved exactly once');
+});
+
 test('12 threads debit at once against a balance that covers 3: exactly 3 get through', async (t) => {
   const root = makeRoot(t);
-  // Shelf grants 48 credits, which is exactly three 480p tapes at 16 each.
-  const account = signUp(root, { plan: 'shelf' });
-  assert.equal(PLANS.shelf.creditsPerPeriod, TAPE * 3);
+  // THE BALANCE IS CONSTRUCTED, NOT BORROWED. This used to lean on Shelf
+  // granting exactly three tapes' worth, which stopped being true the moment
+  // the tape price was corrected -- and a concurrency guard that fails because
+  // a PRICE moved is a guard nobody trusts. Three renders' worth, set here, and
+  // it stays three whatever a tape costs.
+  const account = setBalance(await signUp(root, { plan: 'shelf' }), TAPE * 3, clock());
 
   const { results, peak } = await stampede({
     count: 12, root, accountId: account.accountId, credits: TAPE, jobIdFor: (i) => JOB(20 + i),
@@ -699,7 +972,7 @@ test('12 threads debit at once against a balance that covers 3: exactly 3 get th
 
 test('8 threads debit the SAME jobId at once: it is charged once', async (t) => {
   const root = makeRoot(t);
-  const account = signUp(root, { plan: 'archive' });
+  const account = await signUp(root, { plan: 'archive' });
 
   // A double-submitted form, or a select POST arriving twice. Idempotency that
   // holds single-threaded and not under a race is idempotency that fails on the
@@ -720,8 +993,7 @@ test('16 threads against a balance that covers exactly one render', async (t) =>
   // The narrowest balance is the one a bad lock is most likely to leak through,
   // and the free plan -- one 480p tape -- is the plan with the most accounts on
   // it.
-  const account = signUp(root);
-  assert.equal(PLANS.free.creditsPerPeriod, TAPE);
+  const account = setBalance(await signUp(root), TAPE, clock());
 
   const { results, peak } = await stampede({
     count: 16, root, accountId: account.accountId, credits: TAPE, jobIdFor: (i) => JOB(40 + i),
@@ -730,7 +1002,410 @@ test('16 threads against a balance that covers exactly one render', async (t) =>
   assert.equal(results.filter((r) => r.ok).length, 1, 'one tape of credits means one render');
   const after = loadAccount({ root, accountId: account.accountId, nowImpl: clock() });
   assert.equal(balanceOf(after).credits, 0);
-  assert.equal(after.ledger.filter((e) => e.delta < 0).length, 1);
+  // DEBITS FOR A RENDER, not every negative line: `setBalance` above writes a
+  // negative correction to put this account on an exact one-tape balance, and
+  // counting that as a charge would make the guard fail on its own setup.
+  assert.equal(after.ledger.filter((e) => e.delta < 0 && e.jobId !== null).length, 1);
   assert.ok(peak >= 2, `peak concurrent debitCredits() calls was ${peak}`);
   t.diagnostic(`peak concurrent debitCredits() calls: ${peak} of 16`);
+});
+
+// ---------------------------------------------------------------------------
+// what the tiers actually cost -- MEASURED 2026-08-25
+// ---------------------------------------------------------------------------
+
+/**
+ * THE PRICE IS DERIVED FROM THE RASTER FAL RETURNS, NOT THE ONE WE ORDER.
+ *
+ * Three metered jobs settled this. Two ordered 640x480 and were delivered --
+ * and billed for -- 752x560; one ordered 960x720 and was delivered 1112x834.
+ * fal upscales by about 1.16 on each axis and bills what it sends, so a price
+ * computed from the raster we ASK for understates the invoice by roughly a
+ * third, in the unsafe direction.
+ *
+ * This test pins each offered tier to the formula applied to its DELIVERED
+ * raster. It replaces the old "720p anchor" assertion, which pinned the figure
+ * to 1280x720 -- a 16:9 frame this product never orders and fal never sent.
+ * That the old number happened to land within three cents of the truth was a
+ * coincidence of two errors cancelling, and a coincidence is not a derivation.
+ */
+test('every offered tier is priced from the raster fal actually delivered', async () => {
+  const cfg = creditConfig();
+  const rate = cfg.provider.usdPerThousandTokens / 1000;
+  const tokens = (w, h) => (w * h * cfg.referenceSeconds * cfg.provider.tokensPerPixelSecond)
+    / cfg.provider.tokenDivisor;
+
+  for (const id of RESOLUTIONS) {
+    const res = cfg.resolutions[id];
+    assert.ok(res.delivered, `${id} is on offer and nothing records what fal delivered for it`);
+    assert.ok(Number.isInteger(res.delivered.width) && Number.isInteger(res.delivered.height),
+      `${id} delivered raster is not a pair of whole pixels`);
+
+    const usd = tokens(res.delivered.width, res.delivered.height) * rate;
+    assert.ok(
+      Math.abs(usd - res.estimatedUSDPer15s) < 0.01,
+      `${id}: the delivered raster ${res.delivered.width}x${res.delivered.height} costs $${usd.toFixed(4)}, config says $${res.estimatedUSDPer15s}`,
+    );
+
+    // A tier that is sold cannot still call itself a guess.
+    assert.equal(res.estimate, false, `${id} is on offer and still marked an estimate`);
+    assert.match(res._comment, /MEASURED/, `${id} is on offer and its comment does not say it was measured`);
+  }
+});
+
+/** The customer-facing number, pinned to the measurement rather than to a
+ *  figure somebody chose. If a tape's cost moves, this is what has to move with
+ *  it -- and a credit price that no longer covers the invoice fails here rather
+ *  than on an invoice. */
+test('a tape is priced at or above what it costs to serve', async () => {
+  const cfg = creditConfig();
+  for (const id of RESOLUTIONS) {
+    const charged = creditCost({ resolution: id, seconds: 15 }) * cfg.creditUSD;
+    const costs = cfg.resolutions[id].estimatedUSDPer15s;
+    assert.ok(charged >= costs,
+      `${id} charges ${(charged / cfg.creditUSD)} CR ($${charged.toFixed(2)}) against a measured cost of $${costs.toFixed(4)}`);
+  }
+});
+
+/**
+ * 720p IS A DIFFERENT PRODUCT FROM 480p, and that is a claim on a public page
+ * so it is asserted rather than assumed. It was genuinely open until
+ * 2026-08-25: both 480p jobs came back at 752x560, and if a 720p order had
+ * come back at 752x560 too there would have been one tier and not two --
+ * pricing them separately would have been charging for a difference that does
+ * not exist.
+ */
+test('the two offered tiers deliver visibly different rasters', async () => {
+  const cfg = creditConfig();
+  const a = cfg.resolutions['480p'].delivered;
+  const b = cfg.resolutions['720p'].delivered;
+  const ratio = (b.width * b.height) / (a.width * a.height);
+  assert.ok(ratio > 1.5,
+    `720p delivers ${(ratio).toFixed(2)}x the pixels of 480p -- too close to sell as separate tiers`);
+});
+
+// --------------------------------------------------------------------------
+// the owner-refund glue: what the worker hands a job that ended with no tape
+// --------------------------------------------------------------------------
+
+/** The web layer's ownership receipt, written the way `claimJob` writes it:
+ *  the file's existence at out/owners/<accountId>/<jobId>.json IS the fact. */
+function claimOnDisk(root, accountId, jobId) {
+  const dir = path.join(root, 'out', 'owners', accountId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${jobId}.json`), JSON.stringify({ jobId, accountId }));
+}
+
+test('the worker refund glue finds the owner and gives back what the steps never spent', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(1);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  assert.equal(balanceOf(account).credits, FREE - TAPE);
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({ root });
+  const result = await refunds.refund(jobWith([['intake', 1]], jobId), { reason: 'refund:failed-before-provider' });
+
+  assert.equal(result.refunded, true);
+  assert.equal(result.accountId, account.accountId);
+  const fresh = loadAccount({ root, accountId: account.accountId });
+  assert.equal(balanceOf(fresh).credits, FREE, 'the debit came back');
+  const rows = ledgerFor(fresh).filter((e) => e.jobId === jobId);
+  assert.equal(rows.length, 2, 'the refund is its own ledger line, never an erased debit');
+});
+
+test('the glue declines a job whose steps show a paid attempt, and money stays gone', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(2);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({ root });
+  const result = await refunds.refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+
+  assert.equal(result.refunded, false);
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE - TAPE,
+    'a provider was asked for something, so the money is gone and stays gone');
+});
+
+/** A job nobody owns is every direct-CLI render. Declining quietly is the
+ *  correct answer -- there is no ledger to give anything back to. */
+test('the glue answers a job with no owner by refunding nothing, not by throwing', async (t) => {
+  const root = makeRoot(t);
+  const refunds = createOwnerRefunds({ root });
+  const result = await refunds.refund(jobWith([['intake', 1]], JOB(3)), { reason: 'refund:failed-before-provider' });
+  assert.equal(result.refunded, false);
+  assert.deepEqual(listMissedRefunds({ root }), [],
+    'a job that was never charged is not a reconciliation item');
+});
+
+// --------------------------------------------------------------------------
+// the reconciliation ledger: a missed refund is a record, never only a line
+// --------------------------------------------------------------------------
+
+/**
+ * The most likely launch-day failure joined up: a fal outage trips
+ * `providerWasCalled` (attempts increment before the request leaves), the
+ * refund is declined -- correctly, because nothing on disk can distinguish a
+ * pre-flight crash from an in-flight loss, and guessing wrong hands out free
+ * provider calls -- and until this existed the decline was SILENT: the worker
+ * emits only on success or on a throw. The operator, who can read fal's
+ * dashboard and knows whether the call was actually billed, had nothing to
+ * reconcile from. Now every declined-as-spent refund with a real owner leaves
+ * a durable record under out/refunds/, naming the job, the account and the
+ * credits, until a human settles it.
+ */
+test('a declined refund leaves a durable reconciliation record naming the money', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(4);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({ root });
+  const result = await refunds.refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+  assert.equal(result.refunded, false);
+
+  const pending = listMissedRefunds({ root });
+  assert.equal(pending.length, 1, 'the decline must be recorded, not only declined');
+  assert.equal(pending[0].jobId, jobId);
+  assert.equal(pending[0].accountId, account.accountId);
+  assert.equal(pending[0].credits, TAPE, 'the record names the money the ledger is still holding');
+  assert.equal(pending[0].kind, 'declined-spent');
+  assert.equal(pending[0].settled, null);
+});
+
+test('a refund that lands clears the record an earlier decline left behind', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(5);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({ root });
+  await refunds.refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+  assert.equal(listMissedRefunds({ root }).length, 1);
+
+  // The same job asked again with steps showing no paid attempt -- the shape a
+  // revive-and-retry leaves. The refund lands and the reconciliation item goes.
+  const again = await refunds.refund(jobWith([['intake', 1]], jobId), { reason: 'refund:failed-before-provider' });
+  assert.equal(again.refunded, true);
+  assert.deepEqual(listMissedRefunds({ root }), [],
+    'money that came back must not stay on the reconciliation list');
+});
+
+test('a glue that cannot even reach the ledger records the miss and still throws', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(6);
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({
+    root,
+    loadAuthImpl: async () => { throw new Error('auth module unreadable'); },
+  });
+  await assert.rejects(
+    refunds.refund(jobWith([['intake', 1]], jobId), { reason: 'refund:failed-before-provider' }),
+    /auth module unreadable/,
+    'the throw still travels: the worker line and the record are two witnesses, not one',
+  );
+  const pending = listMissedRefunds({ root });
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].kind, 'error');
+  assert.equal(pending[0].credits, null, 'an unreachable ledger cannot name a number, and must not invent one');
+});
+
+test('settling a missed refund gives the money back once, and twice settles nothing more', async (t) => {
+  // The human's half: the operator has read fal's dashboard and knows the call
+  // was never billed, so the conservative decline is overridden BY A PERSON.
+  // `refundCredits` computes the owed amount from the ledger itself and is
+  // idempotent per job, so a double settle -- two terminals, one nervous
+  // operator -- is a no-op rather than a second grant.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(7);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+
+  const refunds = createOwnerRefunds({ root });
+  await refunds.refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE - TAPE);
+
+  const settled = await settleMissedRefund({ root, jobId, nowImpl: clock() });
+  assert.equal(settled.credits, TAPE);
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE,
+    'the settle is the refund the decline was holding');
+
+  const again = await settleMissedRefund({ root, jobId, nowImpl: clock() });
+  assert.equal(again.credits, 0, 'a second settle must move nothing');
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE);
+
+  assert.deepEqual(listMissedRefunds({ root }), [],
+    'a settled record leaves the pending list');
+  const rows = ledgerFor(loadAccount({ root, accountId: account.accountId })).filter((e) => e.jobId === jobId);
+  assert.equal(rows.length, 2, 'the settle is its own ledger line against the job, never an edit');
+});
+
+test('the refunds CLI lists the queue with the money named, and settles by job id', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(8);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+  await createOwnerRefunds({ root }).refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+
+  const { main } = await import('../scripts/auth/refunds-cli.mjs');
+
+  const listed = [];
+  assert.equal(await main(['list', `--root=${root}`], { log: (s) => listed.push(s), error: () => {} }), 0);
+  assert.ok(listed.some((l) => l.includes(jobId)), 'the pending job must be on the list');
+  assert.ok(listed.some((l) => l.includes(`${TAPE} CR`)), 'the list must name the money, or the operator reads ledgers by hand');
+
+  const settled = [];
+  assert.equal(await main(['settle', jobId, `--root=${root}`], { log: (s) => settled.push(s), error: () => {} }), 0);
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE,
+    'the settle through the CLI is the same refund as the function');
+
+  const after = [];
+  assert.equal(await main(['list', `--root=${root}`], { log: (s) => after.push(s), error: () => {} }), 0);
+  assert.ok(after.some((l) => l.includes('nothing pending')), 'a settled queue must say it is empty');
+});
+
+test('the refunds CLI refuses what it does not recognise, touching nothing', async (t) => {
+  // The purge accepted `--job` in silence once and swept six uploads
+  // (CLAUDE.md section 30 item 1). Money gets at least the same whitelist:
+  // a near-miss command or flag is exit 2 and no ledger moves.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(9);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+  await createOwnerRefunds({ root }).refund(jobWith([[PAID_STEPS[0], 1]], jobId), { reason: 'refund:failed-before-provider' });
+
+  const { main } = await import('../scripts/auth/refunds-cli.mjs');
+  const silent = { log: () => {}, error: () => {} };
+
+  assert.equal(await main(['settel', jobId, `--root=${root}`], silent), 2, 'a misspelled command must refuse');
+  assert.equal(await main(['settle', jobId, '--force', `--root=${root}`], silent), 2, 'an unknown flag must refuse');
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE - TAPE,
+    'a refusal must move no money');
+  assert.equal(listMissedRefunds({ root }).length, 1, 'a refusal must not touch the record either');
+});
+
+// ---------------------------------------------------------------------------
+// the refusal that costs nothing, and used to cost a customer everything
+// ---------------------------------------------------------------------------
+
+/**
+ * MEASURED ON THE FIRST REAL PAID ORDER, 2026-09-02. Job
+ * 20260902-141334-34a7e4 reached `animate`, and fal answered HTTP 422 on
+ * content grounds 55 seconds later. `providerWasCalled` saw attempts > 0 on a
+ * paid step, declined the refund, and the owner's balance went 21 -> 0 for a
+ * render that never ran.
+ *
+ * THE GENERAL RULE IS RIGHT AND THIS IS THE CASE IT NEVER CONSIDERED. §37E
+ * chose to over-report deliberately -- "nothing on disk can distinguish a
+ * pre-flight crash from an in-flight loss", and under-reporting hands out free
+ * provider calls. Both halves still hold. What it did not consider is the
+ * outcome that is not ambiguous at all: a 4xx REFUSAL is the provider saying it
+ * understood the request and declined to run it. No generation happened, and
+ * CLAUDE.md §8 records the same fact from the uso experiment -- "a 422 is not
+ * billed".
+ *
+ * So the narrowing is exactly one shape: every paid attempt ended in a 4xx
+ * refusal. Anything ambiguous -- a 5xx, a timeout, a lost connection, a crash
+ * with no error recorded -- keeps the conservative answer, because those are
+ * the cases where the request may well have been served and billed.
+ */
+const failedPaidJob = (error, { attempts = 1, jobId = JOB(41) } = {}) => ({
+  jobId,
+  steps: [
+    { name: 'intake', status: 'done', attempts: 1 },
+    { name: 'still', status: 'skipped', attempts: 0 },
+    { name: 'animate', status: 'failed', attempts, error },
+  ],
+});
+
+test('a provider refusal gives the credits back, because nothing was generated', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  setBalance(account, 21, clock());
+
+  const job = failedPaidJob({
+    code: 'moderation_refused',
+    message: 'fal: HTTP 422 -- the provider refused on content grounds',
+  });
+  debitCredits(account, { jobId: job.jobId, credits: 21, reason: 'render', nowImpl: clock() });
+  assert.equal(balanceOf(account).credits, 0, 'the debit must land first');
+
+  const gave = refundIfUnspent(account, job, { reason: 'refund:provider-refused', nowImpl: clock() });
+  assert.equal(gave, true, 'a 4xx refusal must refund -- the provider did no work to bill for');
+  assert.equal(balanceOf(account).credits, 21, 'the customer is whole again');
+});
+
+test('a rejected request refunds too, and so does a rejected credential', async (t) => {
+  // Both are 4xx: the request never became a generation. A customer must not
+  // pay for our malformed request, nor for our expired key.
+  for (const code of ['bad_request', 'credential']) {
+    const root = makeRoot(t);
+    const account = await signUp(root);
+    setBalance(account, 21, clock());
+    const job = failedPaidJob({ code, message: `fal: ${code}` }, { jobId: JOB(42) });
+    debitCredits(account, { jobId: job.jobId, credits: 21, reason: 'render', nowImpl: clock() });
+
+    assert.equal(refundIfUnspent(account, job, { nowImpl: clock() }), true, `${code} must refund`);
+    assert.equal(balanceOf(account).credits, 21, `${code} left the customer short`);
+  }
+});
+
+test('an ambiguous failure still keeps the conservative answer', async (t) => {
+  // THE HALF THAT MUST NOT MOVE. A 5xx, a timeout or a dropped connection all
+  // mean the request may have been served and billed, and §37E's reasoning
+  // applies to every one: under-reporting hands out an unlimited supply of free
+  // provider calls, and the only place that shows up is the invoice.
+  for (const error of [
+    { code: 'upstream', message: 'fal: HTTP 503 -- the provider failed' },
+    { code: 'rate_limited', message: 'fal: HTTP 429' },
+    { code: 'timeout', message: 'no answer' },
+    null,
+  ]) {
+    const root = makeRoot(t);
+    const account = await signUp(root);
+    setBalance(account, 21, clock());
+    const job = failedPaidJob(error, { jobId: JOB(43) });
+    debitCredits(account, { jobId: job.jobId, credits: 21, reason: 'render', nowImpl: clock() });
+
+    assert.equal(refundIfUnspent(account, job, { nowImpl: clock() }), false,
+      `${error?.code ?? 'no error recorded'} must NOT refund -- it may have been billed`);
+    assert.equal(balanceOf(account).credits, 0, 'an ambiguous failure keeps the charge');
+  }
+});
+
+test('a refusal after a retry does not excuse the attempt before it', async (t) => {
+  // A step tried twice -- served once, then refused -- is not a clean refusal,
+  // and only the recorded error of the LAST attempt survives on the manifest.
+  // attempts > 1 is the cheapest honest signal that an earlier one may have run.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  setBalance(account, 21, clock());
+  const job = failedPaidJob(
+    { code: 'moderation_refused', message: 'refused' },
+    { attempts: 2, jobId: JOB(44) },
+  );
+  debitCredits(account, { jobId: job.jobId, credits: 21, reason: 'render', nowImpl: clock() });
+
+  assert.equal(refundIfUnspent(account, job, { nowImpl: clock() }), false,
+    'a second attempt means an earlier one may have run and been billed');
+  assert.equal(balanceOf(account).credits, 0);
+});
+
+test('providerWasCalled itself is unchanged -- it answers a different question', () => {
+  // It reports whether a paid step was ever ATTEMPTED, which is still true of a
+  // refused job and is still what the worker's own logging wants to know. The
+  // refund decision is what learned to be more precise; this did not move.
+  const job = failedPaidJob({ code: 'moderation_refused', message: 'refused' });
+  assert.equal(providerWasCalled(job), true,
+    'a refused job did reach the provider, and this function still says so');
 });

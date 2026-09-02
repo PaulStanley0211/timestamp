@@ -25,11 +25,14 @@
     "_light": "Where the light comes from, what colour it is, and what it does to the shadows. Two mismatched sources -- grey daylight plus one warm bulb -- is what makes an interior read as a real room rather than a set.",
     "light": "a named source, its direction, and what the shadows do",
 
-    "_lens": "How it was shot optically: focal breadth, depth of focus, edge behaviour. Not how the picture is processed -- that is tapedeck's half of the pipeline.",
-    "lens": "wide near the subject, deep focus behind, slight bend at the edges",
+    "_lens": "How it was shot optically: focal breadth, what goes soft behind, edge behaviour. Not how the picture is processed -- that is tapedeck's half of the pipeline. NEVER ask for edge-to-edge sharpness: a frame where the near table and the far shed are equally sharp is the single biggest tell that an image was generated, and it survives the tape chain intact. Say what falls off.",
+    "lens": "wide near the subject, whatever is behind it going soft, slight bend at the edges",
 
     "_framing": "How much of the person is in frame and where they are standing. Say 'waist-up' or 'chest-up'; do not say anything about what they look like.",
     "framing": "waist-up, three-quarters to the camera",
+
+    "_moment": "OPTIONAL, and the highest-value optional field there is. What is HAPPENING -- not what is in frame. Leave it out and the composer uses a generic floor, which works; write one that belongs to this place and it works far better. A brief with no action in it is a portrait brief, and the model answers it with a portrait: squared to the camera, arms hanging, waiting to be photographed. That pose survives the tape chain untouched and is a large part of why a frame reads as generated. Describe hands, shoulders and direction of travel; never the face.",
+    "moment": "halfway through something ordinary, half turned towards whoever is holding the camera",
 
     "_eraProps": "Three or four objects that date the frame by existing. This is where the era lives. A payphone, a wired telephone, a roof box, a wall clock with hands.",
     "eraProps": "three or four objects that could only be from 1999 to 2005"

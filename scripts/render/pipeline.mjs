@@ -73,16 +73,16 @@ import { purgeJobMedia } from './purge.mjs';
 
 import { runFfmpeg, probe, REPO_ROOT } from '../ffmpeg/run.mjs';
 import {
-  assertDeliveryContract, assertComposite, assertTapeGrade, assertBurnIn,
+  assertDeliveryContract, assertComposite, assertTapeGrade, assertTapeColour, assertBurnIn,
 } from '../ffmpeg/assert.mjs';
-import { tapeGeometry, deliveryGeometry, frameCount } from '../tapedeck/frame.mjs';
+import { tapeGeometry, deliveryGeometry, frameCount, resolveAspect } from '../tapedeck/frame.mjs';
 import { loadLookProfile, buildVideoFilter } from '../tapedeck/look.mjs';
 import { burnInFilters, burnInProbeRegion, deriveStamp } from '../tapedeck/burn-in.mjs';
 import { buildAudioFilter, clampAudio } from '../audio/bed.mjs';
 import {
   muxedArgs, joinGraphs, fileLoudnessArgs, parseIntegratedLufs, lufsVerdict,
 } from '../audio/mix.mjs';
-import { composeStillPrompt, composeMotionPrompt, DEFAULT_ERA } from '../compose/prompt.mjs';
+import { composeStillPrompt, composeMotionPrompt, composeReferencePrompt, DEFAULT_ERA } from '../compose/prompt.mjs';
 import { deriveSeed } from '../compose/seed.mjs';
 import { loadCatalog, getPlace, getOutfit, checkCompatibility } from '../catalog/catalog.mjs';
 import { resolveFont } from '../preflight/doctor.mjs';
@@ -164,17 +164,50 @@ const stepOutput = (job, name) => job.steps.find((s) => s.name === name)?.output
  * every pipeline test in this repo runs through it, and there is no invoice
  * behind a local ffmpeg call to be wrong about.
  */
-function resolveRaster({ resolution, provider, log = noop }) {
+export function resolveRaster({ resolution, provider, aspect = null, defaultAspect = '4:3', log = noop }) {
+  // THE SHAPE IS ORDERED NOW, NOT REFUSED. This branch used to throw
+  // `ASPECT_UNSUPPORTED` for any non-default shape on a paid provider, because
+  // `fal.mjs` sent a hardcoded `aspect_ratio` -- so a 9:16 job would have
+  // fetched a 4:3 source and let the tape stage build a portrait frame around
+  // it, with nothing downstream able to notice because every assertion reads
+  // the same resolved config the filtergraph does.
+  //
+  // `falAspectFor` reads the shape off the requested raster, so that is fixed
+  // at the source. WHAT STILL GUARDS IT IS THE RASTER CHECK BELOW, which is
+  // stronger than the shape check ever was: the raster is derived from
+  // (resolution, aspect) and must appear in the provider's own offers, so a
+  // provider that does not do portrait refuses the exact order rather than
+  // being trusted about shapes in the abstract.
   const id = resolution ?? null;
   // A CLI render has no order behind it and no account to charge, so it takes
   // the provider's first offer -- the same shape this file had before there
   // was a resolution to honour.
   if (id === null) {
+    // A SHAPE WITH NO TIER HAS NO RASTER. The first offer is the cheapest 4:3
+    // one, so taking it while a non-default shape was asked for fetched a 4:3
+    // SOURCE and let the tape stage build a portrait frame around it -- the
+    // exact failure the raster check below exists to prevent, arriving through
+    // the one door that skips it. The documented paid command carries no
+    // `--resolution`, so this was the likely way to meet it.
+    //
+    // Refused rather than guessing a tier, for the reason `creditCost` refuses
+    // an unpriced shape: a number nobody chose must not be rendered or charged
+    // just because it is the cheapest one to hand.
+    const shape = aspect ?? defaultAspect;
+    if (shape !== defaultAspect) {
+      throw new PipelineError(
+        `${shape} was ordered with no resolution, and a shape has no raster without a tier -- ` +
+        'a resolution label names the SHORT edge, so the long one comes from the shape.\n' +
+        `Name a resolution (--resolution=480p or 720p) alongside --aspect=${shape}, ` +
+        `or drop --aspect to render ${defaultAspect} at the provider's first offer.`,
+        { code: 'ASPECT_NEEDS_RESOLUTION', detail: { aspect: shape, defaultAspect } },
+      );
+    }
     const size = provider.capabilities.stillSizes[0];
     return { id: null, size: { width: size.width, height: size.height }, honoured: true };
   }
 
-  const raster = resolutionRaster(id);
+  const raster = resolutionRaster(id, aspect ?? defaultAspect);
   const offered = provider.capabilities.stillSizes
     .some((s) => s.width === raster.width && s.height === raster.height);
   if (offered) {
@@ -184,7 +217,7 @@ function resolveRaster({ resolution, provider, log = noop }) {
   const offers = provider.capabilities.stillSizes.map((s) => `${s.width}x${s.height}`).join(', ');
   if (provider.paid) {
     throw new PipelineError(
-      `this job was ordered at ${id} (${raster.width}x${raster.height}, 4:3) and ${provider.id} offers ${offers}.\n` +
+      `this job was ordered at ${id} (${raster.width}x${raster.height}, ${aspect ?? defaultAspect}) and ${provider.id} offers ${offers}.\n` +
       '  Refusing rather than substituting: a paid render that bills for one size and delivers another is\n' +
       '  invisible to the customer and to the ledger, which is the one failure neither of them can catch.',
       {
@@ -228,7 +261,7 @@ const LAZY = Object.freeze({
  *  test can replace any single one of them without a module mock. */
 const STATIC = Object.freeze({
   runFfmpeg, probe,
-  assertDeliveryContract, assertComposite, assertTapeGrade, assertBurnIn,
+  assertDeliveryContract, assertComposite, assertTapeGrade, assertTapeColour, assertBurnIn,
   loadCatalog, resolveFont, loadPricing, loadModels,
   writeContactSheet,
   scorer: firstScorer,
@@ -433,6 +466,36 @@ function decideIntent({ job, step, payload, wasRunning, matches, log }) {
   // a request went out -- and closing it is what lets `recordIntent` rotate it
   // into the receipts and mint a fresh key.
   if (!wasRunning && prior && prior.result === null) {
+    // AND "DELIBERATE" HAS TO MEAN A HUMAN, NOT THE WORKER'S REVIVE.
+    //
+    // `wasRunning` alone could not tell the two apart. `runOne` revives a
+    // failed job by calling `retryStep` on every failed step, which rewrites
+    // `failed -> pending` -- so after a RETRIABLE failure (a submit timeout is
+    // retriable by its own class, precisely because the request may have landed)
+    // this branch ran automatically, closed the open record, minted a fresh key
+    // and bought the same generation again, up to maxAttempts times.
+    //
+    // `retryStep` now records who asked. The worker does not pass the flag, so
+    // its revive falls through to the same refusal a crash gets: a human looks
+    // at the provider's dashboard and decides, which is the invariant this
+    // file's header states and could not previously keep.
+    const deliberate = job.steps?.find((s) => s.name === step)?.deliberateRetry === true;
+    if (!deliberate) {
+      throw new PipelineError(
+        `${step}: an intent was recorded at ${prior.recordedAt} under key ${prior.key} and no result was ever written.\n` +
+        '  This attempt is an AUTOMATIC retry, so nobody has looked at whether that request was charged.\n' +
+        '  A paid request may already have gone out. This pipeline will not silently re-submit it.\n' +
+        `  Look at intent/${step}.json and at the provider's own record of ${prior.key}, then either:\n` +
+        `    npm run render -- --resume=${job.jobId} --retry-step=${step}    (submit again, deliberately)\n` +
+        `    npm run jobs -- show ${job.jobId}                               (read what is on disk first)`,
+        {
+          code: 'INTENT_IN_FLIGHT',
+          step,
+          userMessage: 'This render was interrupted while it was generating. Someone needs to check it before it continues.',
+          detail: { key: prior.key, recordedAt: prior.recordedAt, attempt: prior.attempt, automatic: true },
+        },
+      );
+    }
     log(`  ${step}: superseding the open intent ${prior.key} -- it is being resubmitted deliberately`);
     completeIntent(job, step, {
       unresolved: true,
@@ -662,32 +725,117 @@ async function stepCompose(ctx) {
   // ordered and charged for; this is the raster that answer means. It goes into
   // `resolved` so that nothing downstream re-derives it from a config file, a
   // default or a provider that may all have moved on by the time a job resumes.
-  const resolution = resolveRaster({ resolution: job.input.resolution, provider, log });
-  log(`  ${resolution.id ?? 'no resolution ordered'} -> ${resolution.size.width}x${resolution.size.height} (4:3)`);
+  const resolution = resolveRaster({
+    resolution: job.input.resolution, provider, log,
+    aspect: job.input.aspect, defaultAspect: cfg.defaultAspect,
+  });
+  // The shape is READ, not asserted. This said `(4:3)` as a literal three lines
+  // below the call that derives the raster from `job.input.aspect`, so a 9:16
+  // render printed `720x1280 (4:3)` -- on a path where the shape is now a
+  // priced dimension and this line is the operator's only confirmation of which
+  // one was frozen.
+  log(`  ${resolution.id ?? 'no resolution ordered'} -> ${resolution.size.width}x${resolution.size.height} (${job.input.aspect ?? cfg.defaultAspect})`);
+
+  const direct = job.input.direct === true;
 
   const segments = planSegments({
     cfg, capabilities: provider.capabilities, jobId: job.jobId, mode: segmentMode, size: resolution.size,
   });
   log(`  ${describePlan(segments)}`);
 
-  const stillPrompt = composeStillPrompt({ place, outfit, era: DEFAULT_ERA, count: job.input.stillCount });
-  const motionPrompts = segments.map((seg) => composeMotionPrompt({
+  // DIRECT MODE IS ONE CALL OR IT IS NOTHING.
+  //
+  // On the still path a chain is at least continuous: segment N+1 begins on
+  // segment N's final frame, which is what phase-0 criterion 5 exists to
+  // measure. On the direct path there is no frame to continue from, so every
+  // extra segment would be an INDEPENDENT generation from the same photographs
+  // -- different takes, joined by a cut nobody asked for. That is precisely
+  // what Paul described not wanting on 2026-08-24: "one frame, second frame,
+  // third frame, combining these three things".
+  //
+  // So this refuses rather than chunking, and names the number that was too
+  // small. The fixture provider caps at 8s deliberately -- its own comment says
+  // a fixture claiming 15 would let the pipeline skip segment chaining -- so
+  // this is a combination somebody will hit for real.
+  if (job.input.direct === true && segments.length !== 1) {
+    throw new PipelineError(
+      `direct mode needs the whole take in one call: ${cfg.durationSeconds}s asked for, but `
+      + `${provider.id} tops out at ${provider.capabilities.maxClipSeconds}s, which would take `
+      + `${segments.length} separate generations and join them with a cut. Use a model that can `
+      + 'do the whole take at once, or drop --direct.',
+      { code: 'DIRECT_NEEDS_ONE_CALL', step: 'compose' },
+    );
+  }
+
+  // ONE PROMPT OR TWO, depending on which path this job is on. Composing a
+  // still prompt for a direct job would put a prompt in the manifest that was
+  // never sent, which is worse than absent: a manifest is read months later to
+  // answer "what did we ask for".
+  const referencePrompt = direct
+    ? composeReferencePrompt({
+      place, outfit, era: DEFAULT_ERA,
+      placePhoto: Boolean(job.input.place.photoPath),
+      seconds: segments.reduce((n, seg) => n + seg.seconds, 0),
+    })
+    : null;
+  const stillPrompt = direct
+    ? null
+    : composeStillPrompt({ place, outfit, era: DEFAULT_ERA, count: job.input.stillCount });
+  const motionPrompts = direct ? [] : segments.map((seg) => composeMotionPrompt({
     place, outfit, segment: seg.index, totalSegments: segments.length,
   }));
 
   // Held to `verified: true` and to the layer-2 audio rule HERE, before a
   // request exists -- a model nobody has checked must not reach a paid call.
   const modelsFile = await (await dep('loadModels'))();
-  const models = defaultModels(modelsFile, provider.id);
-  modelEntry(modelsFile, models.still);
-  modelEntry(modelsFile, models.video);
+  // A copy, because the override rewrites `still` and the frozen `resolved`
+  // block downstream must record the model that was ACTUALLY used -- a bake-off
+  // whose manifests all name the default proves nothing. Built as the explicit
+  // pair rather than a spread, so `videoDirect` stays a DEFAULTS key and never
+  // drifts into the frozen manifest shape.
+  const providerDefaults = defaultModels(modelsFile, provider.id);
+  const models = { still: providerDefaults.still, video: providerDefaults.video };
+  if (ctx.stillModelOverride) models.still = ctx.stillModelOverride;
+  // Same copy, same reason, for the video half: the provider resolves its own
+  // model at construction time, so a manifest that froze the default would name
+  // one endpoint while the call went to another.
+  if (ctx.videoModelOverride) {
+    models.video = ctx.videoModelOverride;
+  } else if (direct) {
+    // A direct job animates from REFERENCES, and an image-to-video endpoint
+    // cannot take them: freezing `defaults.<provider>.video` here recorded one
+    // model while the call had to go to another, which is the section-26 split
+    // one layer down. The worker path hits this on every web job, because a
+    // worker constructs its provider once and passes no --video-model.
+    // Missing means REFUSED, not downgraded -- a silent fall back to the
+    // start-frame model is the 422-after-debit this branch exists to prevent.
+    if (!providerDefaults.videoDirect) {
+      throw new PipelineError(
+        `direct mode has no default video model for provider ${provider.id}: `
+        + 'defaults.'
+        + `${provider.id}.videoDirect in config/models.json is the key to fill in.`,
+        { code: 'NO_DIRECT_DEFAULT', step: 'compose' },
+      );
+    }
+    models.video = providerDefaults.videoDirect;
+  }
+  // THE STILL GATE APPLIES TO THE STILL STAGE, AND A DIRECT JOB HAS NONE.
+  // `fal/UNVERIFIED-identity-still` is unverified deliberately, so that an
+  // unconfigured fal render stops before it spends -- but applying it to a job
+  // that never makes a still killed the direct path at compose on its first
+  // real run. The gate is right; it was being asked the wrong question.
+  if (!direct) modelEntry(modelsFile, models.still, { requireVerified: !ctx.allowUnverifiedModel });
+  modelEntry(modelsFile, models.video, { requireVerified: !ctx.allowUnverifiedModel });
 
   const pricing = await (await dep('loadPricing'))();
   const estimate = estimateJob({
     pricing,
     stillModel: models.still,
     videoModel: models.video,
-    stillCount: job.input.stillCount,
+    // Zero on the direct path: no still is bought, so no still line is quoted.
+    // The manifest is what a ledger reads months later, and a phantom line in it
+    // makes every direct render look more expensive than it was.
+    stillCount: direct ? 0 : job.input.stillCount,
     segments,
   });
 
@@ -702,6 +850,8 @@ async function stepCompose(ctx) {
     resolution,
     stillPrompt,
     motionPrompts,
+    referencePrompt,
+    direct,
     segments,
     seeds,
     models,
@@ -870,8 +1020,22 @@ async function stepAnimate(ctx) {
   const runFfmpegImpl = await dep('runFfmpeg');
   const step = job.steps.find((s) => s.name === 'animate');
 
-  const chosenPath = stepOutput(job, 'select').chosenPath;
-  if (!chosenPath) {
+  // DIRECT MODE HAS NO SELECTION, and that is the whole point of it. The
+  // references are the intake photographs themselves: the face always, and the
+  // uploaded place when there is one. Order is the @Image1/@Image2 contract
+  // `composeReferencePrompt` writes against.
+  const direct = job.input.direct === true;
+  const references = direct
+    ? [
+      { role: 'face', path: fromJobRelative(job, job.input.photo.path) },
+      ...(job.input.place.photoPath
+        ? [{ role: 'place', path: fromJobRelative(job, job.input.place.photoPath) }]
+        : []),
+    ]
+    : null;
+
+  const chosenPath = direct ? null : stepOutput(job, 'select').chosenPath;
+  if (!direct && !chosenPath) {
     throw new PipelineError('no still was selected', { code: 'NO_SELECTION', step: 'animate' });
   }
 
@@ -886,7 +1050,11 @@ async function stepAnimate(ctx) {
   const done = recorded.filter((d) => {
     try { return fs.existsSync(fromJobRelative(job, d.clipPath)); } catch { return false; }
   });
-  const output = { segments: done, model: r.models.video, startedFrom: chosenPath };
+  const output = {
+    segments: done,
+    model: r.models.video,
+    startedFrom: direct ? 'the photographs' : chosenPath,
+  };
   step.output = output;
 
   let estimated = 0;
@@ -919,7 +1087,10 @@ async function stepAnimate(ctx) {
     // visible, and hiding it would make the question unanswerable.
     let startPath;
     let lastFramePath = null;
-    if (seg.startsFrom === 'still') {
+    if (direct) {
+      // Nothing to start from. One call, the whole take, from the photographs.
+      startPath = null;
+    } else if (seg.startsFrom === 'still') {
       startPath = fromJobRelative(job, chosenPath);
     } else {
       const prev = done.find((d) => d.index === seg.index - 1);
@@ -939,7 +1110,7 @@ async function stepAnimate(ctx) {
       lastFramePath = toJobRelative(job, frameFile);
     }
 
-    const prompt = r.motionPrompts[seg.index - 1];
+    const prompt = direct ? r.referencePrompt : r.motionPrompts[seg.index - 1];
     // Carried on the segment by `planSegments`, and falling back to the frozen
     // job-level raster for a manifest written before segments had one. It is
     // part of the PAYLOAD, not just the request, so the idempotency key moves
@@ -954,7 +1125,13 @@ async function stepAnimate(ctx) {
       seed: seg.seed,
       seconds: seg.seconds,
       size,
-      imagePath: toJobRelative(job, startPath),
+      // ONE OR THE OTHER, never both -- `assertVideoRequest` refuses a request
+      // carrying the two, because which one a model honours would differ per
+      // vendor and finding out costs a paid call. In the payload as well as the
+      // request, so the idempotency key moves when the shape does.
+      ...(direct
+        ? { references: references.map((ref) => ({ role: ref.role, path: toJobRelative(job, ref.path) })) }
+        : { imagePath: toJobRelative(job, startPath) }),
     };
 
     const decision = decideIntent({
@@ -981,7 +1158,7 @@ async function stepAnimate(ctx) {
       const req = {
         prompt: payload.prompt,
         negativePrompt: payload.negativePrompt,
-        imagePath: startPath,
+        ...(direct ? { references } : { imagePath: startPath }),
         seed: payload.seed,
         seconds: payload.seconds,
         // The raster the customer paid for. Like `index`, this is not a field
@@ -1029,6 +1206,59 @@ async function stepAnimate(ctx) {
     output,
     cost: { estimated, actual: metered ? actual : null, currency: 'USD' },
   };
+}
+
+/**
+ * What is worth saying about a source whose frame count is not the contract's.
+ *
+ * FRAMES ARE NOT THE MEASURE; SECONDS ARE. The tape stage runs with
+ * `-stream_loop -1` and `-frames:v`, so it fills or truncates whatever it is
+ * given -- and filling means LOOPING, which is visible. That is a real warning
+ * and it must keep working.
+ *
+ * But this compared frame COUNT against 375 and nothing else, so the first
+ * direct run -- seedance returning **361 frames over 15.04 seconds**, i.e. 24fps
+ * against a 25fps contract -- was announced as "the tape stage will loop the
+ * source and the repeat may be visible" when there was over fifteen seconds of
+ * material, ffmpeg retimed it, and the delivered tape ended on the last frame
+ * of the action. Checked by eye on the file before this was changed.
+ *
+ * A warning that cries wolf is how the real one stops being read. So the
+ * question asked here is "is there enough TIME to fill the contract", and a
+ * frame count that differs while the duration holds is silent.
+ *
+ * @param {{frames:number, seconds:number, cfg:{totalFrames:number,fps:number,durationSeconds:number}}} args
+ * @returns {string[]}
+ */
+export function assembleFrameWarnings({ frames, seconds, cfg }) {
+  if (!Number.isFinite(frames) || frames === cfg.totalFrames) return [];
+  if (!Number.isFinite(seconds)) {
+    // No duration to reason with; fall back to the frame count alone rather
+    // than staying silent about a source that may well be short.
+    return [`assembled ${frames} frames, contract is ${cfg.totalFrames}, and the duration could not be read.`];
+  }
+
+  // How many output frames this source can fill at the CONTRACT rate. Half a
+  // frame of slack, because a duration is a float and 15.0 is a target.
+  const fillable = seconds * cfg.fps;
+  if (fillable + 0.5 < cfg.totalFrames) {
+    return [
+      `assembled ${frames} frames over ${seconds.toFixed(2)}s, contract is ${cfg.totalFrames} frames `
+      + `(${cfg.durationSeconds}s). The tape stage will LOOP the source to reach ${cfg.durationSeconds}s `
+      + 'and the repeat may be visible.',
+    ];
+  }
+  // A WHOLE SECOND of slack on this side, not half a frame. A source running
+  // 15.04s against a 15s contract loses one frame, which is not news; a source
+  // running 20s loses five seconds of the take, which is.
+  if (fillable > cfg.totalFrames + cfg.fps) {
+    return [
+      `assembled ${frames} frames over ${seconds.toFixed(2)}s, contract is ${cfg.durationSeconds}s. `
+      + 'The tail will be truncated.',
+    ];
+  }
+  // Right duration, different rate. ffmpeg retimes; nothing is lost or repeated.
+  return [];
 }
 
 /** 8. assemble -- concat to `source.mp4`, and LAYER 3 of the native-audio
@@ -1096,19 +1326,10 @@ async function stepAssemble(ctx) {
 
   const video = (info.streams ?? []).find((s) => s.codec_type === 'video') ?? {};
   const frames = Number(video.nb_read_frames);
-  const warnings = [];
-  if (Number.isFinite(frames) && frames !== cfg.totalFrames) {
-    // Not fatal: the tape stage runs with `-stream_loop -1` and `-frames:v`, so
-    // it will fill or truncate. Worth recording, because a short source is
-    // filled by LOOPING and the repeat is visible.
-    warnings.push(
-      `assembled ${frames} frames, contract is ${cfg.totalFrames}. ` +
-      (frames < cfg.totalFrames
-        ? 'The tape stage will loop the source to reach 15s and the repeat may be visible.'
-        : 'The tail will be truncated.'),
-    );
-    log(`  warning: ${warnings[0]}`);
-  }
+  const warnings = assembleFrameWarnings({
+    frames, seconds: Number(video.duration ?? info.format?.duration), cfg,
+  });
+  for (const warning of warnings) log(`  warning: ${warning}`);
 
   return {
     output: {
@@ -1129,15 +1350,22 @@ async function stepTape(ctx) {
   const cfg = r.cfg;
   const runFfmpegImpl = await dep('runFfmpeg');
 
-  const tape = tapeGeometry(cfg);
-  const delivery = deliveryGeometry(cfg);
+  // The shape the job asked for, resolved ONCE and then used for everything
+  // below. `buildVideoFilter` reads `cfg.tape` and `cfg.delivery` off the
+  // config it is handed rather than taking the geometry objects, so handing it
+  // the unresolved cfg would render the new shape into the default shape's
+  // frame -- and every assertion downstream would agree with it, because they
+  // would be reading the same wrong config.
+  const acfg = resolveAspect(cfg, job.input.aspect);
+  const tape = tapeGeometry(acfg);
+  const delivery = deliveryGeometry(acfg);
 
   // The profile was merged, clamped and frozen at compose. Re-merging it from
   // `config/` and the preset here would let an edited preset redefine a render
   // that is already half paid for.
   const osd = r.look.osd;
   const burnIn = burnInFilters(osd, { tape, delivery });
-  const videoFilter = buildVideoFilter({ ...r.look, osd }, cfg, { burnIn });
+  const videoFilter = buildVideoFilter({ ...r.look, osd }, acfg, { burnIn });
   const audioFilter = buildAudioFilter(r.look, cfg);
   const filterComplex = joinGraphs(videoFilter, audioFilter);
 
@@ -1185,17 +1413,19 @@ async function stepVerify(ctx) {
   const { job, paths, dep, log } = ctx;
   const r = job.resolved;
   const cfg = r.cfg;
-  const delivery = deliveryGeometry(cfg);
-  const tape = tapeGeometry(cfg);
+  const acfg = resolveAspect(cfg, job.input.aspect);
+  const delivery = deliveryGeometry(acfg);
+  const tape = tapeGeometry(acfg);
 
   const deliveryContract = await dep('assertDeliveryContract');
   const composite = await dep('assertComposite');
   const grade = await dep('assertTapeGrade');
+  const colour = await dep('assertTapeColour');
   const burnIn = await dep('assertBurnIn');
   const runFfmpegImpl = await dep('runFfmpeg');
 
   const checks = [];
-  const info = await deliveryContract(paths.video, cfg, { expectAudio: true });
+  const info = await deliveryContract(paths.video, acfg, { expectAudio: true });
   checks.push('delivery');
 
   await composite(paths.video, delivery);
@@ -1203,6 +1433,12 @@ async function stepVerify(ctx) {
 
   await grade(paths.video, delivery);
   checks.push('grade');
+
+  // THE CHECK THAT WOULD HAVE CAUGHT THE GREEN TAPE. Every assertion above
+  // reads the luma plane, and a picture whose chroma is wrong has a perfect
+  // one -- see assertTapeColour for the measurements behind the thresholds.
+  await colour(paths.video, delivery);
+  checks.push('colour');
 
   if (r.look.osd?.enabled) {
     await burnIn(paths.video, burnInProbeRegion(r.look.osd, delivery, tape));
@@ -1335,6 +1571,17 @@ const SKIP_CHECKS = Object.freeze({
   expand: (job) => (job.input.place.kind === 'preset' && job.input.outfit.kind === 'preset'
     ? 'both place and outfit are shipped presets; there is nothing to expand'
     : null),
+  // DIRECT MODE. Both of these exist only to make a picture and put it in front
+  // of somebody, and `reference-to-video` needs neither: it takes the
+  // photographs. `skipped` is not `done` -- the ledger can tell the difference,
+  // which is what stops a skipped still from reading as a still that cost
+  // nothing.
+  still: (job) => (job.input.direct
+    ? 'direct mode: the tape is generated from the photographs, so there is no still to make'
+    : null),
+  select: (job) => (job.input.direct
+    ? 'direct mode: there is no still, so there is nothing to choose between'
+    : null),
 });
 
 // ---------------------------------------------------------------------------
@@ -1369,6 +1616,25 @@ export async function runPipeline(job, {
   sources = {},
   stillIndex = null,
   segmentMode = 'continuous',
+  /**
+   * PHASE 0'S BAKE-OFF SEAM, AND WHY IT IS TWO OPTIONS RATHER THAN ONE.
+   *
+   * The still model is chosen at Phase 0 by comparing candidates on the same
+   * face, and there was no way to say which one to use: it came from
+   * `defaults.fal.still` in config/models.json, which is the UNVERIFIED
+   * placeholder on purpose. Editing that file between runs would mean marking a
+   * candidate `verified: true` to get it to run -- and in this repo that word
+   * means somebody opened the schema page. Faking it to run an experiment
+   * poisons the one signal that stops blind spending.
+   *
+   * So: `stillModelOverride` names the model, and `allowUnverifiedModel` is a
+   * SEPARATE opt-in that lowers the verified gate. Two, not one, so an
+   * unverified endpoint can never be reached by a caller who only meant to pick
+   * a model. The default of both is the refusal that exists today.
+   */
+  stillModelOverride = null,
+  videoModelOverride = null,
+  allowUnverifiedModel = false,
   log = noop,
 } = {}) {
   if (!job || typeof job !== 'object') throw new PipelineError('runPipeline needs a job', { code: 'BAD_JOB' });
@@ -1472,6 +1738,7 @@ export async function runPipeline(job, {
     const ctx = {
       job, paths, root: job.root ?? root, cfg: job.resolved?.cfg ?? renderCfg, baseLook,
       provider, dep, log, sources, stopAfter, stillIndex, signal, segmentMode,
+      stillModelOverride, videoModelOverride, allowUnverifiedModel,
       catalog, wasRunning, step: name, emit, checkCancelled,
       providerCtx: { ...providerCtx, outDir: name === 'still' ? paths.stills : paths.segments, signal,
         onProgress: (e) => onProgress?.({ step: name, ...e }) },
@@ -1559,7 +1826,18 @@ export async function runPipeline(job, {
  * The seeds it prints are NOT the seeds the real render will use: those derive
  * from a job id, and there is deliberately no job here to derive them from.
  */
-export async function dryRun({ provider, input, cfg, deps = {}, segmentMode = 'continuous' } = {}) {
+export async function dryRun({
+  provider, input, cfg, deps = {}, segmentMode = 'continuous',
+  // Same two options as runPipeline, same reasoning -- see its signature. A dry
+  // run that could not name the candidate would be useless for the one job it
+  // has here: showing what a bake-off round costs BEFORE it is authorised.
+  stillModelOverride = null, videoModelOverride = null, allowUnverifiedModel = false,
+} = {}) {
+  // A dry run's whole job is naming the calls that WOULD be made. On the direct
+  // path there is no still call, so resolving a still model here would refuse
+  // the run over a model it was never going to use -- which is exactly what
+  // happened the first time this was tried.
+  const direct = input.direct === true;
   const dep = makeResolver(deps);
   const renderCfg = cfg ?? readJson(path.join(REPO_ROOT, CONFIG_RENDER));
   const baseLook = deps.baseLook ?? readJson(path.join(REPO_ROOT, CONFIG_BASE_LOOK));
@@ -1576,31 +1854,66 @@ export async function dryRun({ provider, input, cfg, deps = {}, segmentMode = 'c
 
   // The same raster resolution the real run will freeze, so `--dry-run` names
   // the size it would actually buy rather than the provider's first offer.
-  const resolution = resolveRaster({ resolution: input.resolution ?? null, provider });
+  //
+  // THE SHAPE TRAVELS WITH THE TIER, and its absence here was the same defect
+  // one dimension later. A label names the SHORT edge, so 16:9 and 9:16 are
+  // exactly 4/3 the pixels of 4:3 at the same tier, and fal bills tokens as
+  // pixels x seconds: without this, the one command whose entire job is
+  // authorising a spend quoted $4.5646 for a render that bills $6.2625.
+  const resolution = resolveRaster({
+    resolution: input.resolution ?? null,
+    provider,
+    aspect: input.aspect ?? null,
+    defaultAspect: renderCfg.defaultAspect,
+  });
   const segments = planSegments({
     cfg: renderCfg, capabilities: provider.capabilities, mode: segmentMode, size: resolution.size,
   });
   const modelsFile = await (await dep('loadModels'))();
-  const models = defaultModels(modelsFile, provider.id);
-  modelEntry(modelsFile, models.still);
-  modelEntry(modelsFile, models.video);
+  const dryDefaults = defaultModels(modelsFile, provider.id);
+  const models = { still: dryDefaults.still, video: dryDefaults.video };
+  if (stillModelOverride) models.still = stillModelOverride;
+  // A copy, for the reason stepCompose keeps one: a bake-off whose dry runs all
+  // name the default is quoting a price for a call nobody is going to make.
+  if (videoModelOverride) {
+    models.video = videoModelOverride;
+  } else if (direct) {
+    // The same resolution stepCompose performs, because a quote whose model is
+    // not the one the render would call authorises the wrong spend. Missing
+    // means refused, same code, same reason.
+    if (!dryDefaults.videoDirect) {
+      throw new PipelineError(
+        `direct mode has no default video model for provider ${provider.id}: `
+        + 'defaults.'
+        + `${provider.id}.videoDirect in config/models.json is the key to fill in.`,
+        { code: 'NO_DIRECT_DEFAULT', step: 'compose' },
+      );
+    }
+    models.video = dryDefaults.videoDirect;
+  }
+  if (!direct) modelEntry(modelsFile, models.still, { requireVerified: !allowUnverifiedModel });
+  modelEntry(modelsFile, models.video, { requireVerified: !allowUnverifiedModel });
   const pricing = await (await dep('loadPricing'))();
   const estimate = estimateJob({
     pricing, stillModel: models.still, videoModel: models.video,
-    stillCount: input.stillCount ?? 3, segments,
+    // Zero stills is the honest number on the direct path, and it keeps the
+    // estimate from quoting a line nobody will be billed for.
+    stillCount: direct ? 0 : (input.stillCount ?? 3), segments,
   });
 
   const calls = [
-    {
+    ...(direct ? [] : [{
       step: 'still',
       model: models.still,
       description: `generateStill x1 asking for ${input.stillCount ?? 3} image(s) at ${resolution.size.width}x${resolution.size.height}`,
       usd: estimate.lines.find((l) => l.step === 'still')?.usd ?? 0,
-    },
+    }]),
     ...segments.map((seg) => ({
       step: 'animate',
       model: models.video,
-      description: `generateVideo segment ${seg.index}/${segments.length}, ${seg.seconds}s, starting from ${seg.startsFrom === 'still' ? 'the approved still' : `the last frame of segment ${seg.index - 1}`}`,
+      description: direct
+        ? `generateVideo ${seg.seconds}s in one call, from the photographs -- no still, no gate`
+        : `generateVideo segment ${seg.index}/${segments.length}, ${seg.seconds}s, starting from ${seg.startsFrom === 'still' ? 'the approved still' : `the last frame of segment ${seg.index - 1}`}`,
       usd: estimate.lines.find((l) => l.step === 'animate' && l.index === seg.index)?.usd ?? 0,
     })),
   ];
@@ -1613,10 +1926,17 @@ export async function dryRun({ provider, input, cfg, deps = {}, segmentMode = 'c
     compatibility: checkCompatibility(place, outfit),
     segments,
     plan: describePlan(segments),
-    stillPrompt: composeStillPrompt({ place, outfit, era: DEFAULT_ERA, count: input.stillCount ?? 3 }),
-    motionPrompts: segments.map((seg) => composeMotionPrompt({ place, outfit, segment: seg.index, totalSegments: segments.length })),
+    stillPrompt: direct ? null : composeStillPrompt({ place, outfit, era: DEFAULT_ERA, count: input.stillCount ?? 3 }),
+    motionPrompts: direct ? [] : segments.map((seg) => composeMotionPrompt({ place, outfit, segment: seg.index, totalSegments: segments.length })),
+    referencePrompt: direct
+      ? composeReferencePrompt({
+        place, outfit, era: DEFAULT_ERA,
+        placePhoto: Boolean(input.place.photoPath),
+        seconds: segments.reduce((n, seg) => n + seg.seconds, 0),
+      })
+      : null,
     calls,
     estimate,
-    freeSteps: STEPS.filter((s) => s !== 'still' && s !== 'animate'),
+    freeSteps: STEPS.filter((step) => step !== 'animate' && (direct || step !== 'still')),
   };
 }

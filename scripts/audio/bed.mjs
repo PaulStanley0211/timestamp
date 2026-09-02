@@ -114,6 +114,22 @@ export const AUDIO_CLAMPS = {
   'audio.capstan.flutterHz': [0.1, 30],
   'audio.capstan.flutterDepth': [0, 1],
   'audio.capstan.lowpass': [100, 20000],
+  'audio.ambience.amplitude': [0, 1],
+  'audio.ambience.volume': [0, 4],
+  'audio.ambience.highpass': [20, 4000],
+  'audio.ambience.lowpass': [200, 20000],
+  // tremolo REFUSES f below 0.1 with an ffmpeg error rather than a warning, and
+  // the graph omits the filter entirely at 0 -- so this range is "off, or legal".
+  'audio.ambience.swellHz': [0, 20],
+  'audio.ambience.swellDepth': [0, 1],
+  'audio.ambience.echoDelayMs': [0, 2000],
+  'audio.ambience.echoDecay': [0, 0.9],
+  'audio.ambience.tone.lowpass': [100, 20000],
+  // tickHz shares tremolo's floor for the same reason swellHz does: below it
+  // the period is longer than the tape is, so "off" and "very slow" are
+  // indistinguishable and the graph should just say off (tickHz: 0).
+  'audio.ambience.tone.tickHz': [0, 20],
+  'audio.ambience.tone.tickDuration': [0, 1],
   'audio.bus.highpass': [20, 4000],
   'audio.bus.lowpass': [1000, 20000],
   // alimiter rejects anything outside this range outright, with an ffmpeg error
@@ -226,6 +242,82 @@ export function buildAudioFilter(look, cfg, { outLabel = 'aout' } = {}) {
       `lowpass=f=${n(capstan.lowpass)}[capstan]`,
     );
     busInputs.push('capstan');
+  }
+
+  // ---- the place ------------------------------------------------------------
+  // Filtered noise, optionally swelling, optionally in a room. That vocabulary
+  // covers every shipped place: surf and wind are a slow swell over brown
+  // noise, traffic is the same without the swell, and a swimming hall or a
+  // stairwell is the same again with an echo on it.
+  //
+  // THE SEED IS NOT audioSeed. Two anoisesrc on one seed emit identical noise,
+  // and summing identical noise is not two layers -- it is one layer 6 dB
+  // louder and perfectly correlated, which sounds precisely like the hiss
+  // turned up. Nothing in the graph would look wrong.
+  const amb = audio.ambience;
+  if (amb && Number(amb.amplitude) > 0) {
+    const parts = [
+      `anoisesrc=c=${amb.color ?? 'brown'}:a=${n(amb.amplitude)}:r=${rate}:d=${n(seconds)}:seed=${Number(look.audioSeed) + 1}`,
+      `highpass=f=${n(amb.highpass)}`,
+      `lowpass=f=${n(amb.lowpass)}`,
+    ];
+    // Omitted rather than zeroed: tremolo=f=0 is a failed render, not a still
+    // bed, and aecho with no delay is a filter doing nothing at a cost.
+    if (Number(amb.swellHz) > 0) parts.push(`tremolo=f=${n(amb.swellHz)}:d=${n(amb.swellDepth)}`);
+    if (Number(amb.echoDelayMs) > 0) parts.push(`aecho=0.8:0.85:${n(amb.echoDelayMs)}:${n(amb.echoDecay)}`);
+    parts.push(`volume=${n(amb.volume)}`);
+    chains.push(`${parts.join(',')}[amb]`);
+    busInputs.push('amb');
+  }
+
+  // ---- the place's own TONE --------------------------------------------------
+  // The ambience block above is NOISE only, and two shipped places want more
+  // than that: a stairwell's flickering fluorescent tube and a kitchen's wall
+  // clock are both TONES, not filtered noise, and the capstan two sections up
+  // already proves a tone belongs in this file. This is that same mechanism --
+  // sine sources, summed with normalize=0, band-limited -- applied to a place
+  // instead of to the machine.
+  //
+  // `tones` is the switch, exactly like `capstan.tones`: nothing here runs
+  // unless a place names at least one partial, so a place with no tone
+  // configured is bit-identical to the bed before this feature existed.
+  //
+  // NO SEED. Unlike hiss and ambience, a tone sine is not stochastic --
+  // ffmpeg's `sine` source is a pure function of frequency and time, so there
+  // is nothing here for audioSeed to seed. That is the same fact the capstan
+  // section already rests on, restated for a second place.
+  //
+  // TICKING IS THE ONE NEW TRICK. A mains hum and a capstan whir are both
+  // continuous, so both are shaped with `tremolo` -- a smooth sinusoidal
+  // swell. A clock does not swell, it clicks: silence for most of a second,
+  // then a brief burst. Gating a continuous sine to that shape needs a hard
+  // edge tremolo cannot produce (its floor is a raised sine, never true
+  // silence), so `tickHz` reaches for ffmpeg's per-frame `volume` expression
+  // instead: `if(lt(mod(t,PERIOD),DURATION),1,0)` is 1 for the first
+  // `tickDuration` seconds of every `1/tickHz`-second period and 0 the rest of
+  // it, evaluated fresh every frame (`eval=frame`) rather than once at graph
+  // build time. The expression is a pure function of `t`, so it is exactly as
+  // deterministic as every fixed number elsewhere in this file -- there is no
+  // clock read here, only the word "PERIOD" for one computed from a config
+  // value. `tickHz: 0` (or absent) skips this stage entirely and the tone
+  // plays as a continuous hum, which is what the fluorescent buzz wants.
+  const tone = audio.ambience?.tone;
+  const toneTones = Array.isArray(tone?.tones) ? tone.tones : [];
+  if (toneTones.length) {
+    const labels = toneTones.map((t, i) => {
+      const label = `tone${i}`;
+      chains.push(`sine=f=${n(t.hz)}:r=${rate}:d=${n(seconds)},volume=${n(t.volume)}[${label}]`);
+      return label;
+    });
+    const tickHz = Number(tone.tickHz) || 0;
+    const gate = tickHz > 0
+      ? `,volume=volume='if(lt(mod(t,${n(1 / tickHz)}),${n(tone.tickDuration)}),1,0)':eval=frame`
+      : '';
+    chains.push(
+      `${labels.map((l) => `[${l}]`).join('')}amix=inputs=${labels.length}:normalize=0,` +
+      `lowpass=f=${n(tone.lowpass)}${gate}[tone]`,
+    );
+    busInputs.push('tone');
   }
 
   // ---- mix bus --------------------------------------------------------------

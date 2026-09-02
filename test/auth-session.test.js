@@ -356,9 +356,38 @@ const shared = new Int32Array(workerData.shared);
   assert.equal(secrets.size, 1, `all ${COUNT} threads must agree on one secret, got ${secrets.size}`);
   assert.equal([...secrets][0], fs.readFileSync(sessionsRoot(root).secret, 'utf8').trim());
 
+  // WHY THIS STANDS THE RUN DOWN RATHER THAN FAILING IT.
+  //
+  // Every assertion above is unconditional and has already passed: nobody
+  // threw, all eight agreed on one secret, and that secret is the one on disk.
+  // What this last check establishes is something weaker -- that the eight
+  // threads genuinely OVERLAPPED, so that the agreement above was won against a
+  // real race rather than against eight calls the scheduler happened to
+  // serialise.
+  //
+  // On a loaded CI runner the scheduler can and does serialise them. Measured:
+  // green on ubuntu node 24 at d6ec4b6 and red at cdb6fa0 minutes later with
+  // `peak 1`, on a docs-only commit, while 22 consecutive local runs -- idle and
+  // under eight cpu hogs -- never once failed to overlap. That is the shape this
+  // file's own §4 names: a test whose margin is narrower than the machine's
+  // variance is testing the machine.
+  //
+  // A race that did not happen proves nothing about a race that does, so there
+  // is nothing here to fail. It is not a hole either: the forced-interleaving
+  // test immediately below drives the exact `openSync(secret,'wx')` window
+  // deterministically, every run, on every machine -- so the window is covered
+  // whether or not this one overlaps. Same ruling as job-model's concurrent
+  // reader, which stands itself down with its reason when its own count is zero.
+  //
+  // NOTE the suite then reports 3 skipped rather than the standing 2, and the
+  // reason is printed beside it. That is deliberate: a run that could not
+  // arrange the race should say so out loud rather than read as a clean pass.
   const peak = Atomics.load(view, PEAK);
-  assert.ok(peak >= 2, `the contenders must genuinely overlap; peak concurrent sessionSecret() calls was ${peak}`);
   t.diagnostic(`peak concurrent sessionSecret() calls: ${peak} of ${COUNT}`);
+  if (peak < 2) {
+    t.skip(`the contenders never overlapped (peak ${peak} of ${COUNT}); the agreement above was not won against a real race, and the forced-interleaving test below covers this window deterministically`);
+    return;
+  }
 });
 
 /**

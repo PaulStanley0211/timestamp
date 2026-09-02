@@ -153,7 +153,7 @@ async function resume(root, jobId, args) {
   const provider = createProvider(args.provider ?? job.provider, { cfg });
 
   if (args['retry-step']) {
-    retryStep(job, args['retry-step']);
+    retryStep(job, args['retry-step'], { deliberate: true });
     saveJob(job);
     console.log(`  ${args['retry-step']} put back to pending -- it will be run again, deliberately.`);
   }

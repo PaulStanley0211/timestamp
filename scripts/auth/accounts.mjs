@@ -61,6 +61,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 import { assertConsent, recordConsent } from '../safety/consent.mjs';
@@ -123,6 +124,69 @@ export const OWNERS_DIR = 'out/owners';
  *  lowercase hex characters and nothing else. */
 export const INDEX_DIR = '_index';
 
+/**
+ * The second index, and why the email index is not enough.
+ *
+ * The Supabase user id is the STABLE key; an email is not, because a person can
+ * change their address at the provider and arrive with the same identity and a
+ * different mailbox.
+ */
+export const SUPABASE_INDEX_DIR = '_index-supabase';
+
+/**
+ * DELIBERATELY WIDER THAN "LOOKS LIKE A UUID". A real Supabase user id is hex
+ * and hyphens, but this file's own supabaseUserId fixtures (`uuid-claim`,
+ * `uuid-a`, `uuid-attacker`, ...) are not -- they are short mnemonic strings a
+ * test picked, and this module has no way to tell "a test id" from "a real
+ * one" nor any reason to. What actually matters here is PATH SAFETY: this
+ * string becomes a filename under `_index-supabase/`, so the only real
+ * requirement is that it cannot contain a path separator, a `.`, or anything
+ * else that would let it climb out of that directory. Alphanumeric-and-hyphen
+ * is exactly that bound, with a length ceiling so a hostile identity provider
+ * cannot hand back a multi-megabyte "id" and turn every lookup into a stat on
+ * an absurd filename.
+ */
+export const SUPABASE_ID_RE = /^[0-9a-zA-Z-]{1,64}$/;
+
+function supabaseIndexPath(root, supabaseUserId) {
+  if (!SUPABASE_ID_RE.test(String(supabaseUserId ?? ''))) return null;
+  const { dir } = accountsRoot(root);
+  return `${dir}/${SUPABASE_INDEX_DIR}/${String(supabaseUserId)}`;
+}
+
+/**
+ * How many free tapes this installation has given away, ever.
+ *
+ * THE ONLY PIECE OF GLOBAL STATE IN THE ACCOUNT STORE, and it is here rather
+ * than in a database because there is no database -- the pricing spec's section
+ * 4 is explicit that a pack ships on the file ledger and revenue is not blocked
+ * behind Supabase. It sits beside `_index` under the same root, underscore
+ * prefixed for the same collision-proof reason, so that one `--root` still
+ * moves a whole installation including its spend bound.
+ *
+ * WHY A STORED COUNT, IN A CODEBASE WHOSE FIRST RULE IS THAT THE BALANCE IS
+ * NEVER STORED. The balance is derived because there is exactly one place to
+ * derive it from -- one account's own append-only ledger -- and a stored copy
+ * could disagree with it. This number has no such source. Deriving it means
+ * scanning every account directory on the filesystem at every signup, which is
+ * unbounded work on the hot path of the one operation that must stay cheap; and
+ * far worse, A SCAN CANNOT BE ATOMIC WITH THE GRANT. Two signups landing
+ * together both scan, both count N-1, and both grant. Making that safe needs a
+ * global lock, and once the lock is held the counter file costs nothing extra.
+ * So the lock is the real mechanism and the file is just where it writes.
+ *
+ * IT IS A RESERVATION REGISTER, NOT A SECOND OPINION ABOUT MONEY. The ledger
+ * rows are still the audit trail for what was granted. This answers only "may
+ * another one be given away", and it is incremented BEFORE the account record
+ * is written, deliberately. A crash in the gap leaves the count one ahead of
+ * reality, so the ceiling arrives one tape early -- headroom lost, which is
+ * survivable. The other ordering loses the reservation and grants a tape the
+ * ceiling had already spent, which is the failure this whole file exists to
+ * prevent. Same reasoning, same direction, as debitCredits happening before the
+ * queue entry is written.
+ */
+export const FREE_TAPES_FILE = '_free-tapes.json';
+
 export const ACCOUNT_ID_RE = /^[0-9a-f]{32}$/;
 
 /**
@@ -165,7 +229,14 @@ export function creditConfig({ root = REPO_ROOT, reload = false } = {}) {
   // Every entry in that file has to say it is an estimate, for the same reason
   // config/pricing.json refuses an entry without a `_comment`: an unannotated
   // number in the money path reads as fact to whoever finds it next.
+  // `_comment` KEYS ARE DOCUMENTATION, NOT PLANS, exactly as `isPackKey` treats
+  // them one block down. The `plans` object had no container-level comment until
+  // 2026-08-27, so this filter had nothing to do and was never written; the
+  // moment one was added, every plan read turned into BAD_CREDIT_CONFIG at
+  // import time. A convention the whole config file uses has to be understood
+  // by the reader in every block, not just the block where it happened first.
   for (const [id, plan] of Object.entries(parsed?.plans ?? {})) {
+    if (id.startsWith('_')) continue;
     for (const key of ['id', 'label', 'monthlyUSD', 'annualUSD', 'creditsPerPeriod']) {
       if (plan?.[key] === undefined) {
         throw new AuthError(`plan ${id} in ${file} is missing ${key}`, { code: 'BAD_CREDIT_CONFIG' });
@@ -177,8 +248,62 @@ export function creditConfig({ root = REPO_ROOT, reload = false } = {}) {
       });
     }
   }
+  // PACKS ARE CHECKED THE SAME WAY, AND THE STAKES ARE HIGHER THAN FOR A PLAN.
+  // A plan is granted by an operator who is looking at the screen. A pack is
+  // granted by a webhook nobody is watching, so a `credits` field lost in an
+  // edit would resolve to `undefined`, travel all the way to `grantCredits`,
+  // and be refused there as a bad integer -- AFTER the card was charged. The
+  // loud version of that failure is a process that will not start.
+  for (const [id, pack] of Object.entries(parsed?.packs ?? {})) {
+    if (id.startsWith('_')) continue; // `_comment` is documentation, not a pack
+    for (const key of ['id', 'label', 'priceUSD', 'credits', 'available', 'stripePriceId']) {
+      // `stripePriceId` is null until the Price exists, and `available` may be
+      // false, so PRESENCE is the test and not truthiness.
+      if (pack?.[key] === undefined) {
+        throw new AuthError(`pack ${id} in ${file} is missing ${key}`, { code: 'BAD_CREDIT_CONFIG' });
+      }
+    }
+    if (typeof pack._comment !== 'string' || pack._comment.length === 0) {
+      throw new AuthError(`pack ${id} in ${file} carries no _comment saying where its number came from`, {
+        code: 'BAD_CREDIT_CONFIG',
+      });
+    }
+  }
+  // THE FREE-TAPE CEILING IS CHECKED HERE FOR A STRONGER REASON THAN THE PACKS
+  // ARE. A missing pack field is caught when somebody tries to buy something. A
+  // missing ceiling is caught by NOBODY: the free grant would simply carry on
+  // being handed out, exactly as it does today, and the file would look like it
+  // had a bound on it. A guard that silently becomes absent is worse than one
+  // that was never written, so the process refuses to start instead.
+  assertCeiling(parsed?.freeTape?.globalCeiling, `${file} (freeTape.globalCeiling)`);
+  if (typeof parsed?.freeTape?._comment !== 'string' || parsed.freeTape._comment.length === 0) {
+    throw new AuthError(`freeTape in ${file} carries no _comment saying where its number came from`, {
+      code: 'BAD_CREDIT_CONFIG',
+    });
+  }
+
   creditConfigCache = deepFreeze(parsed);
   return creditConfigCache;
+}
+
+/**
+ * A ceiling is a whole number of tapes, zero or more, and anything else throws.
+ *
+ * NO FALLBACK, ON PURPOSE. The tempting default for an unreadable ceiling is
+ * "no limit", and that is the single worst value it could take: the config file
+ * would claim a bound, the code would enforce nothing, and the discrepancy
+ * would surface as an invoice. `Infinity` and a float are both rejected by name
+ * because both survive a `typeof x === 'number'` check that somebody will
+ * eventually write instead of this one.
+ */
+function assertCeiling(ceiling, where) {
+  if (!Number.isInteger(ceiling) || ceiling < 0) {
+    throw new AuthError(
+      `the free-tape ceiling must be a whole number of tapes, zero or more; ${where} is ${JSON.stringify(ceiling)}`,
+      { code: 'BAD_FREE_TAPE_CEILING', detail: { ceiling: ceiling ?? null } },
+    );
+  }
+  return ceiling;
 }
 
 function deepFreeze(value) {
@@ -202,12 +327,19 @@ function deepFreeze(value) {
  * page renders; the reasoning stays in the file, where the numbers are.
  */
 export const PLANS = Object.freeze(Object.fromEntries(
-  Object.entries(creditConfig().plans).map(([id, plan]) => [id, Object.freeze({
+  Object.entries(creditConfig().plans).filter(([id]) => !id.startsWith('_')).map(([id, plan]) => [id, Object.freeze({
     id: plan.id,
     label: plan.label,
     monthlyUSD: plan.monthlyUSD,
     annualUSD: plan.annualUSD,
     creditsPerPeriod: plan.creditsPerPeriod,
+    // ABSENT MEANS OFFERED, exactly as it reads for a pack and for a
+    // resolution. A withdrawn plan stays in `PLANS` -- it is still a legal id
+    // for an account that already holds it, and setPlan must still accept it --
+    // so this flag governs one thing only: whether /pricing offers it. A plan
+    // that vanished from PLANS instead would turn every existing account on it
+    // into an unloadable record.
+    available: plan.available !== false,
   })]),
 ));
 
@@ -362,7 +494,11 @@ export function normaliseEmail(email) {
   }
   const cleaned = email.trim().toLowerCase();
   if (cleaned.length === 0 || cleaned.length > MAX_EMAIL_CHARS || !EMAIL_RE.test(cleaned)) {
-    throw new AuthError(`email ${JSON.stringify(email)} is not a usable address`, {
+    // The length and the reason, not the value. What was typed is a form field
+    // from a stranger and is very often a real address with a typo in it --
+    // still theirs, and still not something to write into a log file. Same
+    // ruling as `emailTaken` below.
+    throw new AuthError(`email is not a usable address (${cleaned.length} chars)`, {
       code: 'BAD_EMAIL',
       userMessage: 'That does not look like an email address.',
     });
@@ -411,6 +547,17 @@ function assertUsablePassword(password) {
 }
 
 /**
+ * The derivation itself, and it is ASYNC ON PURPOSE -- the work runs on the
+ * libuv threadpool, not the event loop. A derivation is ~30ms of deliberate
+ * CPU and 16 MiB of deliberate memory; done synchronously, every one of them
+ * freezes the whole process -- every status poll, every page, the Stripe
+ * webhook holding somebody's money -- for its full duration, and login and
+ * signup are public routes. The test that pins this is the one asserting the
+ * event loop keeps turning while a derivation is in flight.
+ */
+const scryptAsync = promisify(crypto.scrypt);
+
+/**
  * `scrypt$N$r$p$<salt b64>$<hash b64>`.
  *
  * Everything needed to verify is inside the string, which is what makes the
@@ -418,11 +565,11 @@ function assertUsablePassword(password) {
  * people who chose the same password have the same digest, and one precomputed
  * table opens every account on the service at once.
  */
-export function hashPassword(password, { params = SCRYPT, rand = crypto } = {}) {
+export async function hashPassword(password, { params = SCRYPT, rand = crypto } = {}) {
   assertUsablePassword(password);
   const salt = rand.randomBytes(params.saltBytes ?? SCRYPT.saltBytes);
   const { N, r, p, keylen, maxmem } = { ...SCRYPT, ...params };
-  const hash = crypto.scryptSync(password, salt, keylen, { N, r, p, maxmem });
+  const hash = await scryptAsync(password, salt, keylen, { N, r, p, maxmem });
   return `scrypt$${N}$${r}$${p}$${salt.toString('base64')}$${hash.toString('base64')}`;
 }
 
@@ -454,16 +601,24 @@ export function parsePassword(encoded) {
  * mistake would be a crash on the login path for every account created before
  * the change -- a total outage produced by a one-line tuning edit.
  */
-export function verifyPassword(account, password) {
+export async function verifyPassword(account, password) {
   const encoded = typeof account === 'string' ? account : account?.password;
   const parsed = parsePassword(encoded);
   if (parsed === null) return false;
   if (typeof password !== 'string') return false;
-  if (Buffer.byteLength(password, 'utf8') > PASSWORD.maxBytes) return false;
+  if (Buffer.byteLength(password, 'utf8') > PASSWORD.maxBytes) {
+    // The refusal is free but the answer must not be. An oversized password is
+    // one any stranger can send, and the unknown-email branch burns a full
+    // derivation for it -- so an early return HERE would make "this address
+    // holds an account" readable off the wall clock, which is the exact
+    // divergence this module's header forbids. Same work, then the same no.
+    await burnEqualWork(password);
+    return false;
+  }
 
   let candidate;
   try {
-    candidate = crypto.scryptSync(password, parsed.salt, parsed.hash.length, {
+    candidate = await scryptAsync(password, parsed.salt, parsed.hash.length, {
       N: parsed.N, r: parsed.r, p: parsed.p, maxmem: SCRYPT.maxmem,
     });
   } catch {
@@ -477,12 +632,12 @@ export function verifyPassword(account, password) {
 /** The work an unknown email must also do, so "no such account" and "wrong
  *  password" take the same wall-clock time. It derives against a throwaway salt
  *  at today's default cost, which is what a freshly created account pays. */
-function burnEqualWork(password) {
+async function burnEqualWork(password) {
   const text = typeof password === 'string' && Buffer.byteLength(password, 'utf8') <= PASSWORD.maxBytes
     ? password
     : 'x';
   try {
-    crypto.scryptSync(text, crypto.randomBytes(SCRYPT.saltBytes), SCRYPT.keylen, {
+    await scryptAsync(text, crypto.randomBytes(SCRYPT.saltBytes), SCRYPT.keylen, {
       N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: SCRYPT.maxmem,
     });
   } catch { /* the point is the time spent, not the digest */ }
@@ -585,6 +740,34 @@ function tryExclusiveCreate(file, body) {
 }
 
 /**
+ * The same exclusive-create primitive as `tryExclusiveCreate`, writing plain
+ * text rather than JSON.
+ *
+ * WHY A SEPARATE FUNCTION RATHER THAN REUSING THE ONE ABOVE. The supabase
+ * index has to hold nothing but the account id, because its reader
+ * (`findAccountBySupabaseId`) validates the file's raw bytes against
+ * `ACCOUNT_ID_RE` -- a JSON-wrapped `"<id>"` would carry quotes that fail that
+ * match. Same collision-refusing shape, different serialisation.
+ */
+function tryExclusiveCreateText(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  let fd;
+  try {
+    fd = fs.openSync(file, 'wx');
+  } catch (err) {
+    if (err.code === 'EEXIST') return false;
+    if (TRANSIENT.has(err.code)) return false;
+    throw err;
+  }
+  try {
+    fs.writeFileSync(fd, text);
+  } finally {
+    fs.closeSync(fd);
+  }
+  return true;
+}
+
+/**
  * The lock body, tolerantly. `null` means absent, `undefined` means present but
  * not readable as JSON. Those are different facts and `stealIfStale` treats
  * them differently, so they do not get collapsed -- the same distinction, for
@@ -661,29 +844,196 @@ function stealIfStale(file, nowMs) {
  */
 export function withAccountLock({ root = REPO_ROOT, accountId }, fn) {
   const paths = accountPaths(root, accountId);
-  fs.mkdirSync(paths.dir, { recursive: true });
+  return withFileLock({
+    lock: paths.lock,
+    onTimeout: () => new AuthError(`timed out waiting for the lock on account ${accountId}`, {
+      code: 'ACCOUNT_LOCKED',
+      accountId,
+      userMessage: 'We are still finishing your last request. Please try again in a moment.',
+    }),
+  }, fn);
+}
+
+/**
+ * The lock itself, with nothing about accounts in it.
+ *
+ * EXTRACTED RATHER THAN COPIED, and that is the whole point of it existing. The
+ * free-tape register needs exactly this mutual exclusion and is NOT keyed by an
+ * account id -- it is one file for the whole installation, so it cannot go
+ * through `withAccountLock`, whose path builder rejects anything that is not 32
+ * hex characters. The alternative was a second lock loop, and a second
+ * hand-written lock is how a codebase ends up with one that is correct and one
+ * that looks correct: this repo already MEASURED that `unlink` and `rename` are
+ * not exclusive on Windows while `openSync(path,'wx')` is, and that measurement
+ * is embodied here once. See the WINNER SELECTION comment in
+ * scripts/queue/queue.mjs.
+ *
+ * `onTimeout` builds the error rather than receiving one, so the caller can say
+ * which resource was contended without this function knowing what a resource
+ * is, and so the message is not constructed on the path where nothing is wrong.
+ */
+function withFileLock({ lock, onTimeout }, fn) {
+  fs.mkdirSync(path.dirname(lock), { recursive: true });
   const started = Date.now();
   let delay = 0;
 
   for (;;) {
-    if (tryExclusiveCreate(paths.lock, { pid: process.pid, at: Date.now() })) {
+    if (tryExclusiveCreate(lock, { pid: process.pid, at: Date.now() })) {
       try {
         return fn();
       } finally {
-        try { fs.rmSync(paths.lock, { force: true }); } catch { /* stealIfStale will clear it */ }
+        try { fs.rmSync(lock, { force: true }); } catch { /* stealIfStale will clear it */ }
       }
     }
-    stealIfStale(paths.lock, Date.now());
-    if (Date.now() - started > LOCK_TIMEOUT_MS) {
-      throw new AuthError(`timed out waiting for the lock on account ${accountId}`, {
-        code: 'ACCOUNT_LOCKED',
-        accountId,
-        userMessage: 'We are still finishing your last request. Please try again in a moment.',
-      });
-    }
+    stealIfStale(lock, Date.now());
+    if (Date.now() - started > LOCK_TIMEOUT_MS) throw onTimeout();
     sleepSync(delay);
     delay = Math.min(delay === 0 ? 1 : delay * 2, 16);
   }
+}
+
+// ---------------------------------------------------------------------------
+// the free-tape ceiling
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a plan is a giveaway, and therefore whether the ceiling applies.
+ *
+ * THE TEST IS THE PRICE, NOT THE NAME. `planId === 'free'` would be the obvious
+ * spelling and it is the wrong one: it bounds a string rather than the property
+ * that actually costs money, so a promotional plan added at $0 under any other
+ * name would hand out provider spend with nothing counting it. Zero is also the
+ * one number in config/credits.json that its own comment says cannot drift.
+ *
+ * It lives here, exported, because `createAccount` and `grantPlanPeriod` both
+ * need it and two spellings of "is this free" is how one of them ends up
+ * bounded and the other does not.
+ */
+export function isFreePlan(planId) {
+  return PLANS[assertPlanId(planId)].monthlyUSD === 0;
+}
+
+/** The register and its lock. A sibling of the record, never a field inside it,
+ *  for the same reason the account lock is: a lock written into the file it
+ *  protects has to be read through the very write it protects against. */
+export function freeTapePaths(root = REPO_ROOT) {
+  const { dir } = accountsRoot(root);
+  return { record: `${dir}/${FREE_TAPES_FILE}`, lock: `${dir}/${FREE_TAPES_FILE}.lock` };
+}
+
+/** The configured ceiling. Read through `creditConfig` on every call rather
+ *  than captured at module scope, so that `reload: true` in a test reaches it
+ *  like every other number in that file. */
+export function freeTapeCeiling({ root = REPO_ROOT } = {}) {
+  return creditConfig({ root }).freeTape.globalCeiling;
+}
+
+/**
+ * How many free tapes have been given away, and whether there is room for one
+ * more. Read-only: it takes no lock and writes nothing.
+ *
+ * A MISSING FILE IS ZERO, NOT AN ERROR, and that is the one place a default is
+ * right in this module. An installation that has never granted a free tape has
+ * genuinely granted zero of them, and there is no other value it could mean.
+ * Creating the file on a read would mean `accounts -- list` left state behind
+ * it, and the number it wrote would be indistinguishable from a real one.
+ */
+export function freeTapeState({ root = REPO_ROOT, ceiling = freeTapeCeiling({ root }) } = {}) {
+  assertCeiling(ceiling, 'the ceiling passed to freeTapeState');
+  const granted = readGrantedCount(freeTapePaths(root).record);
+  return {
+    granted,
+    ceiling,
+    // Clamped at zero: if the count is ever above the ceiling -- which happens
+    // the moment somebody LOWERS the ceiling, a completely legitimate act -- the
+    // honest answer to "how many are left" is none, not a negative number that
+    // arithmetic elsewhere would treat as room.
+    remaining: Math.max(0, ceiling - granted),
+    exhausted: granted >= ceiling,
+  };
+}
+
+function readGrantedCount(file) {
+  const record = readJson(file, { missingOk: true });
+  if (record === null) return 0;
+  const granted = Number(record?.granted);
+  if (!Number.isInteger(granted) || granted < 0) {
+    // A corrupt register is NOT read as zero. Zero means "give everything away
+    // again", which is the most expensive possible interpretation of a damaged
+    // file, and it would be reached by the one account store that had already
+    // shown it could not be trusted.
+    throw new AuthError(`the free-tape register at ${file} is unreadable: granted is ${JSON.stringify(record?.granted)}`, {
+      code: 'FREE_TAPE_REGISTER_CORRUPT',
+      detail: { file },
+    });
+  }
+  return granted;
+}
+
+/**
+ * Claims one free tape against the global ceiling, or reports that there are
+ * none left. The read and the write are one critical section, which is the
+ * entire reason this function exists rather than a comparison at the call site.
+ *
+ * RETURNS RATHER THAN THROWS WHEN THE CEILING IS REACHED. Being full is not an
+ * error -- it is the product having given away what it chose to give away, and
+ * the caller is a signup that must still succeed. An exception here would turn
+ * "no free credits" into "you cannot create an account", which converts a
+ * spending decision into an outage.
+ */
+export function reserveFreeTape({ root = REPO_ROOT, ceiling = freeTapeCeiling({ root }), nowImpl = defaultNow } = {}) {
+  assertCeiling(ceiling, 'the ceiling passed to reserveFreeTape');
+  const paths = freeTapePaths(root);
+
+  return withFileLock({
+    lock: paths.lock,
+    onTimeout: () => new AuthError('timed out waiting for the lock on the free-tape register', {
+      code: 'FREE_TAPES_LOCKED',
+      userMessage: 'We are still finishing another signup. Please try again in a moment.',
+    }),
+  }, () => {
+    const granted = readGrantedCount(paths.record);
+    // `>=` and not `>`. At a ceiling of zero these differ, and zero is the kill
+    // switch somebody reaches for while a balance is draining.
+    if (granted >= ceiling) return { reserved: false, granted, ceiling };
+
+    const next = granted + 1;
+    atomicWriteJson(paths.record, {
+      schemaVersion: SCHEMA_VERSION,
+      granted: next,
+      updatedAt: toDate(nowImpl()).toISOString(),
+    }, null);
+    return { reserved: true, granted: next, ceiling };
+  });
+}
+
+/**
+ * Hands a reservation back, for the one caller that took one and then could not
+ * use it: a signup that lost the race for its own email address.
+ *
+ * NOT CALLED ON ANY ERROR PATH, and deliberately not wrapped in one. Losing a
+ * reservation to a crash costs a tape of headroom and the ceiling arrives early;
+ * releasing one that was actually used costs a tape of real money. Only the
+ * caller that KNOWS the account was destroyed may call this.
+ */
+export function releaseFreeTape({ root = REPO_ROOT, nowImpl = defaultNow } = {}) {
+  const paths = freeTapePaths(root);
+  return withFileLock({
+    lock: paths.lock,
+    onTimeout: () => new AuthError('timed out waiting for the lock on the free-tape register', {
+      code: 'FREE_TAPES_LOCKED',
+    }),
+  }, () => {
+    const granted = readGrantedCount(paths.record);
+    if (granted === 0) return { granted: 0 };
+    const next = granted - 1;
+    atomicWriteJson(paths.record, {
+      schemaVersion: SCHEMA_VERSION,
+      granted: next,
+      updatedAt: toDate(nowImpl()).toISOString(),
+    }, null);
+    return { granted: next };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -731,17 +1081,48 @@ function rootOf(account) {
  * agreed to is stored verbatim for the reason scripts/safety/consent.mjs
  * explains. A block that IS passed and is not granted is a refusal, not a shrug.
  */
-export function createAccount({
+export async function createAccount({
   root = REPO_ROOT,
   email,
   password,
   plan = DEFAULT_PLAN_ID,
   consent = null,
+  // Present so the Supabase identity path (Task 5's `resolveIdentity`) can
+  // create an account directly, rather than creating a local-password account
+  // and claiming it a moment later. `null` here means "an ordinary account";
+  // see `passwordless` below for the one case where it changes what a missing
+  // password means.
+  supabaseUserId = null,
+  // Injected exactly as `nowImpl` and `rand` are, and for the same reason: a
+  // test that wants to prove the ceiling holds should be able to state the
+  // number it is testing instead of creating a hundred accounts to reach the
+  // real one. Production never passes it.
+  ceiling = undefined,
   nowImpl = defaultNow,
   rand = crypto,
 }) {
   const address = normaliseEmail(email);
-  assertUsablePassword(password);
+
+  const hasSupabaseId = supabaseUserId !== null && supabaseUserId !== undefined;
+  let supabaseIndexFile = null;
+  if (hasSupabaseId) {
+    supabaseIndexFile = supabaseIndexPath(root, supabaseUserId);
+    if (!supabaseIndexFile) {
+      throw new TypeError('createAccount needs a well-formed supabaseUserId');
+    }
+  }
+
+  // THE ONLY DOOR THROUGH WHICH `assertUsablePassword` MAY BE SKIPPED. A
+  // Supabase-authenticated signup has no local password at all -- Supabase
+  // already proved who this is -- so `password: null` is a deliberate
+  // "nothing to hash", not an omission. But `password: null` ALONE is never
+  // enough: without a Supabase identity riding along, it would create an
+  // account no mechanism on earth can sign in to. Both conditions are
+  // required, or the relaxation is reachable by a caller that forgot the
+  // second argument.
+  const passwordless = password === null && hasSupabaseId;
+  if (!passwordless) assertUsablePassword(password);
+
   const planId = assertPlanId(plan);
   const hash = emailHash(address);
 
@@ -754,13 +1135,43 @@ export function createAccount({
   const at = toDate(nowImpl()).toISOString();
   const accountId = newAccountId({ rand });
 
+  // THE GLOBAL CEILING, AND IT IS CLAIMED HERE -- after the cheap duplicate
+  // check, so an ordinary "you already have an account" never burns one, and
+  // before the record is written, so a crash costs headroom rather than money.
+  //
+  // ONLY THE FREE PLAN IS BOUNDED. A paid plan's credits were bought; counting
+  // them here would exhaust the giveaway on the people who are not being given
+  // anything. `reserved` is therefore trivially true for every other plan, and
+  // the register is not touched at all.
+  const isFree = isFreePlan(planId);
+  const reservation = isFree
+    ? reserveFreeTape({ root, nowImpl, ...(ceiling === undefined ? {} : { ceiling }) })
+    : { reserved: true };
+
+  // A WITHHELD GRANT IS STILL AN EVENT, so it is a row with a delta of zero
+  // rather than an empty ledger. `createAccount`'s contract below is that an
+  // account with no ledger line is an account whose balance is zero for a
+  // reason nothing recorded, and "we had already given away everything we
+  // decided to give away" is exactly the reason somebody will be looking for
+  // when they read this account back and ask why it started empty.
+  const opening = reservation.reserved
+    ? { at, delta: PLANS[planId].creditsPerPeriod, jobId: null, reason: 'grant:signup' }
+    : { at, delta: 0, jobId: null, reason: 'grant:signup:withheld-global-ceiling' };
+
   const account = attach({
     schemaVersion: SCHEMA_VERSION,
     accountId,
     email: address,
     emailHash: hash,
-    password: hashPassword(password, { rand }),
+    password: passwordless ? null : await hashPassword(password, { rand }),
     plan: planId,
+    // `null` for every account this slice predates. Set at creation, not only
+    // on a later claim, so Task 5's `resolveIdentity` can create a brand-new
+    // Supabase-authenticated account and find it again immediately through
+    // `findAccountBySupabaseId` -- CLAUDE.md's `entriesOf` lesson, generalised:
+    // a field written to disk and not named in the object literal that writes
+    // it reads back `undefined` forever.
+    supabaseUserId: hasSupabaseId ? String(supabaseUserId) : null,
     createdAt: at,
     updatedAt: at,
     // How many times this record has been written. `saveAccount` refuses a write
@@ -775,25 +1186,54 @@ export function createAccount({
     // The opening entry is the plan's first grant, written here rather than
     // left to a later call, because an account that exists with no ledger line
     // is an account whose balance is zero for a reason nothing recorded.
-    ledger: [{
-      at,
-      delta: PLANS[planId].creditsPerPeriod,
-      jobId: null,
-      reason: 'grant:signup',
-    }],
+    ledger: [opening],
   }, { root, nowImpl });
 
-  fs.mkdirSync(account.paths.dir, { recursive: true });
-  atomicWriteJson(account.paths.record, account, accountId);
+  // EVERYTHING BELOW RUNS UNDER THE ACCOUNT'S OWN LOCK (RULING R1). Nobody else
+  // can know this accountId until this function returns it, so the lock buys
+  // nothing against a concurrent reader of *this* account -- what it buys is a
+  // single critical section across BOTH index writes, so a crash or a racing
+  // caller can never observe the email index claimed and the Supabase index
+  // not, or the reverse. `withAccountLock` creates the account directory
+  // itself, so taking it before the directory technically "exists" is safe.
+  return withAccountLock({ root, accountId }, () => {
+    fs.mkdirSync(account.paths.dir, { recursive: true });
+    atomicWriteJson(account.paths.record, account, accountId);
 
-  if (!tryExclusiveCreate(indexPath(root, hash), { accountId })) {
-    // Somebody registered this address between the pre-check and here. Remove
-    // the record just written: it is unreachable, and its directory name is 16
-    // random bytes, so nothing else can possibly be pointing at it.
-    try { fs.rmSync(account.paths.dir, { recursive: true, force: true }); } catch { /* orphan, not a leak */ }
-    throw emailTaken(address);
-  }
-  return account;
+    if (!tryExclusiveCreate(indexPath(root, hash), { accountId })) {
+      // Somebody registered this address between the pre-check and here. Remove
+      // the record just written: it is unreachable, and its directory name is 16
+      // random bytes, so nothing else can possibly be pointing at it.
+      try { fs.rmSync(account.paths.dir, { recursive: true, force: true }); } catch { /* orphan, not a leak */ }
+      // And give the free tape back. This is the one place that may: the account
+      // it was reserved for has just been destroyed, so the reservation is
+      // provably unused rather than merely probably unused. Failing to release it
+      // costs a tape of headroom and nothing else, which is why the release is
+      // allowed to fail quietly and the reservation is not.
+      if (reservation.reserved && isFree) {
+        try { releaseFreeTape({ root, nowImpl }); } catch { /* headroom, not money */ }
+      }
+      throw emailTaken(address);
+    }
+
+    if (hasSupabaseId && !tryExclusiveCreateText(supabaseIndexFile, accountId)) {
+      // The same race as above, one identity later: somebody else's account
+      // already claims this Supabase user id. Unwind every write this call
+      // made -- the email index too, or the address is stuck pointing at a
+      // record we are about to delete.
+      try { fs.rmSync(indexPath(root, hash), { force: true }); } catch { /* best effort */ }
+      try { fs.rmSync(account.paths.dir, { recursive: true, force: true }); } catch { /* orphan, not a leak */ }
+      if (reservation.reserved && isFree) {
+        try { releaseFreeTape({ root, nowImpl }); } catch { /* headroom, not money */ }
+      }
+      throw new AuthError(`a different account already claims supabase id ${supabaseUserId}`, {
+        code: 'SUPABASE_ID_TAKEN',
+        userMessage: 'We could not create an account for that sign-in identity.',
+      });
+    }
+
+    return account;
+  });
 }
 
 function emailTaken(address) {
@@ -801,8 +1241,14 @@ function emailTaken(address) {
   // in a way login is not, and the only real fix is a verification email, which
   // this build has no way to send. The wording is kept flat so it reads as "use
   // the other form" rather than as a confirmation. Do not make it more helpful.
-  return new AuthError(`an account already exists for ${address}`, {
+  // THE ADDRESS GOES ON `detail`, NEVER IN THE MESSAGE. The web layer logs
+  // `err.stack` on four identity paths, so an address in the message is an
+  // address in plaintext in the log of a service that promises to delete a
+  // photograph after seven days -- and the address outlives the face. `detail`
+  // is reachable from a debugger and is not what gets written to disk.
+  return new AuthError('an account already exists for that address', {
     code: 'EMAIL_TAKEN',
+    detail: { emailHash: emailHash(address) },
     userMessage: 'We could not create an account with that email. If you already have one, sign in instead.',
   });
 }
@@ -855,6 +1301,19 @@ export function loadAccount({ root = REPO_ROOT, accountId, nowImpl = defaultNow 
       code: 'ACCOUNT_ID_MISMATCH', accountId,
     });
   }
+  // AN ABSENT `supabaseUserId` IS "UNCLAIMED", AND SAYING SO HERE IS THE WHOLE
+  // FIX. The field was added to `createAccount` without bumping
+  // `SCHEMA_VERSION` -- reasonably, since nothing about the existing fields
+  // changed -- so a record written before it still loads as valid and simply
+  // has no such key. It then read back `undefined`, and `claimAccount`'s guard
+  // is spelled `!== null`, which `undefined` fails: every account predating
+  // the identity slice was PERMANENTLY UNCLAIMABLE, refused as a takeover of
+  // an identity it had never had. Found 2026-08-27 by the owner typing a
+  // correct code and being told it was wrong, with six such records live.
+  // Normalising on the way out means one shape for every reader --
+  // `claimAccount`, `identity.mjs` and anything later -- instead of each
+  // remembering that `undefined` and `null` mean the same thing here.
+  if (record.supabaseUserId === undefined) record.supabaseUserId = null;
   return attach(record, { root, nowImpl });
 }
 
@@ -883,6 +1342,125 @@ export function findAccountByEmail({ root = REPO_ROOT, email, nowImpl = defaultN
     if (err.code === 'NO_ACCOUNT' || err.code === 'BAD_ACCOUNT_ID') return null;
     throw err;
   }
+}
+
+/**
+ * Index lookup, then record load -- the Supabase-id twin of
+ * `findAccountByEmail`. Same contract: null for "no such account", including a
+ * malformed or unrecognisable id, and a throw reserved for something genuinely
+ * broken underneath a legitimate lookup.
+ */
+export function findAccountBySupabaseId({ root = REPO_ROOT, supabaseUserId, nowImpl = defaultNow }) {
+  const file = supabaseIndexPath(root, supabaseUserId);
+  if (!file) return null;
+  let accountId;
+  try {
+    accountId = fs.readFileSync(file, 'utf8').trim();
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+  if (!ACCOUNT_ID_RE.test(accountId)) return null;
+  try {
+    return loadAccount({ root, accountId, nowImpl });
+  } catch (err) {
+    if (err.code === 'NO_ACCOUNT' || err.code === 'BAD_ACCOUNT_ID') return null;
+    throw err;
+  }
+}
+
+/**
+ * Stamps a Supabase identity onto an account that predates this slice, and
+ * nulls the scrypt hash in the same write.
+ *
+ * WHY THE PASSWORD IS NULLED RATHER THAN KEPT. After this slice nothing in the
+ * request path calls `verifyPassword`. A hash that gates nothing is a liability
+ * with no remaining benefit -- it can only ever be stolen.
+ *
+ * WHY THE ACCOUNT IS LOADED *BEFORE* THE INDEX IS TOUCHED AT ALL. The earlier
+ * shape of this function claimed the index first and loaded the account
+ * second, on the theory that a refused claim should cost the account nothing.
+ * That theory is right for a CONFLICT but wrong for a NONEXISTENT account: a
+ * well-formed but unknown `accountId` would still claim the index slot, THEN
+ * throw `NO_ACCOUNT` from the load, and leave that slot pointing at nothing
+ * forever -- verbatim the "an index entry pointing at an account that does
+ * not exist" failure this second index exists to rule out, and with no
+ * recovery: a later real claim of the same Supabase id sees the slot already
+ * taken and is refused. `loadAccount` is read-only, so loading first costs
+ * nothing extra and it means a claim against an account that does not exist
+ * fails before a single byte of the index is written.
+ *
+ * WHY A REBIND TO A *DIFFERENT* SUPABASE ID IS REFUSED, BUT THE *SAME* ID IS
+ * NOT. If this account already carries a different Supabase identity,
+ * silently re-pointing it would let a second identity walk in and inherit the
+ * first one's ledger the moment a session is minted from the lookup -- a
+ * decision an operator makes on purpose, never a side effect of a claim. But
+ * the account already carrying THIS SAME id must still succeed: it is the
+ * only repair path for the gap between `createAccount`'s two index writes (the
+ * record can say the id before the index does), and Task 5's `resolveIdentity`
+ * depends on it -- its email fallback finds exactly this account and re-claims
+ * the id it already has.
+ *
+ * WHY THE INDEX CLAIM STILL HAPPENS *BEFORE* THE ACCOUNT IS MUTATED, EVEN AFTER
+ * THE ACCOUNT IS KNOWN TO EXIST. The naive order -- save the account, then
+ * write the index -- means a claim that turns out to conflict with an
+ * existing one has already thrown this account's real password away for
+ * nothing. Checking the index first means a refused claim costs nothing: the
+ * account is untouched, including its own password, and can be claimed again
+ * by whichever identity actually owns it.
+ *
+ * WHY BOTH STEPS SHARE ONE LOCK ACQUISITION rather than going through
+ * `updateAccount` and writing the index after it returns. Two separate lock
+ * acquisitions leave a window between them: a second `claimAccount` racing for
+ * a *different* accountId is not serialised by this account's lock at all, and
+ * without a single critical section here two concurrent claims for the same
+ * supabaseUserId could both pass an index check that reads stale, each winning
+ * one race and losing the other -- an index file pointing at an account whose
+ * own `supabaseUserId` field says something else. One lock, held across both
+ * writes, is what rules that out.
+ */
+export async function claimAccount({ root = REPO_ROOT, accountId, supabaseUserId, nowImpl = defaultNow }) {
+  const file = supabaseIndexPath(root, supabaseUserId);
+  if (!file) throw new TypeError('claimAccount needs a well-formed supabaseUserId');
+  const wanted = String(supabaseUserId);
+
+  return withAccountLock({ root, accountId }, () => {
+    // Loaded first, inside the lock, before the index is touched at all: a
+    // well-formed but nonexistent accountId throws NO_ACCOUNT right here and
+    // leaves no index entry behind.
+    const fresh = loadAccount({ root, accountId, nowImpl });
+
+    // A REBIND IS A DECISION, NOT A RETRY. Refuse outright when this account
+    // already belongs to a DIFFERENT Supabase identity. The one case that must
+    // NOT be refused is the account already carrying this SAME id -- see the
+    // repair note above.
+    if (fresh.supabaseUserId !== null && fresh.supabaseUserId !== wanted) {
+      throw new AuthError(`account ${accountId} already claims a different supabase id`, {
+        code: 'SUPABASE_ID_TAKEN',
+        accountId,
+      });
+    }
+
+    // Claim (or confirm) the index slot. `tryExclusiveCreateText` fails when
+    // the file already exists -- either a different account got there first
+    // (a genuine conflict, refused below) or it already names this account (a
+    // retried claim, or the missing-index repair, tolerated as a no-op).
+    if (!tryExclusiveCreateText(file, accountId)) {
+      let existing;
+      try { existing = fs.readFileSync(file, 'utf8').trim(); } catch { existing = null; }
+      if (existing !== accountId) {
+        throw new AuthError(`a different account already claims supabase id ${supabaseUserId}`, {
+          code: 'SUPABASE_ID_TAKEN',
+          accountId,
+        });
+      }
+    }
+
+    fresh.supabaseUserId = wanted;
+    fresh.password = null;
+    saveAccount(fresh);
+    return fresh;
+  });
 }
 
 /**
@@ -933,6 +1511,84 @@ export function updateAccount({ root = REPO_ROOT, accountId, nowImpl = defaultNo
     saveAccount(fresh);
     return { account: fresh, outcome };
   });
+}
+
+/**
+ * Erases one account from the local store: both index entries, the record,
+ * and the directory. Deletion spec §1 step 5 -- the LAST local step, after
+ * jobs and sessions, because everything before it needs this record to find
+ * what else to delete.
+ *
+ * THE ACCOUNT IS LOADED INSIDE THE LOCK, like `updateAccount` and for the
+ * same reason: a snapshot taken outside it can be stale by the time the lock
+ * is won. The concrete stale read (review finding, 2026-08-29): a person
+ * clicks "Sign in with Google" while the operator deletes their account, and
+ * `claimAccount` -- which holds this same lock -- binds a supabase id and
+ * writes its index entry between the snapshot and the deletion. A snapshot
+ * that still says `supabaseUserId: null` then skips that entry, and the
+ * dangling file makes the Google identity permanently unable to open an
+ * account (`createAccount`'s exclusive create reads bare existence as
+ * `SUPABASE_ID_TAKEN`). Loaded under the lock, the claim either finished
+ * first (and is seen) or arrives second (and finds `NO_ACCOUNT`).
+ *
+ * THE INDEX ENTRIES GO FIRST AND THE RECORD GOES LAST, because the record is
+ * the RETRY'S ONLY ENTRY POINT. The first version removed the record first,
+ * and a refused entry removal -- an EBUSY is a Tuesday on Windows -- then
+ * left a dangling entry with no account behind it: sign-in resolved to null,
+ * signup read the bare entry file as "address taken", and no retry could
+ * reach it because `loadAccount` answered `NO_ACCOUNT`. The address was
+ * wedged forever, silently. Entries-first inverts every partial state into a
+ * recoverable one: whatever fails, the record survives, and running the
+ * deletion again converges (`adminDeleteUser` upstream is already
+ * retry-proof, 404 being success). A concurrent `updateAccount` cannot
+ * resurrect anything either way -- it reloads under this same lock and fails
+ * `NO_ACCOUNT` once the record is gone.
+ *
+ * EACH INDEX ENTRY IS REMOVED ONLY IF IT POINTS AT THIS ACCOUNT -- OR AT
+ * NOTHING LEGIBLE. The entries are exclusive-created and should always
+ * agree, but "should" is not a reason to let a crossed index turn one
+ * person's deletion into another person's unreachable account. An entry that
+ * will not parse points at nobody, so it is removed rather than left to
+ * wedge the address (an unreadable entry blocks signup exactly like a real
+ * one).
+ *
+ * WHAT THIS NEVER TOUCHES: the free-tape register. Its ceiling counts grants
+ * across every account that has EVER existed -- decrementing it here is the
+ * create-delete-create farm the ceiling exists to bound.
+ *
+ * `fsImpl` covers only the removals -- it exists so a test can refuse one
+ * `rmSync` and prove the retry converges.
+ */
+export function deleteAccount({ root = REPO_ROOT, accountId, fsImpl = fs }) {
+  const paths = accountPaths(root, accountId);
+
+  const account = withAccountLock({ root, accountId }, () => {
+    const fresh = loadAccount({ root, accountId });
+
+    const emailEntry = indexPath(root, fresh.emailHash ?? emailHash(fresh.email));
+    let entry = null;
+    let entryReadable = true;
+    try { entry = readJson(emailEntry, { missingOk: true }); } catch { entryReadable = false; }
+    if (!entryReadable || entry?.accountId === accountId) fsImpl.rmSync(emailEntry, { force: true });
+
+    const sbEntry = fresh.supabaseUserId ? supabaseIndexPath(root, fresh.supabaseUserId) : null;
+    if (sbEntry) {
+      let remove = false;
+      try {
+        remove = fs.readFileSync(sbEntry, 'utf8').trim() === accountId;
+      } catch (err) {
+        // Already gone is done; unreadable points at nobody and must go.
+        remove = err.code !== 'ENOENT';
+      }
+      if (remove) fsImpl.rmSync(sbEntry, { force: true });
+    }
+
+    fsImpl.rmSync(paths.record, { force: true });
+    return fresh;
+  });
+
+  fsImpl.rmSync(paths.dir, { recursive: true, force: true });
+  return { accountId, email: account.email };
 }
 
 /** Copies the persisted fields of `fresh` onto `stale`, so a caller still
@@ -1004,13 +1660,13 @@ export function listAccounts({ root = REPO_ROOT, nowImpl = defaultNow } = {}) {
  * they will have reintroduced the enumeration oracle, and the test that catches
  * it is the one asserting both branches take comparable time.
  */
-export function authenticate({ root = REPO_ROOT, email, password, nowImpl = defaultNow }) {
+export async function authenticate({ root = REPO_ROOT, email, password, nowImpl = defaultNow }) {
   const account = findAccountByEmail({ root, email, nowImpl });
   if (account === null) {
-    burnEqualWork(password);
+    await burnEqualWork(password);
     throw badCredentials();
   }
-  if (!verifyPassword(account, password)) throw badCredentials();
+  if (!(await verifyPassword(account, password))) throw badCredentials();
   return account;
 }
 

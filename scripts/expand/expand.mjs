@@ -133,7 +133,7 @@ export const EXPAND_RULES = Object.freeze([
  * and close to unstateable as a rule.
  */
 export const EXPAND_PROMPT_TEMPLATE = `You are expanding one short phrase from a user into a single {{KIND}} fragment
-for a 2003 German camcorder-tape video. The user's photograph supplies the person; you supply
+for a 2003 camcorder-tape video. The user's photograph supplies the person; you supply
 everything else about {{SCOPE}}.
 
 THE THREE RULES. Breaking any of them makes the output unusable, and it is checked mechanically

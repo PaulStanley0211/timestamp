@@ -61,6 +61,22 @@ export const LIMITS = Object.freeze({
   maxBytes: 12_000_000,
   minEdge: 256,
   maxEdge: 8000,
+  /**
+   * THE LONGEST EDGE THAT MAY LEAVE THIS MACHINE, and it is a REFUSAL FROM A
+   * REAL ENDPOINT rather than a guess. fal-ai/uso answered a 3712px-tall
+   * reference with HTTP 422 `image_too_large`: "Maximum dimensions are
+   * 2048x2048 pixels" (2026-08-23, job 20260823-185647-a08774).
+   *
+   * It is enforced at INTAKE rather than in the provider for two reasons. The
+   * photograph a phone takes is 3000-4000px on the long edge, so this is not an
+   * edge case, it is EVERY REAL UPLOAD -- and the largest still this product
+   * ever generates is 960x720, so a 2048px reference is already oversampled
+   * more than twice over. And the reference travels as a base64 data URI, which
+   * inflates it by a third: capping here cut this photo's request from about
+   * 8.5MB to well under a megabyte, which is latency and failure surface on
+   * every single call, not just the ones that would have been refused.
+   */
+  maxReferenceEdge: 2048,
   accept: Object.freeze(['image/jpeg', 'image/png', 'image/webp']),
 });
 
@@ -265,6 +281,19 @@ export async function ingestPhoto(srcPath, destPath, {
       '-map_metadata', '-1',
       '-map_metadata:s:v', '-1',
       '-frames:v', '1',
+      // Downscale to fit inside maxReferenceEdge, and NEVER upscale: the box is
+      // min(iw, cap) x min(ih, cap), so an image already inside it is scaled by
+      // exactly 1. Expressed as a FILTER rather than computed in Node on
+      // purpose -- see the note below about not reimplementing the orientation
+      // table. iw/ih here are post-autorotation, which is the only place the
+      // real delivered dimensions exist. The second scale rounds to even
+      // dimensions, which yuvj420p requires and which the first scale does not
+      // guarantee.
+      '-vf', [
+        `scale=w='min(iw,${limits.maxReferenceEdge})':h='min(ih,${limits.maxReferenceEdge})'`
+          + ':force_original_aspect_ratio=decrease:flags=lanczos',
+        'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+      ].join(','),
       // Pinned rather than inferred from destPath -- see the header note about
       // the PNG encoder writing an eXIf chunk back out of frame side data.
       '-c:v', 'mjpeg',

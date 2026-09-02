@@ -34,7 +34,10 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { hostname } from 'node:os';
 import { createQueue, REPO_ROOT } from '../queue/queue.mjs';
+import { createOwnerRefunds } from '../web/session-middleware.mjs';
 import { createWorker, WorkerError } from './worker.mjs';
+import { STEPS } from '../render/job.mjs';
+import { installCrashHandlers } from '../ops/crash.mjs';
 
 export function parseArgs(argv) {
   const flags = new Set();
@@ -77,9 +80,20 @@ export function renderEvent(event, { verbose = false, t0 = null } = {}) {
   const job = e.jobId ?? '';
 
   switch (e.type) {
-    case 'reaped':
+    case 'reaped': {
       if (e.count === 0) return verbose ? line('reaped     nothing -- every claimed job is inside its lease') : null;
-      return line(`reaped     ${e.count} dead lease(s) back to pending: ${(e.jobIds ?? []).join(', ')}`);
+      // BACK TO PENDING AND GONE TO failed/ ARE DIFFERENT DIRECTORIES, and this
+      // line said "back to pending" for both. An operator then ran `queue-cli
+      // peek`, which defaults to pending, found nothing, and was looking in the
+      // wrong place -- on the one line whose stated job is telling them the
+      // difference between "the queue is stuck" and "a previous run was killed".
+      const failed = e.failed ?? [];
+      const pending = e.pending ?? (e.jobIds ?? []).filter((id) => !failed.includes(id));
+      const parts = [];
+      if (pending.length) parts.push(`${pending.length} back to pending: ${pending.join(', ')}`);
+      if (failed.length) parts.push(`${failed.length} out of attempts -> failed/: ${failed.join(', ')}`);
+      return line(`reaped     ${parts.join(' · ')}`);
+    }
 
     case 'claimed':
       return line(`claimed    ${job}  attempt ${(e.attempts ?? 0) + 1}/${e.maxAttempts ?? '?'}`);
@@ -119,6 +133,22 @@ export function renderEvent(event, { verbose = false, t0 = null } = {}) {
 
     case 'cancelled':
       return line(`cancelled  ${job}  ${formatMs(e.ms)}  no attempt burned, nothing in failed/`);
+
+    case 'refunded':
+      return line(`refunded   ${job}  ${e.credits == null ? 'unspent credits returned' : `${e.credits} CR returned`}  (${e.reason})`);
+
+    case 'refund-failed':
+      // A person's money missed its way back. The durable record lands in
+      // out/refunds/ (session-middleware writes it); this line is the live
+      // half, and it says what to do, not just what happened.
+      return line(`REFUND MISSED ${job}  [${e.error?.code ?? 'ERROR'}] ${e.error?.message}  -- npm run refunds to reconcile`);
+
+    case 'refund-declined':
+      // Not an error and not nothing: the seam read a paid attempt and kept
+      // the money, conservatively. The operator -- who can read the provider's
+      // own dashboard -- decides whether that was right. out/refunds/ holds
+      // the record either way.
+      return line(`REFUND HELD ${job}  a paid step had started, so the credits stay spent -- npm run refunds to reconcile`);
 
     case 'failed':
       return line(`FAILED     ${job}  ${formatMs(e.ms)}  [${e.error?.code ?? 'ERROR'}] ${e.error?.message}` +
@@ -188,6 +218,28 @@ async function main() {
   const verbose = flags.has('verbose');
   const json = flags.has('json');
 
+  // A MISSPELLED --stop-after IS A SPEND, NOT A NO-OP.
+  //
+  // `runPipeline` only ever COMPARES this value (`if (stopAfter === name)`), so
+  // an unmatched one never matches and every claimed job runs straight through
+  // `animate` and is billed -- while the banner below confirms the operator's
+  // intent by printing it back. The comparison is case-sensitive too, so
+  // `--stop-after=Select` fails the same way while looking more correct. This
+  // process holds `paidTransport(provider)`, so on `--provider=fal` that is
+  // real money.
+  //
+  // `render.mjs` has validated this against STEPS since it was written; the
+  // worker simply never learned to. Same ruling as the `purge` CLI's argument
+  // whitelist: an unknown argument is a refusal, never a silent no-op, when the
+  // thing it was meant to prevent costs money.
+  const stopAfter = values['stop-after'] ?? null;
+  if (values['stop-after'] !== undefined && !STEPS.includes(stopAfter)) {
+    console.error(`\n--stop-after must be one of: ${STEPS.join(', ')}\n` +
+      `got ${JSON.stringify(values['stop-after'])}. An unrecognised step never matches, so the\n` +
+      'worker would run every job through the paid step and bill it.\n');
+    return 1;
+  }
+
   if (values.concurrency !== undefined && Number(values.concurrency) !== cfg.provider.maxInflight) {
     console.error(`\n--concurrency=${values.concurrency} disagrees with cfg.provider.maxInflight ` +
       `(${cfg.provider.maxInflight}). That number lives in config/render.json so there is one answer; ` +
@@ -207,8 +259,30 @@ async function main() {
     leaseMs: cfg.provider.pollTimeoutMs,
   });
 
-  const { createProvider } = await import('../providers/index.mjs');
+  // `paidTransport` arrives through the SAME lazy import, for the reason named
+  // in this file's header: the provider layer's index pulls ffmpeg in behind it
+  // and a test that imports `renderEvent` must not load either.
+  const { createProvider, paidTransport } = await import('../providers/index.mjs');
   const provider = createProvider(providerId, { cfg, root });
+
+  // THE IMAGE CLASSIFIER, AND THIS IS THE ONLY PLACE ITS CREDENTIAL IS READ.
+  // Unconfigured it returns null, which is the state this product has shipped
+  // in all along: `moderate.mjs` records an `image-unclassified` warning and
+  // the job proceeds. Configured, it becomes a paid call, so it gets the same
+  // transport treatment as the render provider -- an explicitly bound `fetch`
+  // handed in from here, never a default inside the module, so `npm test`
+  // cannot reach the network however hard it tries.
+  //
+  // Half-configured THROWS and takes the worker down with it. That is the
+  // point: a worker that starts having quietly decided not to check
+  // photographs is worse than one that refuses to start.
+  const { awsImageModeratorFromEnv } = await import('../safety/image-moderate-aws.mjs');
+  const imageModerateImpl = awsImageModeratorFromEnv(process.env, {
+    fetchImpl: globalThis.fetch.bind(globalThis),
+  });
+  if (imageModerateImpl && !json) {
+    console.log('  moderation image classifier: AWS Rekognition');
+  }
 
   const t0 = Date.now();
   let lastLine = null;
@@ -218,8 +292,27 @@ async function main() {
     provider,
     queue,
     pollMs: values['poll-ms'] ? Number(values['poll-ms']) : undefined,
-    stopAfter: values['stop-after'] ?? null,
+    stopAfter,
     workerId: `${hostname()}-${process.pid}`,
+    // THE WIRE THAT LETS THIS PROCESS SPEND. `worker.mjs` has always accepted
+    // `providerCtx` and this file passed none, so `--provider=fal` died at the
+    // still step with the money guard's own TypeError and the web app's
+    // renderer could not reach the network at all -- CLI only, nobody but Paul.
+    // `paidTransport` returns nothing at all for the fixture, so the free path
+    // is byte-identical to what it was.
+    providerCtx: paidTransport(provider),
+    // Null when unconfigured, which `makeResolver` treats as an explicit
+    // override equal to the default it already had. Nothing changes until the
+    // three AWS variables exist.
+    deps: { imageModerateImpl },
+    // THE OTHER WIRE THAT MUST NOT DANGLE. The worker consults this seam when
+    // a job ends without a tape; the glue walks the ownership index back to
+    // the account that paid at enqueue and asks `refundIfUnspent`, which
+    // reads the manifest's steps and declines on its own if a paid step ever
+    // ran. Without this line, worker-side refunds exist only in the tests --
+    // the exact dangling-seam shape BUG 1 in CLAUDE.md section 8 had -- and
+    // a source-reading test in test/worker.test.js fails if it goes missing.
+    refundImpl: createOwnerRefunds({ root }).refund,
     signals: true,
     onEvent(event) {
       if (json) { console.log(JSON.stringify(event)); return; }
@@ -233,7 +326,7 @@ async function main() {
     },
   });
 
-  const reaped = worker.reap();
+  const reaped = await worker.reap();
   const stats = queue.stats();
 
   if (!json) {
@@ -262,6 +355,9 @@ const invokedDirectly = process.argv[1] &&
   pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
 
 if (invokedDirectly) {
+  // Direct invocation only, never on import -- a test that imports
+  // renderEvent must not gain process-wide crash handlers.
+  installCrashHandlers({ name: 'worker' });
   main()
     .then((code) => { process.exitCode = code ?? 0; })
     .catch((err) => {

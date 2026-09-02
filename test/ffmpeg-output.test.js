@@ -18,7 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runFfmpeg, findFfmpeg, REPO_ROOT } from '../scripts/ffmpeg/run.mjs';
-import { assertDeliveryContract, assertComposite, assertTapeGrade, assertBurnIn, regionStats } from '../scripts/ffmpeg/assert.mjs';
+import { assertDeliveryContract, assertComposite, assertTapeGrade, assertTapeColour, assertBurnIn, regionStats } from '../scripts/ffmpeg/assert.mjs';
 import { deliveryGeometry, tapeGeometry } from '../scripts/tapedeck/frame.mjs';
 import { loadLookProfile, buildVideoFilter } from '../scripts/tapedeck/look.mjs';
 import { burnInFilters, burnInProbeRegion } from '../scripts/tapedeck/burn-in.mjs';
@@ -45,7 +45,33 @@ const skip = HAVE ? false : `ffmpeg not found (${findFfmpeg().ffmpeg}) -- pixel 
 
 // Everything lands under build/, which is gitignored, and uses a distinct
 // prefix so a failed run leaves inspectable artifacts rather than vanishing.
-const outDir = path.join(REPO_ROOT, 'build', 'test');
+//
+// THE PID IS NOT DECORATION. The names below are fixed literals, so every
+// `node --test` on this checkout wants the same `build/test/contract.mp4`.
+// Inside ONE run that is safe: this file and `audio-output.test.js` are the
+// only two writing here, their names do not overlap, and neither is imported
+// by another test file the way `provider-contract.test.js` imports
+// `provider-fal.test.js`. Across TWO runs it is not safe. A second `npm test`
+// started while the first is still going truncates the first's mp4s mid-read,
+// and what surfaces is `moov atom not found` or a torn h264 bytestream,
+// reported against whichever test happened to be reading rather than against
+// the run that overwrote the file. It reads exactly like load or a real
+// regression and is neither, which is what makes it expensive to chase.
+//
+// It therefore never fires on CI, which runs one suite at a time -- only on a
+// developer machine running two, which is now routine on this checkout.
+// Measured before this line existed: two concurrent suites claimed all SIX
+// files under build/test in common, and the SAME NINE tests failed in both
+// runs -- every one of them from these two files, and nothing else in the
+// other 53. Measured after, the same way: 0 files shared, and not one of
+// those nine failing in either run.
+//
+// The pid makes the directory this process's own -- the same fix, for the
+// same class of shared-path race, as `c897845` (the fal test) and the tmp
+// name in `scripts/auth/accounts.mjs`. It goes on the DIRECTORY rather than
+// on each filename so that a test added here later is safe without its
+// author having to know any of this.
+const outDir = path.join(REPO_ROOT, 'build', 'test', String(process.pid));
 if (HAVE) fs.mkdirSync(outDir, { recursive: true });
 
 const SOURCE = { lavfi: `testsrc2=size=1280x720:rate=${cfg.fps}:duration=${cfg.durationSeconds}` };
@@ -150,10 +176,61 @@ test('a broken filtergraph fails loudly with the ffmpeg error attached', { skip 
       // unknown filter as a filterchain parse error rather than "No such
       // filter", so assert on the offending name rather than on the wording.
       assert.match(err.message, /nosuchfilter/);
-      // And the exit code must read as the -22 it is, not its unsigned wrap.
-      assert.equal(err.code, -22);
+      // The exit code is the OS's to spell, not ffmpeg's: the same EINVAL comes
+      // back as -22 on Windows (through the unsigned-32 wrap normalizeExitCode
+      // undoes) and as 234 on POSIX, which truncates it to 8 bits. Measured:
+      // asserting -22 was one of the two Linux CI reds. Assert the property --
+      // ffmpeg RAN and FAILED -- and leave the wrap itself to ffmpeg-run.test.js,
+      // which asserts normalizeExitCode(4294967274) === -22 on a literal and so
+      // tests it identically on both platforms. Integer, not merely non-zero:
+      // a code of null is how run() reports a process that never started, and
+      // that must not read as a filtergraph rejection.
+      assert.ok(Number.isInteger(err.code) && err.code !== 0,
+        `expected a non-zero integer exit code from a failed ffmpeg, got ${err.code}`);
       assert.ok(err.stderr.length > 0, 'the full stderr is attached for diagnosis');
       return true;
     },
+  );
+});
+
+/**
+ * THE GREEN TAPE, 2026-09-02, and the reason this file needed a new test at all.
+ *
+ * The first tape ever rendered inside the deployed image came out entirely
+ * green -- and every assertion above it passed, because they all read the luma
+ * plane and the luma plane was perfect. 375 frames, 15.000 seconds, -26.5
+ * LUFS, black floor lifted, highlights rolled off, date stamp present. The
+ * cause was ffmpeg 5.1 in the container against 8.1 here, negotiating the
+ * grade/tape boundary differently.
+ *
+ * The fault is reproduced rather than imagined: the real render is re-encoded
+ * with both chroma planes pinned to the values the broken tape actually
+ * measured (UAVG 76.1, VAVG 77.3), which is green in YUV.
+ */
+test('a tape with a colour cast is caught, though its luma plane is perfect', { skip }, async () => {
+  const good = await fullRender();
+
+  // The luma-plane assertions cannot tell these two apart -- that is the point.
+  await assertTapeColour(good, delivery);
+
+  const green = path.join(outDir, 'green.mp4');
+  await runFfmpeg([
+    '-y', '-hide_banner', '-loglevel', 'error',
+    '-i', good,
+    '-vf', "geq=lum='p(X,Y)':cb=76:cr=77",
+    '-frames:v', '30', '-c:v', 'libx264', '-pix_fmt', cfg.encode.pixFmt, '-crf', '14', green,
+  ]);
+
+  // The luma checks still pass on the broken file, which is the whole finding.
+  await assertTapeGrade(green, delivery);
+
+  await assert.rejects(
+    () => assertTapeColour(green, delivery),
+    (err) => {
+      assert.match(err.message, /colour fault the luma checks cannot see/);
+      assert.match(err.message, /[UV]AVG=/);
+      return true;
+    },
+    'a green tape must not pass verify',
   );
 });

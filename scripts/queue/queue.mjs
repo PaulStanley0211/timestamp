@@ -638,19 +638,52 @@ export function createQueue({
   /**
    * Remove a lock only if it is still the same lock we read.
    *
-   * Every reaper clears the dead lock, winner or loser, so that a reaper which
-   * died mid-repair cannot strand the job. That generosity has one sharp edge:
-   * a slow reaper still holding a path from a moment ago could delete a lock
-   * that a live worker has since taken on the very same job, silently
-   * un-claiming a render that is already in progress. Comparing fingerprints
-   * catches exactly that, because the live worker's lock carries a different
-   * token.
+   * The fingerprint comparison narrows the window; it cannot close it, because
+   * the check and the unlink are two calls and the unlink is aimed at a name.
+   * What closes it is that only one caller per lease is ever allowed here --
+   * the mark holder, or its lease-aged successor; see WHO MAY UNLINK THE LOCK
+   * in reapExpired(). A version that let every reaper drop the dead lock had a
+   * descheduled loser wake up and unlink the LIVE lock a worker had since
+   * taken on the same job, and the job got claimed twice.
    */
   function dropLockIfUnchanged(lock) {
     const current = readLock(lock.jobId);
     if (!current) return false;
     if (lockFingerprint(current) !== lockFingerprint(lock)) return false;
     return unlinkIfPresent(lock.file);
+  }
+
+  /**
+   * The sanction to unlink a lease's lock: this lease's reap mark. Exactly one
+   * caller can create the mark, and holding it is what licenses
+   * dropLockIfUnchanged -- the full argument is at WHO MAY UNLINK THE LOCK in
+   * reapExpired(). Both callers that clear dead leases go through here:
+   * reapExpired(), and enqueue() when it clears an expired lease to resume a
+   * job.
+   *
+   * A caller that finds the mark already taken may inherit the drop only once
+   * the mark is a full lease old: its taker has had leaseMs to run two
+   * syscalls, and past that it is presumed dead by the same rule leases
+   * presume workers dead. A mark that is present but not yet readable is being
+   * taken this instant, and its taker will do the dropping. A readable mark
+   * with no usable reapedAt can only be a hand-made repair, and refusing it
+   * would strand the job forever.
+   *
+   * @returns {{mine: boolean, mayDropLock: boolean}} `mine` is whether this
+   *   call took the mark -- the reap is its to report; `mayDropLock` is
+   *   whether this call may clear the lease's lock.
+   */
+  function acquireDropSanction(jobId, generation, t, markBody) {
+    const mine = tryExclusiveCreate(reapMarkPath(jobId, generation), markBody) === 'created';
+    let mayDropLock = mine;
+    if (!mine) {
+      const mark = parseJson(readText(reapMarkPath(jobId, generation)));
+      if (mark) {
+        const reapedAt = Date.parse(mark.reapedAt);
+        mayDropLock = !Number.isFinite(reapedAt) || t - reapedAt > leaseMs;
+      }
+    }
+    return { mine, mayDropLock };
   }
 
   /** Idempotent: an entry already sitting in pending is left exactly as it is,
@@ -723,7 +756,28 @@ export function createQueue({
         // An expired lease is not a claim. Clearing it here rather than making
         // the caller run reapExpired() first is the difference between "resume
         // this job" working and needing a runbook.
-        unlinkIfPresent(lock.file);
+        //
+        // But clearing it is an unlink of the shared lock name, and every one
+        // of those must hold this lease's mark first -- an enqueue parked
+        // over an unsanctioned unlink stole a successor's live lock exactly
+        // the way a parked reaper did; see WHO MAY UNLINK THE LOCK in
+        // reapExpired(). The mark mirrors what a reap of this lease would
+        // write, so an enqueue that dies right here leaves a record the net
+        // can rescue the job from. If the mark belongs to a reaper mid-drop,
+        // the lock is theirs and will be gone in microseconds; the fresh
+        // entry below is valid either way, and claim() sweeps the duplicate
+        // the reaper's repair may add alongside it.
+        const generation = lockFingerprint(lock);
+        const { mayDropLock } = acquireDropSanction(jobId, generation, t, {
+          jobId,
+          generation,
+          seq: Number.isFinite(lock.seq) ? lock.seq : 0,
+          priority: Number.isFinite(lock.priority) ? lock.priority : 0,
+          enqueuedAt: lock.enqueuedAt ?? iso(t),
+          attempts: (Number.isFinite(lock.attempts) ? lock.attempts : 0) + 1,
+          reapedAt: iso(t),
+        });
+        if (mayDropLock) dropLockIfUnchanged(lock);
       }
 
       // A previous terminal record is not a reason to refuse. `failed/` IS the
@@ -929,7 +983,25 @@ export function createQueue({
      *
      * @returns {string[]} the job ids this call moved
      */
-    reapExpired() {
+    /**
+     * @param {{onTerminal?: (jobId: string) => void}} [opts]
+     *   `onTerminal` is called for each job this reap sent to `failed/` for
+     *   good, rather than back to `pending`.
+     *
+     *   ADDITIVE ON PURPOSE. The return value is unchanged -- a flat array of
+     *   every job moved -- because thirty-odd assertions and a race test depend
+     *   on that shape, and this module's atomicity properties are the last
+     *   place to introduce churn for a signature.
+     *
+     *   IT EXISTS BECAUSE A REAPED-TO-DEATH JOB WAS NEVER REFUNDED. The debit
+     *   lands at enqueue, and the only refund trigger is inside the worker's
+     *   own failure path. This function writes the terminal record itself, in a
+     *   module that holds no token and knows nothing about accounts, so a job
+     *   killed by four lease expiries left the customer down 21 CR with no
+     *   provider ever called, no `refunded` event, and no `REFUND MISSED` line
+     *   either -- the one witness the design relies on. Total silence.
+     */
+    reapExpired({ onTerminal = null } = {}) {
       ensureDirs();
       const t = now();
       const moved = [];
@@ -1027,10 +1099,31 @@ export function createQueue({
         // one reporter, decided by the one primitive on this platform that is
         // actually exclusive. A later lease on the same job mints a fresh token
         // and so gets a fresh name, and is reported again as it should be.
+        //
+        // WHO MAY UNLINK THE LOCK. One caller per lease, and it is the mark
+        // holder. An unlink is aimed at a NAME, not at the bytes that were
+        // checked: with every reaper allowed to drop the dead lock, a reaper
+        // descheduled between "the lock is still the dead lease" and "unlink
+        // it" wakes up and unlinks whatever is at that name NOW -- and by then
+        // it can be the LIVE lock of the worker that claimed the job in the
+        // gap. The stolen claim's job gets resurrected and claimed a second
+        // time: one render, two workers, both paying a provider. CI caught
+        // exactly that on Linux (7 wins over 6 jobs, run 33258055925), and
+        // test/queue-race.test.js replays it deterministically with a reaper
+        // parked over its own unlink. Serialising the drop on the mark closes
+        // it: a second lock at this name can only exist after the one
+        // sanctioned unlink has already happened. enqueue() clears expired
+        // leases under the same sanction, because the argument is about the
+        // name, not about who is unlinking it.
+        //
+        // A mark holder that died between taking the mark and dropping the
+        // lock must not strand the job, so acquireDropSanction lets the drop
+        // be taken over -- but only once the mark is a full lease old, the
+        // same backstop workers themselves get.
         const generation = lockFingerprint(lock);
-        const mine = tryExclusiveCreate(reapMarkPath(jobId, generation), {
+        const { mine, mayDropLock } = acquireDropSanction(jobId, generation, t, {
           jobId, generation, seq, priority, enqueuedAt, attempts, reapedAt: iso(t),
-        }) === 'created';
+        });
 
         // A reaper that took the mark and then died would strand the job for
         // ever if nobody else were allowed to finish: the mark can never be
@@ -1068,14 +1161,20 @@ export function createQueue({
             const holder = readLock(jobId);
             if (holder && lockFingerprint(holder) !== generation) undoIfUnchanged(dest, body);
           }
-          dropLockIfUnchanged(lock);
+          if (mayDropLock) dropLockIfUnchanged(lock);
         }
 
         // The mark holder reports even when somebody else did the writing, and
         // even when the lease has since moved on. Taking the mark is what
         // reaped this lease; who happened to run the syscalls is not the
         // question `reapExpired` answers.
-        if (mine) moved.push(jobId);
+        if (mine) {
+          moved.push(jobId);
+          // Only the mark holder reports, so a job cannot be refunded twice by
+          // two workers reaping the same lease -- the same rule the line above
+          // already follows for the return value.
+          if (terminal && onTerminal) onTerminal(jobId);
+        }
       }
 
       // THE NET. Everything above is written so that a job is always in at

@@ -42,7 +42,7 @@ export const DIVERGENCE_LIMIT = 0.15;
 /** How a model bills. `call` is a flat per-request price; `second` is the
  *  common video shape; `image` the common still shape. A unit not on this list
  *  is a table someone hand-edited without reading the estimator. */
-export const PRICING_UNITS = Object.freeze(['image', 'second', 'call']);
+export const PRICING_UNITS = Object.freeze(['image', 'second', 'call', 'token']);
 
 export const PRICING_FILE = 'config/pricing.json';
 
@@ -78,12 +78,71 @@ export function assertPricingTable(pricing) {
     if (!Number.isFinite(entry.usd) || entry.usd < 0) {
       throw bad('invalid_pricing', `pricing.models[${model}].usd must be a non-negative number, got ${JSON.stringify(entry.usd)}`, { model });
     }
-    // The exemption, and its only safe form.
+    // The exemption, and its only safe forms. There are two.
+    //
+    // ZERO is a fact because it cannot drift: a local ffmpeg call costs nothing
+    // and no invoice will ever say otherwise.
+    //
+    // A MEASURED PRICE is a fact too -- but only if it says WHERE it was
+    // measured. This clause used to refuse every non-zero `estimate: false`
+    // outright, and its own message said why: "until a --meter run proves it".
+    // On 2026-08-24 a run finally proved two of them, and an entry forced to
+    // keep calling itself an ESTIMATE while carrying an invoiced number is a
+    // lie in the other direction. The principle was never "everything is a
+    // guess" -- it was "a number may not claim to be a fact without saying
+    // why". So the evidence is the price of the claim: an ISO date and a
+    // provenance string, both non-empty, or the refusal stands.
     if (entry.estimate === false && entry.usd !== 0) {
-      throw bad('unmarked_price', `pricing.models[${model}] claims estimate:false with usd=${entry.usd}. Only a zero price may claim to be a fact -- every non-zero number here is an ESTIMATE until a --meter run proves it.`, { model, usd: entry.usd });
+      const missing = [];
+      if (typeof entry.meteredOn !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(entry.meteredOn)) missing.push('meteredOn (YYYY-MM-DD)');
+      if (typeof entry.meteredFrom !== 'string' || entry.meteredFrom.length === 0) missing.push('meteredFrom (where the number was read)');
+      if (missing.length > 0) {
+        throw bad('unmarked_price', `pricing.models[${model}] claims estimate:false with usd=${entry.usd} and is missing ${missing.join(' and ')}. A non-zero price may only stop being an ESTIMATE by naming the invoice that proved it.`, { model, usd: entry.usd, missing });
+      }
+    }
+    // A RATE TABLE IS CHECKED AT LOAD, for the reason the token fields are: a
+    // malformed one would not throw, it would quote something plausible from a
+    // rate of `undefined` and land NaN in a figure somebody authorises a spend
+    // against. Tier keys are the short edge in pixels; `_comment` is skipped
+    // here exactly as it is at lookup.
+    if (entry.usdByShortEdge !== undefined) {
+      if (!isPlainObject(entry.usdByShortEdge)) {
+        throw bad('invalid_pricing', `pricing.models[${model}].usdByShortEdge must be an object`, { model });
+      }
+      const tiers = Object.entries(entry.usdByShortEdge).filter(([key]) => !key.startsWith('_'));
+      if (tiers.length === 0) {
+        throw bad('invalid_pricing', `pricing.models[${model}].usdByShortEdge has no tiers in it`, { model });
+      }
+      for (const [key, rate] of tiers) {
+        if (!/^[1-9]\d*$/.test(key)) {
+          throw bad('invalid_pricing', `pricing.models[${model}].usdByShortEdge key ${JSON.stringify(key)} is not a pixel short edge`, { model });
+        }
+        if (!Number.isFinite(rate) || rate < 0) {
+          throw bad('invalid_pricing', `pricing.models[${model}].usdByShortEdge[${key}] must be a non-negative number, got ${JSON.stringify(rate)}`, { model });
+        }
+      }
     }
     if (!PRICING_UNITS.includes(entry.unit)) {
       throw bad('invalid_pricing', `pricing.models[${model}].unit must be one of ${PRICING_UNITS.join('|')}, got ${JSON.stringify(entry.unit)}`, { model });
+    }
+    // A TOKEN PRICE IS THREE NUMBERS, NOT ONE, and a partial one is worse than
+    // a per-second rate: it would quote something plausible from an incomplete
+    // formula. `usd` is per token; the other two turn a raster and a duration
+    // into a token count. Checked here so the failure is "this file is wrong"
+    // at load, rather than NaN in a quote.
+    if (entry.unit === 'token') {
+      for (const field of ['tokensPerPixelSecond', 'tokenDivisor']) {
+        if (!Number.isFinite(entry[field]) || entry[field] <= 0) {
+          throw bad('invalid_pricing', `pricing.models[${model}] is billed per token and needs a positive ${field}, got ${JSON.stringify(entry[field])}`, { model });
+        }
+      }
+      // The fallback is what prices a raster nobody has metered. Absent, an
+      // unmetered size would be quoted at the raster we ORDER -- and fal has
+      // never once delivered the raster it was asked for.
+      if (entry.deliveredUpscaleFallback !== undefined
+        && (!Number.isFinite(entry.deliveredUpscaleFallback) || entry.deliveredUpscaleFallback < 1)) {
+        throw bad('invalid_pricing', `pricing.models[${model}].deliveredUpscaleFallback must be >= 1, got ${JSON.stringify(entry.deliveredUpscaleFallback)}`, { model });
+      }
     }
   }
   return pricing;
@@ -123,11 +182,52 @@ export function priceEntry(pricing, model) {
  *  level turns a 15-second clip into $0.00. */
 const usd = (n) => Number(n.toFixed(4));
 
-function quantityFor(entry, { count, seconds }, model) {
+/**
+ * What fal actually renders for a given order, and therefore what it bills.
+ *
+ * A LOOKUP AND NOT A COEFFICIENT, because the two measured upscales are not
+ * the same number: 640x480 came back 752x560 (1.175 x 1.167) and 960x720 came
+ * back 1112x834 (1.1583 on both axes). A single factor cannot reproduce both,
+ * and a price that is nearly right in the money path is a price that is wrong.
+ *
+ * An ordered raster with no measurement gets `deliveredUpscaleFallback` -- the
+ * LARGEST upscale seen so far -- so an unmetered size is quoted high rather
+ * than low. Overstating cost understates margin, which is the safe direction;
+ * the other way round is an invoice nobody forecast.
+ *
+ * @returns {{width, height, measured: boolean}}
+ */
+export function deliveredRaster(entry, size) {
+  const key = `${size.width}x${size.height}`;
+  const hit = entry.delivered?.[key];
+  if (hit) return { width: hit.width, height: hit.height, measured: true };
+  const up = entry.deliveredUpscaleFallback ?? 1;
+  return {
+    width: Math.round(size.width * up),
+    height: Math.round(size.height * up),
+    measured: false,
+  };
+}
+
+function quantityFor(entry, { count, seconds, size }, model) {
   switch (entry.unit) {
     case 'image': return count;
     case 'second': return seconds;
     case 'call': return 1;
+    // TOKENS ARE PIXELS x FRAMES, which is how fal actually bills video. The
+    // raster is REQUIRED rather than defaulted: an estimate that does not know
+    // the size cannot price a token-billed model, and falling back to a
+    // per-second guess is exactly the flattening that had --dry-run quoting the
+    // identical figure at two tiers that differ by 2.2x.
+    case 'token': {
+      if (!size || !Number.isFinite(size.width) || !Number.isFinite(size.height)) {
+        throw bad('invalid_request',
+          `pricing.models[${model}] is billed per token, so it needs the raster size -- got ${JSON.stringify(size)}`,
+          { model });
+      }
+      const out = deliveredRaster(entry, size);
+      return (out.width * out.height * seconds * entry.tokensPerPixelSecond) / entry.tokenDivisor;
+    }
     default: throw bad('invalid_pricing', `pricing.models[${model}].unit ${JSON.stringify(entry.unit)} has no estimator`, { model });
   }
 }
@@ -142,12 +242,55 @@ export function estimateStill({ pricing, model, count = 1 }) {
 }
 
 /** Estimated USD for one video segment. */
-export function estimateVideo({ pricing, model, seconds }) {
+/**
+ * The per-unit rate, which is not always one number.
+ *
+ * `alibaba/wan-3.0/reference-to-video` (2026-09-02) bills per SECOND at a rate
+ * that doubles per quality tier -- $0.05, $0.10, $0.20. A single `usd` would
+ * quote 480p's price for a 720p order and understate it by half, which is
+ * section 26's flattening defect arriving in a second billing model.
+ *
+ * THE KEY IS THE SHORT EDGE because that is this product's own invariant
+ * (section 13): a resolution label holds the short edge and only the long edge
+ * varies with the shape. It follows that the frame shape does not move the
+ * price on such a model -- 640x480, 854x480 and 480x854 are all the 480 tier --
+ * which is the opposite of the token-billed case, where holding the short edge
+ * makes a wide shape exactly 4/3 the pixels and 4/3 the price.
+ *
+ * A TIER WITH NO RATE IS REFUSED, never priced at the nearest one. The failure
+ * direction matters: guessing low would sell a 1080p tape at the 480p price,
+ * which is a quarter of cost, silently, on the paid path.
+ */
+function rateFor(entry, { size } = {}, model) {
+  const table = entry.usdByShortEdge;
+  if (!isPlainObject(table)) return entry.usd;
+
+  if (!size || !Number.isFinite(size.width) || !Number.isFinite(size.height)) {
+    throw bad('invalid_request',
+      `pricing.models[${model}] is priced by tier, so it needs the raster size -- got ${JSON.stringify(size)}`,
+      { model });
+  }
+  const shortEdge = Math.min(size.width, size.height);
+  // `_comment` lives in this object like it does everywhere else in the config,
+  // and a rate table that treats it as a tier is the trap section 36F names:
+  // the `_` filter is not applied everywhere it needs to be.
+  const tiers = Object.entries(table).filter(([key]) => !key.startsWith('_'));
+  const found = tiers.find(([key]) => key === String(shortEdge));
+  if (!found || !Number.isFinite(found[1])) {
+    throw bad('invalid_pricing',
+      `pricing.models[${model}] has no rate for the ${shortEdge}px tier (raster ${size.width}x${size.height}). `
+      + `Known tiers: ${tiers.map(([k]) => k).join(', ') || 'none'}. A tier nobody priced is refused rather than guessed.`,
+      { model, shortEdge, known: tiers.map(([k]) => k) });
+  }
+  return found[1];
+}
+
+export function estimateVideo({ pricing, model, seconds, size = null }) {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     throw bad('invalid_request', `estimateVideo seconds must be a positive number, got ${JSON.stringify(seconds)}`);
   }
   const entry = priceEntry(pricing, model);
-  return usd(entry.usd * quantityFor(entry, { count: 1, seconds }, model));
+  return usd(rateFor(entry, { size }, model) * quantityFor(entry, { count: 1, seconds, size }, model));
 }
 
 /**
@@ -166,14 +309,43 @@ export function estimateVideo({ pricing, model, seconds }) {
  */
 export function estimateJob({ pricing, stillModel, videoModel, stillCount, segments = [] }) {
   const lines = [
-    { step: 'still', model: stillModel, quantity: stillCount, usd: estimateStill({ pricing, model: stillModel, count: stillCount }) },
-    ...segments.map((seg, i) => ({
-      step: 'animate',
-      model: videoModel,
-      index: i + 1,
-      quantity: seg.seconds,
-      usd: estimateVideo({ pricing, model: videoModel, seconds: seg.seconds }),
-    })),
+    // NO STILL LINE WHEN THERE IS NO STILL STAGE. `stillCount: 0` is the direct
+    // path -- the tape is generated from the photographs and no image is ever
+    // bought -- and quoting a line for it would overstate the price of every
+    // direct render. An estimate that names a call nobody will be billed for is
+    // worse than no estimate: --dry-run exists so a spend can be authorised
+    // against real numbers.
+    ...(stillCount > 0
+      ? [{ step: 'still', model: stillModel, quantity: stillCount, usd: estimateStill({ pricing, model: stillModel, count: stillCount }) }]
+      : []),
+    ...segments.map((seg, i) => {
+      const entry = priceEntry(pricing, videoModel);
+      // THE RASTER TRAVELS WITH THE SEGMENT. `planSegments` already resolves it
+      // -- the same size the renderer will order -- so the estimate is priced
+      // against what will actually be requested rather than against a default.
+      const out = entry.unit === 'token' && seg.size ? deliveredRaster(entry, seg.size) : null;
+      return {
+        step: 'animate',
+        model: videoModel,
+        index: i + 1,
+        // THE QUANTITY IS THE ONE THE PRICE WAS COMPUTED FROM, IN THE UNIT THE
+        // MODEL IS BILLED IN -- not the seconds it ran. This line was
+        // `seg.seconds` and the estimate still looked right, because the USD
+        // beside it was computed correctly from tokens. The damage landed one
+        // file away: `npm run ledger` divides a REAL INVOICE by this number to
+        // imply a rate, so dividing $8.73 by 45 seconds instead of 622,142
+        // tokens implied $0.1941/token against $0.000014 configured and printed
+        // an instruction to edit config/pricing.json by a factor of ~13,825.
+        // The unit travels with the number so nothing downstream has to guess.
+        unit: entry.unit,
+        quantity: quantityFor(entry, { count: 1, seconds: seg.seconds, size: seg.size ?? null }, videoModel),
+        usd: estimateVideo({ pricing, model: videoModel, seconds: seg.seconds, size: seg.size ?? null }),
+        // What fal is expected to send back, and whether that is a measurement
+        // or a forecast. A line the operator can see is a forecast is a line
+        // they can decide about; one that looks measured and is not, is not.
+        ...(out ? { ordered: seg.size, delivered: out, measured: out.measured } : {}),
+      };
+    }),
   ];
   return {
     estimated: usd(lines.reduce((sum, l) => sum + l.usd, 0)),

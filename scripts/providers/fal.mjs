@@ -57,13 +57,40 @@
  * because it is tested and the next provider may need it. Phase-0 criterion 5
  * -- "is the join visible" -- is simply not asked of this model.
  *
- * ALWAYS 4:3, ALWAYS. `aspect_ratio: '4:3'` is sent on every call because the
- * tape raster is 720x576 at SAR 16/15, i.e. DAR 4:3. Asking for 16:9 and
- * cropping throws away a third of the frame we paid for AND moves the crop
- * decision to whichever downstream filter happens to make it. The resolutions
- * offered here are therefore the 4:3 rasters -- 640x480 and 960x720 -- not the
- * 16:9 shapes those labels usually name. config/credits.json carries the same
- * reasoning next to the money.
+ * THE SHAPE IS ORDERED, NEVER CROPPED, AND IT IS NO LONGER ALWAYS 4:3. This
+ * block used to read "ALWAYS 4:3, ALWAYS" and send a hardcoded `aspect_ratio`
+ * on every call. The argument it made was against CROPPING -- taking a 4:3
+ * frame and throwing away a third of what we paid for, with the crop decision
+ * landing on whichever downstream filter happened to make it -- and that
+ * argument was always correct and is untouched. What it was NOT is an argument
+ * against 16:9, and it had been doing duty as one.
+ *
+ * fal's own enum, read on both endpoint pages on 2026-08-24, accepts `auto`,
+ * `21:9`, `16:9`, `4:3`, `1:1`, `3:4` and `9:16`. So the other two shapes this
+ * product sells are ORDERED natively. `falAspectFor` reads the shape off the
+ * raster that was actually requested, so a 9:16 job asks fal for 9:16 rather
+ * than fetching 4:3 and building a portrait frame around it -- which nothing
+ * downstream could have caught, because every check reads the same resolved
+ * config the filtergraph does.
+ *
+ * A LABEL NAMES THE SHORT EDGE, which is `animate/plan.mjs`'s rule and section
+ * 13's before it: 480p is 640x480, 854x480 or 480x854. `FAL_RESOLUTIONS` stays
+ * the 4:3 raster per tier because every existing caller reads it that way, and
+ * `FAL_SIZES` is the cross product.
+ *
+ * AND THE PRICING FALLS OUT OF THAT, in the direction that costs money rather
+ * than saves it. An earlier version of this comment said "16:9 at 1024x576 is
+ * FEWER pixels than 4:3 at 720p" -- that compared the TAPE raster against the
+ * SOURCE raster ordered here, which are different things, and fal bills the
+ * second. Like for like, 4:3 is the squarest shape shipped, so holding the
+ * short edge makes 16:9 and 9:16 exactly 4/3 the pixels at the same tier. fal
+ * bills tokens as pixels x seconds, so they cost 4/3 as much and
+ * `config/credits.json` charges 4/3 for them.
+ *
+ * STILL UNMEASURED: no non-4:3 shape has ever been ORDERED from fal, and this
+ * endpoint picks its own delivered raster -- 752x560 for an ordered 640x480.
+ * If that upscale turns out to differ by SHAPE rather than by tier, the
+ * multiplier moves. See the raster question in config/models.json.
  *
  * WHAT IS NOT VERIFIED, AND IS MARKED SO. The video endpoints and their
  * parameters come from fal's own documentation. THE STILL MODEL HAS NOT BEEN
@@ -116,12 +143,6 @@ export const FAL_ID = 'fal';
 export const FAL_QUEUE_BASE = 'https://queue.fal.run';
 
 /**
- * The only aspect ratio this product ever asks for. Named rather than inlined
- * because it appears in both bodies and in the report a reviewer reads.
- */
-export const FAL_ASPECT_RATIO = '4:3';
-
-/**
  * The resolutions on offer, as the 4:3 RASTER each label means here.
  *
  * fal's `resolution` enum is a label; what "720p" renders as depends on the
@@ -142,10 +163,44 @@ export const FAL_RESOLUTIONS = Object.freeze({
   '720p': Object.freeze({ width: 960, height: 720 }),
 });
 
+/**
+ * Every shape this provider will be asked for, cheapest-and-squarest first.
+ *
+ * A LABEL NAMES THE SHORT EDGE, which is `animate/plan.mjs`'s rule and section
+ * 13's before that. So the table above stays the 4:3 raster per tier -- every
+ * existing caller and all of config/credits.json read it that way -- and the
+ * other shapes are derived from its short edge rather than written out again.
+ *
+ * DERIVED HERE RATHER THAN IMPORTED FROM `animate/plan.mjs`, deliberately. A
+ * provider importing the pipeline's planner inverts the layering that makes
+ * `planSegments({ capabilities })` take capabilities as an argument in the
+ * first place. The duplication is the same one this file already had for the
+ * 4:3 case, and it is closed the same way: a test asserts the two agree for
+ * every tier and every shape, and goes red if they ever do not.
+ */
+export const FAL_ASPECT_RATIOS = Object.freeze(['4:3', '16:9', '9:16']);
+
+const falRaster = (short, aspect) => {
+  const [w, h] = aspect.split(':').map(Number);
+  const even = (n) => 2 * Math.round(n / 2);
+  return w >= h
+    ? { width: even((short * w) / h), height: short }
+    : { width: short, height: even((short * h) / w) };
+};
+
 /** In offer order, cheapest first -- `stillSizes[0]` is what a caller that has
  *  not asked for a resolution gets, and the default in config/credits.json is
- *  480p because the product is credit-conscious. */
-export const FAL_SIZES = Object.freeze(Object.values(FAL_RESOLUTIONS));
+ *  480p because the product is credit-conscious. 4:3 leads within each tier for
+ *  the same reason: a CLI render with no order behind it must not suddenly
+ *  start coming back portrait. */
+export const FAL_SIZES = Object.freeze(
+  Object.entries(FAL_RESOLUTIONS).flatMap(([resolution, base]) =>
+    FAL_ASPECT_RATIOS.map((aspect) => Object.freeze({
+      ...falRaster(Math.min(base.width, base.height), aspect),
+      resolution,
+      aspect,
+    }))),
+);
 
 /** Seedance 2.0 takes 4..15 seconds in ONE call. The 15 is the whole reason
  *  this provider has no segment seam; the 4 is a real floor and a request for
@@ -187,8 +242,10 @@ export const FAL_ENDPOINTS = Object.freeze({
  * The queue hands back `status_url`, `response_url` and a CDN url for the
  * finished file, and following a URL out of a response body without looking at
  * it is how a compromised or simply wrong upstream turns into a credential
- * posted somewhere else. The credential goes to `queue.fal.run` ONLY; the CDN
- * download is unauthenticated on purpose.
+ * posted somewhere else. The credential goes to the queue host ONLY; the CDN
+ * download is unauthenticated on purpose. That rule is enforced where the
+ * header is attached, in `call` -- an authorized request to any other host on
+ * this list is refused before a socket opens, not merely frowned at here.
  */
 const ALLOWED_HOSTS = Object.freeze([
   'queue.fal.run',
@@ -272,17 +329,34 @@ export function falRequestId(idempotencyKey) {
 /** The `resolution` label for a raster, or a CapabilityError naming what is on
  *  offer. Exact match only: "nearest" would silently render 480p for a 720p
  *  order, which is a billing bug wearing a rendering bug's clothes. */
-export function falResolutionFor(size) {
-  const hit = Object.entries(FAL_RESOLUTIONS)
-    .find(([, r]) => r.width === size?.width && r.height === size?.height);
+function falOfferFor(size) {
+  const hit = FAL_SIZES.find((r) => r.width === size?.width && r.height === size?.height);
   if (!hit) {
     throw new CapabilityError(
-      `${FAL_ID}: no resolution renders ${size?.width}x${size?.height} at ${FAL_ASPECT_RATIO}. ` +
-      `Offers: ${Object.entries(FAL_RESOLUTIONS).map(([id, r]) => `${id} (${r.width}x${r.height})`).join(', ')}`,
-      { provider: FAL_ID, code: 'unsupported_size', detail: { requested: size ?? null, offered: FAL_RESOLUTIONS } },
+      `${FAL_ID}: nothing on offer renders ${size?.width}x${size?.height}. ` +
+      `Offers: ${FAL_SIZES.map((r) => `${r.resolution} ${r.aspect} (${r.width}x${r.height})`).join(', ')}`,
+      { provider: FAL_ID, code: 'unsupported_size', detail: { requested: size ?? null, offered: FAL_SIZES } },
     );
   }
-  return hit[0];
+  return hit;
+}
+
+export function falResolutionFor(size) {
+  return falOfferFor(size).resolution;
+}
+
+/**
+ * The shape to ask fal for, read off the raster rather than assumed.
+ *
+ * THE CONSTANT THIS REPLACES WAS THE BUG. `aspect_ratio: FAL_ASPECT_RATIO` went
+ * on every call, so a job ordered at 9:16 fetched a 4:3 source and the tape
+ * stage built a 9:16 frame around it -- with every check downstream agreeing,
+ * because they all read the same resolved config the filtergraph does. That is
+ * why `resolveRaster` refused the shape outright rather than trusting this, and
+ * lifting that refusal means this has to be real first.
+ */
+export function falAspectFor(size) {
+  return falOfferFor(size).aspect;
 }
 
 /** Magic bytes first, extension second. The staged upload is deliberately
@@ -354,15 +428,26 @@ export function falDataUri(file, { readImpl = fs.readFileSync } = {}) {
  * silently share a seed are three copies of one picture and a human clicking
  * "this one" for no reason.
  */
-export function falStillBody({ prompt, references, seed, size, dataUriImpl = falDataUri }) {
+export function falStillBody({
+  prompt, references, seed, size, dataUriImpl = falDataUri,
+  // The field that carries the reference images, because IT IS NOT THE SAME ON
+  // EVERY CANDIDATE. `image_urls` is the fal image-edit convention and it is
+  // still the default, but fal-ai/uso rejected it 422 with
+  // {"loc":["body","input_image_urls"],"msg":"Field required"} on
+  // 2026-08-23 -- the endpoint's own schema, which is a better source than any
+  // docs page. Per-model rather than renamed outright: the three Phase 0
+  // candidates are three different vendors and there is no reason to think
+  // they agree. The name lives in config/models.json next to the endpoint id.
+  referencesParam = 'image_urls',
+}) {
   const urls = references.map((ref) => dataUriImpl(ref.path));
   return {
     // @Image1 is the face and @Image2, when present, is the place. The prompt
     // itself never describes the person -- CLAUDE.md, "Prompt rules" -- so the
     // reference marker is the only thing that points at them.
     prompt,
-    image_urls: urls,
-    aspect_ratio: FAL_ASPECT_RATIO,
+    [referencesParam]: urls,
+    aspect_ratio: falAspectFor(size),
     num_images: 1,
     seed,
     // PNG because `select` writes a contact sheet a human looks at and then
@@ -391,7 +476,7 @@ export function falVideoBody({ prompt, imagePath, seconds, seed, size, nativeAud
     prompt,
     image_url: dataUriImpl(imagePath),
     resolution: falResolutionFor(size),
-    aspect_ratio: FAL_ASPECT_RATIO,
+    aspect_ratio: falAspectFor(size),
     // A STRING enum -- "15", not 15. fal's schema page spells the values out
     // as string literals and an integer here is a 422 that costs a round trip.
     duration: String(Math.round(seconds)),
@@ -400,6 +485,93 @@ export function falVideoBody({ prompt, imagePath, seconds, seed, size, nativeAud
     generate_audio: nativeAudio === true,
     seed,
   };
+}
+
+/**
+ * The reference-to-video request body: the path with no still in it.
+ *
+ * WHY THIS EXISTS AT ALL. `animate` has always started from an approved still,
+ * which made the still stage structural rather than optional. Paul's product is
+ * four choices and a tape -- upload a photo, pick an outfit, a place and a
+ * frame shape -- and a picture the user has to look at and approve is not in
+ * that list. `bytedance/seedance-2.0/reference-to-video` takes the photographs
+ * THEMSELVES, up to nine of them, so the still stops existing rather than being
+ * hidden behind a spinner.
+ *
+ * WHAT IT COSTS, STATED ONCE. The still was also the cheap rejection gate: a
+ * likeness that missed cost $0.04 and the user saw it before paying. On this
+ * path the same miss costs a finished video. That trade was put to Paul three
+ * times and taken three times; it is a product decision, not an oversight.
+ *
+ * THE ORDER OF `references` IS A CONTRACT. The prompt names them @Image1 and
+ * @Image2, so element 0 is the face and element 1, when present, is the place.
+ * The prompt still never describes the person -- CLAUDE.md, "Prompt rules" --
+ * which makes the reference marker the only thing pointing at them.
+ */
+export function falReferenceVideoBody({
+  prompt, references, seconds, seed, size, nativeAudio,
+  // Per model, for the reason falStillBody carries the same parameter: on
+  // 2026-08-23 `fal-ai/uso` answered 422 because the field it wanted was
+  // `input_image_urls`. Three vendors, no reason to assume they agree.
+  referencesParam = 'image_urls',
+  // LAYER 1'S FIELD NAME, and it was hardcoded here until 2026-09-02 while
+  // config/models.json had been recording it all along. Seedance calls it
+  // `generate_audio`; Wan calls it `audio`. Both default to TRUE, so writing
+  // the wrong name is not a 422 -- it is a field the endpoint ignores while its
+  // own audio stays on, and a tape that ships the model's soundtrack under a
+  // bed whose entire spec is "quiet". Only layer 3 would have caught it, after
+  // the render was paid for. The default keeps the Seedance shape.
+  audioOffParam = { name: 'generate_audio', value: false },
+  // Seedance's `duration` is a STRING enum of '4'..'15'; Wan's is an INTEGER
+  // 2..30. The wrong type is a 422 at best and a silently coerced duration at
+  // worst, which breaks the 375-frame contract without failing anything.
+  durationType = 'string',
+  // Whatever else one endpoint needs and the others do not. Wan's
+  // `enable_prompt_expansion` defaults to TRUE and would rewrite the prompt --
+  // undoing sections 14, 17 and 19, and ending reproducibility, since the same
+  // seed and the same prompt would stop being the same request.
+  extraParams = null,
+  dataUriImpl = falDataUri,
+}) {
+  if (!Array.isArray(references) || references.length === 0) {
+    // The face IS the product. An empty array is a paid call that cannot
+    // return the right person, and it would read as a model failure rather
+    // than the caller bug it is.
+    throw new TypeError('a reference video request needs at least one reference image');
+  }
+  const audioField = audioOffParam?.name ?? 'generate_audio';
+  const audioOffValue = audioOffParam && Object.hasOwn(audioOffParam, 'value')
+    ? audioOffParam.value
+    : false;
+
+  const body = {
+    prompt,
+    [referencesParam]: references.map((ref) => dataUriImpl(ref.path)),
+    resolution: falResolutionFor(size),
+    aspect_ratio: falAspectFor(size),
+    duration: durationType === 'integer' ? Math.round(seconds) : String(Math.round(seconds)),
+    // LAYER 1 ON THE WIRE. Every entry in config/models.json with kind 'video'
+    // must name this parameter (assertAudioOff), because a model that cannot be
+    // told to stop generating audio is disqualified outright.
+    [audioField]: nativeAudio === true ? true : audioOffValue,
+    seed,
+  };
+
+  if (extraParams != null) {
+    // A FREE-FORM MERGE WOULD BE A HOLE, and it would open onto the paid path:
+    // a config edit could turn the model's audio back on, swap the references
+    // or restate the duration, from a file nobody reads on the way to a bill.
+    // The builder owns those fields; an extra that collides with one is a
+    // configuration error rather than an override.
+    for (const key of Object.keys(extraParams)) {
+      if (Object.hasOwn(body, key)) {
+        throw new TypeError(
+          `model extras cannot override "${key}" -- the request builder owns that field`);
+      }
+      body[key] = extraParams[key];
+    }
+  }
+  return body;
 }
 
 /** `https://queue.fal.run/<endpoint>`. Sub-paths are part of the model id and
@@ -523,6 +695,9 @@ export function createFalProvider(opts = {}) {
   // `--dry-run` require a credential to answer "what would this cost".
   const envImpl = opts.envImpl ?? (() => process.env);
   const base = opts.base ?? FAL_QUEUE_BASE;
+  // The one host the credential may ever be sent to -- see ALLOWED_HOSTS,
+  // whose comment states this rule and whose enforcement lives in `call`.
+  const queueHost = new URL(base).hostname.toLowerCase();
   const nowImpl = opts.nowImpl ?? (() => performance.now());
   const existsImpl = opts.existsImpl ?? fs.existsSync;
   const writeImpl = opts.writeImpl ?? fs.writeFileSync;
@@ -564,9 +739,25 @@ export function createFalProvider(opts = {}) {
   async function resolveModel(kind) {
     const table = await models();
     const { modelEntry, defaultModels } = await registry();
+    // `videoDirect` is still the VIDEO override's territory: a named
+    // --video-model is a human having chosen, and it wins on both request
+    // shapes -- the shape only picks which DEFAULT applies when nobody chose.
     const override = kind === 'still' ? opts.stillModel : opts.videoModel;
     const id = override ?? defaultModels(table, FAL_ID)[kind];
-    const entry = modelEntry(table, id);
+    if (!isNonEmptyString(id)) {
+      throw new CapabilityError(
+        `${FAL_ID}: no default model recorded for ${JSON.stringify(kind)} -- defaults.${FAL_ID}.${kind} in config/models.json is the key to fill in`,
+        { provider: FAL_ID, code: 'no_default_model', detail: { kind } },
+      );
+    }
+    // `allowUnverifiedModel` lowers the verified gate for a NAMED override and
+    // nothing else -- Phase 0's bake-off needs to call candidates whose schema
+    // pages nobody has read yet, and the alternative was editing
+    // config/models.json to claim `verified: true`, which in this repo means
+    // "somebody read the schema". Faking that to run an experiment would poison
+    // the one signal that stops blind spending. Defaults to false, so every
+    // path that does not deliberately opt in still gets the refusal.
+    const entry = modelEntry(table, id, { requireVerified: !opts.allowUnverifiedModel });
     const endpoint = entry.endpoint;
     if (!isNonEmptyString(endpoint)) {
       throw new CapabilityError(
@@ -614,12 +805,20 @@ export function createFalProvider(opts = {}) {
   function makeCall(ctx, { fetchImpl, key, sleepImpl, onRetry }) {
     return async function call(url, { method = 'GET', body = null, idempotencyKey = null, authorize = true, expect = 'json' } = {}) {
       const checked = assertAllowedHost(url, { what: `${method} target` });
+      // The credential goes to the queue host and nowhere else -- ENFORCED,
+      // not merely stated. The allow-list above admits hosts we download from,
+      // and one of them is multi-tenant storage anyone can own a bucket under;
+      // an authorized call steered at any of them by a url out of a response
+      // body is refused outright, before a socket opens. Terminal, because the
+      // same poisoned url would fail the same way on every retry.
+      if (authorize && new URL(checked).hostname.toLowerCase() !== queueHost) {
+        throw fail('credential_scope',
+          `${FAL_ID}: refusing to authorize a ${method} to ${new URL(checked).hostname} -- the credential goes to ${queueHost} and nowhere else`,
+          { url: checked, queueHost });
+      }
       return withRetry(async () => {
         throwIfAborted(ctx?.signal);
         const headers = { Accept: expect === 'json' ? 'application/json' : '*/*' };
-        // The credential goes to the queue host and nowhere else. A CDN
-        // download is unauthenticated, and sending a key to a host named in a
-        // response body is how a key ends up somewhere nobody chose.
         if (authorize) headers.Authorization = `Key ${key}`;
         if (body !== null) headers['Content-Type'] = 'application/json';
         // fal does not document an idempotency header. Sending one costs
@@ -629,18 +828,70 @@ export function createFalProvider(opts = {}) {
 
         let res;
         try {
-          res = await fetchImpl(checked, {
-            method,
-            headers,
-            ...(body === null ? {} : { body: JSON.stringify(body) }),
-            ...(ctx?.signal ? { signal: ctx.signal } : {}),
-          });
+          // THE ALLOW-LIST GATES EVERY HOP, NOT JUST THE FIRST.
+          //
+          // Node's global fetch defaults to `redirect: 'follow'` and chases up
+          // to twenty hops, so `assertAllowedHost` above gated only the url we
+          // dial: an allowlisted host answering
+          // `302 Location: http://169.254.169.254/…` was followed without the
+          // list being consulted again, and that address is the instance
+          // metadata service on every cloud this could deploy to. The fetch
+          // spec strips Authorization on a cross-origin redirect, so the
+          // credential was never what was at risk -- the request was.
+          //
+          // `manual` hands the 3xx back instead, so the decision is made here.
+          // Three hops is a cap and not a guess at fal's behaviour: the CDN
+          // uses one, and a chain longer than three is a redirector rather
+          // than a download.
+          let target = checked;
+          for (let hop = 0; ; hop += 1) {
+            res = await fetchImpl(target, {
+              method,
+              headers,
+              redirect: 'manual',
+              ...(body === null ? {} : { body: JSON.stringify(body) }),
+              ...(ctx?.signal ? { signal: ctx.signal } : {}),
+            });
+
+            const status = Number(res?.status ?? 0);
+            const location = status >= 300 && status < 400
+              ? (res?.headers?.get?.('location') ?? null)
+              : null;
+            // Not a redirect, or a redirect with nowhere to go: let the
+            // existing status handling below have it.
+            if (!location) break;
+
+            if (hop >= 3) {
+              throw fail('too_many_redirects',
+                `${FAL_ID}: ${method} ${checked} redirected more than 3 times`, { url: checked });
+            }
+
+            let next;
+            try {
+              next = new URL(String(location), target).href;
+            } catch {
+              throw fail('bad_url',
+                `${FAL_ID}: ${method} ${checked} redirected to something that is not a URL: ${JSON.stringify(location)}`,
+                { url: checked, location });
+            }
+            // Same two questions the first request had to answer.
+            target = assertAllowedHost(next, { what: `${method} redirect target` });
+            if (authorize && new URL(target).hostname.toLowerCase() !== queueHost) {
+              throw fail('credential_scope',
+                `${FAL_ID}: refusing to follow a redirect to ${new URL(target).hostname} on an authorized ${method} -- the credential goes to ${queueHost} and nowhere else`,
+                { url: target, queueHost });
+            }
+          }
         } catch (err) {
           // A transport failure arrives as a bare TypeError with the real
           // cause buried, and `isRetriable` deliberately does not sniff for
           // that -- providers wrap their own. An aborted fetch is a decision
           // and must not be retried.
           throwIfAborted(ctx?.signal);
+          // A refusal raised by the redirect loop above is a DECISION, not a
+          // transport failure. Without this it would be rewrapped as retriable
+          // and the same poisoned Location would be dialled four times.
+          if (err instanceof TerminalError) throw err;
           throw new RetriableError(`${FAL_ID}: ${method} failed before a response: ${err?.message ?? err}`, {
             provider: FAL_ID, code: 'transport', detail: { url: checked }, cause: err,
           });
@@ -781,7 +1032,7 @@ export function createFalProvider(opts = {}) {
         }
       }
 
-      const { id: model, endpoint } = await resolveModel('still');
+      const { id: model, endpoint, entry: stillEntry } = await resolveModel('still');
       const key = credential();
 
       const report = progressReporter(ctx);
@@ -820,6 +1071,7 @@ export function createFalProvider(opts = {}) {
           seed,
           size: req.size,
           dataUriImpl,
+          referencesParam: stillEntry?.stillParams?.references ?? 'image_urls',
         });
 
         const { requestId, result } = await runQueued({
@@ -881,11 +1133,25 @@ export function createFalProvider(opts = {}) {
       const outDir = requireOutDir(ctx);
       throwIfAborted(ctx.signal);
 
-      if (!existsImpl(req.imagePath)) {
-        throw fail('missing_image', `${FAL_ID}: start image not found: ${req.imagePath}`, { path: req.imagePath });
+      // TWO SHAPES, and the request already said which. `assertVideoRequest`
+      // has refused anything carrying both, so this is a branch and not a
+      // precedence rule.
+      const direct = req.references !== undefined;
+
+      for (const missing of direct
+        ? req.references.filter((r) => !existsImpl(r.path)).map((r) => r.path)
+        : (existsImpl(req.imagePath) ? [] : [req.imagePath])) {
+        throw fail('missing_image', `${FAL_ID}: ${direct ? 'reference' : 'start'} image not found: ${missing}`, { path: missing });
       }
 
-      const { id: model, endpoint } = await resolveModel('video');
+      // THE ENDPOINT FOLLOWS THE REQUEST'S SHAPE, exactly as the body below
+      // does. Resolving `video` unconditionally posted a reference body to the
+      // image-to-video endpoint whenever nobody passed --video-model -- which
+      // is every worker-rendered job, since a worker constructs its provider
+      // once with no override. fal answers that mismatch with a 422, after the
+      // customer's credits were debited (CLAUDE.md section 26 records the CLI
+      // flavour of the same defect).
+      const { id: model, endpoint, entry: videoEntry } = await resolveModel(direct ? 'videoDirect' : 'video');
       const key = credential();
 
       const report = progressReporter(ctx);
@@ -899,15 +1165,38 @@ export function createFalProvider(opts = {}) {
 
       fs.mkdirSync(outDir, { recursive: true });
 
-      const body = falVideoBody({
-        prompt: req.prompt,
-        imagePath: req.imagePath,
-        seconds: req.seconds,
-        seed: req.seed,
-        size,
-        nativeAudio: req.nativeAudio,
-        dataUriImpl,
-      });
+      const body = direct
+        ? falReferenceVideoBody({
+          prompt: req.prompt,
+          references: req.references,
+          seconds: req.seconds,
+          seed: req.seed,
+          size,
+          nativeAudio: req.nativeAudio,
+          // Per model, for the reason the still path carries the same lookup:
+          // `fal-ai/uso` answered 422 in 2026-08-23 because its field was
+          // called `input_image_urls`. Absent means the fal convention.
+          referencesParam: videoEntry?.videoParams?.references ?? 'image_urls',
+          // The three fields the second vendor disagreed on (2026-09-02). Each
+          // is read from the entry rather than assumed, and each default is the
+          // Seedance shape, so nothing about the original path moves.
+          // `audioOffParam` is the SAME object assertAudioOff validates, so a
+          // video model that reaches here has already been refused if it does
+          // not name the parameter that turns its audio off.
+          audioOffParam: videoEntry?.audioOffParam,
+          durationType: videoEntry?.videoParams?.durationType ?? 'string',
+          extraParams: videoEntry?.videoParams?.extra ?? null,
+          dataUriImpl,
+        })
+        : falVideoBody({
+          prompt: req.prompt,
+          imagePath: req.imagePath,
+          seconds: req.seconds,
+          seed: req.seed,
+          size,
+          nativeAudio: req.nativeAudio,
+          dataUriImpl,
+        });
 
       const { requestId, result } = await runQueued({
         ctx,
@@ -936,7 +1225,14 @@ export function createFalProvider(opts = {}) {
         // is caught downstream where it matters -- `verify` asserts 375 frames
         // against the finished tape, exactly.
         clip: { path: dest, seconds: req.seconds },
-        cost: cost(estimateVideo({ pricing: pricing(), model, seconds: req.seconds }), null),
+        // THE RASTER TRAVELS WITH THE SECONDS, because a token-billed model
+        // prices on pixels x seconds and throws without it. Omitting it was
+        // harmless on a per-second model and fatal on the per-token one --
+        // which is the only video model the direct path uses. The submit
+        // succeeded, the clip downloaded, and THEN this line threw, so fal was
+        // paid for a tape that never shipped and a resume could not adopt the
+        // download because `clip.path` had never been written.
+        cost: cost(estimateVideo({ pricing: pricing(), model, seconds: req.seconds, size }), null),
         meta: {
           model,
           requestId: falRequestId(req.idempotencyKey),

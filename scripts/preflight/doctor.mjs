@@ -132,6 +132,53 @@ export async function doctor({ cfg, env = process.env, root = REPO_ROOT } = {}) 
     { fatal: false },
   ));
 
+  // --- identity provider ---------------------------------------------------
+  // Not fatal: `scripts/web/server-cli.mjs`'s `supabaseFromEnv` already
+  // degrades a fully-absent configuration to `null`, and the app boots with
+  // the identity routes answering 503. This is reporting, not gating -- and
+  // it reports presence only. NEVER the value: a URL, a publishable key and
+  // especially the secret key are exactly the kind of thing this command
+  // must not put in a terminal's scrollback or a CI log.
+  //
+  // That gap is CLOSED (item 12, 2026-08-28): `npm run doctor` now carries
+  // `--env-file-if-exists=.env` exactly as `render`, `web`, `worker`, `smoke`
+  // and `ledger` do, so a correctly configured `.env` is visible here and no
+  // longer reports "not set". Note what that does and does not mean -- the
+  // flag is on the npm SCRIPT, so running this file directly as
+  // `node scripts/preflight/doctor.mjs` still sees only the parent
+  // environment. `test/preflight-doctor.test.js` executes the command
+  // package.json declares, which is what keeps the two from drifting apart.
+  const SUPABASE_KEYS = ['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY'];
+  for (const key of SUPABASE_KEYS) {
+    checks.push(check(
+      key,
+      Boolean(env[key]),
+      env[key] ? 'present' : 'not set -- identity routes will 503 with one sentence until all three are set',
+      { fatal: false },
+    ));
+  }
+
+  // A COMBINED CHECK, ON TOP OF THE THREE ABOVE. Coordinator ruling,
+  // 2026-08-26: two of three `SUPABASE_*` values present is not the same
+  // shape as none of them -- it is what a secret rotation or a non-atomic
+  // env propagation leaves behind, transiently, on a deployment that would
+  // otherwise look fully configured. `supabaseFromEnv` (`server-cli.mjs`)
+  // boots on it regardless, so this is still non-fatal here too -- but it is
+  // reported as a distinct problem rather than left for someone to notice by
+  // reading three separate present/not-set lines and doing the arithmetic
+  // themselves. Names only, never a value.
+  const supaPresent = SUPABASE_KEYS.filter((key) => Boolean(env[key]));
+  const supaMissing = SUPABASE_KEYS.filter((key) => !env[key]);
+  const supaPartial = supaPresent.length > 0 && supaMissing.length > 0;
+  checks.push(check(
+    'SUPABASE_CONFIG',
+    !supaPartial,
+    supaPartial
+      ? `PARTIAL -- present: ${supaPresent.join(', ')}; missing: ${supaMissing.join(', ')} -- identity is DISABLED until all three are set`
+      : (supaPresent.length === 3 ? 'all three present' : 'all three absent -- identity disabled, nothing else affected'),
+    { fatal: false },
+  ));
+
   return { ok: checks.every((c) => c.ok || !c.fatal), checks, font, version };
 }
 

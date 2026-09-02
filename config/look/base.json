@@ -75,7 +75,9 @@
     "droppedFrames": [
       201,
       202
-    ]
+    ],
+    "_comment_judderScatter": "How far, in fractions of a source frame, each frame's timing is nudged before the retiming. It exists because fal delivers 24fps against a 25fps contract, so one frame in every 25 is held for two -- at 12, 37, 62, 87 and so on, measured. Periodic judder is the most visible kind because the eye locks onto the rhythm, and it was in every tape this product had ever made. This does NOT remove those duplicates: fifteen frames are still repeated, they just stop arriving on a metronome. Measured at this value, the spacing goes from a flat 25 to a range of 21-30, with the count unchanged at 15. 0 restores the metronome exactly. The ceiling in CLAMPS is 0.45 because at half a frame a nudged frame can overtake its neighbour, which is a non-monotonic dts and a graph ffmpeg refuses; 0.25 leaves that margin doubled while still swinging the cadence about five frames either way. A source already at 25fps is untouched at any value under the clamp, which is what keeps `npm run look` honest over the real footage in assets/stock.",
+    "judderScatter": 0.25
   },
   "composite": {
     "_comment": "The final vignette is applied to the WHOLE 1080x1920 canvas after the overlay, not to the tape image. That is what fuses tape and surround into one photographed object rather than two stacked layers, and it is the move that actually sells the framing.",
@@ -108,6 +110,25 @@
       "flutterHz": 7.3,
       "flutterDepth": 0.35,
       "lowpass": 900
+    },
+    "ambience": {
+      "_comment": "THE SOUND OF THE PLACE, as opposed to the sound of the machine above it. Silent by default -- amplitude 0 emits no chain at all -- so a place that names nothing is bit-identical to the bed before this existed, and the still path, which has no place, is untouched. Every shipped place sets its own in `lookOverride.audio.ambience`. Synthesised for the same reason the hiss is: a sample would need a licence to reason about and a normalisation pass, where a generator's loudness is known before it renders. NOTE the noise seed is deliberately NOT `audioSeed`: two anoisesrc on one seed produce identical noise, and summing that is not two layers, it is one layer 6 dB louder and perfectly correlated -- which sounds exactly like the hiss being turned up, and is invisible in the graph.",
+      "amplitude": 0,
+      "color": "brown",
+      "highpass": 200,
+      "lowpass": 1200,
+      "volume": 0.5,
+      "swellHz": 0,
+      "swellDepth": 0.5,
+      "echoDelayMs": 0,
+      "echoDecay": 0,
+      "tone": {
+        "_comment": "A fluorescent buzz, a kitchen clock -- the ambience block above is noise only, and these two are TONES, built the same way the capstan two sections up is: sine partials, summed, band-limited. `tones` is the switch, empty by default, so a place with no tone configured is bit-identical to the bed before this existed. `tickHz` is the one thing a mains hum and a capstan whir do not need: 0 (or absent) plays the partials as a continuous hum, and a positive value gates them to a brief periodic burst instead -- `tickDuration` seconds on, silence for the rest of `1/tickHz` seconds. No seed anywhere in here: sine is a pure function of frequency and time, not stochastic, the same fact the capstan section already rests on.",
+        "tones": [],
+        "lowpass": 4000,
+        "tickHz": 0,
+        "tickDuration": 0
+      }
     },
     "bus": {
       "_comment": "Band-limit the sum a second time, apply the one fixed makeup gain, end in a real ceiling. The 190 Hz highpass is authentic -- a camcorder built-in mic had no low end -- which is why the capstan is voiced as harmonics above it rather than as its fundamental below it.",

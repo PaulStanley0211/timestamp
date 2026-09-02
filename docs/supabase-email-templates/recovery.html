@@ -1,0 +1,57 @@
+<!--
+  Timestamp - Supabase "Reset password" template.
+
+  THE ONE RULE, IDENTICAL TO confirm-signup.html: this template must contain
+  the Token variable and must NOT contain the ConfirmationURL variable, a
+  button, or any link that signs somebody in. /auth/reset/complete asks for six
+  digits and a new password. A template that mails a link instead strands the
+  person in front of a field they have nothing to type into, and NOTHING IN THE
+  APP CAN DETECT THAT THE TEMPLATE IS WRONG - no request arrives to be wrong
+  about. Supabase's default recovery template is exactly that wrong template: a
+  "Reset password" link over the ConfirmationURL.
+
+  NO TEMPLATE SYNTAX IN THIS COMMENT, AND THAT IS DELIBERATE. The whole file is
+  pasted into the dashboard, and Supabase substitutes its variables by scanning
+  text -- an HTML comment is not a hiding place, it is just more text. A comment
+  naming ConfirmationURL in its real syntax would therefore MINT A WORKING
+  MAGIC LINK and bury it in the source of every reset email: invisible when
+  rendered, extractable by anyone who reads the source or receives a forward.
+  The one variable this file may spell literally is the code itself, once, in
+  the box below. Say the others in words.
+
+  Paste into: Supabase dashboard -> Authentication -> Emails -> Reset password.
+  Subject line for that same screen is in README.md next to this file.
+
+  TWO SENTENCES DIFFER FROM THE SIGNUP TEMPLATE ON PURPOSE, and both are the
+  app's own words from resetCompletePage:
+
+    1. "signs every device out" - completing a reset destroys every session
+       for the account, including the one the person is reading this on. That
+       is real and surprising, so it is said before it happens rather than
+       discovered afterwards.
+    2. The did-not-ask-for-this line is stronger here than on signup. An
+       unexpected confirmation code means somebody typed an address. An
+       unexpected RESET code means somebody typed an address that already has
+       an account behind it, and the person should know that.
+
+  Plain inline styles and a system font stack on purpose: no <style> block (Gmail
+  strips parts of it), no web font, no image, nothing to load. The six digits are
+  the message; everything else is one sentence of context.
+-->
+<div style="margin:0;padding:32px 24px;background:#f4f1ec;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="max-width:420px;margin:0 auto;background:#fffdf9;border:1px solid #e2dcd2;padding:32px 28px;">
+
+    <p style="margin:0 0 24px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#8a8175;">Timestamp</p>
+
+    <h1 style="margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:600;color:#2b2723;">Set a new password</h1>
+
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#5c554c;">Enter these six digits on the page that asked for them, with the password you want.</p>
+
+    <p style="margin:0 0 24px;padding:16px 0;font-size:32px;line-height:1;letter-spacing:0.22em;font-weight:600;text-align:center;color:#2b2723;background:#f4f1ec;border:1px solid #e2dcd2;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">{{ .Token }}</p>
+
+    <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#5c554c;">The code lasts an hour. Setting a new password signs every device out, including this one.</p>
+
+    <p style="margin:0;font-size:13px;line-height:1.5;color:#8a8175;">If you did not ask to reset your password, you can ignore this and nothing changes &mdash; your current password still works. Somebody typed your address into the reset form; if that was not you, it is worth knowing.</p>
+
+  </div>
+</div>

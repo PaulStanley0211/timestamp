@@ -45,7 +45,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runFfmpeg, findFfmpeg, probe, REPO_ROOT } from '../scripts/ffmpeg/run.mjs';
+import { runFfmpeg, runFfprobe, findFfmpeg, probe, REPO_ROOT } from '../scripts/ffmpeg/run.mjs';
 import { assertDeliveryContract } from '../scripts/ffmpeg/assert.mjs';
 import { deliveryGeometry, tapeGeometry } from '../scripts/tapedeck/frame.mjs';
 import { loadLookProfile, buildVideoFilter } from '../scripts/tapedeck/look.mjs';
@@ -75,7 +75,14 @@ async function haveFfmpeg() {
 const HAVE = await haveFfmpeg();
 const skip = HAVE ? false : `ffmpeg not found (${findFfmpeg().ffmpeg}) -- audio tests skipped`;
 
-const outDir = path.join(REPO_ROOT, 'build', 'test');
+// THE PID IS NOT DECORATION: it is what stops a second concurrent
+// `node --test` on this checkout from writing these same fixed filenames.
+// Inside one run nothing here collides -- across two runs every mp4 below is
+// the same path, and the reader gets a file truncated mid-write, which is
+// reported as a decode failure against whichever test was reading.
+// `test/ffmpeg-output.test.js` carries the full account at the same line;
+// the precedent is `c897845` and the tmp name in `scripts/auth/accounts.mjs`.
+const outDir = path.join(REPO_ROOT, 'build', 'test', String(process.pid));
 if (HAVE) fs.mkdirSync(outDir, { recursive: true });
 
 const SOURCE = { lavfi: `testsrc2=size=1280x720:rate=${cfg.fps}:duration=${cfg.durationSeconds}` };
@@ -154,6 +161,22 @@ test('the muxed output carries exactly one mono 48 kHz audio stream', { skip }, 
   assert.equal(audio[0].channels, 1);
   assert.equal(Number(audio[0].sample_rate), 48000);
   assert.equal(audio[0].codec_name, 'aac');
+});
+
+test('the finished file carries AI-provenance tags a scanner can read back', { skip }, async () => {
+  // The argv test in audio-bed.test.js proves the flags are SENT; this proves
+  // the mp4 muxer actually kept them under keys ffprobe reports -- mov drops
+  // metadata keys it does not map, silently, so sending is not shipping.
+  const file = await fullRender();
+  const { stdout } = await runFfprobe([
+    '-v', 'error', '-show_entries', 'format_tags', '-of', 'json', file,
+  ]);
+  const raw = JSON.parse(stdout).format?.tags ?? {};
+  const tags = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k.toLowerCase(), v]));
+  assert.match(tags.comment ?? '', /AI-generated/,
+    `the delivered file must carry the human-readable disclosure; format tags were ${JSON.stringify(raw)}`);
+  assert.match(tags.description ?? '', /trainedAlgorithmicMedia/,
+    'the delivered file must carry the machine-readable digital-source-type marker');
 });
 
 test('adding the bed does not move a single video frame', { skip }, async () => {
@@ -284,4 +307,68 @@ test('without --with-audio the output has no audio stream at all', { skip }, asy
 
   const info = await probe(output);
   assert.equal(info.streams.filter((s) => s.codec_type === 'audio').length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// the two cheap wins -- a fluorescent buzz, a kitchen clock tick
+//
+// The golden-string tests in test/audio-bed.test.js prove the SHAPE of the two
+// new tones; this proves the NUMBER, the same division of labour section 20
+// already drew for ambience. "Quiet" is a spec with a figure attached to it,
+// not an adjective, so the only real proof that a tone "sits in the bed" is
+// ebur128 measuring the WHOLE thing -- hiss, capstan, ambience noise and tone
+// together -- and finding it still where the output contract says it must be.
+// ---------------------------------------------------------------------------
+
+function withPlaceOverride(id) {
+  const raw = JSON.parse(fs.readFileSync(path.join(ROOT, 'presets/places', `${id}.json`), 'utf8'));
+  const { look } = loadLookProfile(base, raw.lookOverride);
+  clampAudio(look);
+  return buildAudioFilter(look, cfg);
+}
+
+test('the stairwell preset, buzz and all, is still inside the loudness contract', { skip }, async () => {
+  const audioFilter = withPlaceOverride('plattenbau-treppenhaus');
+  assert.ok(audioFilter.includes('[tone]'), 'this test proves nothing if the buzz never made it into the graph');
+  const lufs = parseIntegratedLufs((await runFfmpeg(bedLoudnessArgs({ audioFilter, cfg }))).stderr);
+  assert.ok(lufs >= -29 && lufs <= -25,
+    `the stairwell bed with its fluorescent buzz measured ${lufs} LUFS, outside [-29, -25]`);
+});
+
+test('the kitchen preset, clock tick and all, is still inside the loudness contract', { skip }, async () => {
+  const audioFilter = withPlaceOverride('kuechentisch-fruehstueck');
+  assert.ok(audioFilter.includes('[tone]'), 'this test proves nothing if the tick never made it into the graph');
+  const lufs = parseIntegratedLufs((await runFfmpeg(bedLoudnessArgs({ audioFilter, cfg }))).stderr);
+  assert.ok(lufs >= -29 && lufs <= -25,
+    `the kitchen bed with its clock tick measured ${lufs} LUFS, outside [-29, -25]`);
+});
+
+test('the clock tick is heard as a click train, not as a second layer of hiss', { skip }, async () => {
+  // The tick's whole point is silence between beats. If it measured anywhere
+  // near the bed's own level it would not read as a clock, it would read as a
+  // second, slightly different, hiss -- so its OWN loudness, isolated from
+  // hiss and capstan, has to sit well under the bed's -27 LUFS floor even
+  // though its instantaneous peak (2% duty cycle) is much louder than that.
+  const raw = JSON.parse(fs.readFileSync(path.join(ROOT, 'presets/places/kuechentisch-fruehstueck.json'), 'utf8'));
+  const { look } = loadLookProfile(base, raw.lookOverride);
+  clampAudio(look);
+  // hiss.amplitude 0 leaves the [hiss] chain in the graph but genuinely silent
+  // (anoisesrc at amplitude 0 emits nothing); capstan.tones=[] and
+  // ambience.amplitude 0 omit their chains entirely, the same way a place with
+  // neither configured already does. What is left contributing anything at all
+  // is the tick.
+  const toneOnly = buildAudioFilter(
+    {
+      ...look,
+      audio: {
+        ...look.audio,
+        hiss: { ...look.audio.hiss, amplitude: 0 },
+        capstan: { ...look.audio.capstan, tones: [] },
+        ambience: { ...look.audio.ambience, amplitude: 0 },
+      },
+    },
+    cfg,
+  );
+  const lufs = parseIntegratedLufs((await runFfmpeg(bedLoudnessArgs({ audioFilter: toneOnly, cfg }))).stderr);
+  assert.ok(lufs < -32, `the tick alone measured ${lufs} LUFS -- too loud to sit quietly under the bed`);
 });

@@ -53,6 +53,45 @@ export function joinGraphs(...graphs) {
 }
 
 /**
+ * What the delivered file says about itself.
+ *
+ * EU AI Act Art. 50 asks that synthetic video be marked in a machine-readable
+ * way, and this is that marking: two mp4 metadata tags on the delivered tape.
+ * "comment" carries the sentence a person sees in any player's info panel;
+ * "description" carries the IPTC digital-source-type vocabulary
+ * (trainedAlgorithmicMedia) so a scanner grepping for the standard term finds
+ * it without knowing this product exists.
+ *
+ * Known mp4 keys ONLY, on purpose. An arbitrary key needs
+ * "-movflags use_metadata_tags", which changes where the muxer stores ALL
+ * metadata -- gambling every player's ability to read the disclosure to win a
+ * nicer key name is the wrong trade for a compliance marking. And nothing here
+ * may ever carry a clock: the strings are static because two renders of one
+ * job must stay comparable, and a creation date is the classic way that
+ * property is lost without an error.
+ *
+ * The tags ride muxedArgs and NOT gradeArgs, because muxedArgs produces
+ * exactly the delivered artifact. The look CLI runs gradeArgs against any
+ * clip in assets/stock -- real footage -- and a false "AI-generated" claim
+ * baked into a real recording is worse than no tag at all.
+ */
+export const PROVENANCE_COMMENT =
+  'AI-generated video. Made with Timestamp (https://timestamptapes.com): '
+  + 'a generative AI model built this scene from a photograph. '
+  + 'The events shown did not happen.';
+export const PROVENANCE_MARKER =
+  'digitalsourcetype=trainedAlgorithmicMedia '
+  + '(http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia); '
+  + 'generator=Timestamp';
+
+export function provenanceMetadataArgs() {
+  return [
+    '-metadata', `comment=${PROVENANCE_COMMENT}`,
+    '-metadata', `description=${PROVENANCE_MARKER}`,
+  ];
+}
+
+/**
  * The `audioArgs` payload for gradeArgs, which defaults to `['-an']`. That
  * parameter is the seam the whole milestone hangs off: the video argv builder
  * did not need to learn anything about audio, it only needed one hole.
@@ -95,6 +134,7 @@ export function muxedArgs({
     filterComplex: joinGraphs(videoFilter, audioFilter),
     cfg,
     outLabel,
+    metadataArgs: provenanceMetadataArgs(),
     // No audioFilter means no [aout] to map, so fall through to gradeArgs' own
     // `-an` default rather than emitting a map for a label that does not exist.
     ...(audioFilter ? { audioArgs: audioMuxArgs(cfg, { outLabel: audioOutLabel }) } : {}),

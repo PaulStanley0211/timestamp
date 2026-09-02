@@ -19,6 +19,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -544,4 +546,208 @@ test('formatMs and parseArgs', () => {
   assert.ok(flags.has('once'));
   assert.equal(values.provider, 'fixture');
   assert.equal(values['poll-ms'], '250');
+});
+
+// --- refunds ----------------------------------------------------------------
+
+/**
+ * The debit happened at enqueue, in the web process. The worker is where a job
+ * can die AFTER that, so the worker is where the customer's case for their
+ * money back is decided -- and it hands the decision to the refund seam, which
+ * reads the manifest's steps and declines by itself when a paid step was ever
+ * attempted. What these tests pin is WHEN the seam is consulted: exactly once,
+ * and only on an outcome that ends the job without a tape.
+ */
+test('a job that fails for good is handed to the refund seam, once', async (t) => {
+  const clock = { now: T0 };
+  const refunds = [];
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async () => {
+      throw new TerminalError('the compose gate refused the still', { provider: 'fake', code: 'refused' });
+    },
+    refundImpl: async (job, { reason }) => {
+      refunds.push({ jobId: job.jobId, reason });
+      return { refunded: true, credits: 21 };
+    },
+  });
+  rig.seed();
+
+  assert.equal(await rig.worker.once(), true);
+
+  assert.equal(rig.queue.stats().failed, 1);
+  assert.deepEqual(refunds, [{ jobId: JOB_A, reason: 'refund:failed-before-provider' }]);
+  assert.equal(rig.of('refunded').length, 1, 'the operator can see money moved back');
+});
+
+test('a refund declined as spent is announced, and a job nobody owns stays quiet', async (t) => {
+  // The decline used to be SILENT: the worker emitted on success and on a
+  // throw, and the one outcome where a customer was charged for nothing --
+  // the seam reading a paid attempt and keeping the money -- said nothing at
+  // all. The glue records it durably (out/refunds/); this event is the live
+  // terminal's half of the same witness.
+  const clock = { now: T0 };
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async () => {
+      throw new TerminalError('the provider died mid-flight', { provider: 'fake', code: 'boom' });
+    },
+    refundImpl: async () => ({ refunded: false, accountId: 'acct-somebody' }),
+  });
+  rig.seed();
+  assert.equal(await rig.worker.once(), true);
+  assert.equal(rig.of('refund-declined').length, 1,
+    'a declined refund with a real owner must reach the terminal');
+  assert.equal(rig.of('refunded').length, 0);
+
+  const quiet = makeRig(t, {
+    clock,
+    pipeline: async () => {
+      throw new TerminalError('the compose gate refused', { provider: 'fake', code: 'refused' });
+    },
+    refundImpl: async () => ({ refunded: false, accountId: null }),
+  });
+  quiet.seed();
+  assert.equal(await quiet.worker.once(), true);
+  assert.equal(quiet.of('refund-declined').length, 0,
+    'a CLI job with no ledger is not a decline worth announcing');
+});
+
+test('a failure the queue will retry refunds nothing until the attempt that makes it final', async (t) => {
+  const clock = { now: T0 };
+  const refunds = [];
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async () => { throw new RetriableError('the provider hiccupped', { provider: 'fake' }); },
+    refundImpl: async (job, { reason }) => { refunds.push(reason); return { refunded: true }; },
+  });
+  rig.seed();
+
+  for (let attempt = 0; attempt < CFG.provider.maxAttempts; attempt += 1) {
+    await rig.worker.once();
+    clock.now += 60_000;
+    // A refund while the queue still intends to run the job again would pay
+    // the customer back for a tape they may yet receive.
+    if (attempt < CFG.provider.maxAttempts - 1) {
+      assert.deepEqual(refunds, [], `a refund fired while attempt ${attempt + 2} was still owed`);
+    }
+  }
+  assert.equal(rig.queue.stats().failed, 1);
+  assert.deepEqual(refunds, ['refund:failed-before-provider'], 'exactly one refund, on the attempt that made it final');
+});
+
+test('a job cancelled at a step boundary is handed to the refund seam', async (t) => {
+  const clock = { now: T0 };
+  const refunds = [];
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async (job) => {
+      cancelJob(job, 'cancelled by the person who uploaded it');
+      saveJob(job);
+      return job;
+    },
+    refundImpl: async (job, { reason }) => {
+      refunds.push({ jobId: job.jobId, reason });
+      return { refunded: true, credits: 21 };
+    },
+  });
+  rig.seed();
+
+  assert.equal(await rig.worker.once(), true);
+  assert.deepEqual(refunds, [{ jobId: JOB_A, reason: 'refund:cancelled-before-provider' }]);
+});
+
+test('a refund seam that throws does not take the worker down with it', async (t) => {
+  const clock = { now: T0 };
+  const rig = makeRig(t, {
+    clock,
+    pipeline: async () => {
+      throw new TerminalError('the compose gate refused the still', { provider: 'fake', code: 'refused' });
+    },
+    refundImpl: async () => { throw new Error('the accounts module is not reachable'); },
+  });
+  rig.seed();
+
+  assert.equal(await rig.worker.once(), true, 'the job still failed cleanly on the queue');
+  assert.equal(rig.queue.stats().failed, 1);
+  assert.equal(rig.of('refund-failed').length, 1, 'the miss is visible, not swallowed');
+});
+
+/**
+ * The wire, not the function. The refund path existed once before with every
+ * piece tested and NO caller -- the exact shape BUG 1 in CLAUDE.md section 8
+ * had, where the fix lived in a file that no longer had the bug. Same defence
+ * as provider-contract.test.js: read the command's source and fail if the
+ * seam is not handed the real implementation.
+ */
+/**
+ * A MISSPELLED `--stop-after` MUST NOT SILENTLY DISABLE THE PRE-SPEND GATE.
+ *
+ * `render.mjs` validates this argument against STEPS and exits 1. The worker
+ * did not: it passed the string straight through, and `runPipeline` only ever
+ * COMPARES it (`if (stopAfter === name)`), so an unmatched value simply never
+ * matches. The banner then confirms the operator's intent -- it prints
+ * "stopping after selct" -- and every claimed job runs through `animate` and is
+ * billed. The worker holds `paidTransport(provider)`, so on `--provider=fal`
+ * that is real money.
+ *
+ * The comparison is case-sensitive too, so `--stop-after=Select` fails the same
+ * way while looking even more correct.
+ *
+ * Same defect shape as the `purge` CLI accepting a `--job` flag that does not
+ * exist (CLAUDE.md section 30): an unknown argument must be a refusal, never a
+ * silent no-op, when the thing it was meant to prevent costs money.
+ *
+ * Spawned rather than source-read, because what matters is that the process
+ * REFUSES -- a regex can confirm a line exists and not that it runs.
+ */
+test('the worker CLI refuses a --stop-after that is not a step', () => {
+  const cli = fileURLToPath(new URL('../scripts/worker/worker-cli.mjs', import.meta.url));
+
+  for (const bad of ['selct', 'Select', 'animate ', '']) {
+    const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+    const res = spawnSync(process.execPath, [cli, '--provider=fixture', `--stop-after=${bad}`], {
+      cwd: repoRoot, encoding: 'utf8', timeout: 15_000,
+    });
+    assert.equal(res.status, 1,
+      `--stop-after=${JSON.stringify(bad)} should exit 1, got ${res.status}. ` +
+      'An unmatched value never matches a step name, so the worker runs every job through animate and bills it.');
+    assert.match(`${res.stderr}${res.stdout}`, /stop-after/,
+      'the refusal must name the argument it is refusing');
+  }
+});
+
+/** And the steps that ARE real must still be accepted, so the guard above
+ *  cannot be satisfied by refusing everything. */
+test('the worker CLI accepts every real step name', () => {
+  const source = fs.readFileSync(new URL('../scripts/worker/worker-cli.mjs', import.meta.url), 'utf8');
+  assert.match(source, /STEPS/,
+    'worker-cli must validate against the same STEPS list render.mjs uses, not a copy');
+});
+
+test('the worker CLI hands createWorker the owner-refund glue', () => {
+  const source = fs.readFileSync(new URL('../scripts/worker/worker-cli.mjs', import.meta.url), 'utf8');
+  assert.match(source, /refundImpl:\s*createOwnerRefunds\(\{\s*root\s*\}\)\.refund/,
+    'worker-cli must wire refundImpl to createOwnerRefunds, or worker-side refunds exist only in tests');
+  assert.match(source, /session-middleware\.mjs/, 'the glue comes from the module that owns the ownership index');
+});
+
+test('the worker CLI hands createWorker the image classifier, with an injected transport', () => {
+  // Same class of check as the two above, and for the reason CLAUDE.md section 8
+  // records: the bug that cost a day was a seam the module always accepted and
+  // no CLI ever passed. A unit test of the classifier cannot see the call site
+  // that forgot to wire it.
+  const source = fs.readFileSync(new URL('../scripts/worker/worker-cli.mjs', import.meta.url), 'utf8');
+
+  assert.match(source, /awsImageModeratorFromEnv\(\s*process\.env/,
+    'worker-cli must build the classifier from the environment, or configuring it does nothing');
+  assert.match(source, /deps:\s*\{\s*imageModerateImpl\s*\}/,
+    'the classifier must reach runPipeline through deps, or the seam stays null in production');
+  assert.match(source, /fetchImpl:\s*globalThis\.fetch\.bind\(globalThis\)/,
+    'the transport is injected HERE, so the module keeps no default and npm test cannot spend');
+
+  // And the worker itself has to forward what the CLI hands it.
+  const worker = fs.readFileSync(new URL('../scripts/worker/worker.mjs', import.meta.url), 'utf8');
+  assert.match(worker, /providerCtx,\s*\r?\n\s*deps,/,
+    'createWorker must pass deps through to runPipeline, beside providerCtx');
 });

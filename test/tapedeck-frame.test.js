@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tapeGeometry, deliveryGeometry, frameCount } from '../scripts/tapedeck/frame.mjs';
+import { tapeGeometry, deliveryGeometry, frameCount, resolveAspect, aspectIds } from '../scripts/tapedeck/frame.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/render.json'), 'utf8'));
@@ -84,4 +84,95 @@ test('the probe regions land where they claim to', () => {
   assert.ok(d.tapeCentre.y >= d.offsetY);
   assert.ok(d.tapeCentre.y + d.tapeCentre.h <= d.offsetY + d.tapeDisplayHeight);
   assert.ok(d.tapeCentre.x + d.tapeCentre.w <= d.width);
+});
+
+/* --- three aspect ratios ------------------------------------------------ *
+ * The design holds the SHORT EDGE at 576 in every aspect and varies only the
+ * long edge. That single constraint is what keeps every pixel-tuned constant
+ * in the filtergraph correct without a second set of numbers: a 14px
+ * head-switch band is 14px of a 576-high picture whichever shape it is in.
+ * See docs/aspect-ratios-plan.md §3.
+ */
+
+test('resolveAspect leaves the 4:3 tape raster exactly where it was', () => {
+  // The inertness checkpoint. If this moves, the refactor is not a refactor.
+  const c = resolveAspect(cfg, '4:3');
+  const t = tapeGeometry(c);
+  assert.equal(t.width, 720);
+  assert.equal(t.height, 576);
+  assert.equal(t.sar, '16/15');
+  assert.equal(t.workWidth, 736);
+  assert.equal(t.workHeight, 588);
+});
+
+test('16:9 is 1024x576 with square pixels', () => {
+  const t = tapeGeometry(resolveAspect(cfg, '16:9'));
+  assert.equal(t.width, 1024);
+  assert.equal(t.height, 576);
+  assert.equal(t.sar, '1/1', 'only the PAL 4:3 raster is anamorphic; the others are square-pixel');
+  assert.equal(t.width / t.height, 16 / 9);
+});
+
+test('9:16 is 576x1024, the same raster stood on its end', () => {
+  const t = tapeGeometry(resolveAspect(cfg, '9:16'));
+  assert.equal(t.width, 576);
+  assert.equal(t.height, 1024);
+  assert.equal(t.sar, '1/1');
+  assert.equal(t.width / t.height, 9 / 16);
+});
+
+test('there are exactly three shapes, and the default is first', () => {
+  // Paul, 2026-08-23: "it should only contain three options. That's it."
+  // The default leads because it is the camcorder shape and the product's premise.
+  assert.deepEqual(aspectIds(cfg), ['4:3', '16:9', '9:16']);
+});
+
+test('every shape holds its short edge at 576', () => {
+  // THIS IS THE DESIGN. The whole reason there is one set of tuning constants
+  // and not three is that the short edge never moves: a 14px head-switch band
+  // is 14px of a 576-high picture in every shape, and the short edge always
+  // scales 576 -> 1080 on delivery, so the grain is arithmetically identical.
+  // Break this and every pixel constant in the filtergraph is quietly wrong.
+  for (const id of aspectIds(cfg)) {
+    const t = tapeGeometry(resolveAspect(cfg, id));
+    assert.equal(Math.min(t.width, t.height), 576, `${id} short edge`);
+  }
+});
+
+test('a shape nobody defined is refused rather than silently defaulted', () => {
+  assert.throws(() => resolveAspect(cfg, '21:9'), /unknown aspect "21:9"/);
+  assert.throws(() => resolveAspect(cfg, '_comment'), /unknown aspect/);
+});
+
+test('16:9 delivers a landscape file with the picture edge to edge', () => {
+  // The reason this shape exists: the file goes to YouTube. A 16:9 picture
+  // matted into a portrait canvas would be useless there, so the DELIVERY
+  // dimensions have to be the shape that was chosen.
+  const d = deliveryGeometry(resolveAspect(cfg, '16:9'));
+  assert.equal(d.width, 1920);
+  assert.equal(d.height, 1080);
+  assert.equal(d.tapeDisplayWidth, 1920);
+  assert.equal(d.tapeDisplayHeight, 1080);
+  assert.equal(d.offsetX, 0);
+  assert.equal(d.offsetY, 0);
+  assert.equal(d.surroundTop.h, 0, 'there is no surround to measure');
+  assert.equal(d.surroundBottom.h, 0);
+});
+
+test('9:16 delivers a full-bleed portrait file, which is what a reel wants', () => {
+  const d = deliveryGeometry(resolveAspect(cfg, '9:16'));
+  assert.equal(d.width, 1080);
+  assert.equal(d.height, 1920);
+  assert.equal(d.tapeDisplayWidth, 1080);
+  assert.equal(d.tapeDisplayHeight, 1920);
+  assert.equal(d.surroundTop.h, 0);
+});
+
+test('4:3 still sits matted on the dark surface, exactly as it always has', () => {
+  const d = deliveryGeometry(resolveAspect(cfg, '4:3'));
+  assert.equal(d.width, 1080);
+  assert.equal(d.height, 1920);
+  assert.equal(d.tapeDisplayWidth, 1080);
+  assert.equal(d.tapeDisplayHeight, 810);
+  assert.ok(d.surroundTop.h > 0, 'the surround is the point of this one');
 });

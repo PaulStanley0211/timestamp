@@ -55,7 +55,7 @@ const aPlace = (over = {}) => ({
   prompt: {
     scene: 'a plain room with a wooden table against the wall',
     light: 'one bulb overhead and grey daylight from a small window',
-    lens: 'wide and close, deep focus behind',
+    lens: 'wide and close, whatever is behind it going soft',
     framing: 'waist-up, three-quarters to the camera',
     eraProps: 'a wall clock with hands, a wired telephone, a folded newspaper',
     ...(over.prompt ?? {}),
@@ -418,4 +418,37 @@ test('the ban lists are not silently empty', () => {
   for (const [group, terms] of Object.entries(BANNED)) {
     assert.ok(terms.length > 10, `BANNED.${group} has collapsed to ${terms.length} terms`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// the optional moment
+//
+// Added 2026-08-24. A place may say what is HAPPENING in the frame, not merely
+// what is in it. Optional on purpose: the composer carries a generic floor, so
+// adding the field breaks no existing preset and typing your own place still
+// gets a moment. See the composition-tells section of compose-prompt.test.js
+// for why a brief with no action in it produces a posed portrait.
+// ---------------------------------------------------------------------------
+
+test('a place may write its own moment, and it survives validation', () => {
+  const moment = 'still turning back from the window, one hand flat on the table';
+  const place = validatePlace(aPlace({ prompt: { moment } }), { id: 'p1' });
+  assert.equal(place.prompt.moment, moment,
+    'an authored moment must reach the composer -- PLACE_FRAGMENTS rebuilds the '
+    + 'prompt object key by key, so an unlisted field is dropped in silence');
+});
+
+test('a place without a moment has none, and the composer supplies the floor', () => {
+  const place = validatePlace(aPlace(), { id: 'p1' });
+  assert.equal(place.prompt.moment, undefined, 'optional means absent, not empty string');
+});
+
+test('an authored moment is held to the same vocabulary as every other fragment', () => {
+  // The new field must not become a hole in rule 1. A moment is about what the
+  // hands and shoulders are doing; the instant it describes the face it is a
+  // competing description of somebody the preset has never seen.
+  assert.throws(
+    () => validatePlace(aPlace({ prompt: { moment: 'smiling towards the camera' } }), { id: 'p1' }),
+    /smiling/,
+    'person vocabulary must be refused inside a moment exactly as it is elsewhere');
 });

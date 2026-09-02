@@ -68,6 +68,7 @@ import {
   AuthError,
   PLANS,
   creditConfig,
+  isFreePlan,
   loadAccount,
   planFor,
   refreshAccount,
@@ -153,6 +154,7 @@ export function creditCost({
   resolution = CREDIT_DEFAULTS.resolution,
   seconds = CREDIT_DEFAULTS.seconds,
   tier = CREDIT_DEFAULTS.tier,
+  aspect = null,
 } = {}) {
   const cfg = creditConfig();
   const res = cfg.resolutions[resolution];
@@ -190,7 +192,30 @@ export function creditCost({
       userMessage: 'That length is not available.',
     });
   }
-  return creditsFor(res, seconds, tierEntry.multiplier);
+  // THE SHAPE IS PART OF THE PRICE, because it is part of the cost.
+  //
+  // A resolution label names the SHORT edge, so 16:9 and 9:16 are exactly 4/3
+  // the pixels of 4:3 at the same tier, and fal bills tokens as pixels x
+  // seconds. Charging the 4:3 price for a wide tape sells it a third below
+  // cost -- and 9:16 is the phone format on a product that delivers to phones,
+  // so that would be the MODAL order, not an edge case.
+  //
+  // REFUSED RATHER THAN DEFAULTED, exactly like an unknown resolution above. A
+  // shape nobody priced must not be quietly charged at the cheapest rate: that
+  // is the failure where the button, the ledger and the manifest all agree on
+  // a number that is not what the render cost.
+  const shape = aspect ?? cfg.defaultAspect;
+  const known = [cfg.defaultAspect, ...Object.keys(cfg.aspects ?? {})];
+  const aspectMultiplier = shape === cfg.defaultAspect ? 1 : cfg.aspects?.[shape];
+  if (!Number.isFinite(aspectMultiplier) || aspectMultiplier <= 0) {
+    throw new AuthError(`unknown aspect ${JSON.stringify(aspect)}`, {
+      code: 'UNKNOWN_ASPECT',
+      userMessage: 'That frame shape is not available.',
+      detail: { aspect, known },
+    });
+  }
+
+  return creditsFor(res, seconds, tierEntry.multiplier * aspectMultiplier);
 }
 
 /** The estimated provider spend behind a credit figure. For the ledger CLI and
@@ -227,6 +252,25 @@ function assertReason(reason) {
 }
 
 /**
+ * An idempotency key, or nothing at all.
+ *
+ * WHY A BAD REF IS REFUSED RATHER THAN TREATED AS ABSENT. A caller passing an
+ * empty string believes it is protected and is not: the entry would be written
+ * with no key, and the next redelivery would grant the credits again. Failing
+ * loudly at the call is the only version of this that cannot be quietly wrong,
+ * and the caller is a webhook handling somebody's money.
+ */
+function assertRef(ref) {
+  if (ref === undefined || ref === null) return null;
+  if (typeof ref !== 'string' || ref.trim().length === 0) {
+    throw new AuthError(`a ledger ref must be a non-empty string or absent, got ${JSON.stringify(ref)}`, {
+      code: 'BAD_REF',
+    });
+  }
+  return ref.trim();
+}
+
+/**
  * Reads the stored ledger, refusing anything malformed.
  *
  * A skip-the-bad-entry policy would be wrong here in a way it is not wrong for
@@ -250,7 +294,13 @@ function entriesOf(account) {
     const ok = Number.isInteger(delta)
       && Number.isFinite(at)
       && typeof entry?.reason === 'string' && entry.reason.length > 0
-      && (entry.jobId === null || (typeof entry.jobId === 'string' && entry.jobId.length > 0));
+      && (entry.jobId === null || (typeof entry.jobId === 'string' && entry.jobId.length > 0))
+      // `ref` is optional, and EVERY ENTRY WRITTEN BEFORE 2026-08-24 LACKS IT
+      // ENTIRELY, so absent is as valid as null. Present but unusable as a key
+      // is corruption, and reading it as absent would silently disarm the
+      // grant dedupe on exactly the account whose file was damaged.
+      && (entry.ref === undefined || entry.ref === null
+        || (typeof entry.ref === 'string' && entry.ref.length > 0));
     if (!ok) {
       throw new AuthError(
         `ledger entry ${i} of account ${account?.accountId ?? '?'} is malformed: ${JSON.stringify(entry)}`,
@@ -262,7 +312,13 @@ function entriesOf(account) {
         },
       );
     }
-    return { at: entry.at, delta, jobId: entry.jobId ?? null, reason: entry.reason };
+    // THE PROJECTION IS A FIXED SHAPE AND DROPS WHATEVER IT DOES NOT NAME.
+    // `ref` was written to disk correctly and left off this line during
+    // implementation, and the result was a grant dedupe comparing every stored
+    // entry against `undefined` -- idempotent in memory, not idempotent at all
+    // across a reload, which is the only case that matters for a webhook. The
+    // round-trip test in test/auth-credits.test.js exists because of it.
+    return { at: entry.at, delta, jobId: entry.jobId ?? null, reason: entry.reason, ref: entry.ref ?? null };
   });
 }
 
@@ -457,8 +513,9 @@ export function refundCredits(account, { jobId, reason = 'refund:failed-before-p
  * below zero: a negative balance is a debt this product has no way to collect
  * and no page that could explain it.
  */
-export function grantCredits(account, { credits, reason, nowImpl } = {}) {
+export function grantCredits(account, { credits, reason, ref: rawRef, nowImpl } = {}) {
   assertReason(reason);
+  const ref = assertRef(rawRef);
   if (!Number.isInteger(credits) || credits === 0) {
     throw new AuthError(`grant must be a non-zero integer, got ${JSON.stringify(credits)}`, {
       code: 'BAD_CREDITS',
@@ -467,8 +524,22 @@ export function grantCredits(account, { credits, reason, nowImpl } = {}) {
   const { root, accountId } = mutableAccount(account, 'grantCredits');
   const clock = nowImpl ?? account?.nowImpl ?? defaultNow;
 
-  const { account: fresh } = updateAccount({ root, accountId, nowImpl: clock }, (record) => {
-    const balance = sum(entriesOf(record));
+  const { account: fresh, outcome } = updateAccount({ root, accountId, nowImpl: clock }, (record) => {
+    const entries = entriesOf(record);
+
+    // IDEMPOTENT BY ref, AND THE CHECK IS INSIDE THE LOCK FOR THE SAME REASON
+    // THE DEBIT'S BALANCE CHECK IS. Stripe redelivers events -- documented
+    // behaviour, not an edge case -- and a redelivery can arrive while the
+    // first delivery is still inside this function. A check that read before
+    // `updateAccount` took the per-account lock would let both through and
+    // grant twice. There is an 8-thread barrier test for exactly that.
+    //
+    // A replay RETURNS rather than throws: the webhook must be able to answer
+    // Stripe 200, and a 500 on a duplicate would make Stripe retry the one
+    // thing that already succeeded.
+    if (ref !== null && entries.some((entry) => entry.ref === ref)) return { granted: false };
+
+    const balance = sum(entries);
     if (balance + credits < 0) {
       throw new AuthError(
         `a grant of ${credits} would take account ${accountId} from ${balance} to ${balance + credits}`,
@@ -481,19 +552,53 @@ export function grantCredits(account, { credits, reason, nowImpl } = {}) {
     }
     record.ledger = [
       ...record.ledger,
-      { at: toIso(clock), delta: credits, jobId: null, reason },
+      { at: toIso(clock), delta: credits, jobId: null, reason, ref },
     ];
+    return { granted: true };
   });
 
   refreshAccount(account, fresh);
+  // Returned rather than void, because the one caller that matters -- the
+  // Stripe webhook -- has to be able to tell a payment from a redelivery, and
+  // reading it back off the ledger would be a second source of truth.
+  return { granted: outcome.granted, credits: outcome.granted ? credits : 0, ref };
 }
 
-/** The plan's period grant, by name, so the CLI and a future webhook cannot
- *  drift into two ideas of what a plan is worth. */
+/**
+ * The plan's period grant, by name, so the CLI and a future webhook cannot
+ * drift into two ideas of what a plan is worth.
+ *
+ * THE FREE PLAN HAS NO PERIOD, AND ASKING FOR ONE IS AN ERROR RATHER THAN A
+ * NO-OP. Section 3 of the credit-packs spec: "One real tape, ever, per verified
+ * account. Not monthly. A recurring free tape is a standing $2.08/user/month
+ * liability against no revenue and no card on file." The signup grant in
+ * `createAccount` is the whole of the free tape, it is claimed against the
+ * global ceiling there, and this is the only other automated path that could
+ * ever hand out the same credits a second time -- `npm run accounts -- grant
+ * --period` reaches it directly.
+ *
+ * IT REFUSES INSTEAD OF QUIETLY GRANTING ZERO because the caller is an operator
+ * at a terminal who has just typed a command meaning "top this person up", and
+ * silence would read as success. An operator who genuinely intends to give a
+ * free account more credits still can -- `grant <id> 42 --reason ...` goes
+ * through `grantCredits` and writes a row saying a human decided it -- and that
+ * is the difference worth preserving: a deliberate gift is auditable, a
+ * recurring one is a liability nobody chose.
+ */
 export function grantPlanPeriod(account, { planId = account?.plan, nowImpl } = {}) {
   const plan = PLANS[planId];
   if (!plan) {
     throw new AuthError(`unknown plan ${JSON.stringify(planId)}`, { code: 'BAD_PLAN' });
+  }
+  if (isFreePlan(plan.id)) {
+    throw new AuthError(
+      `the ${plan.id} plan grants one tape ever, at signup, and has no period to grant`,
+      {
+        code: 'FREE_TAPE_IS_ONCE_EVER',
+        detail: { planId: plan.id },
+        userMessage: 'The free tape is a one-time grant and cannot be renewed.',
+      },
+    );
   }
   grantCredits(account, { credits: plan.creditsPerPeriod, reason: `grant:period:${plan.id}`, nowImpl });
   return plan.creditsPerPeriod;
@@ -531,14 +636,68 @@ export function providerWasCalled(job) {
   return steps.some((step) => PAID_STEPS.includes(step?.name) && Number(step?.attempts ?? 0) > 0);
 }
 
+/**
+ * The 4xx outcomes that mean the provider did no work there is anything to
+ * bill for: it read the request, understood it, and declined.
+ *
+ * `moderation_refused` and `bad_request` are the two shapes `classifyHttp`
+ * gives a 400 or 422; `credential` is a 401 or 403, where the request was
+ * never even authorised. None of them produces a generation, and CLAUDE.md §8
+ * records the same fact measured against fal directly: a 422 is not billed.
+ *
+ * DELIBERATELY NOT HERE: `upstream` (5xx), `rate_limited`, `timeout`, and the
+ * absence of any recorded error. Every one of those is a case where the
+ * request may have been served and billed while the answer was lost, which is
+ * exactly the ambiguity §37E refused to guess at.
+ */
+const UNBILLED_REFUSALS = Object.freeze(['moderation_refused', 'bad_request', 'credential']);
+
+/**
+ * Whether every paid attempt this job made ended in a provider refusal.
+ *
+ * THE CASE §37E DID NOT CONSIDER. Its reasoning was that nothing on disk can
+ * distinguish a pre-flight crash from an in-flight loss, so a paid step that
+ * was attempted must be assumed billed. That is right about ambiguity and this
+ * is the outcome that carries none: a 4xx refusal is a recorded answer FROM the
+ * provider saying it declined to run.
+ *
+ * Measured 2026-09-02 on the first real paid order: job 20260902-141334-34a7e4
+ * was refused on content grounds and the owner's balance went 21 to 0 for a
+ * tape that was never generated. On the free tier that is a customer's entire
+ * grant, spent on nothing.
+ *
+ * `attempts === 1` IS PART OF THE TEST AND NOT A DETAIL. Only the last
+ * attempt's error survives on the manifest, so a step tried twice could have
+ * been served once and refused once, and its recorded error would look
+ * identical to a clean refusal. One attempt is the only case where the recorded
+ * error describes everything that happened.
+ */
+function providerRefusedWithoutCharge(job) {
+  const steps = Array.isArray(job?.steps) ? job.steps : [];
+  const paid = steps.filter(
+    (step) => PAID_STEPS.includes(step?.name) && Number(step?.attempts ?? 0) > 0,
+  );
+  if (paid.length === 0) return false;
+  return paid.every((step) => (
+    Number(step.attempts) === 1
+    && step.status === 'failed'
+    && UNBILLED_REFUSALS.includes(step?.error?.code)
+  ));
+}
+
 /** The form worth copying: the rule applied rather than restated. Returns
  *  whether anything was given back, and never throws for the spent case --
  *  declining a refund is a normal outcome, not an error. */
 export function refundIfUnspent(account, job, { reason, nowImpl } = {}) {
-  if (providerWasCalled(job)) return false;
+  const refused = providerRefusedWithoutCharge(job);
+  if (providerWasCalled(job) && !refused) return false;
   refundCredits(account, {
     jobId: job.jobId,
-    reason: reason ?? 'refund:failed-before-provider',
+    // The two cases are different facts and the ledger says which: one never
+    // reached a provider, the other reached one and was turned away. A refund
+    // labelled "failed-before-provider" for a job that plainly did call fal is
+    // the kind of line that makes an audit trail stop being trusted.
+    reason: reason ?? (refused ? 'refund:provider-refused' : 'refund:failed-before-provider'),
     spent: false,
     nowImpl,
   });

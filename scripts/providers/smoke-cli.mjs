@@ -127,7 +127,11 @@ async function main() {
     }
   }
 
-  const usd = estimateVideo({ pricing, model: wanted.video, seconds: args.seconds });
+  // The raster travels with the seconds here for the same reason it does in
+  // `fal.mjs`: a token-billed model prices on pixels x seconds and refuses
+  // without it, so omitting it turns this report into a crash on exactly the
+  // model the direct path uses.
+  const usd = estimateVideo({ pricing, model: wanted.video, seconds: args.seconds, size });
   const tapeCredits = creditCost({ resolution: args.resolution, seconds: cfg.durationSeconds });
   console.log('');
   console.log(`  this call       ~$${usd.toFixed(2)} ESTIMATED (config/pricing.json -- every non-zero number there is a guess)`);

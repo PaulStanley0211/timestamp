@@ -105,8 +105,16 @@ test('an expanded pair composes into a prompt that names the person exactly once
   assert.deepEqual(scanText(still.prompt, ['person', 'look']), []);
   assert.deepEqual(scanText(motion.prompt, ['person', 'look']), []);
   assert.deepEqual(scanText(still.negativePrompt, ['look']), []);
-  // the eight lines a hand-written preset produces, from two typed phrases
-  assert.equal(still.prompt.split('\n').length, 8);
+  // THE SAME CLAUSES A HAND-WRITTEN PRESET PRODUCES, from two typed phrases.
+  // This used to assert the line COUNT, which went stale the moment a ninth
+  // clause was added (the moment, 2026-08-24) and which never said WHICH nine
+  // lines it wanted anyway. Naming them in order pins what the test is actually
+  // for -- free text earns the identical structure -- and it cannot pass
+  // vacuously if the composer starts emitting something else entirely.
+  const labels = still.prompt.split('\n').map((l) => (l.match(/^([A-Z][a-z ]+):/) ?? [, '(prose)'])[1]);
+  assert.deepEqual(labels, [
+    '(prose)', 'Place', 'Framing', 'Moment', 'Lens', 'Light', 'In frame', 'Period', '(prose)',
+  ]);
 });
 
 // ---------------------------------------------------------------------------

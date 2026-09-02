@@ -288,8 +288,11 @@ test('a borrowed clause that repeats the user\'s own noun phrase is dropped', ()
   const carpark = place('a car park at night');
   assert.equal(carpark.prompt.scene.match(/car park/g).length, 1);
   // the one-word case is deliberately NOT dropped: it would throw away the best
-  // clause in the beach preset
-  assert.ok(place('a beach in winter').prompt.scene.includes('roofed wicker beach chairs'));
+  // clause in the beach preset. The clause carrying the user's own word used to
+  // be "roofed wicker beach chairs"; the preset was de-nationalised on
+  // 2026-08-29 (a Strandkorb is a German object on a product that is not for
+  // Germany) and the loungers carry that job now.
+  assert.ok(place('a beach in winter').prompt.scene.includes('stacked plastic beach loungers'));
 });
 
 test('a skeleton whose climate contradicts the request keeps its lens and loses its dressing', () => {
@@ -308,7 +311,13 @@ test('a skeleton whose climate contradicts the request keeps its lens and loses 
   assert.deepEqual(summer.lookOverride, {});
   // "sunshine" is one of ostsee's negatives and would fight the request outright
   assert.ok(!summer.negatives.includes('sunshine'));
-  assert.ok(!/wicker|groyne|marram/.test(summer.prompt.scene));
+  // Named against the dressing the preset ACTUALLY carries. These were
+  // `wicker|groyne|marram` until the de-nationalisation removed those words
+  // from the repository entirely -- at which point the assertion could no
+  // longer fail for any reason, which is the vacuous-absence trap this file's
+  // own siblings have been caught by. The words below are present in the
+  // preset and must be absent from THIS expansion.
+  assert.ok(!/kiosk|loungers|tarpaulin/.test(summer.prompt.scene));
 
   // the lens is not dressing -- a focal length has no season
   assert.equal(summer.prompt.lens, catalog.places.get('ostsee-strand').prompt.lens);
@@ -334,8 +343,23 @@ test('climate is a term in the score, so a warm request prefers a warm skeleton'
 
 test('a lookOverride tuned for one light is carried one step along the time axis and no further', () => {
   // dusk -> night is the same sodium lamps; midday -> night is not.
-  assert.deepEqual(place('a car park at night').lookOverride,
-    { grade: { cbRedMid: 0.07, cbBlueMid: -0.06, saturation: 0.8 }, optics: { bloomStrength: 0.52 }, tape: { grainStrength: 26 } });
+  //
+  // THE AUDIO BLOCK JOINED THIS EXPECTATION on 2026-08-24 and it belongs here:
+  // a car park at night borrowing the Autobahn's motorway rumble is the same
+  // one-step rule the grade follows, applied to the other half of the tape.
+  // The `_comment` arguing for those numbers is stripped at every depth -- see
+  // the test below.
+  assert.deepEqual(place('a car park at night').lookOverride, {
+    grade: { cbRedMid: 0.07, cbBlueMid: -0.06, saturation: 0.8 },
+    optics: { bloomStrength: 0.52 },
+    tape: { grainStrength: 26 },
+    audio: {
+      ambience: {
+        amplitude: 0.34, color: 'brown', highpass: 200, lowpass: 600,
+        volume: 0.22, swellHz: 0.25, swellDepth: 0.4,
+      },
+    },
+  });
   assert.deepEqual(place('a stairwell at night').lookOverride, {});
 });
 
@@ -417,4 +441,24 @@ test('the id is derived from the request, not from the expander', () => {
 
 test('an unknown kind is a programmer error, not a silent default', () => {
   assert.throws(() => localExpander({ kind: 'weather', text: 'a beach', seed: 0, catalog }), TypeError);
+});
+
+test('a borrowed lookOverride leaves the argument behind at EVERY depth', () => {
+  // `withoutDocs` filtered the top level only, which was enough while every
+  // lookOverride was two levels deep -- `grade.saturation`, `optics.bloom`.
+  // Place ambience (2026-08-24) is three: `audio.ambience._comment`, and that
+  // comment argues about a specific place. Borrowed onto somebody's typed text
+  // it becomes a manifest quoting "motorway rumble from behind the kiosk" over
+  // a scene with no kiosk in it -- exactly the misleading record this function
+  // exists to prevent, one level down where it was not looking.
+  const nested = (obj, hits = []) => {
+    for (const [k, v] of Object.entries(obj ?? {})) {
+      if (k.startsWith('_')) hits.push(k);
+      if (v && typeof v === 'object' && !Array.isArray(v)) nested(v, hits);
+    }
+    return hits;
+  };
+  for (const text of SAMPLES) {
+    assert.deepEqual(nested(place(text).lookOverride), [], `${text} carried a comment through`);
+  }
 });

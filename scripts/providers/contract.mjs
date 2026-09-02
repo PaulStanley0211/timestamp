@@ -100,7 +100,29 @@ export const PROGRESS_PHASES = Object.freeze(['submit', 'queued', 'running', 'do
  *  in the ledger. */
 export const CURRENCY = 'USD';
 
-const bad = (code, message, detail = null) => new TerminalError(message, { code, detail, provider: 'contract' });
+/**
+ * Which provider ids spend money, as a plain list.
+ *
+ * WHY THIS IS DUPLICATED FROM THE PROVIDERS THEMSELVES, WHICH IS NORMALLY THE
+ * WRONG ANSWER. The web layer needs it -- it renders a menu of frame shapes
+ * and only some of them are renderable on a paid path, so a page that does not
+ * know is a page that offers a choice the renderer will refuse. But it must
+ * not ASK a provider: `providers/index.mjs` statically imports `fal.mjs`, and
+ * keeping that module out of the web process is what three of the four money
+ * guards are for. `server-cli.mjs` already goes to the trouble of a lazy
+ * import for exactly this reason.
+ *
+ * This file is a leaf -- node builtins, `seed.mjs` and `errors.mjs` -- so
+ * importing it costs nothing and pulls in no provider.
+ *
+ * THE DRIFT IS CLOSED BY A TEST, not by hoping. `provider-contract.test.js`
+ * builds every real provider and compares this list against its own `paid`
+ * flag, so a provider added later that nobody lists here goes red rather than
+ * being quietly treated as free.
+ */
+export const PAID_PROVIDER_IDS = Object.freeze(['fal']);
+
+const bad =(code, message, detail = null) => new TerminalError(message, { code, detail, provider: 'contract' });
 
 const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNonEmptyString = (v) => typeof v === 'string' && v.length > 0;
@@ -133,12 +155,54 @@ function requireAbsolutePath(obj, key, where) {
   return v;
 }
 
-/** 4:3 is not decoration. The tape raster is 720x576 with SAR 16/15, i.e. DAR
- *  4:3, and a still that arrives at any other aspect gets cropped or pillared
- *  somewhere downstream without anyone deciding where. Checked here so the
- *  decision is a loud failure at request time rather than a quiet crop at
- *  assemble time. */
-function requireFourThree(size, where) {
+/**
+ * The shapes the tape stage has geometry for.
+ *
+ * THIS USED TO BE THE SINGLE VALUE 4:3, and its reasoning -- "the tape raster
+ * is 720x576 with SAR 16/15, i.e. DAR 4:3" -- was true when it was written and
+ * stopped being true when section 13 gave every shape its own tape raster:
+ * 720x576, 1024x576 and 576x1024, each holding the short edge at 576. The
+ * check was right and its premise went stale.
+ *
+ * WHAT IT IS STILL FOR, unchanged: a still that arrives at an aspect nobody
+ * planned gets cropped or pillared somewhere downstream without anyone
+ * deciding where. So the rule is not "4:3" and it is not "anything" -- it is
+ * "a shape this product has a tape frame for", and a test cross-checks this
+ * list against `config/render.json`, which is the authority.
+ */
+export const SHIPPED_ASPECTS = Object.freeze(['4:3', '16:9', '9:16']);
+
+const RATIOS = SHIPPED_ASPECTS.map((a) => {
+  const [w, h] = a.split(':').map(Number);
+  return { aspect: a, w, h };
+});
+
+/**
+ * The shape id for a raster, or null when it is not one this product ships.
+ *
+ * WHY THIS IS A TOLERANCE AND NOT AN EXACT CROSS-MULTIPLICATION, which was the
+ * first attempt and was wrong. There is NO integer width that makes 16:9 exact
+ * at a height of 480 -- 480 is not divisible by 9 -- which is precisely why
+ * 854x480 is the industry-standard 480p widescreen raster and is itself 0.08%
+ * off. Demanding exactness would reject the only raster anybody actually uses.
+ * yuv420p forces both edges even on top of that, so the rounding is not
+ * optional either.
+ *
+ * 1% is safe rather than arbitrary: the shapes this product ships are 1.333,
+ * 1.778 and 0.5625, and the closest pair is 33% apart. The widest real error is
+ * 854x480 at 0.078%, so there is more than two orders of magnitude of headroom
+ * before two shapes could be confused.
+ */
+const ASPECT_TOLERANCE = 0.01;
+
+export function aspectOf(size) {
+  if (!Number.isFinite(size?.width) || !Number.isFinite(size?.height) || size.height <= 0) return null;
+  const actual = size.width / size.height;
+  const hit = RATIOS.find(({ w, h }) => Math.abs(actual - w / h) / (w / h) <= ASPECT_TOLERANCE);
+  return hit ? hit.aspect : null;
+}
+
+function requireShippedAspect(size, where) {
   if (!isPlainObject(size)) {
     throw bad('invalid_request', `${where}.size must be {width,height}, got ${JSON.stringify(size)}`);
   }
@@ -148,8 +212,19 @@ function requireFourThree(size, where) {
       throw bad('invalid_request', `${where}.size.${k} must be a positive integer, got ${JSON.stringify(v)}`, { size });
     }
   }
-  if (width * 3 !== height * 4) {
-    throw bad('invalid_request', `${where}.size must be 4:3 -- the tape raster is DAR 4:3 -- got ${width}x${height}`, { size });
+  // yuv420p subsamples chroma by two, so an odd edge is a filtergraph failure
+  // at the far end of a paid render rather than a rejected request here.
+  for (const [k, v] of [['width', width], ['height', height]]) {
+    if (v % 2 !== 0) {
+      throw bad('invalid_request', `${where}.size.${k} must be even -- yuv420p subsamples chroma by two -- got ${v}`, { size });
+    }
+  }
+  if (aspectOf(size) === null) {
+    throw bad(
+      'invalid_request',
+      `${where}.size must be one of ${SHIPPED_ASPECTS.join(', ')} -- the tape stage has no frame for anything else -- got ${width}x${height}`,
+      { size, shipped: SHIPPED_ASPECTS },
+    );
   }
   return size;
 }
@@ -187,29 +262,41 @@ export function assertStillRequest(req) {
   requireString(req, 'negativePrompt', 'StillRequest', { allowEmpty: true });
   requireSeed(req, 'StillRequest');
   requireString(req, 'idempotencyKey', 'StillRequest');
-  requireFourThree(req.size, 'StillRequest');
+  requireShippedAspect(req.size, 'StillRequest');
 
   if (!Number.isInteger(req.count) || req.count < 1 || req.count > MAX_STILL_COUNT) {
     throw bad('invalid_request', `StillRequest.count must be an integer in 1..${MAX_STILL_COUNT}, got ${JSON.stringify(req.count)}`, { count: req.count });
   }
 
-  if (!Array.isArray(req.references) || req.references.length === 0) {
-    throw bad('invalid_request', 'StillRequest.references must be a non-empty array', { references: req.references });
+  requireReferences(req.references, 'StillRequest');
+}
+
+/**
+ * The reference images, wherever they are attached.
+ *
+ * Shared between the still request and the video request rather than written
+ * twice: `reference-to-video` takes exactly the same photographs the still
+ * stage used to, so a rule that held for one and not the other would be an
+ * accident. Extracted when the direct path landed, 2026-08-24.
+ */
+function requireReferences(references, what) {
+  if (!Array.isArray(references) || references.length === 0) {
+    throw bad('invalid_request', `${what}.references must be a non-empty array`, { references });
   }
-  req.references.forEach((ref, i) => {
-    if (!isPlainObject(ref)) throw bad('invalid_request', `StillRequest.references[${i}] must be an object`, { ref });
+  references.forEach((ref, i) => {
+    if (!isPlainObject(ref)) throw bad('invalid_request', `${what}.references[${i}] must be an object`, { ref });
     if (ref.role !== 'face' && ref.role !== 'place') {
-      throw bad('invalid_request', `StillRequest.references[${i}].role must be 'face' or 'place', got ${JSON.stringify(ref.role)}`, { ref });
+      throw bad('invalid_request', `${what}.references[${i}].role must be 'face' or 'place', got ${JSON.stringify(ref.role)}`, { ref });
     }
-    requireAbsolutePath(ref, 'path', `StillRequest.references[${i}]`);
+    requireAbsolutePath(ref, 'path', `${what}.references[${i}]`);
   });
 
   // Exactly one face, and it is the whole product. The photo is the identity
   // anchor; two faces is an averaging instruction and zero faces is a stock
   // photo generator. Neither is a thing anyone asked for.
-  const faces = req.references.filter((r) => r.role === 'face').length;
+  const faces = references.filter((r) => r.role === 'face').length;
   if (faces !== 1) {
-    throw bad('invalid_request', `StillRequest.references must contain exactly one reference with role 'face', found ${faces}`, { faces });
+    throw bad('invalid_request', `${what}.references must contain exactly one reference with role 'face', found ${faces}`, { faces });
   }
 }
 
@@ -218,7 +305,29 @@ export function assertVideoRequest(req) {
   if (!isPlainObject(req)) throw bad('invalid_request', `VideoRequest must be an object, got ${JSON.stringify(req)}`);
   requireString(req, 'prompt', 'VideoRequest');
   requireString(req, 'negativePrompt', 'VideoRequest', { allowEmpty: true });
-  requireAbsolutePath(req, 'imagePath', 'VideoRequest');
+  // EXACTLY ONE OF THE TWO, and never both.
+  //
+  // `imagePath` is image-to-video's start frame: the still a human approved.
+  // `references` is `reference-to-video`, which has no start frame at all and
+  // generates the whole take from the photographs -- the path with no still in
+  // it, which is the product Paul actually described.
+  //
+  // Both together is refused rather than resolved by precedence, because which
+  // one a model honours would differ per vendor, and discovering that costs a
+  // paid call. The same ambiguity is refused again in falReferenceVideoBody.
+  const hasReferences = req.references !== undefined;
+  const hasImage = req.imagePath !== undefined;
+  if (hasReferences && hasImage) {
+    throw bad('invalid_request',
+      'VideoRequest carries both imagePath and references; exactly one is allowed',
+      { imagePath: req.imagePath });
+  }
+  if (!hasReferences && !hasImage) {
+    throw bad('invalid_request',
+      'VideoRequest needs either imagePath (a start frame) or references (the photographs)', {});
+  }
+  if (hasReferences) requireReferences(req.references, 'VideoRequest');
+  else requireAbsolutePath(req, 'imagePath', 'VideoRequest');
   requireSeed(req, 'VideoRequest');
   requireString(req, 'idempotencyKey', 'VideoRequest');
 
@@ -323,7 +432,7 @@ export function assertProvider(p) {
   if (!Array.isArray(c.stillSizes) || c.stillSizes.length === 0) {
     throw bad('invalid_provider', 'provider.capabilities.stillSizes must be a non-empty array', { id: p.id });
   }
-  c.stillSizes.forEach((s, i) => requireFourThree(s, `provider.capabilities.stillSizes[${i}]`));
+  c.stillSizes.forEach((s, i) => requireShippedAspect(s, `provider.capabilities.stillSizes[${i}]`));
 
   if (typeof c.supportsPlaceReference !== 'boolean') {
     throw bad('invalid_provider', `provider.capabilities.supportsPlaceReference must be a boolean, got ${JSON.stringify(c.supportsPlaceReference)}`, { id: p.id });
