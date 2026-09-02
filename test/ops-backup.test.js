@@ -67,6 +67,25 @@ test('a backup carries the money and the ownership, byte for byte', () => {
   assert.match(path.basename(dir), BACKUP_NAME_RE);
 });
 
+test('a backup is readable by its owner and nobody else on the host',
+  { skip: process.platform === 'win32' ? 'POSIX file modes are not a thing on Windows' : false }, () => {
+    // The backup holds every account's email, ledger and record, on the HOST
+    // filesystem rather than inside the volume. `mkdirSync` and `copyFileSync`
+    // default to 0755 / 0644 under the usual umask, which is every local user
+    // on the box. The account records inside the volume are not world-readable
+    // and their copies must not become so on the way out.
+    const root = seededRoot();
+    const to = destFor();
+    const { dir } = runBackup({ root, to, nowImpl: () => AT, logImpl: () => {} });
+
+    const mode = (p) => fs.statSync(p).mode & 0o777;
+    assert.equal(mode(dir), 0o700, `the backup directory is ${mode(dir).toString(8)}`);
+    assert.equal(mode(path.join(dir, 'accounts')), 0o700, 'every directory inside it too');
+    assert.equal(mode(path.join(dir, 'accounts', 'ab')), 0o700);
+    assert.equal(mode(path.join(dir, 'accounts', 'ab', 'abc123.json')), 0o600, 'and every file');
+    assert.equal(mode(path.join(dir, 'backup.json')), 0o600, 'the manifest names the root and the counts; same rule');
+  });
+
 test('a fresh install with nothing to back up still produces a truthful backup', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-backup-src-'));
   const to = destFor();

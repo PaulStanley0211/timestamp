@@ -36,6 +36,39 @@ top to bottom; nothing here is optional.
    **When PR #1 is merged, drop the `-b` and delete this paragraph**; until
    then the branch is the deployable ref.
 
+   **Then close the front door, before anything else is on the box.** A fresh
+   Ubuntu image answers SSH password authentication to the whole internet, and
+   the brute-force fleets find a new port 22 within the hour. This box will
+   hold every secret this product has and every customer's face; it is the
+   single highest-value target there is. Three steps, ten minutes, and **keep
+   the session you are typing in open until a second key login has succeeded**
+   -- a mistake here locks you out of your own server.
+
+   ```bash
+   # 1. key-only SSH. Ubuntu ships an override under sshd_config.d/ that can
+   #    re-enable passwords, so the drop-in below takes precedence by name.
+   cat > /etc/ssh/sshd_config.d/00-timestamp.conf <<'EOF'
+   PasswordAuthentication no
+   KbdInteractiveAuthentication no
+   PermitRootLogin prohibit-password
+   EOF
+   sshd -t && systemctl reload ssh
+   # in a SECOND terminal: ssh in again with your key. Only then close this one.
+
+   # 2. no account on the box may have a password at all
+   passwd -S root            # must say L or NP, never P
+   passwd -l root
+
+   # 3. belt and braces: a ban after repeated failures
+   apt-get install -y fail2ban && systemctl enable --now fail2ban
+   ```
+
+   Then **Hetzner console → Firewalls → create** one and attach it to the
+   server: inbound TCP 22 from your own address only (or a VPN range), TCP 80
+   and 443 and UDP 443 from anywhere, nothing else. That takes port 22 off the
+   internet entirely; the sshd change above is what protects you on the day
+   the firewall rule is edited wrongly.
+
 3. Write **three** env files in `/opt/timestamp`, not one. Each container is
    given only the secrets its own process reads, so a compromise of the
    internet-facing web process does not also hand over the render budget.
@@ -96,6 +129,19 @@ top to bottom; nothing here is optional.
 - `A  timestamptapes.com      <server IPv4>` — **DNS only (grey cloud)**.
 - `A  www.timestamptapes.com  <server IPv4>` — DNS only.
 - Leave the `send.timestamptapes.com` records (Resend mail) untouched.
+- **Mail from this domain must be rejectable when it is forged.** Every
+  customer of this service has a face on file, and "your tape is ready, sign
+  in here" from `support@timestamptapes.com` is the phishing lure the brand
+  hands an attacker. With DMARC at `p=none` and the apex SPF ending `~all`,
+  a forged message is delivered (at worst to spam); nothing rejects it.
+  - `TXT  _dmarc.timestamptapes.com` →
+    `v=DMARC1; p=quarantine; sp=quarantine; adkim=r; aspf=r; rua=mailto:support@timestamptapes.com`
+  - `TXT  timestamptapes.com` (the apex SPF) → change the trailing `~all` to
+    `-all`. Outbound mail is From the `send.` subdomain, which has its own
+    SPF and DKIM and aligns under relaxed mode, so legitimate mail passes.
+  - Read the aggregate reports that arrive at `support@` for a week. If they
+    show only Resend passing, move `p=quarantine` to **`p=reject`**. Checked
+    2026-09-03: the record was `p=none`.
 
 Grey cloud matters at first boot: Caddy proves domain control over port 80 to
 issue its certificates, and the proxy in front complicates that on day one.
@@ -197,7 +243,7 @@ job is self-healing if the directory is ever lost.
 ```bash
 crontab -e
 # 03:10 nightly; keep two weeks
-10 3 * * * install -d -o 1000 -g 1000 /var/backups/timestamp && cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14 >> /var/log/timestamp-backup.log 2>&1
+10 3 * * * install -d -m 700 -o 1000 -g 1000 /var/backups/timestamp && cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14 >> /var/log/timestamp-backup.log 2>&1
 ```
 
 **RUN IT ONCE BY HAND BEFORE TRUSTING THE SCHEDULE** — everything after
@@ -205,7 +251,7 @@ crontab -e
 never been observed working is not a backup:
 
 ```bash
-install -d -o 1000 -g 1000 /var/backups/timestamp
+install -d -m 700 -o 1000 -g 1000 /var/backups/timestamp
 cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups \
   web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14
 find /var/backups/timestamp -type f          # accounts/, _index/, _free-tapes.json, backup.json
@@ -214,6 +260,17 @@ find /var/backups/timestamp -type f          # accounts/, _index/, _free-tapes.j
 `/var/backups/timestamp` is on the host filesystem, outside the volume —
 `backup-cli` refuses a destination inside the root it protects. For offsite,
 rsync that directory anywhere; it contains no media and no faces.
+
+**`-m 700` ON THE DESTINATION AND OWNER-ONLY MODES ON EVERYTHING INSIDE IT.**
+The backup holds every account's email, ledger and record on the host, where
+`0755`/`0644` -- the umask defaults -- is every local user on the box.
+`backup-cli` writes each directory `0700` and each file `0600` itself (a test
+pins it on Linux); the `-m 700` is for the parent it cannot see.
+
+**`--keep=14` IS A NUMBER THE PRIVACY PAGE STATES.** `/privacy` tells a person
+that a deleted account can survive in a backup for up to 14 days. Change the
+keep count here and that sentence in `scripts/web/views.mjs` in the same
+commit, or the page promises something the cron does not do.
 
 **IT DOES NOT COVER THE THREE `.env` FILES**, deliberately (§7 splits them and
 they hold every live credential). Only Hetzner's disk-level backup in §1 would

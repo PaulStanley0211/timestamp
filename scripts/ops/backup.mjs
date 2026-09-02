@@ -71,15 +71,33 @@ export function parseArgs(argv) {
   return opts;
 }
 
+/**
+ * OWNER-ONLY, EVERY DIRECTORY AND EVERY FILE. The backup lands on the host
+ * filesystem, outside the volume, and holds every account's email, ledger
+ * and record. `mkdirSync` and `copyFileSync` take the process umask, which
+ * on a stock host is 022 -- readable by every local user. The records inside
+ * the volume are not world-readable and their copies must not become so on
+ * the way out. `chmod` after the create rather than a mode on it, because a
+ * mode is masked by the umask and an explicit chmod is not; on Windows both
+ * are no-ops and the test that pins this skips there.
+ */
+const DIR_MODE = 0o700;
+const FILE_MODE = 0o600;
+
+function ownerOnlyDir(dir) {
+  fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
+  fs.chmodSync(dir, DIR_MODE);
+}
+
 function copyTree(from, into) {
   let files = 0;
   const walk = (src, dst) => {
-    fs.mkdirSync(dst, { recursive: true });
+    ownerOnlyDir(dst);
     for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
       const s = path.join(src, entry.name);
       const d = path.join(dst, entry.name);
       if (entry.isDirectory()) walk(s, d);
-      else if (entry.isFile()) { fs.copyFileSync(s, d); files += 1; }
+      else if (entry.isFile()) { fs.copyFileSync(s, d); fs.chmodSync(d, FILE_MODE); files += 1; }
       // Symlinks and specials are skipped: nothing here writes them, so one
       // appearing is somebody else's artefact, not data to preserve.
     }
@@ -112,7 +130,7 @@ export function runBackup({
 
   const at = nowImpl();
   const dir = path.join(absTo, `timestamp-backup-${stampOf(at)}`);
-  fs.mkdirSync(dir, { recursive: true });
+  ownerOnlyDir(dir);
 
   const counts = {};
   for (const name of BACKUP_DIRS) {
@@ -120,12 +138,14 @@ export function runBackup({
     logImpl(`  ${name.padEnd(9)} ${counts[name]} file(s)`);
   }
 
-  fs.writeFileSync(path.join(dir, 'backup.json'), `${JSON.stringify({
+  const manifest = path.join(dir, 'backup.json');
+  fs.writeFileSync(manifest, `${JSON.stringify({
     at: at.toISOString(),
     root: absRoot,
     dirs: BACKUP_DIRS,
     counts,
-  }, null, 2)}\n`, 'utf8');
+  }, null, 2)}\n`, { encoding: 'utf8', mode: FILE_MODE });
+  fs.chmodSync(manifest, FILE_MODE);
 
   const pruned = [];
   if (keep !== null) {
