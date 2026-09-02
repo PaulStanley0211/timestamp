@@ -971,6 +971,66 @@ test('a direct job is refused outright when the model cannot do the whole take a
     });
 });
 
+/**
+ * THE MANIFEST IS THE ONLY TRUST ANCHOR THE WORKER HAS, AND IT LIVES ON A
+ * VOLUME THE WEB PROCESS CAN WRITE. The direct-mode guard above runs at
+ * compose, and a resumed job skips compose; so a manifest with compose marked
+ * done and `resolved.segments` padded to N entries used to make the worker
+ * buy N generations, one paid call per entry, with nothing between the file
+ * and the bill. Animate now re-derives the plan from the config shipped
+ * INSIDE THE IMAGE -- not from `resolved.cfg`, which is the same file -- and
+ * refuses by name when the two disagree, before the first call.
+ */
+test('animate re-derives the segment plan from the shipped config and refuses a manifest that disagrees', async () => {
+  for (const [label, input, provider, padTo] of [
+    ['direct', { direct: true }, { maxClipSeconds: 15 }, 3],
+    ['still path', {}, { maxClipSeconds: 8 }, 5],
+  ]) {
+    const root = tmpRoot();
+    const photo = writeUpload(root);
+    const pair = makeProvider(provider);
+    const { job: parked } = await runFake({ root, photo, providerPair: pair, input, stopAfter: 'compose' });
+    assert.equal(stepStatus(parked, 'compose'), 'done', `${label}: parked after compose`);
+    const before = pair.calls.video;
+
+    // What a writer on the volume would do: keep every frozen field honest
+    // and multiply the one that is a bill.
+    const manifestPath = jobPaths(root, parked.jobId).manifest;
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const [first] = manifest.resolved.segments;
+    manifest.resolved.segments = Array.from({ length: padTo }, (_, i) => ({ ...first, index: i + 1 }));
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+    const resumed = loadJob({ root, jobId: parked.jobId });
+    const deps = makeDeps({ ffmpeg: makeFfmpeg() });
+    await assert.rejects(
+      runPipeline(resumed, { provider: pair.provider, root, deps, sources: { photo } }),
+      (err) => {
+        assert.equal(err.code, 'PLAN_MISMATCH', `${label}: ${err.message}`);
+        assert.match(String(err.message), new RegExp(`\\b${padTo}\\b`), `${label}: the number on the manifest is named`);
+        return true;
+      },
+    );
+    assert.equal(pair.calls.video, before, `${label}: no provider call was made against the padded plan`);
+  }
+});
+
+test('an honest resume through animate still buys exactly the planned segments', async () => {
+  // The guard must not refuse the plan it was given. Parked after compose,
+  // untouched, resumed: one call per planned segment, and the job finishes.
+  const root = tmpRoot();
+  const photo = writeUpload(root);
+  const pair = makeProvider({ maxClipSeconds: 8 });
+  const { job: parked } = await runFake({ root, photo, providerPair: pair, stopAfter: 'compose' });
+  const resumed = loadJob({ root, jobId: parked.jobId });
+  const finished = await runPipeline(resumed, {
+    provider: pair.provider, root, deps: makeDeps({ ffmpeg: makeFfmpeg() }), sources: { photo },
+  });
+  assert.equal(finished.status, 'done');
+  assert.equal(pair.calls.video, resumed.resolved.segments.length);
+  assert.equal(pair.calls.video, 2);
+});
+
 test('a direct job does not care that the still model is unverified, because it makes no still', async () => {
   // THE BUG, FOUND BY PAUL ON THE FIRST REAL RUN, 2026-08-24. `stepCompose`
   // held the STILL model to `verified: true` unconditionally, so a direct job
