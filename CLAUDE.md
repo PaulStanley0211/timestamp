@@ -11,25 +11,34 @@ Warm, grainy, quiet.
 
 # THE PRODUCT IS LIVE AT https://timestamptapes.com AND IT CAN TAKE MONEY.
 
-**THE DEPLOYED SITE IS CURRENT AS OF 2026-09-01 — §49.** It was 18 commits
-behind for a day; everything from the premium pass (§48) onward had never been
-served. `origin/supabase-identity-slice`, local, and the box are all at
-`ccaea1c`. **PR #1's CI is GREEN on all five checks there**, and the browser
-tests genuinely RAN on Linux rather than self-skipping (only 2 skips, both the
-money guards). **§48's banner line saying the branch is AHEAD of the deployed
-site is HISTORY — do not act on it.**
+## READ §54 FIRST. THE BLIND CHECK PASSED AND THE FIRST PAID ORDER WAS REFUSED.
 
-**WHAT HAS NOT HAPPENED: NO CARD HAS EVER BEEN CHARGED, AND NO WEB ORDER HAS
-EVER REACHED REAL FAL.** The box's queue reads **done 0, failed 0**, and THAT is
-the evidence. ~~`worker.lastSeen` is still `null` — the worker on that box has
-never claimed a single job~~ — **THE CONCLUSION IS RIGHT AND THE FIELD NAMED FOR
-IT IS WRONG, WHICH WILL MISLEAD YOU DURING THE PAID RUN.** `lastSeen` is derived
-only from CURRENTLY-CLAIMED jobs, so it reads `null` for a healthy idle worker
-and **returns to `null` the moment a tape succeeds**. Measured 2026-09-01 —
-§50B. Every piece is verified individually and the chain has never been run end
-to end with money in it. **Those two runs are the top of the list and they are
-the owner's, because they spend.** §46C, §49I, and §50 for the dress rehearsal
-that cleared everything on either side of the paid call.
+**THE BLIND CHECK IS ANSWERED (2026-09-02) AND IT IS THE GOOD ANSWER.** Three
+people, separate chats, "Who is this?" and nothing else — **all three named
+Paul immediately.** Phase 0 criterion 1, open since 2026-08-21 and top of the
+list for six sessions, is CLOSED. **All three also volunteered that it was
+AI-generated** — on RAW model output that never went through the tape stage,
+which is close to the expected result and says nothing yet about a finished
+tape. **The realism check that asks that question is built and unsent at
+`out/realism-check/`.** §54A.
+
+**A WEB ORDER HAS NOW REACHED REAL FAL, AND FAL REFUSED IT.** Job
+`20260902-141334-34a7e4`: 480p, 4:3, reached `animate`, **HTTP 422 on content
+grounds after 55 seconds.** So the wiring works end to end and **a completed
+paid render still has not happened.** Why it was refused is not yet known — the
+prompt was a car park at dusk in a checked shirt, which points at the
+photograph. **Next attempt: a different photo and a brighter place.** §54B.
+
+**STILL TRUE: NO CARD HAS EVER BEEN CHARGED.**
+
+**`worker.lastSeen` WILL MISLEAD YOU DURING A PAID RUN.** It is derived only
+from CURRENTLY-CLAIMED jobs, so it reads `null` for a healthy idle worker and
+**returns to `null` the moment a tape succeeds**. Measured 2026-09-01 — §50B.
+Read the job page for progress and `done`/`failed` for the verdict.
+
+**THE DEPLOYED SITE IS CURRENT.** Local, `origin/supabase-identity-slice` and
+the box are all at **`420bf2b`**. Verified from outside after each of three
+deploys, not from the container logs.
 
 **THE PAID PATH IS ARMED AND THERE IS NO SAFETY NET.** `/api/health` reports
 `"provider": "fal"` on the web process and `compose.yaml` hardcodes
@@ -37,13 +46,23 @@ that cleared everything on either side of the paid call.
 and spends real money.** That is the correct production configuration; know it
 before clicking Record.
 
-**THE OWNER'S FAL BALANCE WAS $2.97 ON 2026-08-31 AND A 480p TAPE COSTS $2.0727
-(MEASURED).** Too thin for the first job that machine has ever run — a retry or
-a slightly larger delivered raster turns a clean signal into a confusing
-failure, and a request that reaches fal and fails is still billable. **He is
-topping up ~$20 on 2026-09-01 and then running the test: 480p and 4:3, nothing
-else**, because the free grant of 21 credits pays for exactly that combination
-and 16:9 or 9:16 costs 28. §49I has the checks to make afterwards.
+**FAL IS TOPPED UP (~€20, 2026-09-02) AND A 480p TAPE COSTS $2.0727
+(MEASURED).** The test order is **480p and 4:3, nothing else** — the free grant
+of 21 credits pays for exactly that combination and 16:9 or 9:16 costs 28.
+§49I has the checks to make afterwards.
+
+**A REFUSED RENDER GIVES THE CREDITS BACK NOW, AND IT DID NOT ON THE FIRST
+ORDER.** The balance went 21 → 0 for a tape fal never made. `providerWasCalled`
+counted any attempt on a paid step as money spent — right for ambiguous
+failures, wrong for a 4xx, which is the provider saying it read the request and
+declined. Narrowed in `420bf2b` to exactly that shape and no wider; everything
+ambiguous keeps the conservative answer. **The 21 credits were returned by hand
+and the balance is 21.** §54C.
+
+**ONE FREE THING IS OWED AND IT DECIDES WHETHER THAT FIX IS RIGHT: read fal's
+usage page for `20260902-141334-34a7e4`.** §8 records that a 422 is not billed,
+measured against a DIFFERENT endpoint. If a refused request IS billed here, the
+new rule gives away a real render every time and must be reverted.
 
 **THE FREE GRANT IS 21 AND THAT IS FINAL — the owner's words, 2026-08-31.** It
 was briefly 42 the same day and he overruled it. **21 buys ONE 480p tape in 4:3
@@ -65,12 +84,16 @@ playable and downloadable, linked from the nav as MY VIDEOS.
 
 **AGREED FOR THE NEXT SESSION, in order (§49I):** ~~a free local fixture render
 as a dress rehearsal, so the paid run tests fal rather than our plumbing~~ —
-**DONE 2026-09-01, §50. Everything on either side of the paid fal call is proven
-against current code; the call itself is the only thing left that money can
-test.** What is next is the landing page's comment bloat (§48D — 14% of that
-page is design rationale shipped to every visitor, one comment quoting a promise
-the product deleted); then the premium pass on the result and status pages,
-which needs the owner's taste and should start with mockups.
+**DONE 2026-09-01, §50.** ~~What is next is the landing page's comment bloat
+(§48D); then the premium pass on the result and status pages.~~ **BOTH DONE
+2026-09-02 — §54D.** The bloat was 19.3% across FOUR pages rather than 14% on
+one; the result page has a cassette label and the status page three phases with
+a working record light, both to mockups the owner approved.
+
+**AGENT-BUILDABLE WORK IS NOW EXHAUSTED — nothing is left ungated.** What
+remains is in §54I and almost all of it is the owner's: retry the paid order,
+read fal's usage page, send the realism check, buy and refund a Starter pack,
+sign the AWS agreement, and decide the `noindex` question that gates marketing.
 
 **AND ONE PROMPT CHANGE IS QUEUED BEHIND THE PAID RUN — §53.** A machine looked
 at the three model tapes for the first time (free, offline) and §19's six-beat
@@ -85,9 +108,13 @@ on the person. **Unproven against a model — only the paid run can prove it —
 and it is the ONLY prompt change made**, so that render still measures one
 change and not two (§19).
 
-**STILL THE OWNER'S, AND THE BLIND CHECK IS STILL THE ONE THAT MATTERS MOST.**
-Free, ten minutes, packet unsent at `out/blind-check/` for five sessions, and
-the only thing left that can tell us the product premise is wrong. ~~Then an
+~~**STILL THE OWNER'S, AND THE BLIND CHECK IS STILL THE ONE THAT MATTERS
+MOST.** Free, ten minutes, packet unsent at `out/blind-check/` for five
+sessions.~~ **SENT AND ANSWERED 2026-09-02 — IT PASSED. §54A.** Three people,
+blind, named him immediately. **The successor question is the realism check,
+built and unsent at `out/realism-check/`**: does the FINISHED tape — grain,
+chroma bleed, date stamp — read as real to two people who have not seen the
+stills? ~~Then an
 image-moderation vendor — `imageModerateImpl` is an honest null seam and is the
 one genuinely unbuilt thing~~ — **BUILT 2026-09-01, §52, AND DELIBERATELY OFF.**
 Rekognition sits behind the seam, tested, unconfigured. **DO NOT SET THE THREE
@@ -115,7 +142,7 @@ CX line it quotes is "temporarily not available" everywhere, so the box is a
 **THE SITE IS `noindex` ON PURPOSE** and lifting it is a deliberate step, not a
 tidy-up — the Impressum publishes a home address. §46F, §42E.
 
-**1982 tests / 1980 pass / 0 fail / 2 skipped.** The two standing skips are the
+**2045 tests / 2043 pass / 0 fail / 2 skipped.** The two standing skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`; on a
 machine with no Chromium-family browser the browser tests self-skip too, and
 §47G's session-secret race test stands itself down when the scheduler will not
@@ -6494,6 +6521,252 @@ picture defect this product has ever had was found by Paul watching a screen.
   configures a transcription backend (Gemini, OpenAI, or local Whisper); with
   `skip_audio: true` none is required and nothing leaves the machine but frames,
   which come into the conversation.
+
+---
+
+### 54. THE BLIND CHECK PASSED, AND THE FIRST PAID ORDER WAS REFUSED (2026-09-01/02)
+
+**1982 / 1980 -> 2045 / 2043 pass / 0 fail / 2 skipped.** Nine commits,
+`b407237..420bf2b`, every one test-first and sabotage-verified. **PUSHED, AND
+THE BOX IS AT `420bf2b`** — deployed three times during the session and verified
+from outside each time, not from the container logs.
+
+#### A — THE BLIND CHECK IS ANSWERED AND IT IS THE GOOD ANSWER
+
+**Three people, separate chats, asked "Who is this?" and nothing else. All
+three named Paul immediately, with no hesitation.** Phase 0 criterion 1 —
+open since 2026-08-21, top of the list for six sessions, the question that
+decided whether this is a product — **is closed.**
+
+**AND ALL THREE VOLUNTEERED, UNPROMPTED, THAT IT WAS AI-GENERATED.** That is
+the other half of the premise and it did not pass.
+
+**BUT THEY WERE NOT LOOKING AT THE PRODUCT, AND THE PACKET SAYS SO IN ITS OWN
+BRIEF.** The five blind-check images are **raw model output** — straight from
+fal, never through the tape stage. No grain, no chroma bleed, no head-switch
+band, no date stamp, 1080-line clean. That was deliberate: grain would have
+hidden the face, and the packet existed to test identity. §17 measured that the
+grade kills every TEXTURE tell — waxy skin, hyper-detail, lifted shadows,
+clinical sharpness — and that what survives it is COMPOSITION. So "that is AI"
+on an ungraded still is close to the expected result. **It is not evidence that
+the finished tape reads as AI, and it is not evidence that it does not.**
+
+**THE REALISM CHECK IS BUILT AND UNSENT at `out/realism-check/`.** One finished
+tape (`f34b4f`, 720p, the six-shot shape, highest face-time of the three at
+47%), re-encoded to 10.9 MB for a messaging app — **measured to keep 88% of the
+original's frame-to-frame grain energy, 3.690 against 4.195**, so the texture
+being tested survives the encode. `BRIEF.md` has the protocol.
+
+**THE MESSAGE IS "What do you think of this?" AND NOTHING ELSE.** Not "does
+this look real", not "does this look AI" — both name the answer inside the
+question, exactly as "does this look like me?" would have ruined the first
+check. **The test is whether they raise it themselves**, which is precisely what
+the three did with the stills. Two people who have NOT seen the stills; the
+first three are spent.
+
+#### B — THE FIRST REAL PAID WEB ORDER RAN, AND FAL REFUSED IT
+
+**Job `20260902-141334-34a7e4`.** 480p, 4:3, `autobahn-raststaette` +
+`hemd-jeans`, direct. Reached `animate`, and **fal answered HTTP 422 on content
+grounds after 55 seconds** — `moderation_refused`, non-retriable.
+
+**So the wiring works.** Intake, moderate, compose and the still/select skips
+all behaved exactly as §50's dress rehearsal predicted, the job was claimed in
+seconds, and the request genuinely reached fal. **What has still never happened
+is a completed paid render.**
+
+**WHY IT WAS REFUSED IS UNKNOWN AND THAT WAS ITSELF A DEFECT** — see §54C. The
+prompt is innocuous: a roadside rest stop at dusk, a checked shirt, jeans.
+Nothing in the text should trip a filter, which points at the reference
+photograph. **Untested guesses worth trying next: a different photo, and a
+brighter place** — the car park is the darkest scene in the catalogue and
+sodium-lamp night shots are what image filters flag most.
+
+**AND THE OWED VERIFICATION IS ONE PAGE ON FAL.** §8 records that a 422 is not
+billed, measured against a different endpoint. **Nobody has confirmed it for
+this one.** If a refused request IS billed, §54C's fix gives away a real render
+every time and has to be reverted.
+
+#### C — IT TOOK THE CUSTOMER'S WHOLE BALANCE FOR A TAPE NOBODY MADE
+
+**The balance went 21 -> 0.** On the free tier that is the entire grant, spent
+on nothing, and it would have happened to every customer whose photograph trips
+fal's filter.
+
+`providerWasCalled` treats any attempt on a paid step as money spent. **§37E
+chose that over-reporting deliberately** — "nothing on disk can distinguish a
+pre-flight crash from an in-flight loss" — and both halves of that reasoning
+still hold. What it did not consider is **the one outcome that carries no
+ambiguity: a 4xx refusal is a recorded answer FROM the provider saying it read
+the request and declined to run it.**
+
+`420bf2b` narrows it to exactly that shape — every paid attempt ended in
+`moderation_refused`, `bad_request` or `credential`, **and the step was tried
+once.** The single-attempt condition is part of the test rather than a detail:
+only the LAST attempt's error survives on the manifest, so a step tried twice
+could have been served once and refused once and would look identical to a
+clean refusal. **Everything ambiguous keeps the old answer** — a 5xx, a rate
+limit, a timeout, or no recorded error — and there are tests pinning that half
+so it cannot drift.
+
+**The ledger says which refund it is.** A row labelled `failed-before-provider`
+on a job that plainly did call fal is how an audit trail stops being trusted, so
+a refusal writes `refund:provider-refused`.
+
+**AND THE REASON THE PROVIDER GAVE IS KEPT NOW.** `classifyHttp` builds the
+response body into `error.detail` and `failStep` dropped it, so the manifest
+recorded the code, the message and the clock — everything except what fal
+objected to. **A refusal a customer can trigger and an operator cannot diagnose
+is a support queue with no exit.** It stays off the wire: `jobView` projects
+errors through `customerError`, a two-field allow-list.
+
+**§37's reconciliation queue worked exactly as designed** — the withheld refund
+was already sitting in `out/refunds/` as `declined-spent`, waiting on a human,
+and `npm run refunds -- settle` returned the 21 credits.
+
+#### D — What else shipped
+
+| Commit | What it does |
+|---|---|
+| `937f278` | The rationale stays in the file and stops riding to the browser |
+| `b07d794` | The finished tape gets a label, the way a cassette does |
+| `adc4abb` | The wait is three phases, and the record light finally does its job |
+| `90bf3e1` | The tape stops ending on a frame with nobody in it (§53) |
+| `6ae1c60` | A classifier this product has not disclosed cannot run |
+| `3e32096` | You can see the photo you chose, and take it back |
+| `420bf2b` | A tape the provider refused to make is a tape nobody should pay for |
+
+**§48D UNDERSTATED THE COMMENT BLOAT AND NAMED ONE PAGE OF FOUR.** Measured
+live: **19.3%, not 14.2%**, and `home` carried 4,744 bytes of it that §48D never
+mentioned, `pricing` 553, `result` 529 — **10,458 bytes across four pages, on
+every visit.** One comment quoted verbatim a promise the product DELETED in §18
+("You approve a still before any video is made"), so anyone opening View Source
+read a guarantee this product does not offer. The rationale now lives in an
+interpolation slot holding a block comment: same words, same place in the
+source, nothing on the wire. **The rule is zero rather than a percentage,
+because a budget only invites the next author to spend up to it.**
+
+**THE PHOTO UPLOAD SHOWED YOU NOTHING AND COULD NOT BE UNDONE** — the owner hit
+both while placing the first paid order. Step 1 named the file and displayed no
+image, so a wrong photo was invisible until the finished tape came back, on the
+step that commits 21 credits; and a file input keeps its selection, so the only
+escape was reloading the page. **FileReader and a data URL rather than
+`createObjectURL`**, because the CSP is `img-src 'self' data:` and a blob: URL
+is refused silently. The preview and the Remove button sit OUTSIDE the dropzone
+label, because a click anywhere inside a `<label>` activates its control — a
+Remove button in there opens the file picker instead of clearing the file.
+
+**§52B'S LANDMINE IS DEFUSED.** `/privacy`'s processor list is derived from
+`TIMESTAMP_IMAGE_PROCESSOR` the way its retention promise is already derived
+from the config the purge enforces, and **the worker REFUSES TO START when it
+holds AWS keys that declaration does not account for.** The declaration lives in
+`.env.common` because §51E gives the credentials to the worker and the page is
+rendered by web, which never sees them. **"Nobody else" survives, because the
+list grew rather than the promise shrinking** — it is exactly as true with two
+processors as with one provided the sentence names both, and a page that
+stopped making the claim would tell a reader less.
+
+#### E — Ops, and a runbook line that could not work
+
+**THE APP-LEVEL BACKUP WAS NEVER INSTALLED** and is now running nightly at
+03:10. **The runbook's own published cron line fails**: the image runs as
+`USER node` (uid 1000) and a root-owned `/var/backups/timestamp` dies on
+`EACCES` before copying anything — **§34B's fresh-volume ownership bug in a
+second place**, and on a schedule it would have failed every night into a log
+nobody reads. `install -d -o 1000 -g 1000` is part of the cron line now rather
+than a setup step, so the job repairs its own destination. **Found only by
+running it once by hand instead of trusting the schedule.**
+
+**`TIMESTAMP_TRUST_PROXY=1` IS SET** — §51E's owed verification, closed on the
+running container, and it is the good answer.
+
+**UPTIME MONITORING IS LIVE.** UptimeRobot, free tier, 5-minute **Keyword**
+monitor on `https://timestamptapes.com/api/health` for `"ok":true`, alert when
+absent. **Keyword and not HTTP, because `/api/health` always answers 200** — the
+`ok` flag is in the body, so a plain uptime check reports a happy green site
+that cannot render a tape. One alert covers site-down, disk-low and
+ffmpeg-broken. **The keyword must have no space after the colon**; the live
+response is `{"ok":true,`.
+
+**One false DOWN alert fired in the first hour and could not be diagnosed,
+which is the finding.** Health was fine, the container had not restarted, and
+**Caddy has no access logging at all** — zero lines in an hour despite
+successful requests. So the empty log window proved nothing. Free-tier
+UptimeRobot alerts on one failed check from one probe location with no
+second-opinion re-check; a transient Ashburn-to-Falkenstein blip is the most
+likely explanation by a wide margin. **If it repeats, turn on Caddy access logs
+before diagnosing anything.**
+
+#### F — TWO CLASS COLLISIONS IN ONE DAY, AND NEITHER WAS VISIBLE TO A TEST
+
+| Class | Already was | What it did |
+|---|---|---|
+| `.rec` | the blinking dot inside the wordmark SVG | the status record light and the brand mark styled each other |
+| `.thumb` | the place card's photograph layer, `position:absolute; inset:0` | the upload preview escaped its row and painted over the STEP 01 heading at ghost opacity |
+
+**2037 tests passed over the second one. It was found by looking at a
+screenshot.** There is a guard now: every class the upload preview declares must
+appear in the stylesheet ONLY inside a `.picked`-scoped selector — **and it
+caught a third immediately**, `chosen-name`, which step 3's place upload still
+uses. **A class name is a global; reusing one is not a naming preference, it is
+inheriting somebody else's geometry.**
+
+#### G — AN AA FAILURE INTRODUCED AND CAUGHT IN THE SAME HOUR
+
+Demoting the result page's spec line stacked `opacity: var(--ghost)` on
+`--faint`, which is already the soft tier. **Measured: 4.85:1 became 2.45:1**, a
+real failure on body text. **§31 states the rule in words** — the floor was
+solved for `--ink` alone, and "hierarchy inside a card is carried by SIZE, which
+survives being multiplied by an opacity, and not by colour, which does not" —
+and **2021 tests passed over it.** There is now a guard failing any rule that
+pairs the ghost opacity with the soft tier, sabotage-verified both ways. The
+line demotes by size instead.
+
+#### H — Things that will bite
+
+- **THE BACKTICK TRAP FIRED TWICE MORE**, in `static.mjs` and in a JSDoc block
+  — the second one because spelling out the interpolation-comment idiom in
+  syntax puts a block-comment terminator inside the comment describing it.
+  `node --check` caught both instantly. Still the most repeated mistake here.
+- **`${''}` IS NOT VALID IN PLAIN JS.** Twice this session an interpolation
+  slot was written into ordinary function bodies while editing files that are
+  mostly template literals. `node --check` after every edit.
+- **A SHELL-QUOTED `node -e` EATS INNER QUOTES.** A rename script containing
+  `'.rec'` had its quotes closed by the shell, reported "replace failed", and
+  exited before writing — so the file was untouched and looked edited. **Use
+  Write/Edit for anything containing quotes or escapes**, which this file has
+  said since 2026-08-28.
+- **A TEST CAN ASSERT THE WRONG REQUIREMENT.** The first version of the privacy
+  test asserted "nobody else" should DISAPPEAR when a classifier is added. That
+  is wrong: the promise is as true with two processors as with one, provided
+  the sentence names both. Deriving the list keeps it honest; deleting the claim
+  would have told the reader less. **Corrected before it shipped, but it passed
+  its own red run first, which is exactly how a wrong requirement gets locked
+  in.**
+- **`metaLineOf` IN THE TESTS READS `class="meta"` EXACTLY.** Demoting the
+  result page's spec line had to be a stylesheet change rather than a second
+  class for that reason — and that is the better separation anyway, since where
+  a fact sits in a hierarchy is a design decision and not a markup one.
+
+#### I — Where it leaves things
+
+**THE LIST IS SHORT AND ALMOST ALL OF IT IS THE OWNER'S.**
+
+1. **Retry the paid order** — 21 credits are back. A different photo, and a
+   brighter place than the car park. If it fails again the manifest will name
+   fal's reason this time.
+2. **Read fal's usage page for `20260902-141334-34a7e4`** — free, and it decides
+   whether §54C's refund rule is right or has to be reverted.
+3. **Send the realism check** — two fresh people, `out/realism-check/`.
+4. **Buy a Starter pack and refund it** — no card has ever been charged.
+5. **The AWS agreement**, before image moderation goes on. The code is done and
+   guarded; the paperwork is not.
+6. **The `noindex` decision**, which gates all marketing and may need a business
+   address rather than the home one on the Impressum.
+
+**AGENT-BUILDABLE: nothing is left ungated.** The punch-in zoom (§34G) is
+deliberately parked so the next paid render measures one change and not two —
+§19's ruling, and the arc fix (§53) is that one change.
 
 ---
 
