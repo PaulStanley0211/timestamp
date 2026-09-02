@@ -23,7 +23,7 @@ kept because the sections it lives in are records.
 **Whether the box and future work should move to `main` now that it is the
 trunk is an open decision and the owner's** -- it changes the deploy runbook.
 
-## READ §58 FIRST (2026-09-03): THE SECURITY AUDIT IS DONE, ITS REPORT IS GITIGNORED ON DISK, AND NOTHING FROM IT IS FIXED YET. THE OWNER IS FIXING IT IN A FRESH SESSION. THEN §57.
+## READ §59 FIRST (2026-09-03, evening): THE AUDIT'S CODE ITEMS ARE FIXED, DEPLOYED AT `bf84de3`, AND THE BOX IS KEY-ONLY. TWO CONSOLE STEPS ARE THE OWNER'S. THEN §58, THEN §57.
 
 ## READ §57 FIRST. IT IS THE CURRENT STATE AND THE LIST. THEN §56, §55, §54.
 
@@ -7434,6 +7434,106 @@ Supabase's Site URL and Redirect URLs still name only the live domain.
   touching real directories.
 - **A probe with the wrong `Accept` header lies** (§50D, §51D), and it still
   does: gated routes answer 401 to `curl` and 303 to a browser.
+
+---
+
+### 59. THE AUDIT'S FIX LIST, WORKED (2026-09-03, evening) -- eleven commits, deployed, and the box's front door closed
+
+**2055 / 2053 -> 2083 / 2080 pass / 0 fail / 3 skipped.** Eleven commits,
+`d86cd2d..bf84de3`, every one test-first: the failing test watched against the
+unfixed code, then the fix, then a sabotage that put the defect back and
+watched the test go red before being restored from a copy (never `git
+checkout --`, §37F). All seven `guards.yml` steps run verbatim and COUNTED,
+7/7 (§49H). **Pushed, and deployed: the box is at `bf84de3`, web healthy,
+and every live probe from outside passed** -- anonymous `/api/health`, the
+security headers including HSTS, an unsigned webhook post answered 400, and
+the three new sentences on `/privacy`.
+
+**THE REPORT STAYS GITIGNORED AND NOW CARRIES ITS OWN FIX RECORD**, a
+per-finding table at its end with commit hashes and what is left. Read it
+there; nothing about open mechanisms is restated here (§28, §35D, §51C).
+
+#### A -- What the code does now, one line per commit
+
+| Commit | What it does |
+|---|---|
+| `d86cd2d` | Checkout names the card method, so `completed` always means `paid`; an unpaid completion is logged with its event and session |
+| `e3cc287` | A fal failure after the queue accepted the request raises `generation_failed`, which the refund rule holds rather than refunds |
+| `e1e96df` | `classifyHttp` redacts every inline base64 payload BEFORE it caps the body, so no pixel can reach a manifest |
+| `9144be8` | Four directory reads under `out/` treat only ENOENT as "absent"; every other failure is reported through the path already there for a refused delete |
+| `913475a` | `stepAnimate` re-derives the segment plan from the config shipped in the image and refuses `PLAN_MISMATCH` before any paid call |
+| `21455c8` | The refund ledger label follows the manifest's fact, not the caller's guess |
+| `d0d3c99` | A poll that gives up after acceptance is terminal, so the retry ladder cannot submit the same generation twice |
+| `04819f7` | Intake reads the pixel cap off the stream header before a frame is decoded; every ffprobe and ffmpeg call carries `-protocol_whitelist file` |
+| `3116c0d` | Backups are `0700`/`0600`; the runbook gains key-only SSH, a firewall, fail2ban, the mail records, and the backup modes |
+| `f7a506f` | `/privacy` states the backup window, where fal is, and that the client address goes to Supabase |
+| `bf84de3` | `/api/health` answers `{ok, degraded}` anonymously and the full report to a session; the origin check precedes the limiter on all SEVEN credential posts; the 500 log keeps the pathname; a job's media is `no-store` |
+
+**AND THE BOX ITSELF (no commit): SSH is key-only.** Read first, changed
+second: root was locked and **no account held a usable password hash**, so
+removing the password method could lock nobody out. A drop-in under
+`sshd_config.d/`, `sshd -t`, reload, a FRESH key login verified, and a probe
+now gets `Permission denied (publickey)` with no password offered. `fail2ban`
+is active and had counted 66 failed attempts within the hour -- the fleets
+were already there.
+
+#### B -- THE LIST IS NOW TWO CONSOLE STEPS AND THE DEFERRED ITEMS
+
+**THE OWNER'S, both ten-minute console steps, both in the runbook now:**
+
+1. **Hetzner console -> Firewalls**: TCP 22 from your own address only, 80/443
+   from anywhere, attach to the server. Runbook §1. This takes port 22 off the
+   internet; the sshd change above is what protects you the day the rule is
+   edited wrongly.
+2. **Cloudflare DNS**: the two mail records in runbook §2, then the
+   quarantine-to-reject step after a week of reports.
+
+**Unchanged from §57D and §58C:** read fal's usage page for the 2026-09-02
+refusals (it still decides how urgent `e3cc287` was), the AWS agreement, GitHub
+two-factor and branch protection, the free-grant register decision.
+
+**DEFERRED DELIBERATELY, and the reason is in the report's fix record:** the
+`__Host-` cookie prefix. It needs `Secure` unconditionally, the dev loop runs
+over plain HTTP with `secure` derived from the connection, and the rename
+touches three cookie names across the reader, the CSRF pair, the OAuth state,
+the browser-smoke CDP cookie and the privacy page's cookie count -- a
+cross-cutting change with real dev-loop risk for a LOW. Two other LOWs the
+roadmap never scheduled are also untouched; the report names them.
+
+#### C -- Things that will bite the next reader
+
+- **`runFake` RETURNS AN ENVELOPE, NOT A JOB.** `const { job } = await
+  runFake(...)`; destructuring the whole return as the job produced "unknown
+  step compose" and "unusable job id undefined" and cost two red runs.
+- **`/api/health` IS AUTH-OPTIONAL NOW, NOT SESSION-FREE.** A test that wants
+  the ffmpeg build, the disk or the queue counts must send a session cookie;
+  `operatorCookie()` in `web-api.test.js` mints one on a fake auth. The
+  anonymous shape is `{ok, degraded}` and `ok` MUST stay the first key -- the
+  uptime monitor searches for the literal `"ok":true`.
+- **`sameOriginPost` NOW RUNS BEFORE `refuseOverLimit` ON EVERY CREDENTIAL
+  POST.** A test that counts limiter hits must send same-origin posts; a
+  cross-site post is a 403 that counts against nobody.
+- **A TERMINAL `poll_timeout` IS NOT A REGRESSION.** `[fal] a poll that never
+  resolves` asserts `TerminalError` and exactly one submit on purpose. Do not
+  "restore" the retriable class; §59A row `d0d3c99` says why.
+- **`ffprobe` IS CALLED TWICE PER INSPECTION.** Header first, then the frame.
+  A fake `ffprobeImpl` that returns one JSON for every call still works; one
+  that counts calls will see two per file, and the ingest inspects the
+  DESTINATION as well as the source.
+- **The ingest's whitelist test reads the file position as the LAST argument**,
+  because the destination probe does not contain the source path. Searching
+  for the source path returned -1 and read as "whitelist after the input".
+- **Docker Desktop was not running**, so the Linux-only backup-mode test has
+  never been watched red here; its first real run is CI's ubuntu legs. Start
+  Docker and run `node --test test/ops-backup.test.js` in `node:22-bookworm-slim`
+  the next time it is convenient.
+- **THE EDIT TOOL WRITES LF INTO CRLF FILES.** Every touched file now warns
+  "LF will be replaced by CRLF" on `git add`; git normalises on commit, so the
+  repository content is fine, but a `sed` anchored on `\r$` will miss the
+  edited lines. Mixed endings are cosmetic here and were left alone.
+- **One commit carries four findings** (`bf84de3`), against §58D's
+  one-per-item rule, because all four live in `server.mjs` and partial staging
+  on this checkout is the §49H blob dance. The message lists the four.
 
 ---
 
