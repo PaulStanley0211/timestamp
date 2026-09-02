@@ -23,6 +23,8 @@ kept because the sections it lives in are records.
 **Whether the box and future work should move to `main` now that it is the
 trunk is an open decision and the owner's** -- it changes the deploy runbook.
 
+## READ §58 FIRST (2026-09-03): THE SECURITY AUDIT IS DONE, ITS REPORT IS GITIGNORED ON DISK, AND NOTHING FROM IT IS FIXED YET. THE OWNER IS FIXING IT IN A FRESH SESSION. THEN §57.
+
 ## READ §57 FIRST. IT IS THE CURRENT STATE AND THE LIST. THEN §56, §55, §54.
 
 **THE BUILDING IS FINISHED AND NOTHING LEFT ON THE LIST IS CODE.** Live at
@@ -7306,6 +7308,132 @@ of themselves.
 * **Do not build something to feel productive.** Every remaining item is a
   decision, a card, an account or a conversation. The most valuable next hour
   is one stranger's reaction to a tape.
+
+---
+
+### 58. THE PRE-MARKETING SECURITY AUDIT (2026-09-03) -- DONE, RECORDED, AND NOTHING FROM IT IS FIXED YET
+
+**No code changed and nothing was committed.** This section and one memory file
+are the only edits of that session. The audit ran as a full gstack `/cso` in
+comprehensive mode: the infrastructure phases by the lead (git history, CI,
+Dockerfile, compose, Caddy, the live site's headers and DNS, the box's open
+ports, GitHub settings), then five parallel domain auditors (auth and session,
+money, the web request surface, providers and prompts and ffmpeg, data and
+privacy and ops), then a fresh independent verifier per medium given only
+file:line and the filtering rules. Four of those verifiers reproduced their
+finding with a local probe. Suite at audit time 2055 / 2053 / 0 / 2.
+
+**THE REPORT IS `docs/security-review-2026-09-03.md` AND IT IS GITIGNORED.
+READ IT BEFORE FIXING ANYTHING. DO NOT SUMMARISE ITS MECHANISMS HERE, IN A
+COMMIT MESSAGE, OR IN A PR DESCRIPTION.** Same rule as the three earlier
+reviews (§2, §35D, §51C) and for the same reason: this repository is public
+and the list is open. The machine-readable record is
+`.gstack/security-reports/2026-09-02-224323.json` (also gitignored; the stamp
+is UTC). Both were confirmed ignored with `git check-ignore` and `git status`
+shows nothing new tracked.
+
+#### A -- What is safe to say
+
+All of it verified rather than assumed. No secret in any of the ~255 commits,
+in the image, in a log line, on a page or in a manifest. Live headers, CSP,
+the HTTPS redirect, cookie flags and the webhook's refusal of an unsigned post
+are all correct on the running site. The per-container secret split (§51E) was
+proved on the box. Caddy's default handling of `X-Forwarded-For` was confirmed
+from its own documentation, so the rate-limiter key under
+`TIMESTAMP_TRUST_PROXY=1` is sound as long as no CDN is put in front. No path
+was found from the internet to another customer's face, credits or session.
+Account takeover, session fixation, open redirect, CSRF, path traversal, XSS,
+SSRF, prototype pollution and command injection were each searched for by an
+independent reviewer and none was found. Four of the six findings from the
+2026-09-01 audit are closed; the other two are the recorded decisions in §51C
+and §52.
+
+**The verdict:** do two things on the box and the domain before posting the
+first public link (neither is code, each is about ten minutes), then a short
+list of small code fixes. None of the code items is reachable from outside
+except one, which is a refund a customer can trigger.
+
+#### B -- THE WORK, in the report's order. The mechanism of each is in the report only.
+
+1. **Report section A, items 1 and 2: the box and the domain.** No code. Two
+   console-level changes; afterwards both go into `docs/deploy-runbook.md` §1
+   so the next box gets them by construction.
+2. **Report item 3 -- the checkout body in `scripts/billing/stripe.mjs`, the
+   webhook in `scripts/web/server.mjs`, and `test/web-billing.test.js:382`.**
+   One added line in the checkout body, one log line in the webhook, one test
+   updated to assert the log line.
+3. **Report item 2 -- the poll loop and the result fetch in
+   `scripts/providers/fal.mjs`, the refund rule in `scripts/auth/credits.mjs`.**
+   A distinct terminal error code and a test. **Read fal's usage page for the
+   six 2026-09-02 refusals first** (§55G, §57D item 7): its answer sets this
+   item's urgency in one direction or the other.
+4. **Report item 8 -- `classifyHttp` in `scripts/providers/errors.mjs`.** A
+   redaction before the body cap, a test, the comment at
+   `scripts/render/job.mjs:1050` corrected, and one manifest on the box purged
+   by hand (the report names it).
+5. **Report items 5 and 6 -- `listFiles` in `scripts/render/purge.mjs`,
+   `ownedJobIds` in `scripts/auth/deletion.mjs`, `ownerOf` and `refund` in
+   `scripts/web/session-middleware.mjs`.** Absent means `ENOENT` and nothing
+   else; every other error is reported through the path that already exists
+   for a refused `rmSync`. One injected-`fsImpl` test per site. **The existing
+   tests inject a throwing `rmSync` and never a throwing `readdirSync`**, which
+   is exactly why none of this was visible to 2055 passing tests.
+6. **Report item 4 -- `stepAnimate` in `scripts/render/pipeline.mjs`.**
+   Re-derive the segment plan from the config under `/app` before the loop and
+   refuse a mismatch by name; do not read the ceiling from `job.resolved.cfg`.
+7. **Report items 9 to 16 and 20, each a few lines:** `/api/health` trimmed
+   for anonymous callers; the limiter and the origin check reordered on the
+   five credential handlers; the 500 log line reduced to the pathname; the
+   refund ledger label decided by the fact rather than the caller's guess; the
+   provider retry narrowed to the submit; `no-store` on user media and the
+   `__Host-` cookie prefix; the backup directory's modes; three sentences added
+   to `/privacy`; the intake probe measuring before it decodes.
+8. **Owner decisions (report section C):** a register for the free grant, the
+   AWS agreement before image moderation goes on, GitHub two-factor and branch
+   protection, and whether to scan the globally installed agent skills (the
+   audit did not, because that reads files outside the repo).
+
+#### C -- Things only the owner can verify, and the report needs the answers
+
+Whether any account on the box has a password; which payment methods the
+Stripe Dashboard offers on Checkout; whether the 2026-09-02 fal refusals were
+billed; whether GitHub two-factor is on (the CLI token lacks the scope to
+read it); the one-off Supabase test in the report's appendix; and that
+Supabase's Site URL and Redirect URLs still name only the live domain.
+
+#### D -- Rules for the fixing session
+
+- **Read the gitignored report first**, then §28, §35D and §51C of this file
+  on what may and may not be written down. A commit message describes what a
+  fix DOES, never the hole it closed; `guards.yml` greps for the other shape
+  and goes red on it.
+- Test-first, one commit per item, every guard sabotage-verified, restored
+  from a COPY and never with `git checkout --` (§37F). Run the seven
+  `guards.yml` steps verbatim before pushing (§42G: do not approximate a
+  guard).
+- The box's `.env.*` files are the only copy of the secrets (§46F, §51E).
+  Nothing in item 1 needs them. Keep an SSH session open while changing SSH.
+- **Deploy after items 1 to 6 land**, then re-run the report's live probes
+  from outside: headers, the webhook refusal, `/api/health`, DNS. Then mark
+  each item CLOSED in the report file, not here.
+
+#### E -- Things that will bite
+
+- **The Bash heredoc and a `node -e` string both eat backslashes on this
+  machine**; the audit's JSON record was written from a `.mjs` file in the
+  scratchpad for exactly that reason. Use Write/Edit for anything with an
+  escape (§31, §35E, §45D, §54H, §56D).
+- **A GitHub token without the `user` scope reports
+  `two_factor_authentication: null`**, which means "unknown", not "off". Do
+  not read it as either.
+- **`nslookup` on Windows cannot query CAA records** ("unknown query type");
+  use an online resolver or `dig` inside the container.
+- **The verifiers reproduced three findings by injecting a throwing
+  `readdirSync` into an `fsImpl` seam.** That seam already exists on purge,
+  deletion and the refund glue; use it for the tests in item 5 rather than
+  touching real directories.
+- **A probe with the wrong `Accept` header lies** (§50D, §51D), and it still
+  does: gated routes answer 401 to `curl` and 303 to a browser.
 
 ---
 
