@@ -1141,6 +1141,46 @@ test('the glue answers a job with no owner by refunding nothing, not by throwing
     'a job that was never charged is not a reconciliation item');
 });
 
+/** An owners directory that cannot be LISTED is not "nobody has ever claimed
+ *  anything". Before this test, an EACCES or EIO at the moment a terminal
+ *  failure was processed took the quiet no-owner branch -- outside the try
+ *  whose catch writes the reconciliation record -- and the customer was down
+ *  a tape's worth of credits with no witness anywhere: `npm run refunds`
+ *  listed nothing, and the worker printed nothing. The miss must throw, so
+ *  the worker's REFUND MISSED line fires, and must be RECORDED, so a person
+ *  can find it after the line has scrolled away. */
+test('the glue records a refund it could not attribute, when the owners index cannot be listed', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  const jobId = JOB(5);
+  debitCredits(account, { jobId, credits: TAPE, nowImpl: clock() });
+  claimOnDisk(root, account.accountId, jobId);
+
+  const ownersRoot = `${root}/out/owners`;
+  const fsImpl = {
+    ...fs,
+    readdirSync(dir, opts) {
+      if (String(dir).split(path.sep).join('/') === ownersRoot) {
+        const err = new Error(`EACCES: permission denied, scandir '${dir}'`); err.code = 'EACCES'; throw err;
+      }
+      return fs.readdirSync(dir, opts);
+    },
+  };
+  const refunds = createOwnerRefunds({ root, fsImpl });
+
+  await assert.rejects(
+    () => refunds.refund(jobWith([['intake', 1]], jobId), { reason: 'refund:failed-before-provider' }),
+    (err) => err.code === 'EACCES',
+  );
+  const records = listMissedRefunds({ root });
+  assert.equal(records.length, 1, `one record for the miss: ${JSON.stringify(records)}`);
+  assert.equal(records[0].jobId, jobId);
+  assert.equal(records[0].kind, 'error');
+  assert.equal(records[0].settled, null, 'it is pending money, not trail');
+  assert.equal(balanceOf(loadAccount({ root, accountId: account.accountId })).credits, FREE - TAPE,
+    'nothing was refunded -- the record is what says a person must');
+});
+
 // --------------------------------------------------------------------------
 // the reconciliation ledger: a missed refund is a record, never only a line
 // --------------------------------------------------------------------------

@@ -294,12 +294,32 @@ export function sweepRetention({
   };
 }
 
+/** `true` for the one failure that means "already gone". Everything else --
+ *  EACCES, EIO, EMFILE, ENOTDIR on a path that should be a directory -- means
+ *  the question was not answered, and an unanswered question about a
+ *  directory full of faces must never read as an empty one. */
+const isAbsent = (err) => err?.code === 'ENOENT';
+
 /** Absolute paths of the plain files directly inside `dir`, or `[]`. A missing
  *  directory is not an error here: a job cancelled before its photo landed has
- *  no `input/`, and that is the state purge exists to arrive at. */
+ *  no `input/`, and that is the state purge exists to arrive at.
+ *
+ *  ABSENT MEANS ENOENT AND NOTHING ELSE. The first version swallowed every
+ *  failure, so a directory that exists but cannot be READ -- a root-owned
+ *  `input/` of the §34B/§54E class, an EIO from the disk, EMFILE on a busy
+ *  worker -- was indistinguishable from one that is empty: the sweep deleted
+ *  nothing and said nothing, and the per-job delete answered a person that
+ *  their photograph was gone while it sat on disk. That is the F2 shape one
+ *  layer up from where it was last closed. Anything but absence throws, and
+ *  every caller here already reports what it could not do. */
 function listFiles(fsImpl, dir) {
   let names;
-  try { names = fsImpl.readdirSync(dir); } catch { return []; }
+  try {
+    names = fsImpl.readdirSync(dir);
+  } catch (err) {
+    if (isAbsent(err)) return [];
+    throw err;
+  }
   return names.map((name) => `${dir}/${name}`);
 }
 
@@ -314,11 +334,23 @@ function listFiles(fsImpl, dir) {
 function ownerEntriesFor(fsImpl, root, jobId) {
   const base = `${slash(path.resolve(root))}/${OWNERS_DIR}`;
   let accounts;
-  try { accounts = fsImpl.readdirSync(base); } catch { return []; }
+  try {
+    accounts = fsImpl.readdirSync(base);
+  } catch (err) {
+    if (isAbsent(err)) return []; // nobody has ever claimed anything
+    throw err;
+  }
   const found = [];
   for (const accountId of accounts) {
     const file = `${base}/${accountId}/${jobId}.json`;
-    try { if (fsImpl.statSync(file).isFile()) found.push(file); } catch { /* not this account's */ }
+    try {
+      if (fsImpl.statSync(file).isFile()) found.push(file);
+    } catch (err) {
+      // Not this account's job -- or an account entry that is a stray file,
+      // which the sweep's own test seeds. Any other answer is a real failure.
+      if (isAbsent(err) || err?.code === 'ENOTDIR') continue;
+      throw err;
+    }
   }
   return found;
 }
@@ -387,7 +419,20 @@ export function purgeJobMedia(paths, { dryRun = false, fsImpl = fs } = {}) {
   };
 
   for (const dir of [paths.input, paths.stills, paths.segments, paths.review]) {
-    for (const file of listFiles(fsImpl, dir)) {
+    // A DIRECTORY THAT WOULD NOT LIST IS REPORTED, NEVER TREATED AS EMPTY --
+    // the same rule as `remove` above, one level up. It is reported under the
+    // directory's own path, and the loop carries on to the next one: an
+    // unreadable `input/` does not excuse the stills, the segments and the
+    // tape. `mediaDeleted` upstream is derived from `errors`, so this is what
+    // turns a "your photo is gone" into an honest "not yet".
+    let files;
+    try {
+      files = listFiles(fsImpl, dir);
+    } catch (err) {
+      errors.push({ path: dir, message: err.message, code: err.code ?? null });
+      continue;
+    }
+    for (const file of files) {
       const before = removed.length;
       remove(file);
       if (dir === paths.input && removed.length > before) photosDeleted += 1;

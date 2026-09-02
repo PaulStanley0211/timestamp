@@ -383,18 +383,33 @@ export function createOwnerRefunds({ root, loadAuthImpl = loadAuth, fsImpl = fs,
   }
   const ownersRoot = path.resolve(root, 'out', 'owners').split(path.sep).join('/');
 
+  /**
+   * ABSENT MEANS ENOENT AND NOTHING ELSE. The quiet `null` below is justified
+   * for a job with no ownership entry -- every direct-CLI render. A directory
+   * that exists but cannot be LISTED is not that case, and it used to take
+   * the same branch, outside the try whose catch writes the reconciliation
+   * record: the customer was down a tape's worth of credits and there was no
+   * witness anywhere -- no record, no worker line, nothing for `npm run
+   * refunds` to list. Anything but absence throws, from inside `refund()`'s
+   * try, so the miss is recorded AND the worker prints its REFUND MISSED.
+   */
   function ownerOf(jobId) {
     let names;
     try {
       names = fsImpl.readdirSync(ownersRoot);
-    } catch {
-      return null; // nobody has ever claimed anything
+    } catch (err) {
+      if (err?.code === 'ENOENT') return null; // nobody has ever claimed anything
+      throw err;
     }
     for (const accountId of names) {
       if (!ACCOUNT_ID_RE.test(accountId)) continue;
       try {
         if (fsImpl.statSync(`${ownersRoot}/${accountId}/${jobId}.json`).isFile()) return accountId;
-      } catch { /* not this account's job */ }
+      } catch (err) {
+        // Not this account's job, or an account entry that is a stray file.
+        if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') continue;
+        throw err;
+      }
     }
     return null;
   }
@@ -402,9 +417,12 @@ export function createOwnerRefunds({ root, loadAuthImpl = loadAuth, fsImpl = fs,
   return {
     /** @returns {Promise<{refunded: boolean, accountId: string|null, credits?: number}>} */
     async refund(job, { reason } = {}) {
-      const accountId = ownerOf(job?.jobId);
-      if (accountId === null) return { refunded: false, accountId: null };
+      // Inside the try on purpose: a lookup that FAILS is a miss to record,
+      // and only a lookup that answers "nobody" is the quiet decline.
+      let accountId = null;
       try {
+        accountId = ownerOf(job?.jobId);
+        if (accountId === null) return { refunded: false, accountId: null };
         const mod = await loadAuthImpl();
         const account = mod.loadAccount({ root, accountId });
         const before = mod.balanceOf(account).credits;
