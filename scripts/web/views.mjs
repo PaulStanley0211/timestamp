@@ -1881,7 +1881,15 @@ function operatorBlock(entity, { heading = 'Operator' } = {}) {
   ${h(entity.email)}${entity.vatId ? `<br>\n  VAT ID: ${h(entity.vatId)}` : ''}</p>`;
 }
 
-export function privacyPage({ entity = null, retention = { photoDays: 7, jobDays: 30 }, account = null }) {
+export function privacyPage({
+  entity = null,
+  retention = { photoDays: 7, jobDays: 30 },
+  // The classifier a photograph passes through, declared by the operator and
+  // null when there is none. See the note beside the processor sentence below:
+  // this exists so that switching moderation on cannot leave the page lying.
+  imageProcessor = null,
+  account = null,
+}) {
   const body = `
 <main>
   <section class="panel">
@@ -1900,10 +1908,28 @@ export function privacyPage({ entity = null, retention = { photoDays: 7, jobDays
   consent to them and why there is no cookie banner.</p>
 
   <h2 class="eyebrow legal-h">Who touches the data</h2>
-  <p class="sub">Your photograph is sent to fal.ai, the AI provider that generates the video,
-  and to nobody else. Sign-in runs through Supabase; payments through Stripe, on Stripe's own
-  pages; the six-digit sign-up codes are delivered by Resend. The application and its files
-  run on Hetzner servers in Germany.</p>
+  ${/* THE PROCESSOR LIST IS DERIVED, NOT WRITTEN. Two lines below this, the
+       retention promise is interpolated from the config the purge enforces, so
+       it cannot drift from what the code does. This sentence was the only other
+       legally-significant claim on the page and it was a literal -- which meant
+       "and to nobody else" would have quietly become false the day image
+       moderation was switched on, in a deploy that never touched this file.
+       §52B recorded that hazard and could only ask the next person to remember.
+
+       THE CLAIM SURVIVES BECAUSE THE LIST GREW. "Nobody else" is worth keeping
+       and is exactly as true with two processors as with one, provided the
+       sentence names both. Deriving the list is what keeps it honest; deleting
+       the promise would have told the reader less.
+
+       The purpose rides with the name because Art. 13 asks who AND why -- a
+       recipient with no stated purpose answers the wrong question. */''}
+  <p class="sub">Your photograph is sent to fal.ai, the AI provider that generates the
+  video${imageProcessor
+    ? `, and to ${h(imageProcessor)}, which checks it for illegal or abusive content before
+  anything is generated`
+    : ''}, and to nobody else. Sign-in runs through Supabase; payments through Stripe, on
+  Stripe's own pages; the six-digit sign-up codes are delivered by Resend. The application
+  and its files run on Hetzner servers in Germany.</p>
 
   <h2 class="eyebrow legal-h">How long we keep it</h2>
   <p class="sub">Your photo is deleted after ${h(retention.photoDays)} days and the finished

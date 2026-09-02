@@ -148,6 +148,7 @@ test('a fully configured environment builds a working moderator', async () => {
     AWS_REGION: 'eu-central-1',
     AWS_ACCESS_KEY_ID: 'AKIDEXAMPLE',
     AWS_SECRET_ACCESS_KEY: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+    TIMESTAMP_IMAGE_PROCESSOR: 'Amazon Web Services (Rekognition), Frankfurt',
   }, { fetchImpl, fsImpl: fakeFs(), nowImpl: CREDS.nowImpl });
 
   assert.equal(typeof moderate, 'function');
@@ -161,6 +162,7 @@ test('even fully configured, it still cannot invent a transport', () => {
       AWS_REGION: 'eu-central-1',
       AWS_ACCESS_KEY_ID: 'AKIDEXAMPLE',
       AWS_SECRET_ACCESS_KEY: 'x',
+      TIMESTAMP_IMAGE_PROCESSOR: 'Amazon Web Services (Rekognition), Frankfurt',
     }),
     /fetchImpl has NO DEFAULT/,
     'the env path must not become a way around the money guard',
@@ -331,4 +333,71 @@ test('an oversized image is refused locally, before it is billed', async () => {
   });
   await assert.rejects(() => moderate('/tmp/huge.jpg'), /over the 5000000 inline limit/);
   assert.equal(fetchImpl.calls.length, 0, 'an oversized image must not reach the network at all');
+});
+
+// ---------------------------------------------------------------------------
+// the disclosure, and why the worker enforces it
+// ---------------------------------------------------------------------------
+
+/**
+ * A CLASSIFIER THIS PRODUCT HAS NOT DISCLOSED MUST NOT BE ABLE TO RUN.
+ *
+ * `/privacy` tells a customer their photograph goes to fal.ai "and to nobody
+ * else". Setting the three AWS variables makes that false, and §52B could only
+ * ask whoever set them to remember to change the page -- "nothing in the code
+ * can notice" were its words.
+ *
+ * Something can notice now, and it is this process rather than the web one.
+ * §51E split the environment so each container holds only the secrets it reads:
+ * the AWS keys are the worker's, and `/privacy` is rendered by web, which never
+ * sees them. So web cannot derive the truth -- it reads
+ * `TIMESTAMP_IMAGE_PROCESSOR`, a non-secret declaration in `.env.common`, and
+ * the worker refuses to start when it holds keys that declaration does not
+ * account for.
+ *
+ * The result is that the disclosure cannot lag the deployment: a box configured
+ * to classify photographs without saying so does not render tapes at all, which
+ * is a failure somebody notices in minutes rather than in a subject access
+ * request.
+ */
+test('a classifier with no public disclosure refuses to start', () => {
+  const env = {
+    AWS_REGION: 'eu-central-1',
+    AWS_ACCESS_KEY_ID: 'AKIA_TEST',
+    AWS_SECRET_ACCESS_KEY: 'secret',
+  };
+
+  assert.throws(
+    () => awsImageModeratorFromEnv(env, { fetchImpl: async () => ({}) }),
+    (err) => {
+      assert.match(err.message, /TIMESTAMP_IMAGE_PROCESSOR/,
+        'the refusal must name the variable that fixes it');
+      assert.match(err.message, /privacy/i,
+        'the refusal must say why -- the page is the thing being protected');
+      return true;
+    },
+    'a configured classifier with no disclosure started anyway',
+  );
+});
+
+test('a declared classifier starts normally', () => {
+  const env = {
+    AWS_REGION: 'eu-central-1',
+    AWS_ACCESS_KEY_ID: 'AKIA_TEST',
+    AWS_SECRET_ACCESS_KEY: 'secret',
+    TIMESTAMP_IMAGE_PROCESSOR: 'Amazon Web Services (Rekognition), Frankfurt',
+  };
+  const m = awsImageModeratorFromEnv(env, { fetchImpl: async () => ({}) });
+  assert.equal(typeof m, 'function', 'a declared, fully-configured classifier must build');
+});
+
+test('the declaration alone turns nothing on', () => {
+  // Somebody who writes the disclosure first and the keys later has an honest
+  // page and no classifier, which is the safe order and must not throw. The
+  // page says what the deployment does; the deployment is still off.
+  const m = awsImageModeratorFromEnv(
+    { TIMESTAMP_IMAGE_PROCESSOR: 'Amazon Web Services (Rekognition), Frankfurt' },
+    { fetchImpl: async () => ({}) },
+  );
+  assert.equal(m, null, 'a declaration with no credentials must stay off, not throw');
 });

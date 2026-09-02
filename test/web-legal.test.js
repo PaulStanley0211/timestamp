@@ -24,6 +24,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import { createServer, normaliseLegalEntity } from '../scripts/web/server.mjs';
+import { privacyPage } from '../scripts/web/views.mjs';
 
 const CFG = JSON.parse(fs.readFileSync(new URL('../config/render.json', import.meta.url), 'utf8'));
 
@@ -480,4 +481,75 @@ test('the pricing page says tax is added at checkout', async () => {
     assert.match(html, /added at checkout|added at the checkout|where it applies|where applicable/i,
       'the page does not say the tax is added on top of the listed price');
   });
+});
+
+// ---------------------------------------------------------------------------
+// the processor list, and the sentence that stops being true without it
+// ---------------------------------------------------------------------------
+
+/**
+ * WHY THIS IS A TEST AND NOT A NOTE IN THE RUNBOOK.
+ *
+ * `/privacy` says the photograph goes to fal.ai "and to nobody else". That is
+ * true today and it stops being true the moment image moderation is switched
+ * on, because the photograph would then also go to a classifier. Section 52B
+ * recorded the hazard in its own words -- "nothing in the code can notice" --
+ * and left the switch off behind a paragraph of prose asking whoever flips it
+ * to remember.
+ *
+ * A PARAGRAPH OF PROSE IS NOT A CONTROL. Two lines below that sentence, the
+ * retention promise is interpolated from the very config the purge enforces,
+ * so it cannot drift. The processor list was the only legally-significant claim
+ * on the page still hardcoded, and it was the one most likely to be made false
+ * by a deploy that never touched this file.
+ *
+ * THE DECLARATION IS SEPARATE FROM THE CREDENTIALS ON PURPOSE. Section 51E
+ * split the environment so each container holds only the secrets its own
+ * process reads -- the AWS keys are the worker's, and `/privacy` is rendered by
+ * web, which never sees them. So web cannot derive the truth from the keys. It
+ * reads a declaration instead, and the WORKER refuses to start when it holds
+ * keys the declaration does not account for. That is the enforcement: you
+ * cannot run a classifier this page has not disclosed, because the process that
+ * would run it will not boot.
+ */
+test('with no classifier configured, the page still says fal and nobody else', () => {
+  const html = privacyPage({ entity: ENTITY, retention: { photoDays: 7, jobDays: 30 } });
+  assert.match(html, /fal\.ai/, 'the generation provider must always be named');
+  assert.match(html, /nobody else/,
+    'unconfigured, the photograph really does go to one processor and the page should say so');
+});
+
+test('a configured classifier is named, and "nobody else" stays true because the list grew', () => {
+  // THE CLAIM IS NOT THE PROBLEM, THE LIST IS. "and to nobody else" is a
+  // promise worth keeping and it is exactly as true with two processors as
+  // with one -- provided the sentence names both. So the fix is to derive the
+  // list rather than to delete the claim: a page that stopped saying "nobody
+  // else" would be weaker, not safer, and would tell a reader less.
+  const html = privacyPage({
+    entity: ENTITY,
+    retention: { photoDays: 7, jobDays: 30 },
+    imageProcessor: 'Amazon Web Services (Rekognition), Frankfurt',
+  });
+
+  assert.match(html, /Amazon Web Services \(Rekognition\), Frankfurt/,
+    'a configured classifier must be disclosed by name');
+  assert.match(html, /fal\.ai/, 'the generation provider is still named');
+  assert.match(html, /nobody else/,
+    'the completeness claim should survive -- the list grew, the promise did not shrink');
+
+  // AND IT MUST SAY WHAT THE CLASSIFIER IS FOR. Naming a company a photograph
+  // is sent to, without saying why, is a disclosure that answers the wrong
+  // question -- GDPR Art. 13 asks for the purpose, not just the recipient.
+  assert.match(html, /illegal or abusive/i,
+    'the page names a processor without saying what it does with the photograph');
+});
+
+test('the disclosed processor is escaped like every other operator-supplied value', () => {
+  const html = privacyPage({
+    entity: ENTITY,
+    retention: { photoDays: 7, jobDays: 30 },
+    imageProcessor: '<script>alert(1)</script>',
+  });
+  assert.ok(!/<script>alert/.test(html), 'the processor name reaches the page unescaped');
+  assert.match(html, /&lt;script&gt;/, 'it should render as text');
 });

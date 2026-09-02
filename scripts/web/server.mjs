@@ -795,6 +795,13 @@ export function createServer({
    * site is live, which is what they are for.
    */
   legalEntityJson = process.env.TIMESTAMP_LEGAL_ENTITY || null,
+  // The image classifier a photograph passes through, as it should read on
+  // /privacy. Declared rather than derived because §51E gives the AWS
+  // credentials to the WORKER and this process never sees them -- so the
+  // worker refuses to start when it holds keys this declaration does not
+  // account for (scripts/safety/image-moderate-aws.mjs). Null is off, and
+  // off is the shipped state.
+  imageProcessor = process.env.TIMESTAMP_IMAGE_PROCESSOR || null,
   /**
    * Whether search engines may index this site. DEFAULT FALSE, and the default
    * is the whole point.
@@ -3400,7 +3407,10 @@ export function createServer({
 
     async privacyPage(req, res, { account }) {
       sendHtml(req, res, 200, privacyPage({
-        entity: legalEntity, retention: cfg?.retention ?? {}, account: account ?? null,
+        entity: legalEntity,
+        retention: cfg?.retention ?? {},
+        imageProcessor,
+        account: account ?? null,
       }));
     },
 

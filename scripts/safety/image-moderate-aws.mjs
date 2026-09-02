@@ -141,6 +141,33 @@ export function awsImageModeratorFromEnv(env = {}, options = {}) {
       'Set all three or none. Two of three would silently leave photographs unchecked.',
     );
   }
+  // A CLASSIFIER THIS PRODUCT HAS NOT DISCLOSED MUST NOT BE ABLE TO RUN.
+  // `/privacy` tells a customer their photograph goes to fal.ai "and to nobody
+  // else". These three variables make that false, and §52B could only ask
+  // whoever set them to remember the page -- "nothing in the code can notice".
+  //
+  // This process can. §51E split the environment so each container holds only
+  // the secrets it reads, which puts the AWS keys here and the privacy page in
+  // the web process that never sees them -- so web cannot derive the truth. It
+  // renders `TIMESTAMP_IMAGE_PROCESSOR`, a non-secret declaration in
+  // `.env.common`, and the worker refuses to start without it. The disclosure
+  // therefore cannot lag the deployment: a box configured to classify
+  // photographs without saying so renders no tapes at all, which somebody
+  // notices in minutes rather than in a subject access request.
+  //
+  // The reverse order is deliberately fine. A declaration with no credentials
+  // returns null above and turns nothing on -- writing the page first is the
+  // safe sequence and must not be punished.
+  if (String(env.TIMESTAMP_IMAGE_PROCESSOR ?? '').trim() === '') {
+    throw new TypeError(
+      'aws-moderate: image moderation is configured but undisclosed. /privacy tells customers '
+      + 'their photograph goes to the generation provider "and to nobody else", which these '
+      + 'credentials make untrue. Set TIMESTAMP_IMAGE_PROCESSOR in .env.common to the processor '
+      + 'as it should appear on that page (for example "Amazon Web Services (Rekognition), '
+      + 'Frankfurt") -- and sign the processing agreement before you do.',
+    );
+  }
+
   return createAwsImageModerator({
     ...options,
     region: env.AWS_REGION,

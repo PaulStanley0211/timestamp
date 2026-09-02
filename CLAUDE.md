@@ -6265,10 +6265,27 @@ taxonomy version is visible instead of silently defaulting to allowed.
 
 **`/privacy` says the photograph is sent to fal.ai "and to nobody else".** That
 sentence stops being true the instant the three AWS variables exist, and
-nothing in the code can notice. Before switching it on: change that page, sign
-a DPA with AWS, and add them to the processor list. `eu-central-1` keeps the
-image in Frankfurt, the same jurisdiction as the Hetzner box that page already
-names, which is why that region and not a cheaper one.
+~~nothing in the code can notice~~ — **SOMETHING NOTICES AS OF 2026-09-02.**
+`/privacy`'s processor list is derived from `TIMESTAMP_IMAGE_PROCESSOR` the way
+its retention promise is already derived from the config the purge enforces,
+and **the worker REFUSES TO START when it holds AWS keys that declaration does
+not account for.** So a box configured to classify photographs without saying
+so renders no tapes at all — a failure somebody meets in minutes rather than in
+a subject access request. The declaration lives in `.env.common` because §51E
+gives the credentials to the worker and the page is rendered by web, which
+never sees them.
+
+**"Nobody else" SURVIVES, because the list grew rather than the promise
+shrinking.** It is exactly as true with two processors as with one provided the
+sentence names both, and the purpose rides with the name because Art. 13 asks
+who *and* why.
+
+**WHAT THE CODE STILL CANNOT DO IS SIGN A DPA.** That, and reading the page
+afterwards to see that it says something you are happy to stand behind, are
+still the owner's — the guard makes forgetting impossible, not the paperwork
+unnecessary. `eu-central-1` keeps the image in Frankfurt, the same jurisdiction
+as the Hetzner box that page already names, which is why that region and not a
+cheaper one.
 
 **The consent text survives unchanged** — it says "an AI service", singular and
 unspecified. It is `/privacy` that is specific, and specific is what breaks.
