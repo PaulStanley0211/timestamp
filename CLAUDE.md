@@ -6887,6 +6887,19 @@ at 480p, i.e. $3.31 a tape. The hold §32 item 4 placed on 2.5 (the owner's, "do
 not wire it, do not price it") was lifted by him only far enough to run that one
 free playground test.
 
+**THE OWNER'S VERDICT ON A FINISHED TAPE, 2026-09-02 evening, which is the
+half no test can give.** Not the playground clip -- a real web order through
+the whole pipeline, with his own photograph and an uploaded location: *"the
+quality, the character consistency look great ... I love this model ... overall
+the video generations are very good."* Seedance held his likeness too (§26), so
+the supplier change costs nothing on the axis that decides the product, and the
+comparison is his: **better**, on the tape as well as in the playground.
+
+**AND THE OWN-PLACE UPLOAD IS PROVED ON THE PAID PATH** in that same order --
+face and location as two references, which is what §43 built the step for and
+what config/models.json calls the strongest version of this product. It had
+never been run against a real provider until now.
+
 #### C -- TWO FIELDS WERE HARDCODED AND BOTH WOULD HAVE GONE OUT WRONG
 
 Neither was a Wan problem. Both were latent the whole time and only a second
