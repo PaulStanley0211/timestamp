@@ -100,6 +100,28 @@ export function assertPricingTable(pricing) {
         throw bad('unmarked_price', `pricing.models[${model}] claims estimate:false with usd=${entry.usd} and is missing ${missing.join(' and ')}. A non-zero price may only stop being an ESTIMATE by naming the invoice that proved it.`, { model, usd: entry.usd, missing });
       }
     }
+    // A RATE TABLE IS CHECKED AT LOAD, for the reason the token fields are: a
+    // malformed one would not throw, it would quote something plausible from a
+    // rate of `undefined` and land NaN in a figure somebody authorises a spend
+    // against. Tier keys are the short edge in pixels; `_comment` is skipped
+    // here exactly as it is at lookup.
+    if (entry.usdByShortEdge !== undefined) {
+      if (!isPlainObject(entry.usdByShortEdge)) {
+        throw bad('invalid_pricing', `pricing.models[${model}].usdByShortEdge must be an object`, { model });
+      }
+      const tiers = Object.entries(entry.usdByShortEdge).filter(([key]) => !key.startsWith('_'));
+      if (tiers.length === 0) {
+        throw bad('invalid_pricing', `pricing.models[${model}].usdByShortEdge has no tiers in it`, { model });
+      }
+      for (const [key, rate] of tiers) {
+        if (!/^[1-9]\d*$/.test(key)) {
+          throw bad('invalid_pricing', `pricing.models[${model}].usdByShortEdge key ${JSON.stringify(key)} is not a pixel short edge`, { model });
+        }
+        if (!Number.isFinite(rate) || rate < 0) {
+          throw bad('invalid_pricing', `pricing.models[${model}].usdByShortEdge[${key}] must be a non-negative number, got ${JSON.stringify(rate)}`, { model });
+        }
+      }
+    }
     if (!PRICING_UNITS.includes(entry.unit)) {
       throw bad('invalid_pricing', `pricing.models[${model}].unit must be one of ${PRICING_UNITS.join('|')}, got ${JSON.stringify(entry.unit)}`, { model });
     }
@@ -220,12 +242,55 @@ export function estimateStill({ pricing, model, count = 1 }) {
 }
 
 /** Estimated USD for one video segment. */
+/**
+ * The per-unit rate, which is not always one number.
+ *
+ * `alibaba/wan-3.0/reference-to-video` (2026-09-02) bills per SECOND at a rate
+ * that doubles per quality tier -- $0.05, $0.10, $0.20. A single `usd` would
+ * quote 480p's price for a 720p order and understate it by half, which is
+ * section 26's flattening defect arriving in a second billing model.
+ *
+ * THE KEY IS THE SHORT EDGE because that is this product's own invariant
+ * (section 13): a resolution label holds the short edge and only the long edge
+ * varies with the shape. It follows that the frame shape does not move the
+ * price on such a model -- 640x480, 854x480 and 480x854 are all the 480 tier --
+ * which is the opposite of the token-billed case, where holding the short edge
+ * makes a wide shape exactly 4/3 the pixels and 4/3 the price.
+ *
+ * A TIER WITH NO RATE IS REFUSED, never priced at the nearest one. The failure
+ * direction matters: guessing low would sell a 1080p tape at the 480p price,
+ * which is a quarter of cost, silently, on the paid path.
+ */
+function rateFor(entry, { size } = {}, model) {
+  const table = entry.usdByShortEdge;
+  if (!isPlainObject(table)) return entry.usd;
+
+  if (!size || !Number.isFinite(size.width) || !Number.isFinite(size.height)) {
+    throw bad('invalid_request',
+      `pricing.models[${model}] is priced by tier, so it needs the raster size -- got ${JSON.stringify(size)}`,
+      { model });
+  }
+  const shortEdge = Math.min(size.width, size.height);
+  // `_comment` lives in this object like it does everywhere else in the config,
+  // and a rate table that treats it as a tier is the trap section 36F names:
+  // the `_` filter is not applied everywhere it needs to be.
+  const tiers = Object.entries(table).filter(([key]) => !key.startsWith('_'));
+  const found = tiers.find(([key]) => key === String(shortEdge));
+  if (!found || !Number.isFinite(found[1])) {
+    throw bad('invalid_pricing',
+      `pricing.models[${model}] has no rate for the ${shortEdge}px tier (raster ${size.width}x${size.height}). `
+      + `Known tiers: ${tiers.map(([k]) => k).join(', ') || 'none'}. A tier nobody priced is refused rather than guessed.`,
+      { model, shortEdge, known: tiers.map(([k]) => k) });
+  }
+  return found[1];
+}
+
 export function estimateVideo({ pricing, model, seconds, size = null }) {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     throw bad('invalid_request', `estimateVideo seconds must be a positive number, got ${JSON.stringify(seconds)}`);
   }
   const entry = priceEntry(pricing, model);
-  return usd(entry.usd * quantityFor(entry, { count: 1, seconds, size }, model));
+  return usd(rateFor(entry, { size }, model) * quantityFor(entry, { count: 1, seconds, size }, model));
 }
 
 /**

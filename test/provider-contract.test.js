@@ -977,6 +977,64 @@ test('the estimator prices video by the raster, not by the second alone', () => 
     `720p is ${(dear / cheap).toFixed(2)}x 480p in price; the delivered pixel ratio is 2.20x`);
 });
 
+/**
+ * THE SECOND VENDOR BILLS DIFFERENTLY, AND FLATTENING IT WOULD REPEAT THE BUG
+ * DIRECTLY ABOVE.
+ *
+ * `alibaba/wan-3.0/reference-to-video` (2026-09-02) is per SECOND, not per
+ * token -- but the rate is per quality tier: $0.05/s at 480p, $0.10/s at 720p,
+ * $0.20/s at 1080p. A single `usd` would quote 480p's price for a 720p order
+ * and understate it by half, which is section 26's defect in a new file.
+ *
+ * The table is keyed on the SHORT EDGE because that is this product's own
+ * invariant (section 13): a resolution label holds the short edge and only the
+ * long edge varies with the shape.
+ */
+test('a tiered per-second model is priced by its tier, not by one flat rate', () => {
+  const pricing = loadPricing();
+  const model = 'alibaba/wan-3.0/reference-to-video';
+
+  const cheap = estimateVideo({ pricing, model, seconds: 15, size: { width: 640, height: 480 } });
+  const dear = estimateVideo({ pricing, model, seconds: 15, size: { width: 960, height: 720 } });
+
+  assert.ok(Math.abs(cheap - 0.75) < 0.0001, `15s at 480p should be $0.75, got ${cheap}`);
+  assert.ok(Math.abs(dear - 1.50) < 0.0001, `15s at 720p should be $1.50, got ${dear}`);
+});
+
+/**
+ * AND THE FRAME SHAPE IS FREE ON THIS MODEL, which is a real pricing change
+ * rather than a detail. Section 34D derived a 4/3 surcharge for 16:9 and 9:16
+ * because Seedance billed TOKENS -- pixels x seconds -- and holding the short
+ * edge makes a wide shape exactly 4/3 the pixels. Wan bills seconds at a tier
+ * rate with no pixel term at all, so a wide tape costs precisely what a 4:3
+ * tape costs. Anything that still charges 4/3 on this model is overcharging.
+ */
+test('the frame shape does not move the price on a tiered per-second model', () => {
+  const pricing = loadPricing();
+  const model = 'alibaba/wan-3.0/reference-to-video';
+  const square = estimateVideo({ pricing, model, seconds: 15, size: { width: 640, height: 480 } });
+  const wide = estimateVideo({ pricing, model, seconds: 15, size: { width: 854, height: 480 } });
+  const tall = estimateVideo({ pricing, model, seconds: 15, size: { width: 480, height: 854 } });
+
+  assert.equal(wide, square, '16:9 costs what 4:3 costs at the same tier');
+  assert.equal(tall, square, '9:16 costs what 4:3 costs at the same tier');
+});
+
+/** A TIER NOBODY PRICED IS A REFUSAL, NOT A GUESS -- the same ruling the token
+ *  path already carries. Falling back to the cheapest rate would quote a 1080p
+ *  order at the 480p price and sell it at a quarter of cost. */
+test('a per-second tier with no rate in the table is refused rather than guessed', () => {
+  const pricing = loadPricing();
+  assert.throws(
+    () => estimateVideo({
+      pricing,
+      model: 'alibaba/wan-3.0/reference-to-video',
+      seconds: 15,
+      size: { width: 5760, height: 2160 },
+    }),
+    /tier|short edge|2160/i);
+});
+
 /** Tokens scale with pixels AND frames, so twice the seconds is twice the
  *  price at the same raster -- the one part the per-second rate got right, and
  *  it has to survive the change. */

@@ -16,7 +16,8 @@
     "fal": {
       "still": "fal/UNVERIFIED-identity-still",
       "video": "bytedance/seedance-2.0/image-to-video",
-      "videoDirect": "bytedance/seedance-2.0/reference-to-video"
+      "_comment_videoDirect": "MOVED OFF BYTEDANCE ON 2026-09-02. `bytedance/seedance-2.0/reference-to-video` stopped accepting reference images containing a real person -- six refusals in one afternoon across two photographs, the photograph that had rendered three tapes eight days earlier, an AI-generated still of the same face, and Seedance 2.5 as well. Every one came back `partner_validation_failed`, which is ByteDance's filter rather than fal's, so it is company-wide and no model of theirs is a way round it. Their IMAGE endpoints are unaffected, which is why `still` above is untouched. The `video` entry beside this one is still Seedance and is DEAD for the same reason -- the still path has been gated behind an unverified still model since it was written, so nothing reaches it, and repointing it is a separate decision from this one.",
+      "videoDirect": "alibaba/wan-3.0/reference-to-video"
     }
   },
   "models": {
@@ -126,6 +127,52 @@
         "`video_urls` and `audio_urls` also exist. We never send audio: the bed is ours. And CLAUDE.md's rule about never asking the model for the look applies to a reference video exactly as it does to a prompt.",
         "THE RASTER IS NOT HONOURED, and that -- not the enum -- is what stands between this endpoint and selling three frame shapes. Job 20260824-122201-af8b0d ordered 640x480 with `aspect_ratio: '4:3'` and got 752x560, which is 47:35, at 24fps where the whole contract is 25. An enum value being ACCEPTED is not the same as the ordered raster ARRIVING, and resolveRaster refuses a non-default shape on a paid provider for exactly that reason: a paid render that delivers a different thing from the one ordered is invisible to the customer AND to the ledger. Whoever lifts the guard has to decide what the tape stage does with a raster the model chose.",
         "fal's two pages disagree about `seed` on THIS endpoint as well as on image-to-video: the model page lists it in the OUTPUT only, the model-api-reference schema lists it as an integer input. `falReferenceVideoBody` SENDS it and the 2026-08-24 direct run did not answer 422, so it is at least tolerated. Whether it is HONOURED is unproven -- only a repeat of the same job with the same seed answers that, and `deriveSeed` takes the job id so there is no flag for it today."
+      ]
+    },
+    "alibaba/wan-3.0/reference-to-video": {
+      "_comment": "THE VIDEO MODEL THIS PRODUCT SELLS ON, as of 2026-09-02, and it is here because the previous one stopped taking faces. `bytedance/seedance-2.0/reference-to-video` rendered three tapes from one photograph on 2026-08-24/25 and then refused that SAME photograph on 2026-09-02 -- HTTP 422 content_policy_violation, loc [body,image_urls], 'may contain likenesses of real people', ctx.extra_info.reason `partner_validation_failed`. Four refusals across two photographs and one AI-generated still: ByteDance has closed real-person likeness in VIDEO, and it is not fooled by handing it a generated image instead of a photograph. Their IMAGE endpoints are unaffected -- `seedream/v4.5/edit` accepted the same face the same hour -- so the two-stage path is closed too and there is no route back inside that vendor. VERIFIED 2026-09-02 by reading the schema page AND by a real generation through fal's own playground: the owner's likeness held and he judged the result better than Seedance's. WHAT IT BUYS BEYOND NOT REFUSING: 4:3 is a native aspect rather than a crop, 1080p is orderable for the first time (config/render.json still has it off -- that tier is a separate decision, see CLAUDE.md section 32 item 16), duration runs to 30s so DIRECT_NEEDS_ONE_CALL has headroom instead of sitting exactly on Seedance's 15s ceiling, and it takes 10 references rather than 9. AND IT IS PRICED PER SECOND PER TIER WITH NO PIXEL TERM: $0.05/s at 480p, $0.10/s at 720p, $0.20/s at 1080p. That is flat in the frame SHAPE, so the 4/3 surcharge section 34D derived for 16:9 and 9:16 does not apply to this model -- a wide tape costs exactly what a 4:3 tape costs. A 15s 480p tape is $0.75 against Seedance's measured $2.0727. NOTHING HAS BEEN REPRICED FOR THE CUSTOMER YET: config/credits.json is the owner's call and moving it changes what people are charged.",
+      "verified": true,
+      "verifiedOn": "2026-09-02",
+      "verifiedFrom": "fal.ai/models/alibaba/wan-3.0/reference-to-video and its /api schema page, read 2026-09-02; field names, enums and the 2..30 duration bounds copied from that schema rather than inferred from the sibling endpoint",
+      "provider": "fal",
+      "kind": "video",
+      "endpoint": "alibaba/wan-3.0/reference-to-video",
+      "nativeAudio": false,
+      "audioOffParam": {
+        "name": "audio",
+        "value": false,
+        "verified": true,
+        "_comment": "NOT `generate_audio` -- that is Seedance's name for it, and this endpoint does not read it. Same TRUE default though, so the consequence of getting the NAME wrong is identical to omitting it: a field the model ignores, its own audio still on, and a tape shipping the model's soundtrack under a bed whose entire specification is 'quiet'. falReferenceVideoBody hardcoded the Seedance name until 2026-09-02 and now reads this one."
+      },
+      "videoParams": {
+        "_comment": "The three fields Wan disagrees with Seedance on. Every one was read off the schema page; `references` is the same lesson BUG 3 taught on 2026-08-23, when `fal-ai/uso` answered 422 because it wanted `input_image_urls`.",
+        "references": "reference_image_urls",
+        "durationType": "integer",
+        "extra": {
+          "_comment_expansion": "`enable_prompt_expansion` DEFAULTS TO TRUE and is documented as 'intelligent prompt rewriting'. A rewriter would undo sections 14, 17 and 19 -- the negatives, the anti-slop framing rules and the six-beat shot list -- and it would end reproducibility outright, because the same seed and the same prompt would stop being the same request. fal's own note says disabling it saves 20-60 seconds of latency and is 'likely to degrade generation quality'; that trade is taken deliberately, because prompt fidelity IS the quality here and the tape look is ffmpeg's job.",
+          "enable_prompt_expansion": false
+        }
+      },
+      "capabilities": {
+        "maxClipSeconds": 30,
+        "minClipSeconds": 2,
+        "supportsNativeAudioOff": true,
+        "maxReferences": 10,
+        "aspectRatios": [
+          "4:3",
+          "16:9",
+          "9:16"
+        ],
+        "resolutions": [
+          "480p",
+          "720p",
+          "1080p"
+        ]
+      },
+      "openQuestions": [
+        "THE DELIVERED RASTER IS UNMEASURED. Seedance never once returned the raster it was asked for -- 640x480 ordered came back 752x560, and fal bills what it SENDS, which is where the 37.5% surcharge in section 22 came from. Wan is billed per SECOND rather than per token, so an unexpected raster costs nothing extra here; what it would break is the tape stage's assumptions and the delivered shape. Measure width/height off the first real render: the output schema returns them.",
+        "THE ARC FIX (section 53, commit 90bf3e1) HAS NEVER BEEN SEEN AGAINST A MODEL. It was written for Seedance and the first paid run that would have judged it was refused. This model may read the six beats differently.",
+        "`enable_thinking` exists and is untried. It is documented as 'enhanced reasoning before generation'. Not enabled: it is one more thing between the composed prompt and the render, and this endpoint has not yet produced a single tape through our own pipeline."
       ]
     },
     "bytedance/seedance-2.0/fast/image-to-video": {

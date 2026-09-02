@@ -1490,6 +1490,93 @@ test('[fal] the reference video body keeps every guard the image path already ha
   assert.equal(body.seed, 7);
 });
 
+// ---------------------------------------------------------------------------
+// THE SECOND VENDOR, 2026-09-02, and what it exposed.
+//
+// `bytedance/seedance-2.0/reference-to-video` began refusing every reference
+// image containing a real person -- 422 content_policy_violation,
+// `partner_validation_failed` -- eight days after it had rendered three tapes
+// from the same photograph. ByteDance closed likeness in VIDEO; their IMAGE
+// endpoints still accept it, and so does `alibaba/wan-3.0/reference-to-video`,
+// which is where the product went.
+//
+// Wan disagrees with Seedance on three fields, and TWO of the three were
+// hardcoded here rather than read from config -- so they would have gone out
+// wrong on the wire and been discovered by an invoice.
+// ---------------------------------------------------------------------------
+
+test('[fal] the audio-off field is NAMED by the model entry, not assumed', () => {
+  // THE ONE THAT WOULD HAVE SHIPPED SOUND. config/models.json has recorded an
+  // `audioOffParam` {name, value} since the three-layer guard was written, and
+  // assertAudioOff refuses a video model that does not carry one -- but the
+  // body builder ignored the recorded NAME and always wrote `generate_audio`.
+  // Wan's parameter is `audio` and it DEFAULTS TO TRUE, so the request would
+  // have carried a field Wan does not read while Wan's own audio stayed on,
+  // and every tape would have shipped the model's soundtrack under a bed whose
+  // whole specification is "quiet". Layer 3 (the ffprobe zero-audio-streams
+  // assertion) would have caught it -- after the render was paid for.
+  const body = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    audioOffParam: { name: 'audio', value: false },
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  assert.equal(body.audio, false);
+  assert.ok(Object.hasOwn(body, 'audio'), 'omitted is not the same as false');
+  assert.ok(!Object.hasOwn(body, 'generate_audio'),
+    'one audio field, never both -- the other vendor does not read this one');
+});
+
+test('[fal] duration goes out in the type the endpoint documents', () => {
+  // Seedance's `duration` is a STRING enum of '4'..'15'. Wan's is an INTEGER
+  // 2..30. Sending the wrong one is a 422 at best and a silently coerced
+  // duration at worst, which would break the 375-frame delivery contract
+  // without failing anything.
+  const wan = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    durationType: 'integer',
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  assert.equal(wan.duration, 15);
+  assert.equal(typeof wan.duration, 'number');
+
+  // The default stays the string, so the Seedance path is untouched by this.
+  const seedance = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  assert.equal(seedance.duration, '15');
+  assert.equal(typeof seedance.duration, 'string');
+});
+
+test('[fal] per-model extras ride along, and they cannot overwrite what the builder owns', () => {
+  // Wan needs `enable_prompt_expansion: false`. Its default is TRUE, and an
+  // "intelligent prompt rewriter" would rewrite the prompts sections 14, 17 and
+  // 19 were built on -- and destroy reproducibility, since the same seed and
+  // the same prompt would no longer be the same request.
+  const body = falReferenceVideoBody({
+    prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+    seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+    extraParams: { enable_prompt_expansion: false },
+    dataUriImpl: () => 'data:x;base64,AA==',
+  });
+  assert.equal(body.enable_prompt_expansion, false);
+
+  // A free-form merge is a hole: a config edit could turn the model's audio
+  // back on, or replace the references, from a file nobody reads on the way to
+  // a paid call. The builder owns those fields and says so.
+  assert.throws(
+    () => falReferenceVideoBody({
+      prompt: 'p', references: [{ role: 'face', path: 'f.jpg' }],
+      seconds: 15, seed: 7, size: FAL_RESOLUTIONS['480p'], nativeAudio: false,
+      extraParams: { generate_audio: true },
+      dataUriImpl: () => 'data:x;base64,AA==',
+    }),
+    /cannot override/i);
+});
+
 test('[fal] a reference video request with no references is refused before it is sent', () => {
   // The face IS the product. A body with an empty array is a paid call that
   // cannot possibly return the right person, and it would look like a model

@@ -56,6 +56,19 @@
       },
       "deliveredUpscaleFallback": 1.175
     },
+    "alibaba/wan-3.0/reference-to-video": {
+      "_comment": "AN ESTIMATE, read off fal's own model page on 2026-09-02 and NOT yet proved by an invoice -- no render has been billed on this endpoint, so `estimate` stays true until `npm run ledger -- record` says otherwise. The page's words: 'For every second of video you generate, you will be charged $0.05 480p, $0.10 720p, or $0.20 1080p. For example, a 5s video at 720p will cost $0.50.'\n\nWHY THIS ENTRY HAS A RATE TABLE AND NOT ONE NUMBER. The rate doubles per tier, so a single `usd` would quote 480p's price for a 720p order and understate it by half -- which is precisely the flattening section 26 had to fix on the Seedance entry, where --dry-run quoted the identical $2.079 at two tiers that differ by 2.2x. `usdByShortEdge` is keyed on the SHORT edge because that is this product's own invariant (section 13): a resolution label holds the short edge and only the long edge varies with the shape. A tier absent from the table is REFUSED rather than priced at the nearest rate -- same ruling the token path carries, and the direction that matters, since guessing low sells a 1080p tape at a quarter of cost.\n\nAND THE FRAME SHAPE IS FREE HERE, WHICH IS A REAL CHANGE. Section 34D derived a 4/3 surcharge for 16:9 and 9:16 because Seedance billed TOKENS -- pixels x seconds -- and holding the short edge makes a wide shape exactly 4/3 the pixels. This model bills seconds at a tier rate with no pixel term at all, so a wide tape costs exactly what a 4:3 tape costs. config/credits.json has NOT been changed to match: what a customer pays is the owner's decision and moving it re-prices every rung at once.\n\nFOR SCALE: a 15s 480p tape is $0.75 here against Seedance 2.0's MEASURED $2.0727, and against Seedance 2.5's advertised $3.31.",
+      "estimate": true,
+      "unit": "second",
+      "usd": 0.05,
+      "source": "fal.ai/models/alibaba/wan-3.0/reference-to-video pricing line, read 2026-09-02. `usd` is the 480p rate and is the recorded base; `usdByShortEdge` is authoritative whenever it is present.",
+      "usdByShortEdge": {
+        "_comment": "Keyed on the short edge of the ORDERED raster, which is the resolution tier by this product's own definition. 480p 4:3 is 640x480, 480p 16:9 is 854x480 and 480p 9:16 is 480x854 -- all short edge 480, all the same price, which is the point.",
+        "480": 0.05,
+        "720": 0.1,
+        "1080": 0.2
+      }
+    },
     "fal/still-UNVERIFIED": {
       "_comment": "ESTIMATE, and a placeholder: the still model has NOT been chosen. Paul picks it at Phase 0 (docs/phase-0-validation.md), and criterion 6 measures the real number as balance-before minus balance-after. The figure below is an order-of-magnitude stand-in for an identity-preserving image model at ~1MP so the estimator has something to divide by -- it is not a quote and it is not attributed to any vendor. Replace the id and the number together, in one edit, when the model is chosen.",
       "estimate": true,

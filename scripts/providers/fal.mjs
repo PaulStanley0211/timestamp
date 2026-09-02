@@ -514,6 +514,23 @@ export function falReferenceVideoBody({
   // 2026-08-23 `fal-ai/uso` answered 422 because the field it wanted was
   // `input_image_urls`. Three vendors, no reason to assume they agree.
   referencesParam = 'image_urls',
+  // LAYER 1'S FIELD NAME, and it was hardcoded here until 2026-09-02 while
+  // config/models.json had been recording it all along. Seedance calls it
+  // `generate_audio`; Wan calls it `audio`. Both default to TRUE, so writing
+  // the wrong name is not a 422 -- it is a field the endpoint ignores while its
+  // own audio stays on, and a tape that ships the model's soundtrack under a
+  // bed whose entire spec is "quiet". Only layer 3 would have caught it, after
+  // the render was paid for. The default keeps the Seedance shape.
+  audioOffParam = { name: 'generate_audio', value: false },
+  // Seedance's `duration` is a STRING enum of '4'..'15'; Wan's is an INTEGER
+  // 2..30. The wrong type is a 422 at best and a silently coerced duration at
+  // worst, which breaks the 375-frame contract without failing anything.
+  durationType = 'string',
+  // Whatever else one endpoint needs and the others do not. Wan's
+  // `enable_prompt_expansion` defaults to TRUE and would rewrite the prompt --
+  // undoing sections 14, 17 and 19, and ending reproducibility, since the same
+  // seed and the same prompt would stop being the same request.
+  extraParams = null,
   dataUriImpl = falDataUri,
 }) {
   if (!Array.isArray(references) || references.length === 0) {
@@ -522,19 +539,39 @@ export function falReferenceVideoBody({
     // than the caller bug it is.
     throw new TypeError('a reference video request needs at least one reference image');
   }
-  return {
+  const audioField = audioOffParam?.name ?? 'generate_audio';
+  const audioOffValue = audioOffParam && Object.hasOwn(audioOffParam, 'value')
+    ? audioOffParam.value
+    : false;
+
+  const body = {
     prompt,
     [referencesParam]: references.map((ref) => dataUriImpl(ref.path)),
     resolution: falResolutionFor(size),
     aspect_ratio: falAspectFor(size),
-    // A STRING enum here exactly as on image-to-video.
-    duration: String(Math.round(seconds)),
-    // LAYER 1 ON THE WIRE. config/models.json records this endpoint as having
-    // "the same parameter with the same TRUE default", so omitting it ships
-    // the model's own ambience underneath a bed whose entire spec is "quiet".
-    generate_audio: nativeAudio === true,
+    duration: durationType === 'integer' ? Math.round(seconds) : String(Math.round(seconds)),
+    // LAYER 1 ON THE WIRE. Every entry in config/models.json with kind 'video'
+    // must name this parameter (assertAudioOff), because a model that cannot be
+    // told to stop generating audio is disqualified outright.
+    [audioField]: nativeAudio === true ? true : audioOffValue,
     seed,
   };
+
+  if (extraParams != null) {
+    // A FREE-FORM MERGE WOULD BE A HOLE, and it would open onto the paid path:
+    // a config edit could turn the model's audio back on, swap the references
+    // or restate the duration, from a file nobody reads on the way to a bill.
+    // The builder owns those fields; an extra that collides with one is a
+    // configuration error rather than an override.
+    for (const key of Object.keys(extraParams)) {
+      if (Object.hasOwn(body, key)) {
+        throw new TypeError(
+          `model extras cannot override "${key}" -- the request builder owns that field`);
+      }
+      body[key] = extraParams[key];
+    }
+  }
+  return body;
 }
 
 /** `https://queue.fal.run/<endpoint>`. Sub-paths are part of the model id and
@@ -1140,6 +1177,15 @@ export function createFalProvider(opts = {}) {
           // `fal-ai/uso` answered 422 in 2026-08-23 because its field was
           // called `input_image_urls`. Absent means the fal convention.
           referencesParam: videoEntry?.videoParams?.references ?? 'image_urls',
+          // The three fields the second vendor disagreed on (2026-09-02). Each
+          // is read from the entry rather than assumed, and each default is the
+          // Seedance shape, so nothing about the original path moves.
+          // `audioOffParam` is the SAME object assertAudioOff validates, so a
+          // video model that reaches here has already been refused if it does
+          // not name the parameter that turns its audio off.
+          audioOffParam: videoEntry?.audioOffParam,
+          durationType: videoEntry?.videoParams?.durationType ?? 'string',
+          extraParams: videoEntry?.videoParams?.extra ?? null,
           dataUriImpl,
         })
         : falVideoBody({
