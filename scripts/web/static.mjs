@@ -1371,6 +1371,38 @@ body {
    is nearer, which is exactly what --lift means in this palette. Same depth
    idea, opposite sign, because the ground changed. */
 .drop:hover { background: rgba(168, 52, 42, 0.05); }
+
+/* THE CHOSEN PHOTO, SHOWN BACK. Step 1 named the file and showed nothing, so a
+   wrong photo was invisible until the finished tape came back -- on the step
+   that commits 21 credits.
+
+   The [hidden] rule IS DECLARED EXPLICITLY AND THAT IS NOT BELT-AND-BRACES:
+   the display:flex below beats a bare hidden attribute, and an empty box with
+   a broken-image icon is what ships if this rule is missing. There is a test
+   that reads this stylesheet for it. */
+.picked[hidden] { display: none; }
+.picked {
+  display: flex; align-items: center; gap: var(--s-2);
+  margin: var(--s-2) 0 0;
+}
+.picked .pickthumb {
+  width: 4.5rem; height: 4.5rem;
+  object-fit: cover; border-radius: var(--r-sm);
+  background: var(--lift);
+}
+.picked .pickname {
+  flex: 1 1 auto; min-width: 0;
+  color: var(--faint); font-size: var(--t-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* A real <button>, stripped rather than styled: it must be a button for the
+   keyboard and for a screen reader, and it must not draw a box, because
+   DESIGN.md permits exactly two borders and this is neither of them. */
+.picked #photo-clear {
+  flex: 0 0 auto;
+  background: none; border: 0; padding: 0.35rem 0;
+  font: inherit; font-size: var(--t-1); cursor: pointer;
+}
 .drop input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .drop .plus { font-size: var(--t-3); color: var(--ink); letter-spacing: 0.04em; }
 .drop .say { color: var(--faint); font-size: var(--t-1); max-width: 22rem; }

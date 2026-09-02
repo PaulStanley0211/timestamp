@@ -258,12 +258,46 @@ const HOME_SCRIPT = `
 
   if (!photo || !record) return;
   if (!record.disabled) { record.disabled = true; }
+
+  var picked = document.getElementById('picked');
+  var thumb = document.getElementById('photo-thumb');
+  var clear = document.getElementById('photo-clear');
+
+  // FileReader AND A DATA URL, NOT createObjectURL. The CSP is
+  // "img-src 'self' data:" -- a blob: URL is refused, silently, and the
+  // preview would be a broken image on the one step that has to inspire
+  // confidence. data: is already permitted, so the preview needs no CSP
+  // change and no fourth inline script.
+  function show(file) {
+    name.textContent = file.name;
+    if (picked) picked.hidden = false;
+    if (!thumb) return;
+    var reader = new FileReader();
+    reader.onload = function () { thumb.src = reader.result; };
+    // A preview that cannot be drawn must not block the order: the file is
+    // still valid and the server is the thing that judges it. Fall back to
+    // the filename alone rather than refusing.
+    reader.onerror = function () { if (picked) thumb.removeAttribute('src'); };
+    reader.readAsDataURL(file);
+  }
+
+  function forget() {
+    photo.value = '';
+    name.textContent = '';
+    if (thumb) thumb.removeAttribute('src');
+    if (picked) picked.hidden = true;
+    record.disabled = true;
+    reason.textContent = 'Upload a photo first';
+    photo.focus();
+  }
+
   photo.addEventListener('change', function () {
     var file = photo.files && photo.files[0];
-    name.textContent = file ? file.name : '';
-    if (file) { record.disabled = false; reason.textContent = ''; }
-    else { record.disabled = true; reason.textContent = 'Upload a photo first'; }
+    if (file) { show(file); record.disabled = false; reason.textContent = ''; }
+    else { forget(); }
   });
+
+  if (clear) clear.addEventListener('click', forget);
 }());
 `;
 
@@ -1306,10 +1340,24 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
     <label class="drop" for="photo">
       <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp" required>
       <span class="plus">+ Add photo</span>
-      <span class="chosen-name" id="photo-name"></span>
       <span class="say">A clear photo of your face. JPEG, PNG or WebP, up to 12&nbsp;MB.
       The location and camera data are stripped before anything else happens.</span>
     </label>
+    ${/* THE PREVIEW AND THE REMOVE BUTTON LIVE OUTSIDE THE LABEL, and that is
+         the whole reason this is a sibling rather than a tidier nested block.
+         The dropzone is a <label for="photo">, and a click ANYWHERE inside a
+         label activates its control -- so a Remove button in there opens the
+         file dialog instead of clearing the file, which is the exact opposite
+         of what it says and reads as a broken control. There is a test.
+
+         `hidden` is the initial state and the stylesheet honours it explicitly:
+         a container given `display: flex` beats a bare `hidden` attribute, and
+         that is how an empty box with a broken-image icon ships. */''}
+    <div class="picked" id="picked" hidden>
+      <img class="pickthumb" id="photo-thumb" alt="The photo you chose">
+      <span class="pickname" id="photo-name"></span>
+      <button type="button" class="quiet" id="photo-clear">Remove</button>
+    </div>
   </section>
 
   <section class="panel panel--choice">

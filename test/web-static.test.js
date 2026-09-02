@@ -1278,3 +1278,87 @@ test('the page says the tape survives a closed tab', () => {
   assert.match(html, /close this page|leave this page|come back/i,
     'the page never tells anybody they are allowed to leave');
 });
+
+test('the photo you chose is shown back to you, and can be taken away again', () => {
+  // YOU CANNOT SEE WHAT YOU ARE ABOUT TO SPEND 21 CREDITS ON. Step 1 named the
+  // file and showed nothing, so a wrong photo -- the one before the one you
+  // meant, a screenshot, somebody else -- was invisible until the tape came
+  // back. And there was no way to change it: a file input keeps its selection,
+  // so the only escape was reloading the page.
+  const html = homePage({ ...FOCUS_MENU, consentText: 'I agree' });
+
+  assert.match(html, /id="photo-thumb"/, 'no preview element for the chosen photo');
+  assert.match(html, /id="photo-clear"/, 'no way to remove a photo once chosen');
+});
+
+test('the remove control is not inside the label, or it would reopen the picker', () => {
+  // THE TRAP THIS EXISTS TO PIN. The dropzone is a <label for="photo">, and a
+  // click anywhere inside a label activates its control -- so a Remove button
+  // placed in there opens the file dialog instead of clearing the file, which
+  // is the exact opposite of what it says. It reads as broken and it cannot be
+  // seen in any markup assertion that only checks the button exists.
+  const html = homePage({ ...FOCUS_MENU, consentText: 'I agree' });
+
+  const label = html.match(/<label class="drop"[\s\S]*?<\/label>/);
+  assert.ok(label, 'the dropzone label has gone');
+  assert.ok(!/id="photo-clear"/.test(label[0]),
+    'the remove button sits inside the dropzone label, so clicking it opens the file picker');
+  assert.ok(!/id="photo-thumb"/.test(label[0]),
+    'the preview sits inside the label, so clicking the photo reopens the picker');
+});
+
+test('the preview is hidden until there is something to preview', () => {
+  // AND IT MUST BE HIDDEN BY AN ATTRIBUTE THE STYLESHEET RESPECTS. A container
+  // given `display: flex` beats a bare `hidden` attribute, which is how an
+  // empty box with a broken-image icon ships.
+  const html = homePage({ ...FOCUS_MENU, consentText: 'I agree' });
+  const picked = html.match(/<[^>]*id="picked"[^>]*>/);
+  assert.ok(picked, 'no container for the chosen photo');
+  assert.match(picked[0], /\shidden(\s|>)/, 'the preview container is not hidden on first render');
+
+  const css = createStylesheet({});
+  const sheet = typeof css === 'string' ? css : css.css;
+  assert.match(sheet, /\.picked\[hidden\]\s*\{[^}]*display:\s*none/,
+    'the stylesheet does not honour [hidden] on the preview, so display:flex will beat it');
+});
+
+test('the photo preview does not borrow a class that positions itself elsewhere', () => {
+  // THIS EXACT BUG SHIPPED TWICE IN ONE DAY, both times invisible to every
+  // markup assertion in this file.
+  //
+  //   .rec       was already the blinking dot inside the wordmark SVG, so the
+  //              status page's record light and the brand mark styled each other.
+  //   .thumb     is the place card's photograph layer -- `position: absolute;
+  //              inset: 0` at ghost opacity -- so the upload preview escaped its
+  //              row and painted over the STEP 01 heading, at half strength,
+  //              while every test here passed.
+  //
+  // A class name is a global. Reusing one is not a naming preference, it is
+  // inheriting somebody else's geometry. This pins the preview's own classes to
+  // the preview: each must appear in the stylesheet ONLY inside a .picked-scoped
+  // selector, so a later author cannot quietly rename it onto a shared one.
+  const sheet = createStylesheet({});
+  const css = typeof sheet === 'string' ? sheet : sheet.css;
+  const html = homePage({ ...FOCUS_MENU, consentText: 'I agree' });
+
+  const container = html.match(/<div class="picked"[\s\S]*?<\/div>/);
+  assert.ok(container, 'the preview container has gone');
+
+  const classes = [...container[0].matchAll(/class="([^"]+)"/g)]
+    .flatMap((m) => m[1].split(/\s+/))
+    .filter((c) => c && c !== 'picked' && c !== 'quiet');
+  assert.ok(classes.length, 'the preview declares no classes of its own to check');
+
+  const offenders = [];
+  for (const c of classes) {
+    // Every rule whose selector mentions this class.
+    const rules = (css.match(new RegExp(`(^|\\})([^{}]*\\.${c}\\b[^{}]*)\\{`, 'gm')) || [])
+      .map((r) => r.replace(/^\}/, '').replace(/\{$/, '').trim());
+    const unscoped = rules.filter((sel) => !sel.includes('.picked'));
+    if (unscoped.length) offenders.push(`.${c} is also styled by: ${unscoped.join(' | ')}`);
+  }
+
+  assert.deepEqual(offenders, [],
+    'the upload preview reuses a class that other components style -- it will '
+    + `inherit their geometry, which is how .thumb put the preview over STEP 01:\n${offenders.join('\n')}`);
+});
