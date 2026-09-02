@@ -649,6 +649,15 @@ export function providerWasCalled(job) {
  * absence of any recorded error. Every one of those is a case where the
  * request may have been served and billed while the answer was lost, which is
  * exactly the ambiguity §37E refused to guess at.
+ *
+ * AND NOT `generation_failed`, which is the code fal's adapter gives any
+ * terminal failure that arrives AFTER the queue accepted the request -- a
+ * status that comes back FAILED, or a result URL that answers 4xx. Those are
+ * 4xx by shape and not by meaning: the work was queued and ran, and fal's own
+ * documentation says a failed generation is billable on some plans. The
+ * provider's underlying classification is kept in `error.detail.refused` for
+ * the status page; it is not consulted here, on purpose. A refusal of the
+ * OUTPUT is a generation that happened.
  */
 const UNBILLED_REFUSALS = Object.freeze(['moderation_refused', 'bad_request', 'credential']);
 

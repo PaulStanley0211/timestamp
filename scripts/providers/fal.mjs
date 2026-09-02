@@ -118,6 +118,7 @@ import path from 'node:path';
 import { REPO_ROOT } from '../ffmpeg/run.mjs';
 import { SEED_MAX } from '../compose/seed.mjs';
 import {
+  ProviderError,
   CredentialError,
   TerminalError,
   TimeoutError,
@@ -272,6 +273,50 @@ const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArr
 const isNonEmptyString = (v) => typeof v === 'string' && v.length > 0;
 
 const fail = (code, message, detail = null) => new TerminalError(message, { provider: FAL_ID, code, detail });
+
+/**
+ * A terminal failure that arrived AFTER the queue accepted the request.
+ *
+ * WHY THE CODE CHANGES AND THE MESSAGE DOES NOT. `classifyHttp` gives a 4xx
+ * one of three codes -- `moderation_refused`, `bad_request`, `credential` --
+ * and every one of them means "the provider read the request and declined to
+ * run it". The refund rule in `scripts/auth/credits.mjs` gives the customer's
+ * credits back on exactly those codes, on the strength of that meaning: no
+ * generation happened, so there is nothing to bill.
+ *
+ * That meaning is only true of the SUBMIT. Once a `request_id` exists the
+ * work has been queued, and a status that comes back FAILED -- or a result
+ * URL that answers 4xx -- describes a generation that ran and did not
+ * survive, which fal's own documentation says is billable on some plans. A
+ * refusal of the OUTPUT is the clearest case: the model produced frames and a
+ * filter rejected them, and the frames cost what frames cost. Handing those
+ * the submit-time code would refund a render the provider may have charged
+ * for, automatically, with no record for anyone to reconcile.
+ *
+ * So the code becomes `generation_failed`, which the refund rule does not
+ * know and therefore treats as the ambiguous case it is: the credits are
+ * held and the job lands in `out/refunds/` for a person with the usage page
+ * open. The provider's own classification stays underneath as
+ * `detail.refused`, because the status page still wants to say "content"
+ * rather than "malformed", and the accepted request's id rides along so the
+ * usage page can be searched for it.
+ *
+ * Retriable errors pass through untouched -- they are not a verdict on the
+ * generation -- and so does a cancellation, which is our decision and not
+ * the provider's. A credential rejection is wrapped too: a key that stops
+ * working between the submit and the result fetch says nothing about
+ * whether the frames were made.
+ */
+function failedAfterAcceptance(err, requestId) {
+  if (!(err instanceof ProviderError) || err.retriable === true) return err;
+  if (err.code === 'aborted' || err.code === 'generation_failed') return err;
+  return new TerminalError(err.message, {
+    provider: FAL_ID,
+    code: 'generation_failed',
+    detail: { ...(err.detail ?? {}), requestId, refused: err.code },
+    cause: err,
+  });
+}
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -945,9 +990,11 @@ export function createFalProvider(opts = {}) {
 
       // `error`/`error_type` are documented as present only on failure, and a
       // failed generation is terminal: the same request will fail the same way
-      // and each attempt is billable on some plans.
+      // and each attempt is billable on some plans. Classified through the
+      // shared table so a refusal in the body still reads as one, then given
+      // the code that says WHEN it happened -- see `failedAfterAcceptance`.
       if (status.error || state === 'FAILED' || state === 'ERROR') {
-        throw classifyHttp(422, status, { provider: FAL_ID });
+        throw failedAfterAcceptance(classifyHttp(422, status, { provider: FAL_ID }), requestId);
       }
 
       const elapsed = nowImpl() - startedAt;
@@ -975,7 +1022,12 @@ export function createFalProvider(opts = {}) {
       await (ctx?.sleepImpl ?? defaultSleep)(poll.intervalMs);
     }
 
-    const result = await call(resultUrl);
+    let result;
+    try {
+      result = await call(resultUrl);
+    } catch (err) {
+      throw failedAfterAcceptance(err, requestId);
+    }
     return { requestId, result };
   }
 

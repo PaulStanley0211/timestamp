@@ -1369,6 +1369,14 @@ test('an ambiguous failure still keeps the conservative answer', async (t) => {
     { code: 'upstream', message: 'fal: HTTP 503 -- the provider failed' },
     { code: 'rate_limited', message: 'fal: HTTP 429' },
     { code: 'timeout', message: 'no answer' },
+    // ACCEPTED, THEN FAILED. The queue handed back a request_id and the work
+    // ran before it failed -- fal's own status shape says so, and its
+    // documentation says each such attempt is billable on some plans. That
+    // the failure reads as a content refusal underneath changes nothing: a
+    // refusal of the OUTPUT is a generation that happened. This is the
+    // ambiguous case again, wearing a 4xx, and it goes to out/refunds/ for a
+    // person with the usage page open.
+    { code: 'generation_failed', message: 'fal: the generation failed after acceptance', detail: { refused: 'moderation_refused' } },
     null,
   ]) {
     const root = makeRoot(t);

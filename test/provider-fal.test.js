@@ -1040,12 +1040,50 @@ test('[fal] a failed generation is terminal, not retried', async () => {
     (err) => {
       assert.ok(err instanceof TerminalError, `expected TerminalError, got ${err?.name}`);
       assert.equal(err.retriable, false);
+      // ITS OWN CODE, AND NOT A REFUSAL'S. The queue ACCEPTED this request and
+      // handed back a request_id before it failed, so work may have run and
+      // been billed. The refund rule in credits.mjs gives money back on the
+      // codes that mean "the provider read the request and declined to run
+      // it" -- a failure after acceptance must never wear one of those.
+      assert.equal(err.code, 'generation_failed');
+      assert.equal(err.detail?.requestId, 'fixture-req-0000000000000001', 'the receipt names the accepted request');
       return true;
     },
   );
   // The submit, then one status. Not four -- the same request fails the same
   // way and on some plans every attempt is billable.
   assert.equal(transport.requests.filter((r) => r.url.endsWith('/status')).length, 1);
+});
+
+test('[fal] a result fetch the provider refuses after acceptance is a failed generation, not a refusal', async () => {
+  // Same reasoning one step later: the request was accepted, polled to
+  // COMPLETED, and then the result URL answered 4xx. Whatever the body says,
+  // this is not "the provider declined to run it" -- it ran.
+  const inner = makeFalTransport();
+  const refusing = {
+    requests: inner.requests,
+    async fetchImpl(url, init) {
+      if (/\/requests\/[^/]+$/.test(url)) {
+        const body = { detail: 'Request blocked by the content policy: the output was flagged by the safety filter.' };
+        return { ok: false, status: 422, async text() { return JSON.stringify(body); } };
+      }
+      return inner.fetchImpl(url, init);
+    },
+  };
+  const { provider, ctx } = falUnderTest({ transport: refusing });
+  await assert.rejects(
+    provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('result-refused') })),
+    (err) => {
+      assert.ok(err instanceof TerminalError, `expected TerminalError, got ${err?.name}`);
+      assert.equal(err.code, 'generation_failed');
+      assert.equal(err.retriable, false);
+      // The provider's own classification is kept underneath, because the
+      // status page still wants to say "content" rather than "malformed".
+      assert.equal(err.detail?.refused, 'moderation_refused');
+      assert.match(String(err.detail?.body ?? ''), /content policy/);
+      return true;
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
