@@ -11,7 +11,18 @@ Warm, grainy, quiet.
 
 # THE PRODUCT IS LIVE AT https://timestamptapes.com AND IT CAN TAKE MONEY.
 
-## READ §55 FIRST, THEN §54. THE VIDEO SUPPLIER CHANGED ON 2026-09-02.
+## READ §56 FIRST, THEN §55, THEN §54. TWO THINGS BROKE ON 2026-09-02.
+
+**THE FIRST TAPE THE SERVER EVER MADE CAME OUT ENTIRELY GREEN**, and every
+assertion passed -- 375 frames, 15.000s, -26.5 LUFS, black floor, highlights,
+composite, date stamp. The cause was **ffmpeg 5.1 in the container against 8.1
+on this machine**; the Dockerfile pinned major 5 with a comment claiming that
+was what the look was calibrated against, and it never was. Now trixie and
+**7.1.5**. `verify` reads chroma now, so a colour cast fails the job. **AND
+THE MEASUREMENT HAD BEEN LYING SINCE IT WAS WRITTEN**: ffprobe returns
+frame_tags in signalstats' order, not the requested one, so `regionStats` had
+**YAVG and YMIN swapped** and two live assertions were passing on the wrong
+statistic. §56.
 
 **`bytedance/seedance-2.0/reference-to-video` STOPPED ACCEPTING REFERENCE
 IMAGES CONTAINING A REAL PERSON** -- six refusals in one afternoon, including
@@ -182,7 +193,7 @@ CX line it quotes is "temporarily not available" everywhere, so the box is a
 **THE SITE IS `noindex` ON PURPOSE** and lifting it is a deliberate step, not a
 tidy-up — the Impressum publishes a home address. §46F, §42E.
 
-**2054 tests / 2052 pass / 0 fail / 2 skipped.** The two standing skips are the
+**2055 tests / 2053 pass / 0 fail / 2 skipped.** The two standing skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`; on a
 machine with no Chromium-family browser the browser tests self-skip too, and
 §47G's session-secret race test stands itself down when the scheduler will not
@@ -7012,6 +7023,127 @@ a finding.
 **AGENT-BUILDABLE:** removing §44's now-redundant judder scatter, and giving
 `falVideoBody` the same per-model treatment as the reference path if the still
 route is ever revived. Neither is urgent and neither is gated.
+
+---
+
+### 56. THE FIRST TAPE THE SERVER EVER MADE WAS GREEN, AND FINDING OUT WHY FOUND SOMETHING WORSE (2026-09-02, evening)
+
+**2054 / 2052 -> 2055 / 2053 pass / 0 fail / 2 skipped.** Two commits,
+`8581916` (the image) and `0de8b81` (the assertion), both deployed. **The owner
+found this the way he has found every picture defect in this project: by
+looking at the screen.**
+
+#### A -- The defect
+
+The first web order after the supplier change came back **entirely green**.
+Every assertion passed: 375 frames, 15.000 seconds, -26.5 LUFS, black floor
+lifted, highlights rolled off, composite centred, date stamp present.
+
+**`ffmpeg 5.1.9` IN THE CONTAINER AGAINST `8.1.1` ON THE DEVELOPMENT MACHINE.**
+The look is a filtergraph and the grade/tape boundary is negotiated rather than
+pinned -- this file has warned since M1 that everything downstream of the grade
+inherits a format unless it is stated, and that the failure is silent. Three
+majors apart is not a detail.
+
+**THE DOCKERFILE PINNED `FFMPEG_MAJOR=5` WITH A COMMENT SAYING 5 WAS "THE MAJOR
+VERSION THE LOOK WAS CALIBRATED AGAINST". IT NEVER WAS.** 5 is what Debian 12
+ships. The comment recorded a hope. Now on `node:22-trixie-slim` and ffmpeg
+**7.1.5** -- one major from the development machine instead of three, and still
+apt-maintained, so the thing that parses strangers' uploads keeps getting
+security patches.
+
+**WHY NOTHING CAUGHT IT, WHICH IS WORTH MORE THAN THE FIX.** The build-time
+preflight checks that all 36 filters EXIST. They exist in 5.1. **Presence is
+not behaviour.** And the box had never rendered a tape -- the queue read
+`done 0` for four days -- so the first render was also the first test.
+
+**Proved rather than reasoned:** the same segment through the same code came
+out correct under 7.1.5 and green under 5.1.9.
+
+#### B -- THE MEASUREMENT ITSELF HAD BEEN LYING SINCE IT WAS WRITTEN
+
+Found while building the check for A, and it is the larger finding.
+
+**`ffprobe` EMITS `frame_tags` IN SIGNALSTATS' OWN ORDER, NOT THE ORDER THEY
+ARE REQUESTED IN.** Measured: asking for `YAVG,YMIN,YMAX,SATAVG` returns
+`YMIN,YAVG,YMAX,SATAVG`. `regionStats` split that row positionally, so **YAVG
+and YMIN have been swapped for the life of the project.**
+
+Two live assertions were reading the wrong statistic and passing on it:
+
+| Assertion | Believed it checked | Actually checked |
+|---|---|---|
+| `assertTapeGrade` black floor | the MINIMUM luma >= 10 | the AVERAGE luma |
+| `assertComposite` surround | the AVERAGE luma <= 24 | the MINIMUM luma |
+
+Parsed **by name** now, via `-of json`. A named lookup cannot drift when a key
+is added, which is exactly what adding `UAVG`/`VAVG` would have done to the
+positional read.
+
+**ONE THRESHOLD MOVED AS A CONSEQUENCE, AND IT IS A CORRECTION RATHER THAN A
+RELAXATION.** Reading the surround's real average, four finished tapes measure
+**24.38, 24.39, 24.41, 24.43** -- a variance of 0.05, because it is a flat
+`#0B0A09` with grain on it -- and the old limit of 24 sat just underneath.
+**32** is 30% above the measured constant and far below any picture content,
+which is what the check is actually for.
+
+#### C -- `assertTapeColour`, and the version of it that was wrong
+
+`verify` reads chroma now: `delivery, composite, grade, colour, burn-in`.
+
+**THE FIRST VERSION USED A SATURATION CEILING AND THE TEST KILLED IT.** The
+numbers looked decisive -- 9 finished tapes measure `SATAVG` **4.7..10.4**
+against the fault's **72.9** -- until this file's own contract render measured
+**62.2**. **Saturation is a property of the CONTENT**, and a colourful scene is
+not a defect; that ceiling would have refused real tapes on the paid path.
+Deleted rather than widened.
+
+**WHAT DISCRIMINATES IS THE CHROMA MEANS, AND THEY ARE CONTENT-INDEPENDENT.**
+Averaged over the tape region, real footage sits near neutral whatever is in
+it: **124.1/130.9** on a finished tape, **129.3/125.3** on the saturated
+synthetic. Even a frame filled with one colour pulls the planes in **opposite**
+directions -- blue is U up and V down, orange the reverse. The fault pulled
+**both ~52 the same way** (76.1 and 77.3), which is what luma rendered as green
+looks like, and nothing photographic does that. Tolerance ±25: ~3x headroom
+over the widest legitimate reading, and it catches the fault by 2x.
+
+The test reproduces the fault rather than imagining it -- the real render
+re-encoded with both chroma planes pinned to the values the broken tape
+actually measured -- and asserts the luma checks still pass on it first, which
+is the whole finding.
+
+#### D -- Things that will bite
+
+- **A CI-STYLE THRESHOLD SET AGAINST THE WRONG STATISTIC STILL PASSES.** Both
+  §56B assertions were green for months. When a check's message and its
+  variable disagree, believe neither until you have printed the raw row.
+- **`node -e` WITH `require` PLUS TOP-LEVEL AWAIT IS AMBIGUOUS-MODULE**, and a
+  `.mjs` written outside the repo cannot import `./scripts/...` -- the Windows
+  path is mangled two different ways. Use `--input-type=module` from the repo
+  root.
+- **PYTHON `str.replace` WITH `\n` SILENTLY MATCHES NOTHING ON A TRACKED FILE.**
+  `core.autocrlf` is true, so read with `newline=''` and match `\r\n`, or use a
+  regex with `\r?\n`. It failed twice in one session and the second time the
+  assertion caught it before the write.
+- **`-v error` SUPPRESSES `metadata=print`.** A signalstats probe that returns
+  nothing is usually this and not a broken filtergraph. Use `-v info`.
+- **`npm run look` CANNOT WRITE INSIDE THE CONTAINER as the app user** -- it
+  writes to `/app/review`, which is root-owned. `--user root` for a diagnostic.
+
+#### E -- What is left of this
+
+**NOT DONE, DELIBERATELY: a build-time tape render.** It was proposed and is
+the belt-and-braces version of §56A -- an image that produces a green tape
+would then never exist. The runtime assertion in §56C is the more valuable
+placement, because it checks EVERY tape rather than one at build, and it is
+done. The build-time render would add minutes to every image build for a second
+line of defence against the same fault. **Worth doing if a third colour
+surprise appears; not before.**
+
+**AND THE GREEN TAPE ITSELF IS STILL ON THE BOX.** Job
+`20260902-164149-d3ca07`, `done`, with a green file. Nothing rewrites a
+finished tape and it is not worth a special path; the credits for it are the
+owner's to reclaim.
 
 ---
 
