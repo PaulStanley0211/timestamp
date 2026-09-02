@@ -213,6 +213,7 @@ export function makeDeps({ ffmpeg = makeFfmpeg(), overrides = {} } = {}) {
     assertDeliveryContract: async (file) => ffmpeg.probe(file),
     assertComposite: async () => true,
     assertTapeGrade: async () => ({ YMIN: 12, YMAX: 240 }),
+    assertTapeColour: async () => ({ SATAVG: 8, UAVG: 127, VAVG: 130 }),
     assertBurnIn: async () => ({ YMAX: 200 }),
     ingestPhoto: async (src, dest) => {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -545,10 +546,14 @@ test('verify runs the real assertion set, and a failed one fails the job', async
       assertDeliveryContract: async (file, cfg) => { seen.push('delivery'); return { streams: [{ codec_type: 'video', nb_read_frames: cfg.totalFrames }] }; },
       assertComposite: spy('composite'),
       assertTapeGrade: spy('grade'),
+      assertTapeColour: spy('colour'),
       assertBurnIn: spy('burn-in'),
     },
   });
-  assert.deepEqual(seen, ['delivery', 'composite', 'grade', 'burn-in']);
+  // `colour` joined the set on 2026-09-02, after a tape shipped entirely green
+  // with every luma-plane assertion passing. The order is asserted rather than
+  // the membership, so an assertion silently dropped from stepVerify fails here.
+  assert.deepEqual(seen, ['delivery', 'composite', 'grade', 'colour', 'burn-in']);
 });
 
 test('a date stamp that silently failed to render fails the job rather than shipping', async () => {

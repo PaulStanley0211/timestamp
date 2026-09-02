@@ -139,9 +139,17 @@ export function regionStatsArgs({ input, region, frame = 12 }) {
     '-v', 'error',
     '-f', 'lavfi',
     '-i', `movie=${file}${crop},signalstats`,
-    '-show_entries', 'frame_tags=lavfi.signalstats.YAVG,lavfi.signalstats.YMIN,lavfi.signalstats.YMAX,lavfi.signalstats.SATAVG',
+    // NAMED OUTPUT, NOT POSITIONAL, AND THIS WAS A REAL BUG UNTIL 2026-09-02.
+    // ffprobe emits frame_tags in SIGNALSTATS' OWN ORDER, not the order they
+    // are requested in -- measured: asking for YAVG,YMIN,YMAX,SATAVG returns
+    // YMIN,YAVG,YMAX,SATAVG. So the positional read here had YAVG and YMIN
+    // SWAPPED from the day it was written, which meant assertTapeGrade's black
+    // floor was checking the AVERAGE luma and assertComposite's surround was
+    // checking the MINIMUM. Both still passed, on the wrong statistic.
+    // A csv row cannot say which number is which; json can.
+    '-show_entries', 'frame_tags=lavfi.signalstats.YAVG,lavfi.signalstats.YMIN,lavfi.signalstats.YMAX,lavfi.signalstats.SATAVG,lavfi.signalstats.UAVG,lavfi.signalstats.VAVG',
     '-read_intervals', `%+#${frame}`,
-    '-of', 'csv=p=0',
+    '-of', 'json',
   ];
 }
 

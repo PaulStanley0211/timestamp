@@ -73,7 +73,7 @@ import { purgeJobMedia } from './purge.mjs';
 
 import { runFfmpeg, probe, REPO_ROOT } from '../ffmpeg/run.mjs';
 import {
-  assertDeliveryContract, assertComposite, assertTapeGrade, assertBurnIn,
+  assertDeliveryContract, assertComposite, assertTapeGrade, assertTapeColour, assertBurnIn,
 } from '../ffmpeg/assert.mjs';
 import { tapeGeometry, deliveryGeometry, frameCount, resolveAspect } from '../tapedeck/frame.mjs';
 import { loadLookProfile, buildVideoFilter } from '../tapedeck/look.mjs';
@@ -261,7 +261,7 @@ const LAZY = Object.freeze({
  *  test can replace any single one of them without a module mock. */
 const STATIC = Object.freeze({
   runFfmpeg, probe,
-  assertDeliveryContract, assertComposite, assertTapeGrade, assertBurnIn,
+  assertDeliveryContract, assertComposite, assertTapeGrade, assertTapeColour, assertBurnIn,
   loadCatalog, resolveFont, loadPricing, loadModels,
   writeContactSheet,
   scorer: firstScorer,
@@ -1420,6 +1420,7 @@ async function stepVerify(ctx) {
   const deliveryContract = await dep('assertDeliveryContract');
   const composite = await dep('assertComposite');
   const grade = await dep('assertTapeGrade');
+  const colour = await dep('assertTapeColour');
   const burnIn = await dep('assertBurnIn');
   const runFfmpegImpl = await dep('runFfmpeg');
 
@@ -1432,6 +1433,12 @@ async function stepVerify(ctx) {
 
   await grade(paths.video, delivery);
   checks.push('grade');
+
+  // THE CHECK THAT WOULD HAVE CAUGHT THE GREEN TAPE. Every assertion above
+  // reads the luma plane, and a picture whose chroma is wrong has a perfect
+  // one -- see assertTapeColour for the measurements behind the thresholds.
+  await colour(paths.video, delivery);
+  checks.push('colour');
 
   if (r.look.osd?.enabled) {
     await burnIn(paths.video, burnInProbeRegion(r.look.osd, delivery, tape));

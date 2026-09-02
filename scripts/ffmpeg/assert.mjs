@@ -35,10 +35,88 @@ export class ContractError extends Error {
 /** Parse one signalstats CSV row into numbers. */
 export async function regionStats(input, region, { frame = 12, ...opts } = {}) {
   const { stdout } = await runFfprobe(regionStatsArgs({ input: repoRelative(input), region, frame }), opts);
-  const row = stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop();
-  if (!row) throw new ContractError(`no signalstats returned for ${input}`, { region });
-  const [YAVG, YMIN, YMAX, SATAVG] = row.split(',').map(Number);
-  return { YAVG, YMIN, YMAX, SATAVG };
+  // BY NAME, NEVER BY POSITION. ffprobe returns frame_tags in signalstats' own
+  // order rather than the requested one, so the csv row this used to split had
+  // YAVG and YMIN the wrong way round -- silently, on two live assertions,
+  // from the day it was written. Named lookup cannot drift when a key is added.
+  let frames;
+  try {
+    ({ frames } = JSON.parse(stdout));
+  } catch {
+    throw new ContractError(`signalstats for ${input} was not readable json`, { region });
+  }
+  const tags = Array.isArray(frames) ? frames.filter((f) => f?.tags).pop()?.tags : null;
+  if (!tags) throw new ContractError(`no signalstats returned for ${input}`, { region });
+
+  const num = (key) => {
+    const raw = tags[`lavfi.signalstats.${key}`];
+    return raw === undefined ? undefined : Number(raw);
+  };
+  return {
+    YAVG: num('YAVG'), YMIN: num('YMIN'), YMAX: num('YMAX'),
+    SATAVG: num('SATAVG'), UAVG: num('UAVG'), VAVG: num('VAVG'),
+  };
+}
+
+/**
+ * THE PICTURE HAS COLOUR IN IT, AND THE COLOUR IS NOT ONE FLAT CAST.
+ *
+ * On 2026-09-02 the first tape ever rendered inside the deployed image came
+ * out ENTIRELY GREEN, and every assertion in this file passed: the luma plane
+ * was correct, so the black floor, the highlight roll-off, the composite and
+ * the date stamp were all exactly right. 375 frames, 15.000 seconds, -26.5
+ * LUFS. Nothing here had ever read a chroma plane.
+ *
+ * IT MEASURES THE CHROMA MEANS AND NOT SATURATION, and that was decided by
+ * measurement rather than taste. A saturation ceiling was written first and
+ * removed: the graded picture measures SATAVG 4.7..10.4 across 9 finished
+ * tapes, which looks like a wide margin against the fault's 72.9 -- but the
+ * synthetic source this file's own contract render uses measures 62.2, because
+ * saturation is a property of the CONTENT and a colourful scene is not a
+ * defect. A ceiling that cannot tell a bright picture from a broken one would
+ * reject real tapes on the paid path, so it is not a check.
+ *
+ * THE MEANS DISCRIMINATE CLEANLY AND ARE CONTENT-INDEPENDENT. Averaged over
+ * the whole tape region, real footage sits near neutral whatever is in it:
+ * 124.1/130.9 on a finished tape, 129.3/125.3 on the saturated synthetic. Even
+ * a frame filled with one colour pulls the planes in OPPOSITE directions --
+ * blue is U up and V down, orange the reverse. The fault pulled BOTH planes
+ * ~52 the same way (76.1 and 77.3), which is what luma rendered as green
+ * looks like, and nothing photographic does that.
+ *
+ * +/-25 leaves roughly 3x headroom over the widest legitimate reading measured
+ * and still catches the fault by 2x.
+ */
+export async function assertTapeColour(file, geometry, {
+  maxChromaOffset = 25,
+  neutral = 128,
+  ...opts
+} = {}) {
+  const s = await regionStats(file, geometry.tapeCentre, opts);
+  const failures = [];
+
+  for (const [plane, value] of [['U', s.UAVG], ['V', s.VAVG]]) {
+    if (!Number.isFinite(value)) {
+      failures.push(`${plane}AVG is missing from signalstats -- regionStatsArgs no longer requests it`);
+      continue;
+    }
+    const off = Math.abs(value - neutral);
+    if (!(off <= maxChromaOffset)) {
+      failures.push(
+        `${plane}AVG=${value} is ${off.toFixed(1)} from neutral ${neutral}, over ${maxChromaOffset} -- ` +
+        'both planes pulled the same way is the signature of a format negotiated wrongly at the grade/tape boundary',
+      );
+    }
+  }
+
+  if (failures.length) {
+    throw new ContractError(
+      `${file} has a colour fault the luma checks cannot see:\n  - ${failures.join('\n  - ')}\n` +
+      '  Check the ffmpeg major version -- 5.1 renders this graph green where 7.x and 8.x do not.',
+      { stats: s },
+    );
+  }
+  return s;
 }
 
 /**
@@ -116,7 +194,22 @@ export async function assertTapeGrade(file, geometry, { minBlackFloor = 10, maxH
 
 /** The 4:3 image really is floating on a dark surround, and there really is
  *  something inside it. Proves the composite geometry without a pixel compare. */
-export async function assertComposite(file, geometry, { maxSurroundLuma = 24, ...opts } = {}) {
+/**
+ * THE THRESHOLD MOVED ON 2026-09-02 AND IT WAS A CORRECTION, NOT A RELAXATION.
+ *
+ * `regionStats` returned YAVG and YMIN the wrong way round until that date --
+ * ffprobe emits frame_tags in signalstats' order, not the requested one -- so
+ * this check has always compared the surround's MINIMUM against 24 while its
+ * message said average. Reading the real average, four finished tapes measure
+ * 24.38, 24.39, 24.41 and 24.43: a variance of 0.05, because the surround is a
+ * flat #0B0A09 with grain on it. The old 24 sat just underneath that.
+ *
+ * 32 is 30% above the measured constant and still far below any picture
+ * content, which is what this check is actually for: if the geometry were
+ * wrong the surround region would contain the tape image, and even a night
+ * scene averages well clear of this.
+ */
+export async function assertComposite(file, geometry, { maxSurroundLuma = 32, ...opts } = {}) {
   const failures = [];
 
   for (const [label, region] of [['top', geometry.surroundTop], ['bottom', geometry.surroundBottom]]) {

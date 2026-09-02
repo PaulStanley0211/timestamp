@@ -18,7 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runFfmpeg, findFfmpeg, REPO_ROOT } from '../scripts/ffmpeg/run.mjs';
-import { assertDeliveryContract, assertComposite, assertTapeGrade, assertBurnIn, regionStats } from '../scripts/ffmpeg/assert.mjs';
+import { assertDeliveryContract, assertComposite, assertTapeGrade, assertTapeColour, assertBurnIn, regionStats } from '../scripts/ffmpeg/assert.mjs';
 import { deliveryGeometry, tapeGeometry } from '../scripts/tapedeck/frame.mjs';
 import { loadLookProfile, buildVideoFilter } from '../scripts/tapedeck/look.mjs';
 import { burnInFilters, burnInProbeRegion } from '../scripts/tapedeck/burn-in.mjs';
@@ -190,5 +190,47 @@ test('a broken filtergraph fails loudly with the ffmpeg error attached', { skip 
       assert.ok(err.stderr.length > 0, 'the full stderr is attached for diagnosis');
       return true;
     },
+  );
+});
+
+/**
+ * THE GREEN TAPE, 2026-09-02, and the reason this file needed a new test at all.
+ *
+ * The first tape ever rendered inside the deployed image came out entirely
+ * green -- and every assertion above it passed, because they all read the luma
+ * plane and the luma plane was perfect. 375 frames, 15.000 seconds, -26.5
+ * LUFS, black floor lifted, highlights rolled off, date stamp present. The
+ * cause was ffmpeg 5.1 in the container against 8.1 here, negotiating the
+ * grade/tape boundary differently.
+ *
+ * The fault is reproduced rather than imagined: the real render is re-encoded
+ * with both chroma planes pinned to the values the broken tape actually
+ * measured (UAVG 76.1, VAVG 77.3), which is green in YUV.
+ */
+test('a tape with a colour cast is caught, though its luma plane is perfect', { skip }, async () => {
+  const good = await fullRender();
+
+  // The luma-plane assertions cannot tell these two apart -- that is the point.
+  await assertTapeColour(good, delivery);
+
+  const green = path.join(outDir, 'green.mp4');
+  await runFfmpeg([
+    '-y', '-hide_banner', '-loglevel', 'error',
+    '-i', good,
+    '-vf', "geq=lum='p(X,Y)':cb=76:cr=77",
+    '-frames:v', '30', '-c:v', 'libx264', '-pix_fmt', cfg.encode.pixFmt, '-crf', '14', green,
+  ]);
+
+  // The luma checks still pass on the broken file, which is the whole finding.
+  await assertTapeGrade(green, delivery);
+
+  await assert.rejects(
+    () => assertTapeColour(green, delivery),
+    (err) => {
+      assert.match(err.message, /colour fault the luma checks cannot see/);
+      assert.match(err.message, /[UV]AVG=/);
+      return true;
+    },
+    'a green tape must not pass verify',
   );
 });
