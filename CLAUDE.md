@@ -11,6 +11,18 @@ Warm, grainy, quiet.
 
 # THE PRODUCT IS LIVE AT https://timestamptapes.com AND IT CAN TAKE MONEY.
 
+**PR #1 IS MERGED. `origin/main` IS `251acab` AND CARRIES THE WHOLE
+APPLICATION** (2026-09-02, 252 commits, all five checks green on the exact
+head, merged as a MERGE COMMIT rather than a squash so the reasoning in the
+individual messages survives). **Every line below saying `origin/main` is
+`b6f64a3`, that nothing is merged, or that no PR is open, is history** -- it is
+kept because the sections it lives in are records.
+
+**THE BRANCH IS KEPT AND THE BOX STILL TRACKS IT.** `/opt/timestamp` pulls
+`supabase-identity-slice`, so deleting that branch would break the deploy.
+**Whether the box and future work should move to `main` now that it is the
+trunk is an open decision and the owner's** -- it changes the deploy runbook.
+
 ## READ §56 FIRST, THEN §55, THEN §54. TWO THINGS BROKE ON 2026-09-02.
 
 **THE FIRST TAPE THE SERVER EVER MADE CAME OUT ENTIRELY GREEN**, and every
