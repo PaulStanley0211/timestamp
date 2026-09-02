@@ -3575,7 +3575,16 @@ export function createServer({
       const session = event.data?.object ?? {};
       if (session.payment_status !== 'paid') {
         // A completed session that was not paid is a real Stripe event and not
-        // a payment. Acknowledged, and nothing granted.
+        // a payment. Acknowledged, and nothing granted -- and SAID, because a
+        // 200 is the one answer Stripe never retries and never lists. The
+        // checkout body names cards only, so this branch should never run; if
+        // it does, a method that settles later has been enabled somewhere and
+        // the money will arrive on an event nobody is subscribed to. The line
+        // names the event and the session so both can be found in the
+        // Dashboard and the credits granted by hand.
+        logImpl(`[web] stripe event ${event.id}: session ${session.id ?? 'unknown'} completed UNPAID `
+          + `(payment_status ${JSON.stringify(session.payment_status ?? null)}) -- nothing granted; `
+          + 'if this pays later it must be credited by hand');
         return sendJson(req, res, 200, { ok: true, granted: false, ignored: 'unpaid' });
       }
 

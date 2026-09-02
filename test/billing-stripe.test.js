@@ -369,6 +369,29 @@ test('the session carries the account id, the price, and the pack as metadata', 
   assert.equal(body.get('amount'), null);
 });
 
+test('the session names its payment methods, so a completed session is always a paid one', async () => {
+  // The webhook grants on `checkout.session.completed` and reads
+  // `payment_status` off it. A card (and the wallets that ride on the card
+  // rail) settles before that event fires, so `completed` always means `paid`.
+  // Left unnamed, the Dashboard's own method list applies -- and a method that
+  // settles days later fires `completed` with `payment_status: unpaid`,
+  // followed by an event this product is not subscribed to. Naming the method
+  // here is what keeps the one event the webhook listens for sufficient.
+  let body = null;
+  const fetchImpl = async (url, init) => {
+    body = new URLSearchParams(init.body);
+    return new Response(JSON.stringify({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    });
+  };
+  await createCheckoutSession({
+    ...SESSION, fetchImpl, envImpl: () => ({ STRIPE_SECRET_KEY: 'sk_test_x' }),
+  });
+
+  assert.deepEqual(body.getAll('payment_method_types[0]'), ['card']);
+  assert.equal(body.get('payment_method_types[1]'), null, 'exactly one method, and it is the immediate one');
+});
+
 test('the redirect urls must be absolute http(s), because Stripe will send somebody to them', async () => {
   const fetchImpl = async () => { throw new Error('this must not run'); };
   for (const successUrl of ['/pricing', 'javascript:alert(1)', '', 'ftp://x/y']) {

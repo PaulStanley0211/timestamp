@@ -93,7 +93,7 @@ function unpricedBilling({ fetchImpl, envImpl }) {
   };
 }
 
-async function withApp(run, { billing, nowImpl } = {}) {
+async function withApp(run, { billing, nowImpl, logImpl = () => {} } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-billing-'));
   const app = createServer({
     root,
@@ -103,7 +103,7 @@ async function withApp(run, { billing, nowImpl } = {}) {
     billing,
     publicUrl: 'https://timestamp.example',
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
-    logImpl: () => {},
+    logImpl,
     ...(nowImpl ? { nowImpl } : {}),
   });
   const port = await app.listen();
@@ -380,15 +380,25 @@ test('two different events grant twice', async () => {
 });
 
 test('an unpaid session grants nothing and is not retried', async () => {
+  const lines = [];
   await withApp(async ({ base, root }) => {
     const account = await makeAccount(root);
     const body = completedSession({ accountId: account.accountId, paymentStatus: 'unpaid' });
+    const event = JSON.parse(body);
 
     const res = await deliver(base, body, { signature: stripeSignature(body) });
     assert.equal(res.status, 200, 'a non-2xx would make Stripe retry an event we do not want');
     assert.equal((await res.json()).granted, false);
     assert.deepEqual(await paymentRows(root, account.accountId), []);
-  }, { billing: configuredBilling() });
+    // A 200 that grants nothing is the one outcome Stripe will never retry and
+    // never list, so the log line is the only witness that a completed session
+    // arrived without its money. It names the event and the session so the
+    // operator can find both in the Dashboard.
+    const witness = lines.filter((l) => /unpaid/i.test(l));
+    assert.equal(witness.length, 1, `expected one unpaid line, got ${JSON.stringify(lines)}`);
+    assert.match(witness[0], new RegExp(event.id));
+    assert.match(witness[0], new RegExp(event.data.object.id));
+  }, { billing: configuredBilling(), logImpl: (l) => lines.push(String(l)) });
 });
 
 /**
