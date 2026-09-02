@@ -1975,15 +1975,19 @@ export function privacyPage({
   video${imageProcessor
     ? `, and to ${h(imageProcessor)}, which checks it for illegal or abusive content before
   anything is generated`
-    : ''}, and to nobody else. Sign-in runs through Supabase; payments through Stripe, on
-  Stripe's own pages; the six-digit sign-up codes are delivered by Resend. The application
-  and its files run on Hetzner servers in Germany.</p>
+    : ''}, and to nobody else. fal.ai runs on its own infrastructure outside the EU and keeps
+  what it receives under its own privacy policy. Sign-in runs through Supabase; when you sign
+  in or sign up, your IP address is passed to Supabase, which uses it to limit abuse. Payments
+  run through Stripe, on Stripe's own pages; the six-digit sign-up codes are delivered by
+  Resend. The application and its files run on Hetzner servers in Germany.</p>
 
   <h2 class="eyebrow legal-h">How long we keep it</h2>
   <p class="sub">Your photo is deleted after ${h(retention.photoDays)} days and the finished
   video after ${h(retention.jobDays)} days &mdash; the same promise the consent text makes,
   enforced by an automatic sweep. You can delete either sooner, along with your whole
-  account, at any time.</p>
+  account, at any time. A nightly backup of account records, which never includes your
+  photographs or videos, is kept for 14 days, so a deleted account can survive in it for up
+  to 14 days before it is gone everywhere.</p>
 
   <h2 class="eyebrow legal-h">Your rights</h2>
   <p class="sub">Everything is on <a class="linky" href="/account">your account page</a>:

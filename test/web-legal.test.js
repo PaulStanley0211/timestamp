@@ -519,6 +519,29 @@ test('with no classifier configured, the page still says fal and nobody else', (
     'unconfigured, the photograph really does go to one processor and the page should say so');
 });
 
+test('the privacy page states the three facts that were true and unsaid', () => {
+  // Each of these was already true of the running system and absent from the
+  // page. Art. 13 asks for recipients, retention and the countries data goes
+  // to; a page that names fal and says nothing about where fal is, or that
+  // promises deletion while nightly backups keep the record for a fortnight,
+  // answers less than it knows.
+  const html = privacyPage({ entity: ENTITY, retention: { photoDays: 7, jobDays: 30 } });
+
+  // 1. Deleted accounts persist in the nightly backup for a bounded time, and
+  //    the backup never holds photographs or videos. The number is the
+  //    runbook's cron `--keep`, stated here so the two cannot drift unnoticed.
+  assert.match(html, /backup/i, 'the nightly backup is disclosed');
+  assert.match(html, /14 days/, 'and how long a deleted record can survive in it');
+  assert.match(html, /never (contain|hold|include)s?\s+(your\s+)?photograph/i, 'and that it carries no image');
+
+  // 2. fal.ai is outside the EU and keeps what it receives under its own terms.
+  assert.match(html, /fal\.ai[^.]*outside the (EU|European Union)/i, 'where the generation provider is');
+  assert.match(html, /fal\.ai[^.]*own privacy policy/i, 'and whose retention rules apply there');
+
+  // 3. The client address is forwarded to the sign-in provider.
+  assert.match(html, /IP address[^.]*Supabase/i, 'the address forwarded on sign-in is disclosed');
+});
+
 test('a configured classifier is named, and "nobody else" stays true because the list grew', () => {
   // THE CLAIM IS NOT THE PROBLEM, THE LIST IS. "and to nobody else" is a
   // promise worth keeping and it is exactly as true with two processors as
