@@ -150,7 +150,7 @@ const PLACE_MEDIA_RE = /^([A-Za-z0-9-]{1,64})\.(jpg|mp4)$/;
  *  `scripts/auth/` still serves the stylesheet, and a load balancer still gets
  *  an answer. */
 const NO_SESSION_ROUTES = new Set([
-  'stylesheet', 'font', 'favicon', 'placeImage', 'health', 'robots',
+  'stylesheet', 'font', 'favicon', 'placeImage', 'robots',
   // STRIPE SENDS NO COOKIE, so resolving a session for it is work that can only
   // fail. Keeping it out of the session path also means a webhook is answered
   // while the sign-in half of the app is degraded -- which matters, because the
@@ -169,6 +169,12 @@ const AUTH_OPTIONAL_ROUTES = new Set([
   'pricingPage', 'homePage',
   // Public prose, but the nav should still say who is signed in.
   'privacyPage', 'termsPage', 'impressumPage',
+  // Public for the uptime monitor, which sends no cookie and gets `ok` and
+  // `degraded`; the full report goes to a session. It used to sit in
+  // NO_SESSION_ROUTES so a degraded accounts module could not take health
+  // down with it -- optional keeps that property (the route answers with
+  // `account: null`) while letting an operator's cookie unlock the detail.
+  'health',
 ]);
 
 /**
@@ -2203,8 +2209,14 @@ export function createServer({
      */
     async verifyCode(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'verify', verifyPage)) return undefined;
+      // ORIGIN BEFORE THE LIMITER, on this and on every credential post. A
+      // post that cannot prove it came from this site costs the server
+      // nothing and must not cost the visitor anything either: counted first,
+      // a foreign page could auto-submit a handful of hidden forms from the
+      // visitor's own browser and spend their budget for them -- refused 403
+      // every time, counted every time, and their own next attempt a 429.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'verify');
+      if (refuseOverLimit(req, res, 'verify', verifyPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const code = String(body.code ?? '').trim();
@@ -2335,8 +2347,9 @@ export function createServer({
      */
     async verifyResend(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'verify', verifyPage)) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'verify');
+      if (refuseOverLimit(req, res, 'verify', verifyPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const csrf = String(body.csrf ?? '');
@@ -2388,8 +2401,9 @@ export function createServer({
      */
     async login(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'login', loginPage)) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'login');
+      if (refuseOverLimit(req, res, 'login', loginPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const password = String(body.password ?? '');
@@ -2560,8 +2574,9 @@ export function createServer({
      */
     async reset(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'reset', resetPage)) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'reset');
+      if (refuseOverLimit(req, res, 'reset', resetPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const csrf = String(body.csrf ?? '');
@@ -2641,8 +2656,9 @@ export function createServer({
      */
     async resetComplete(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'verify', resetCompletePage)) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'resetComplete');
+      if (refuseOverLimit(req, res, 'verify', resetCompletePage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const code = String(body.code ?? '').trim();
@@ -2785,8 +2801,9 @@ export function createServer({
      */
     async authGoogle(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'google', loginPage)) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'login');
+      if (refuseOverLimit(req, res, 'google', loginPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const next = safeNext(body.next);
       const csrf = String(body.csrf ?? '');
@@ -2960,8 +2977,9 @@ export function createServer({
 
     async signup(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'signup', (opts) => signupPage({ ...opts, consentText }))) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'signup');
+      if (refuseOverLimit(req, res, 'signup', (opts) => signupPage({ ...opts, consentText }))) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const password = String(body.password ?? '');
@@ -3668,15 +3686,34 @@ export function createServer({
 
     // --- API -------------------------------------------------------------
 
-    async health(req, res) {
+    async health(req, res, { account = null } = {}) {
       const ffmpeg = await ffmpegHealth();
       const { stats, lastSeen } = queueHealth();
       const disk = diskHealth();
 
-      sendJson(req, res, 200, {
-        // `disk.low !== true` and not `!disk.low`, deliberately: an unreadable
-        // figure (low: null) must not take ok down while orders still land.
-        ok: ffmpeg.available && stats !== null && disk.low !== true,
+      // `disk.low !== true` and not `!disk.low`, deliberately: an unreadable
+      // figure (low: null) must not take ok down while orders still land.
+      const degraded = [
+        ...(ffmpeg.available ? [] : ['ffmpeg']),
+        ...(stats !== null ? [] : ['queue']),
+        ...(disk.low === true ? ['disk'] : []),
+      ];
+      const ok = degraded.length === 0;
+
+      // TWO ANSWERS FROM ONE ENDPOINT. The route is public because the uptime
+      // monitor has no session, and it keys on the literal `"ok":true` and
+      // nothing more -- so `ok` is the first key and `degraded` names the
+      // failing part, which is what an alert needs and all it needs. The rest
+      // -- the exact ffprobe build, disk bytes, queue counts, which provider
+      // is wired -- is an operator's report, and a build string is also the
+      // first thing anyone targeting the upload decoder would ask for. It is
+      // answered to a session and to nobody else.
+      if (!account) {
+        return sendJson(req, res, 200, { ok, degraded });
+      }
+      return sendJson(req, res, 200, {
+        ok,
+        degraded,
         ffmpeg,
         queue: stats,
         worker: { lastSeen, inFlight: stats?.claimed ?? null },
@@ -3997,7 +4034,8 @@ export function createServer({
       // Found by scanning the directory and comparing parsed numbers, so no part
       // of the request ever becomes a path component.
       const still = stillsOf(job.jobId).find((s) => s.index === wanted);
-      if (!still || !sendFile(req, res, { file: still.file, maxAge: 3600 })) {
+      // `noStore`: a generated face, never kept by the browser past this view.
+      if (!still || !sendFile(req, res, { file: still.file, noStore: true })) {
         throw new HttpError(404, 'No such still.', { code: 'NO_STILL' });
       }
     },
@@ -4088,7 +4126,9 @@ export function createServer({
       if (!sendFile(req, res, {
         file: jobPaths(root, job.jobId).video,
         contentType: 'video/mp4',
-        maxAge: 3600,
+        // A person's own tape, never kept by the browser past this view -- on
+        // a shared machine `private, max-age` replays it after sign-out.
+        noStore: true,
         download: asAttachment ? `timestamp-${job.jobId}.mp4` : null,
       })) {
         throw new HttpError(404, 'This job has no video yet.', { code: 'NO_VIDEO' });
@@ -4097,7 +4137,7 @@ export function createServer({
 
     getPoster(req, res, { params, account }) {
       const job = ownedJob(account, params.id);
-      if (!sendFile(req, res, { file: jobPaths(root, job.jobId).poster, contentType: 'image/jpeg', maxAge: 3600 })) {
+      if (!sendFile(req, res, { file: jobPaths(root, job.jobId).poster, contentType: 'image/jpeg', noStore: true })) {
         throw new HttpError(404, 'This job has no poster yet.', { code: 'NO_POSTER' });
       }
     },
@@ -4387,7 +4427,13 @@ export function createServer({
       // Everything else is ours, and the message may contain an absolute path,
       // a manifest fragment or a provider request id. It goes to the log; the
       // caller gets a sentence.
-      logImpl(`[web] ${req.method} ${req.url} -> 500 ${err?.stack ?? err}`);
+      //
+      // THE PATHNAME, NEVER THE QUERY STRING. `/verify?email=` carries an
+      // address and `/auth/callback?code=&state=` a live sign-in code, and
+      // this is the one place a request is logged in full -- on the failure
+      // nobody planned for, which is exactly when the line gets read by
+      // somebody who should not be holding either.
+      logImpl(`[web] ${req.method} ${String(req.url ?? '').split('?')[0]} -> 500 ${err?.stack ?? err}`);
       fail(req, res, 500, 'Something went wrong at our end.', null);
     }
   }

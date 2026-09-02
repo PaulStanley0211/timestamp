@@ -182,6 +182,28 @@ test('one connection cannot open unlimited reset requests', async (t) => {
   assert.ok(sawLimit, 'the per-connection limiter never fired on /auth/reset');
 });
 
+test('a cross-site post does not count against the limiter, so a foreign page cannot lock a visitor out of reset', async (t) => {
+  // The limiter is keyed on the client address, and under TRUST_PROXY=1 that
+  // is the visitor's real one. With the limiter counting BEFORE the origin
+  // check, any web page could auto-submit a handful of hidden forms at
+  // `/auth/reset` from the visitor's own browser and spend their budget for
+  // them: every one refused 403, every one counted, and the person's own
+  // reset request an hour of 429s. A post that fails the origin check costs
+  // this server nothing and must not cost the visitor anything either.
+  const { base, csrf, cookie, calls } = await startWithFakeSupabase(t, {});
+  for (let i = 0; i < AUTH_RATE_LIMITS.reset.max + 3; i += 1) {
+    const res = await postForm(`${base}/auth/reset`, { email: `p${i}@b.com`, csrf }, cookie,
+      { headers: { origin: 'https://evil.example' } });
+    assert.equal(res.status, 403, `forged post ${i} must be refused as a forgery, not rate-limited`);
+    await res.text();
+  }
+  assert.equal(calls.length, 0, 'nothing reached Supabase');
+
+  const own = await postForm(`${base}/auth/reset`, { email: TEST_EMAIL, csrf }, cookie);
+  assert.notEqual(own.status, 429, 'the forged posts must not have spent the visitor\'s own budget');
+  await own.text();
+});
+
 // ---------------------------------------------------------------------------
 // the completion route: the same code shape, the same five guesses
 // ---------------------------------------------------------------------------

@@ -359,13 +359,13 @@ function signIn(auth, email, password) {
 
 async function withApp(run, {
   auth = fakeAuth(), queue = fakeQueue(), sessions = null, nowImpl = null, trustProxy = undefined,
-  supabase = fakeSupabaseIdentity(),
+  supabase = fakeSupabaseIdentity(), logImpl = () => {},
 } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-auth-'));
   const app = createServer({
     root, cfg: CFG, queue, port: 0, auth: sessions ? null : auth, sessions, supabase,
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
-    logImpl: () => {},
+    logImpl,
     ...(nowImpl ? { nowImpl } : {}),
     ...(trustProxy === undefined ? {} : { trustProxy }),
   });
@@ -1472,6 +1472,31 @@ test('no page in this app contains anything that collects payment details', asyn
 // ---------------------------------------------------------------------------
 // degrading when scripts/auth/ is not there
 // ---------------------------------------------------------------------------
+
+test('the 500 log line names the path and never the query string', async () => {
+  // `/verify?email=` carries an address and `/auth/callback?code=&state=` a
+  // live sign-in code. Both are query strings, and the one handler that logs
+  // a request in full is the one for a failure nobody planned -- so the log
+  // it writes must hold the pathname and nothing after the question mark.
+  const auth = fakeAuth();
+  const lines = [];
+  await withApp(async ({ base }) => {
+    auth.createAccount({ email: 'a@example.com', password: 'a long enough password', credits: 500 });
+    const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
+    // A failure nobody planned: the ledger dies mid-request, inside a handler.
+    auth.ledgerFor = () => { throw new Error('EIO: i/o error, read /var/lib/somewhere/ledger.json'); };
+
+    const res = await fetch(`${base}/api/account/export?email=secret%40example.com&code=123456`,
+      { headers: { cookie } });
+    assert.equal(res.status, 500);
+    await res.text();
+  }, { auth, logImpl: (line) => lines.push(String(line)) });
+
+  const witness = lines.filter((l) => /-> 500/.test(l));
+  assert.equal(witness.length, 1, `one 500 line: ${JSON.stringify(lines)}`);
+  assert.match(witness[0], /GET \/api\/account\/export /, 'the path is there');
+  assert.doesNotMatch(witness[0], /secret|example\.com|123456|\?/, 'the query string is not');
+});
 
 test('a missing scripts/auth/ is a 503 with a sentence, and the assets still serve', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-auth-'));

@@ -2605,8 +2605,16 @@ export function parseRange(header, size) {
  * @param {object} opts
  * @param {string} opts.file        absolute path, already validated by the caller
  * @param {number} [opts.maxAge]    seconds; job output is immutable once written
+ * @param {boolean} [opts.noStore]  a person's own media: never kept by any
+ *   cache, the browser's included. `private, max-age=N` keeps a file out of
+ *   SHARED caches and still lets the browser hold it, so on a shared machine a
+ *   tape and its poster replay from cache after sign-out. A face is not worth
+ *   a cache hit; the place photographs and the brand assets are nobody's and
+ *   keep their `maxAge`.
  */
-export function sendFile(req, res, { file, contentType, maxAge = 0, download = null, fsImpl = fs } = {}) {
+export function sendFile(req, res, {
+  file, contentType, maxAge = 0, noStore = false, download = null, fsImpl = fs,
+} = {}) {
   let stat;
   try {
     stat = fsImpl.statSync(file);
@@ -2617,12 +2625,13 @@ export function sendFile(req, res, { file, contentType, maxAge = 0, download = n
 
   const type = contentType ?? contentTypeFor(file);
   const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
+  const cacheControl = noStore ? 'no-store' : (maxAge > 0 ? `private, max-age=${maxAge}` : 'no-cache');
   const headers = {
     'Content-Type': type,
     'Accept-Ranges': 'bytes',
     ETag: etag,
     'Last-Modified': stat.mtime.toUTCString(),
-    'Cache-Control': maxAge > 0 ? `private, max-age=${maxAge}` : 'no-cache',
+    'Cache-Control': cacheControl,
     // This is the one path that serves bytes a user influenced -- their
     // photograph re-encoded, their tape. The declared type is final: a browser
     // invited to sniff is a browser that can be talked into treating a "video"

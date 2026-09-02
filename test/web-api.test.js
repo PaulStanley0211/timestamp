@@ -2179,6 +2179,37 @@ test('the result page says the tape is AI-generated', async () => {
 // media
 // ---------------------------------------------------------------------------
 
+test('a tape, its poster and a still are never cached, because the next person at the browser may not own them', async () => {
+  // `private, max-age=3600` keeps the file out of shared caches and still
+  // lets the BROWSER keep it: on a shared machine the tape and the poster
+  // replay from cache after sign-out, and `private` does nothing about that.
+  // A face is not worth a cache hit. The place photographs and the brand
+  // assets stay cacheable -- they are nobody's.
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA });
+    const paths = jobPaths(root, job.jobId);
+    fs.writeFileSync(paths.video, crypto.randomBytes(500));
+    fs.writeFileSync(paths.poster, crypto.randomBytes(500));
+    fs.mkdirSync(paths.stills, { recursive: true });
+    fs.writeFileSync(path.join(paths.stills, 'still-01.png'), crypto.randomBytes(500));
+
+    for (const url of [
+      `/api/jobs/${job.jobId}/video`,
+      `/api/jobs/${job.jobId}/poster`,
+      `/api/jobs/${job.jobId}/stills/1`,
+    ]) {
+      const res = await get(base, url, cookieA);
+      assert.equal(res.status, 200, `${url} -> ${res.status}`);
+      assert.equal(res.headers.get('cache-control'), 'no-store', `${url} is cacheable: ${res.headers.get('cache-control')}`);
+      await res.arrayBuffer();
+    }
+    const place = await get(base, '/places/ostsee-strand.jpg', cookieA);
+    assert.equal(place.status, 200);
+    assert.match(place.headers.get('cache-control') ?? '', /max-age=\d+/, 'a place photograph is still cacheable');
+    await place.arrayBuffer();
+  });
+});
+
 test('the video is range-request capable', async () => {
   await withServer(async ({ base, root, app, accountA, cookieA }) => {
     const job = seedJob(app, root, { status: 'done', owner: accountA });
@@ -2332,16 +2363,54 @@ test('an expired lease is not a claim', async () => {
 // health and the edges
 // ---------------------------------------------------------------------------
 
-test('GET /api/health reports ffmpeg, the queue and the worker, without a session', async () => {
+test('GET /api/health answers ok and what is degraded without a session, and nothing else', async () => {
+  // The endpoint is public because the uptime monitor has no session, and it
+  // keys on `"ok":true` and nothing more. The rest of the report -- the exact
+  // ffprobe build, disk bytes, queue counts, which provider is wired -- is
+  // useful to an operator and to somebody targeting the upload decoder, so it
+  // is answered to a session and to nobody else. `ok` stays the first key,
+  // because that is the literal string the monitor searches for.
   await withServer(async ({ base }) => {
     const res = await fetch(`${base}/api/health`);
     assert.equal(res.status, 200);
+    const text = await res.text();
+    assert.ok(text.startsWith('{"ok":true'), `the monitor keys on the leading "ok": ${text.slice(0, 40)}`);
+    const body = JSON.parse(text);
+    assert.deepEqual(Object.keys(body).sort(), ['degraded', 'ok']);
+    assert.deepEqual(body.degraded, []);
+  });
+});
+
+test('GET /api/health reports ffmpeg, the queue, the worker and the disk to a signed-in caller', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const res = await get(base, '/api/health', cookieA);
+    assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.ok, true);
+    assert.deepEqual(body.degraded, []);
     assert.equal(body.ffmpeg.available, true);
     assert.deepEqual(Object.keys(body.queue).sort(), ['claimed', 'done', 'failed', 'pending']);
     assert.ok('lastSeen' in body.worker);
+    assert.ok('low' in body.disk);
   });
+});
+
+test('GET /api/health names what is degraded without a session, so the monitor alert says why', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(),
+    ffprobeImpl: async () => { throw Object.assign(new Error('spawn ffprobe ENOENT'), { code: 'ENOENT' }); },
+  });
+  const port = await app.listen();
+  try {
+    const body = await fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.json());
+    assert.equal(body.ok, false);
+    assert.deepEqual(body.degraded, ['ffmpeg']);
+    assert.equal('ffmpeg' in body, false, 'the failure is named, the build and the error code are not');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a job ordered at a wide shape is charged the wide price', async () => {
@@ -2466,8 +2535,8 @@ test('a burst on the public health endpoint reads the queue once, and reads it a
     const hit = () => fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.json());
 
     const first = await hit();
-    assert.deepEqual(Object.keys(first.queue).sort(), ['claimed', 'done', 'failed', 'pending'],
-      'the cached payload must still be the real shape');
+    assert.deepEqual(Object.keys(first).sort(), ['degraded', 'ok'],
+      'the cached payload must still be the real (anonymous) shape');
 
     for (let i = 0; i < 9; i += 1) await hit();
     assert.equal(queue.calls.statted, 1,
@@ -2486,20 +2555,30 @@ test('a burst on the public health endpoint reads the queue once, and reads it a
   }
 });
 
+/** A signed-in cookie on a fake auth the test built itself: the full health
+ *  report is answered to a session, and these tests read the full report. */
+function operatorCookie(auth) {
+  auth.createAccount({ email: 'ops@example.com', password: 'an operator password', plan: 'archive', credits: 0 });
+  return signIn(auth, { email: 'ops@example.com', password: 'an operator password' });
+}
+
 test('health says so honestly when ffmpeg is missing', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const auth = fakeAuth();
   const app = createServer({
     root,
     cfg: CFG,
     queue: fakeQueue(),
     port: 0,
-    auth: fakeAuth(),
+    auth,
     ffprobeImpl: async () => { const e = new Error('nope'); e.code = 'ENOENT'; throw e; },
   });
   const port = await app.listen();
   try {
-    const body = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
+    const cookie = operatorCookie(auth);
+    const body = await (await fetch(`http://127.0.0.1:${port}/api/health`, { headers: { cookie } })).json();
     assert.equal(body.ok, false);
+    assert.deepEqual(body.degraded, ['ffmpeg']);
     assert.equal(body.ffmpeg.available, false);
   } finally {
     await app.close();
@@ -2512,8 +2591,8 @@ test('health reports the disk, because the disk is where every balance lives', a
   // one root; a full disk is the one infrastructure failure this deployment
   // can see coming, and the uptime monitor watching /api/health is the only
   // thing that will be looking.
-  await withServer(async ({ base }) => {
-    const body = await (await fetch(`${base}/api/health`)).json();
+  await withServer(async ({ base, cookieA }) => {
+    const body = await (await get(base, '/api/health', cookieA)).json();
     assert.ok(Number.isFinite(body.disk?.availableBytes) && body.disk.availableBytes > 0,
       `health carries no usable disk figure: ${JSON.stringify(body.disk)}`);
     assert.ok(Number.isFinite(body.disk?.totalBytes) && body.disk.totalBytes >= body.disk.availableBytes);
@@ -2525,12 +2604,13 @@ test('low disk flips ok, and the disk is read on the cache window, not per hit',
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
   let statted = 0;
   let now = new Date('2026-08-28T12:00:00Z');
+  const auth = fakeAuth();
   const app = createServer({
     root,
     cfg: CFG,
     queue: fakeQueue(),
     port: 0,
-    auth: fakeAuth(),
+    auth,
     nowImpl: () => now,
     // 512 MiB free of 40 GB: under any sane floor -- a single render writes
     // ~65 MB and the accounts must never hit ENOSPC mid-ledger-append.
@@ -2538,10 +2618,12 @@ test('low disk flips ok, and the disk is read on the cache window, not per hit',
   });
   const port = await app.listen();
   try {
-    const hit = () => fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.json());
+    const cookie = operatorCookie(auth);
+    const hit = () => fetch(`http://127.0.0.1:${port}/api/health`, { headers: { cookie } }).then((r) => r.json());
     const body = await hit();
     assert.equal(body.disk.low, true, `512 MiB free must read as low: ${JSON.stringify(body.disk)}`);
     assert.equal(body.ok, false, 'low disk must page the uptime monitor -- ok stays true only while orders can land');
+    assert.deepEqual(body.degraded, ['disk'], 'and the anonymous half of the answer names the disk');
     assert.equal(body.disk.availableBytes, 131_072 * 4096);
 
     // Same rule as ffmpeg and the queue beside it: an unauthenticated
@@ -2562,17 +2644,19 @@ test('an unreadable disk figure is reported, not fatal and not low', async () =>
   // "the disk is full" -- paging on it would make health cry wolf on any
   // platform quirk, and the boy who cried wolf is how real pages get ignored.
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const auth = fakeAuth();
   const app = createServer({
     root,
     cfg: CFG,
     queue: fakeQueue(),
     port: 0,
-    auth: fakeAuth(),
+    auth,
     statfsImpl: () => { const e = new Error('nope'); e.code = 'ENOSYS'; throw e; },
   });
   const port = await app.listen();
   try {
-    const body = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
+    const cookie = operatorCookie(auth);
+    const body = await (await fetch(`http://127.0.0.1:${port}/api/health`, { headers: { cookie } })).json();
     assert.equal(body.disk.low, null);
     assert.equal(body.disk.error, 'ENOSYS');
     assert.equal(body.ok, true, 'an unreadable statfs must not take ok down while everything else works');
