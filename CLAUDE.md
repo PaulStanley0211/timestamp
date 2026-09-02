@@ -23,6 +23,23 @@ kept because the sections it lives in are records.
 **Whether the box and future work should move to `main` now that it is the
 trunk is an open decision and the owner's** -- it changes the deploy runbook.
 
+## READ §57 FIRST. IT IS THE CURRENT STATE AND THE LIST. THEN §56, §55, §54.
+
+**THE BUILDING IS FINISHED AND NOTHING LEFT ON THE LIST IS CODE.** Live at
+**https://timestamptapes.com**, local/branch/box all at `5ffa440`, `origin/main`
+at `251acab` with PR #1 merged, suite 2055/2053/0/2. A real web order on the
+live site produced a good tape from the owner's own photograph AND his own
+uploaded location on 2026-09-02, and his verdict on it was *"the quality, the
+character consistency look great."*
+
+**WHAT IS UNPROVEN IS EVERYTHING ABOUT DEMAND: nobody outside the owner has
+ever used it, no stranger has ever watched a finished tape, and no card has
+ever been charged.** The realism check is free, takes ten minutes, has been
+unsent for six sessions, and can invalidate the rest of the list. §57.
+
+**AND `noindex` IS NOT THE GATE ON MARKETING -- THE IMPRESSUM ADDRESS IS.**
+That was read wrongly for several sessions. §57C.
+
 ## READ §56 FIRST, THEN §55, THEN §54. TWO THINGS BROKE ON 2026-09-02.
 
 **THE FIRST TAPE THE SERVER EVER MADE CAME OUT ENTIRELY GREEN**, and every
@@ -7169,6 +7186,126 @@ surprise appears; not before.**
 `20260902-164149-d3ca07`, `done`, with a green file. Nothing rewrites a
 finished tape and it is not worth a special path; the credits for it are the
 owner's to reclaim.
+
+---
+
+### 57. WHERE EVERYTHING STANDS (2026-09-03) -- READ THIS BEFORE PLANNING ANYTHING
+
+**The building is finished. Nothing on the remaining list is code.** That has
+not been true before on this project, and it is the single most important fact
+for whoever reads this next: the temptation will be to find something to build,
+and building is no longer what moves this forward.
+
+#### A -- The state, verified rather than remembered
+
+| | |
+|---|---|
+| Live | **https://timestamptapes.com**, `/api/health` ok, ffmpeg 7.1.5 |
+| Local, `origin/supabase-identity-slice`, and the box | all at **`5ffa440`** |
+| `origin/main` | **`251acab`** -- PR #1 merged, 252 commits, all five checks green on the exact head |
+| Suite | **2055 / 2053 pass / 0 fail / 2 skipped** |
+| Video model | `alibaba/wan-3.0/reference-to-video`, $0.75 a tape |
+| Owner's balance | 21 credits, restored as goodwill after the green tape |
+
+**THE BRANCH IS STILL THE DEPLOY BRANCH.** `/opt/timestamp` pulls
+`supabase-identity-slice`, so deleting it breaks the deploy. Moving the box and
+future work onto `main` now that it is the trunk is an open decision and the
+owner's -- it changes `docs/deploy-runbook.md`.
+
+#### B -- WHAT THE PRODUCT HAS ACTUALLY PROVED, AND WHAT IT HAS NOT
+
+**Proved, on 2026-09-02, by a real web order on the live site:** a customer
+uploads their own photograph AND their own location, and gets back a finished
+tape. Identity holds; the owner's verdict on the finished article was *"the
+quality, the character consistency look great ... I love this model."* That
+closes the two-reference path config/models.json calls the strongest version of
+this product.
+
+**NOT PROVED, AND THIS IS THE WHOLE REMAINING RISK:**
+
+1. **Nobody outside the owner has ever used it.** Zero external users, ever.
+2. **No stranger has ever watched a FINISHED tape.** The blind check (§54A)
+   passed on identity and all three volunteered "AI-generated" -- on RAW model
+   output that never went through the tape stage. The realism check at
+   `out/realism-check/` is built, free, ten minutes, and STILL UNSENT.
+3. **No card has ever been charged.** Stripe is activated and every piece is
+   verified; real money has never moved through it.
+
+#### C -- THE FINDING THAT CHANGED THE MARKETING PICTURE
+
+**`noindex` IS NOT THE GATE ON MARKETING. THE IMPRESSUM ADDRESS IS.** This was
+read wrongly for several sessions, including in §42E and §46F, which frame
+indexing as the thing to decide. It is not:
+
+* The legal notice is linked from EVERY page and carries a real address, which
+  today is the owner's home.
+* **Any public link -- a post on X, a Reddit thread, a TikTok caption -- exposes
+  it exactly as surely as a search result would.** `noindex` stops Google
+  LISTING the site; it does nothing about people invited directly.
+* Verified 2026-09-03: `site:timestamptapes.com` returns no results, and
+  `X-Robots-Tag: noindex, nofollow` is on every response. That part works.
+
+**So the address decision gates ALL public marketing, not just SEO**, and the
+usual answer is a business-address service (roughly EUR 10-20/mo) rather than
+publishing a home address. Whether a given provider is acceptable for an
+Impressum is worth checking with somebody qualified; not every mail-forwarding
+service is.
+
+**AND GOOGLE IS PROBABLY THE WEAKEST CHANNEL FOR THIS PRODUCT ANYWAY.** Nobody
+searches for a 2003 camcorder tape of themselves; they see one and want one.
+The tape is the marketing, and every customer leaves with a downloadable video
+of themselves.
+
+#### D -- THE LIST, and who each item belongs to
+
+**THE OWNER'S, in the order worth doing:**
+
+1. **Send the realism check.** Free, ten minutes, unsent for six sessions, and
+   it can invalidate everything below it. Two people who have NOT seen the
+   stills; the message is *"What do you think of this?"* and nothing else --
+   naming the answer in the question ruins it, exactly as it would have ruined
+   the blind check.
+2. **One reviewer.** Reviewers are lined up as of 2026-09-03. A new account
+   gets 21 free credits, so each reviewer costs about 75p and never meets a
+   payment page. It answers the question no test can: does identity hold for
+   somebody who is not the owner.
+3. **Buy a Starter pack and refund it** (~$14.28). The only way the payment
+   path stops being theoretical.
+4. **Hetzner disk backup** (~EUR 4.76/mo, one click). The app-level backup runs
+   nightly already; the disk one is the only thing that would carry the three
+   `.env` files. The owner's own trigger was "the day before real money moves".
+5. **The address decision** (§57C), which gates all marketing.
+6. **Image moderation on**, which needs an AWS account and an agreement before
+   strangers upload faces. The code is built, tested and guarded -- the worker
+   REFUSES TO START if it holds AWS keys the privacy page does not declare.
+7. **Read fal's usage page.** Free, and the only item with a code consequence:
+   were the six refusals of 2026-09-02 billed? `420bf2b` hands credits back on
+   a 4xx on the basis that they are not. If they ARE billed, revert it.
+
+**AGENT-BUILDABLE, both small, neither gated, neither urgent:**
+
+* **Drop the 4/3 surcharge on 16:9 and 9:16** (§55D). It was derived from a
+  pixel term Wan does not have, so a wide tape now costs exactly what a 4:3 one
+  costs. **It has a real user cost:** 21 free credits buy a 4:3 tape but not a
+  28-credit 9:16 one, so a reviewer who picks the phone shape -- the obvious
+  choice -- is refused at the button on their first visit. Offered on
+  2026-09-03 and not yet taken up.
+* **Remove §44's judder scatter.** Wan delivers 30fps, so retiming decimates
+  rather than duplicates and there is no judder to scatter (§55E). Harmless
+  where it is, but it is dead weight on the shipped path.
+
+#### E -- What a fresh session should NOT do
+
+* **Do not re-propose generating an image first to get round ByteDance.** It
+  was tested on 2026-09-02 and refused; the filter reads the likeness, not the
+  file's provenance. §55A.
+* **Do not assume the suite proves the tape is right.** On 2026-09-02, 2054
+  tests passed on a completely green tape, and a measurement in the contract
+  checks had been reading the wrong statistic for the life of the project.
+  §56B.
+* **Do not build something to feel productive.** Every remaining item is a
+  decision, a card, an account or a conversation. The most valuable next hour
+  is one stranger's reaction to a tape.
 
 ---
 
