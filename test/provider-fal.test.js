@@ -990,25 +990,37 @@ test('[fal] the poll honours cfg.provider.pollIntervalMs through the injected sl
   assert.deepEqual(waits, [cfg.provider.pollIntervalMs, cfg.provider.pollIntervalMs]);
 });
 
-test('[fal] a poll that never resolves is a TimeoutError, and it is retriable', async () => {
-  // Retriable, and note what that means: the WORK may still be running on
-  // fal's side, which is why the intent record -- not this class -- is what
-  // stops a resume from paying twice.
+test('[fal] a poll that never resolves is terminal, because a retry would be a second submit', async () => {
+  // THIS USED TO BE RETRIABLE, AND THE RETRY WAS THE BUG. The pipeline's
+  // `callProvider` wraps the WHOLE of generateVideo -- submit, poll, download
+  // -- in the 1/2/4/8 ladder, so a retriable poll timeout re-entered
+  // `runQueued` and POSTed a brand-new submit while the first generation was
+  // still running on fal's side: up to four billed generations for one debit,
+  // with `attempts` still reading 1 because the ladder sits inside one
+  // attempt. The intent record cannot see that either; it is consulted on a
+  // RESUME, not inside the ladder.
+  //
+  // So once a request_id exists, a poll that gives up is terminal. The job
+  // fails naming the request, the credits are held for a person with the
+  // usage page open (the refund rule does not know `poll_timeout`), and the
+  // open intent stops an automatic revive from buying it again.
   let clock = 0;
-  const { provider, ctx } = falUnderTest({
+  const { provider, ctx, transport } = falUnderTest({
     transport: makeFalTransport({ pollsBeforeDone: Number.MAX_SAFE_INTEGER }),
     nowImpl: () => { clock += 60_000; return clock; },
   });
   await assert.rejects(
     provider.generateVideo(videoRequest(), ctx({ outDir: tmpDir('timeout') })),
     (err) => {
-      assert.ok(err instanceof TimeoutError, `expected TimeoutError, got ${err?.name}`);
+      assert.ok(err instanceof TerminalError, `expected TerminalError, got ${err?.name}`);
       assert.equal(err.code, 'poll_timeout');
-      assert.equal(err.retriable, true);
+      assert.equal(err.retriable, false, 'a retry here is a second paid submit');
       assert.match(err.message, /pollTimeoutMs/);
+      assert.equal(err.detail?.requestId, 'fixture-req-0000000000000001', 'the accepted request is named for the usage page');
       return true;
     },
   );
+  assert.equal(transport.requests.filter((r) => r.method === 'POST').length, 1, 'exactly one submit');
 });
 
 test('[fal] an abort between polls stops the call, terminally', async () => {

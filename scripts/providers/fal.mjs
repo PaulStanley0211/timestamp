@@ -121,7 +121,6 @@ import {
   ProviderError,
   CredentialError,
   TerminalError,
-  TimeoutError,
   RetriableError,
   CapabilityError,
   classifyHttp,
@@ -999,14 +998,27 @@ export function createFalProvider(opts = {}) {
 
       const elapsed = nowImpl() - startedAt;
       if (elapsed > poll.timeoutMs) {
-        // Retriable, and note what that means here: a timeout on a POLL is
-        // safe to retry, but the WORK may still be running on fal's side, so
-        // the intent record is what stops a resume from paying twice.
-        throw new TimeoutError(
+        // TERMINAL, AND IT USED TO BE RETRIABLE. The reasoning was that a
+        // timeout on a POLL is safe to retry -- and it is, if the retry polls
+        // again. It does not: the pipeline's ladder wraps the WHOLE of
+        // generateVideo, so a retriable error here re-enters this function at
+        // the top and POSTs a brand-new submit while the first generation is
+        // still running on fal's side. Up to four billed generations for one
+        // debit, and `attempts` still reads 1 because the ladder sits inside
+        // one attempt. The intent record cannot see that either; it is
+        // consulted on a RESUME, not inside the ladder.
+        //
+        // So once a request_id exists, giving up is final. The job fails
+        // naming the request and the status URL, the credits are held for a
+        // person with the usage page open (the refund rule does not know this
+        // code), and the open intent stops an automatic revive from buying it
+        // again. `poll_timeout` is kept as the code because that is what it
+        // is; the class is what changed.
+        throw fail('poll_timeout',
           `${FAL_ID}: ${requestId} was still ${state || 'unknown'} after ${Math.round(elapsed / 1000)}s ` +
-          `(cfg.provider.pollTimeoutMs is ${poll.timeoutMs})`,
-          { provider: FAL_ID, code: 'poll_timeout', detail: { requestId, state, elapsed } },
-        );
+          `(cfg.provider.pollTimeoutMs is ${poll.timeoutMs}). Not retried: the work may still be running ` +
+          'and a retry would submit it again. Check the usage page for this request id.',
+          { requestId, state, elapsed, statusUrl });
       }
 
       polls += 1;
