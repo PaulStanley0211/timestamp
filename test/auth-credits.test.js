@@ -1385,6 +1385,35 @@ test('a provider refusal gives the credits back, because nothing was generated',
   assert.equal(balanceOf(account).credits, 21, 'the customer is whole again');
 });
 
+test('the ledger labels a refusal from what the manifest says, not from what the caller guessed', async (t) => {
+  // The worker asks for a refund with the one reason it knows at that point
+  // -- the job failed -- and cannot know whether a provider was reached until
+  // the seam reads the steps. So the label must come from the FACT the seam
+  // established. Before this test the caller's guess won every time, and the
+  // one line the rule's own comment says must never appear -- "failed before
+  // provider" on a job that plainly called fal -- was written for every
+  // refused job, while the `provider-refused` label was dead code.
+  const root = makeRoot(t);
+  const account = await signUp(root);
+  setBalance(account, 21, clock());
+  const job = failedPaidJob({ code: 'moderation_refused', message: 'refused' }, { jobId: JOB(45) });
+  debitCredits(account, { jobId: job.jobId, credits: 21, reason: 'render', nowImpl: clock() });
+
+  assert.equal(refundIfUnspent(account, job, { reason: 'refund:failed-before-provider', nowImpl: clock() }), true);
+  const refund = ledgerFor(account).filter((e) => e.jobId === job.jobId && e.delta > 0);
+  assert.equal(refund.length, 1);
+  assert.equal(refund[0].reason, 'refund:provider-refused',
+    'a job that reached the provider and was turned away must say so on the ledger');
+
+  // And a job that genuinely never reached one keeps the caller's label,
+  // because there the caller's reason IS the fact.
+  const never = { jobId: JOB(46), steps: [{ name: 'intake', status: 'failed', attempts: 1 }] };
+  debitCredits(account, { jobId: never.jobId, credits: 21, reason: 'render', nowImpl: clock() });
+  assert.equal(refundIfUnspent(account, never, { reason: 'refund:cancelled-before-provider', nowImpl: clock() }), true);
+  const cancelled = ledgerFor(account).filter((e) => e.jobId === never.jobId && e.delta > 0);
+  assert.equal(cancelled[0].reason, 'refund:cancelled-before-provider');
+});
+
 test('a rejected request refunds too, and so does a rejected credential', async (t) => {
   // Both are 4xx: the request never became a generation. A customer must not
   // pay for our malformed request, nor for our expired key.

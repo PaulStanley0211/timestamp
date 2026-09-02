@@ -706,7 +706,15 @@ export function refundIfUnspent(account, job, { reason, nowImpl } = {}) {
     // reached a provider, the other reached one and was turned away. A refund
     // labelled "failed-before-provider" for a job that plainly did call fal is
     // the kind of line that makes an audit trail stop being trusted.
-    reason: reason ?? (refused ? 'refund:provider-refused' : 'refund:failed-before-provider'),
+    //
+    // THE FACT WINS OVER THE CALLER'S GUESS. The worker asks with the one
+    // reason it knows -- the job failed -- and cannot know whether a provider
+    // was reached until the steps are read, which happens here. With the
+    // caller's reason taking precedence, the refused label was dead code and
+    // the line above was written for every refused job. A caller's reason
+    // still stands for a job that never reached a provider, because there it
+    // IS the fact: cancelled, reaped, never enqueued.
+    reason: refused ? 'refund:provider-refused' : (reason ?? 'refund:failed-before-provider'),
     spent: false,
     nowImpl,
   });
