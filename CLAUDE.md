@@ -11,7 +11,42 @@ Warm, grainy, quiet.
 
 # THE PRODUCT IS LIVE AT https://timestamptapes.com AND IT CAN TAKE MONEY.
 
-## READ §54 FIRST. THE BLIND CHECK PASSED AND THE FIRST PAID ORDER WAS REFUSED.
+## READ §55 FIRST, THEN §54. THE VIDEO SUPPLIER CHANGED ON 2026-09-02.
+
+**`bytedance/seedance-2.0/reference-to-video` STOPPED ACCEPTING REFERENCE
+IMAGES CONTAINING A REAL PERSON** -- six refusals in one afternoon, including
+the exact photograph that had rendered three tapes eight days earlier, an
+AI-generated still of that same face, and Seedance 2.5. All
+`partner_validation_failed`, which is ByteDance's filter and not fal's, so it is
+company-wide and **no model of theirs is a way round it.** Their IMAGE endpoints
+are untouched, so the two-stage path is closed too -- **the filter reads the
+LIKENESS, not whether the image came from a camera. Do not re-propose generating
+a picture first; it was tested and refused.** §55A.
+
+**THE PRODUCT IS ON `alibaba/wan-3.0/reference-to-video` AND IT IS BETTER ON
+EVERY AXIS MEASURED.** $0.75 a tape against a measured $2.0727, 4:3 native
+rather than cropped, 1080p orderable, 30s ceiling against 15, and **zero judder**
+-- it delivers 30fps, so retiming to 25 drops frames instead of duplicating
+them, and §44's scatter now solves a problem this source does not have. §55B,
+§55E.
+
+**THE FIRST FINISHED PAID TAPE THIS PRODUCT HAS EVER MADE IS
+`20260902-160924-af12f6`**, $0.75, 375 frames, 15.000s, -27.3 LUFS -- and
+**§53's arc fix is proved against a model at last**: the subject is in all six
+beats and the tape ends on his face. Deployed; the box is at `ebf90b2` and
+`/api/health` is green.
+
+**THE SHAPE SURCHARGE LOST ITS BASIS AND NOBODY HAS ACTED ON IT.** 16:9 and 9:16
+cost 28 CR against 4:3's 21 because Seedance billed pixels. Wan bills seconds at
+a flat tier rate, so a wide tape now costs exactly what a 4:3 tape costs.
+`config/credits.json` is deliberately untouched -- it is the owner's call --
+and it is the item most likely to be forgotten. §55D.
+
+**STILL OWED, FREE, AND IT DECIDES A SHIPPED RULE: read fal's usage page.** Was
+$0.75 real, and **were the six refusals billed?** `420bf2b` hands credits back
+on a 4xx on the basis that they are not. §55G.
+
+### (the record below is 2026-09-02 morning and earlier)
 
 **THE BLIND CHECK IS ANSWERED (2026-09-02) AND IT IS THE GOOD ANSWER.** Three
 people, separate chats, "Who is this?" and nothing else — **all three named
@@ -22,12 +57,13 @@ which is close to the expected result and says nothing yet about a finished
 tape. **The realism check that asks that question is built and unsent at
 `out/realism-check/`.** §54A.
 
-**A WEB ORDER HAS NOW REACHED REAL FAL, AND FAL REFUSED IT.** Job
-`20260902-141334-34a7e4`: 480p, 4:3, reached `animate`, **HTTP 422 on content
-grounds after 55 seconds.** So the wiring works end to end and **a completed
-paid render still has not happened.** Why it was refused is not yet known — the
-prompt was a car park at dusk in a checked shirt, which points at the
-photograph. **Next attempt: a different photo and a brighter place.** §54B.
+~~**A WEB ORDER HAS NOW REACHED REAL FAL, AND FAL REFUSED IT.** ... Next
+attempt: a different photo and a brighter place.~~ **THE DIAGNOSIS IN THIS
+PARAGRAPH WAS WRONG AND IS KEPT AS THE RECORD OF HOW IT LOOKED.** Job
+`20260902-141334-34a7e4` was refused, but not because of the photograph or the
+place: `loc` named `image_urls` and the model refused **every** face, including
+one it had rendered three tapes from a week earlier. A different photo and a
+brighter place would have failed identically, and did. §55A.
 
 **STILL TRUE: NO CARD HAS EVER BEEN CHARGED.**
 
@@ -46,10 +82,11 @@ deploys, not from the container logs.
 and spends real money.** That is the correct production configuration; know it
 before clicking Record.
 
-**FAL IS TOPPED UP (~€20, 2026-09-02) AND A 480p TAPE COSTS $2.0727
-(MEASURED).** The test order is **480p and 4:3, nothing else** — the free grant
-of 21 credits pays for exactly that combination and 16:9 or 9:16 costs 28.
-§49I has the checks to make afterwards.
+**FAL IS TOPPED UP (~€20, 2026-09-02).** ~~A 480p TAPE COSTS $2.0727
+(MEASURED)~~ — **that was Seedance's price and Seedance is gone. A 480p tape is
+$0.75 on Wan** (§55B), so 21 free credits now buy about 2.6 tapes rather than
+exactly one. The grant is still 21 and that is still the owner's final word
+(§49B); what it BUYS is what moved.
 
 **A REFUSED RENDER GIVES THE CREDITS BACK NOW, AND IT DID NOT ON THE FIRST
 ORDER.** The balance went 21 → 0 for a tape fal never made. `providerWasCalled`
@@ -90,10 +127,13 @@ as a dress rehearsal, so the paid run tests fal rather than our plumbing~~ —
 one; the result page has a cassette label and the status page three phases with
 a working record light, both to mockups the owner approved.
 
-**AGENT-BUILDABLE WORK IS NOW EXHAUSTED — nothing is left ungated.** What
-remains is in §54I and almost all of it is the owner's: retry the paid order,
-read fal's usage page, send the realism check, buy and refund a Starter pack,
-sign the AWS agreement, and decide the `noindex` question that gates marketing.
+**WHAT REMAINS IS ALMOST ALL THE OWNER'S — §55G supersedes §54I.** Read fal's
+usage page (free, and it decides a shipped refund rule), settle the wide-shape
+surcharge, put one order through the website, send the realism check, buy and
+refund a Starter pack, sign the AWS agreement, and decide the `noindex`
+question. **Two small agent-buildable items exist and neither is gated:**
+removing §44's now-redundant judder scatter, and giving `falVideoBody` the same
+per-model treatment the reference path got in §55C.
 
 **AND ONE PROMPT CHANGE IS QUEUED BEHIND THE PAID RUN — §53.** A machine looked
 at the three model tapes for the first time (free, offline) and §19's six-beat
@@ -142,7 +182,7 @@ CX line it quotes is "temporarily not available" everywhere, so the box is a
 **THE SITE IS `noindex` ON PURPOSE** and lifting it is a deliberate step, not a
 tidy-up — the Impressum publishes a home address. §46F, §42E.
 
-**2045 tests / 2043 pass / 0 fail / 2 skipped.** The two standing skips are the
+**2054 tests / 2052 pass / 0 fail / 2 skipped.** The two standing skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`; on a
 machine with no Chromium-family browser the browser tests self-skip too, and
 §47G's session-secret race test stands itself down when the scheduler will not
@@ -6767,6 +6807,211 @@ line demotes by size instead.
 **AGENT-BUILDABLE: nothing is left ungated.** The punch-in zoom (§34G) is
 deliberately parked so the next paid render measures one change and not two —
 §19's ruling, and the arc fix (§53) is that one change.
+
+---
+
+### 55. THE VIDEO SUPPLIER CLOSED THE DOOR ON FACES, AND THE PRODUCT MOVED IN AN AFTERNOON (2026-09-02)
+
+**2045 / 2043 -> 2054 / 2052 pass / 0 fail / 2 skipped.** One commit, `ebf90b2`,
+test-first, all seven `guards.yml` steps run verbatim and green (and COUNTED --
+§49H's lesson about a loop reporting a green it never earned). **Pushed, and
+deployed to the box, which is at `ebf90b2`.**
+
+**THE HEADLINE: `bytedance/seedance-2.0/reference-to-video` STOPPED ACCEPTING
+REFERENCE IMAGES CONTAINING A REAL PERSON, EIGHT DAYS AFTER RENDERING THREE
+TAPES FROM ONE.** The product's entire premise is putting a real person in a
+place. It is now on `alibaba/wan-3.0/reference-to-video`, which is better and
+cheaper on every axis measured.
+
+#### A -- Six refusals, and what each one ruled out
+
+Every one came back **HTTP 422 `content_policy_violation`**, *"The images or
+videos provided may contain likenesses of real people or other private
+information that cannot be processed"*, `ctx.extra_info.reason:
+"partner_validation_failed"`.
+
+| # | Sent | To | Result | What it ruled out |
+|---|---|---|---|---|
+| 1 | web order, photo A | seedance-2.0/ref2vid | refused | -- |
+| 2 | web order, photo B | seedance-2.0/ref2vid | refused | "it's that one photo" |
+| 3 | `face.jpg`, the photo that made three tapes on 08-25 | seedance-2.0/ref2vid | refused | **our code, our photos, our prompts** |
+| 4 | `face.jpg` | `seedream/v4.5/edit` | **worked** | "fal has banned faces" |
+| 5 | the AI still from test 4 | seedance-2.0/**image**-to-video | refused | **the two-stage path, and "send a generated image instead"** |
+| 6 | `face.jpg` | seedance-**2.5**/ref2vid | refused | "a newer ByteDance model" |
+| 7 | `face.jpg` | **wan-3.0/ref2vid** | **worked** | -- |
+
+**TEST 3 IS THE ONE THAT PROVES IT IS THEM.** Same file, same hash
+(`14db8d11...`), same endpoint, same request shape as the three tapes of
+2026-08-24/25. The only variable is the date.
+
+**TEST 5 IS THE ONE PEOPLE WILL RE-PROPOSE.** The owner asked three separate
+times whether generating an image first would get round it. It will not, and
+this is the measurement: the input was a seedream still, not a photograph, and
+it was refused identically with `loc: ["body","image_url"]`. **The filter reads
+the LIKENESS, not the file's provenance.** Do not re-litigate this.
+
+**`partner_validation_failed` IS THE KEY FIELD.** fal's own error docs say the
+flag may come from "either fal's filter or one of our partners'". This is
+ByteDance's, applied across their video models -- which is why 2.5 behaves
+identically and why their IMAGE endpoints are untouched. **The line is drawn
+between picture and video, not around any one model.**
+
+#### B -- What Wan 3.0 buys, beyond not refusing
+
+Verified 2026-09-02 by reading the schema page AND by a real generation in
+fal's playground, judged by the owner: *"the face resemblance is also exactly
+as mine ... it's better."*
+
+| | Seedance 2.0 | Wan 3.0 |
+|---|---|---|
+| 15s tape at 480p | **$2.0727** (measured) | **$0.75** |
+| 4:3 | a crop | native aspect |
+| Resolutions | 480p, 720p | 480p, 720p, **1080p** |
+| Max duration | 15s -- exactly our ceiling | **30s** |
+| Max references | 9 | 10 |
+| Delivered | 752x560 @ **24fps** | 720x544 @ **30fps** |
+
+**Seedance 2.5 was tested and is 4.4x the price as well as refusing:** $0.2205/s
+at 480p, i.e. $3.31 a tape. The hold §32 item 4 placed on 2.5 (the owner's, "do
+not wire it, do not price it") was lifted by him only far enough to run that one
+free playground test.
+
+#### C -- TWO FIELDS WERE HARDCODED AND BOTH WOULD HAVE GONE OUT WRONG
+
+Neither was a Wan problem. Both were latent the whole time and only a second
+vendor could expose them.
+
+1. **THE AUDIO-OFF PARAMETER'S NAME.** `config/models.json` has recorded
+   `audioOffParam: {name, value}` since the three-layer guard was written, and
+   `assertAudioOff` refuses any video model that does not carry one -- while
+   `falReferenceVideoBody` ignored the recorded name and always wrote
+   `generate_audio`. **Wan's is `audio`, and both default to TRUE.** So the
+   wrong name is not a 422; it is a field the endpoint ignores while its own
+   audio stays on, and a tape shipping the model's soundtrack under a bed whose
+   entire specification is "quiet". **Only layer 3 -- the ffprobe
+   zero-audio-streams assertion -- would have caught it, after the render was
+   paid for.**
+2. **`duration` WENT OUT AS A STRING.** Seedance's enum is strings `'4'..'15'`;
+   Wan's is an integer 2..30. The wrong type is a 422 at best and a silently
+   coerced duration at worst, which breaks the 375-frame contract without
+   failing anything.
+
+Both are read from the entry now. A third, Wan-specific: **`enable_prompt_expansion`
+defaults to TRUE** and is documented as "intelligent prompt rewriting". It would
+undo §14's negatives, §17's anti-slop framing and §19's shot list, and **end
+reproducibility outright** -- same seed and same prompt would stop being the same
+request. Sent as `false`.
+
+**PER-MODEL EXTRAS CANNOT OVERRIDE WHAT THE BUILDER OWNS.** A free-form merge
+onto the paid path could turn the model's audio back on, or replace the
+references, from a config file nobody reads on the way to a bill. A colliding
+key throws.
+
+#### D -- THE PRICE HAS A TIER DIMENSION, AND THE SHAPE SURCHARGE LOST ITS BASIS
+
+Wan bills **per second at a rate that doubles per tier** -- $0.05 / $0.10 /
+$0.20 for 480p / 720p / 1080p. One flat `usd` would have quoted 480p's price for
+a 720p order and understated it by half: **§26's flattening defect arriving in a
+second billing model.** `usdByShortEdge` is keyed on the SHORT EDGE, which is
+this product's own invariant (§13), and **a tier with no rate is refused rather
+than charged at the nearest one** -- guessing low would sell a 1080p tape at a
+quarter of cost, silently.
+
+**IT FOLLOWS THAT THE FRAME SHAPE IS FREE ON THIS MODEL.** 640x480, 854x480 and
+480x854 are all the 480 tier. **§34D's 4/3 surcharge was derived from a pixel
+term Wan does not have**, so the 28 CR charged for 16:9 and 9:16 against 21 CR
+for 4:3 is now charging for something that costs nothing. **`config/credits.json`
+IS DELIBERATELY UNCHANGED** -- what a customer pays is the owner's decision and
+moving it re-prices every rung at once. **It is the open item most likely to be
+forgotten.**
+
+**AND THE FREE GRANT'S MEANING MOVED WITHOUT ITS NUMBER MOVING.** 21 CR bought
+exactly one 480p tape at $2.0727. At $0.75 it buys about 2.6. The owner's "21 is
+final" (§49B) still stands; what it BUYS did not stay still.
+
+#### E -- THE FIRST FINISHED PAID TAPE THIS PRODUCT HAS EVER MADE
+
+Job `20260902-160924-af12f6`, 480p 4:3 direct, **$0.75**. Every step green:
+375 frames, 15.000s, -27.3 LUFS.
+
+- **§53's ARC FIX IS PROVED AGAINST A MODEL.** `90bf3e1` was written for
+  Seedance and the run that would have judged it was refused. On this tape the
+  subject is **in all six sampled beats and the last frame is his face** --
+  against §53B's measurement of the 720p Seedance tape, where he was absent from
+  53% of it and it ended on an empty garden.
+- **§30's single white stripe survived the model change.** Still one broad
+  stripe, not adidas's three.
+- **`audio: false` HELD ON THE WIRE.** Zero audio streams in the raw segment;
+  the delivered tape's one track is our own bed.
+
+**THE JUDDER IS GONE, AND NOT BECAUSE WE FIXED IT.** Wan delivers **30fps**, so
+`fps=25` DECIMATES (450 -> 375, dropping 75) rather than DUPLICATING. Measured
+the §44 way, on the raw segment, with the old Seedance clip as a control:
+
+```
+Wan 30fps source      : 375 frames, 0 duplicates
+Seedance 24fps source : 376 frames, 15 duplicates   <- reproduces §26 exactly
+```
+
+**§44's `judderScatter` is now solving a problem this source does not have.**
+It is harmless (the render still verified at exactly 375 frames) but it is dead
+weight on the shipped path, and the section describing it as fixing "every tape
+ever made" needs reading with this date attached. **A first measurement that
+agrees with the control is the only kind worth trusting** -- the first attempt
+here reported 0 duplicates for BOTH clips, which was a broken awk parser and not
+a finding.
+
+#### F -- Things that will bite
+
+- **GSTACK `/browse` IS DEAD ON THIS MACHINE.** `dist/` holds `browse.exe`, and
+  running it fails `Permission denied` from Git Bash and **"An Application
+  Control policy has blocked this file"** from PowerShell. Windows Application
+  Control blocks the bundled binary. The fallback that works is the in-app
+  Claude Browser pane -- and **`tab-1` is pinned to a local file preview and
+  refuses to navigate**, so `tabs_create` first.
+- **A PLACEHOLDER IN A PASTED COMMAND IS A REAL BUG ON WINDOWS.**
+  `--actual=<usd>` was pasted literally and cmd read `<` as a redirect:
+  "The syntax of the command is incorrect." Write placeholders as words, or give
+  a worked example with a real number.
+- **A FIRST METERING THAT AGREES PERFECTLY WITH THE ESTIMATE IS SUSPECT.**
+  `20260902-160924-af12f6` is recorded at $0.75 against a $0.75 estimate, 0.0%
+  divergence -- and the figure came from the example in the pasted command, not
+  yet confirmed to have been read off fal's usage page. `config/pricing.json`
+  still says `estimate: true`, which is the honest state; **do not promote it to
+  `estimate: false` until somebody names the invoice.**
+- **`node -e` WITH `require` PLUS TOP-LEVEL AWAIT IS AMBIGUOUS-MODULE.** Use
+  `--input-type=module` with `import fs from 'node:fs'`; relative imports then
+  resolve from the repo root. A scratch `.mjs` outside the repo cannot import
+  `./scripts/...` at all -- the Windows path gets mangled two different ways.
+- **`capabilities.resolutions` / `aspectRatios` in `config/models.json` are
+  REGISTRY DOCUMENTATION, not switches.** The raster check runs off the
+  provider's own table (`FAL_RESOLUTIONS`, `fal.mjs`), so recording 1080p there
+  does not open an unpriced tier. §32 item 16 is still a live decision.
+- **`defaults.fal.video` IS STILL SEEDANCE AND IS DEAD.** The still path has
+  been gated behind an unverified still model since it was written, so nothing
+  reaches it. Repointing it is a separate decision; `falVideoBody` still
+  hardcodes `generate_audio` and would need the same fix as §55C first.
+
+#### G -- What is left
+
+**THE OWNER'S:**
+
+1. **Read fal's usage page.** Two questions on one screen: is $0.75 real (§55F),
+   and **were the six refusals billed?** §8 says a 422 is not billed, measured
+   against a DIFFERENT endpoint; `420bf2b` gives credits back on a 4xx on that
+   basis. If a refusal IS billed, that rule gives away a render every time and
+   must be reverted.
+2. **The wide-shape surcharge** (§55D). Charging 28 CR for a shape that now
+   costs what 4:3 costs.
+3. **One order through the website** (~$0.75). Everything is proved from the CLI;
+   a real customer journey has still never produced a tape.
+4. Unchanged from §54I: the realism check at `out/realism-check/`, buying and
+   refunding a Starter pack, the AWS agreement before image moderation goes on,
+   and the `noindex` decision.
+
+**AGENT-BUILDABLE:** removing §44's now-redundant judder scatter, and giving
+`falVideoBody` the same per-model treatment as the reference path if the still
+route is ever revived. Neither is urgent and neither is gated.
 
 ---
 
