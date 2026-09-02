@@ -159,6 +159,40 @@ test('a huge error body is truncated rather than pasted into the manifest', () =
   assert.ok(err.detail.body.length < 2100, `body was ${err.detail.body.length} chars`);
 });
 
+test('an inline image in an error body is redacted before the body is kept', () => {
+  // fal's 422 echoes the request it refused, and the request carries the
+  // photograph inline as a base64 data URI. `error.detail` is written to the
+  // manifest, which outlives the 7-day photo window and the customer's own
+  // delete -- so image bytes must never reach it, whatever surrounds them.
+  const image = `data:image/jpeg;base64,${'/9j/4AAQSkZJRgABAQ'.repeat(600)}==`;
+  const body = {
+    detail: [{ loc: ['body', 'image_urls', 0], msg: `value ${image} was refused`, type: 'value_error' }],
+  };
+  const err = classifyHttp(422, body, { provider: 'fal' });
+
+  assert.doesNotMatch(err.detail.body, /base64,[A-Za-z0-9+/=]{8,}/, 'no run of image bytes survives');
+  assert.match(err.detail.body, /data:image\/jpeg;base64,<redacted>/, 'the field is still recognisable as an image');
+  // The redaction runs BEFORE the truncation, so what the provider said AFTER
+  // the image is still there to read. A truncation-first order keeps 2000
+  // characters of JPEG header and drops the sentence that names the problem.
+  assert.match(err.detail.body, /was refused/);
+  assert.match(err.detail.body, /value_error/);
+  assert.ok(err.detail.body.length < 400, `body was ${err.detail.body.length} chars -- the image should be gone, not capped`);
+});
+
+test('the redaction covers every data URI shape a provider might echo', () => {
+  for (const uri of [
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ',
+    'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=',
+    'DATA:IMAGE/JPEG;BASE64,/9J/4AAQSKZJRGABAQ',
+    'data:application/octet-stream;base64,AAAA',
+  ]) {
+    const err = classifyHttp(400, `before ${uri} after`);
+    assert.doesNotMatch(err.detail.body, /base64,[A-Za-z0-9+/=]{4,}/i, `${uri.slice(0, 30)} leaked`);
+    assert.match(err.detail.body, /^before data:.*<redacted> after$/i, `context lost around ${uri.slice(0, 30)}`);
+  }
+});
+
 test('isRetriable does not guess about errors nobody classified', () => {
   // Deliberate: a raw `fetch` failure arrives as a bare TypeError with the
   // real cause buried, and teaching this function to sniff for that would put

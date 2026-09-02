@@ -107,6 +107,36 @@ function bodyText(body) {
 }
 
 /**
+ * A base64 data URI, whatever its media type, matched case-insensitively
+ * because a provider that echoes a request may normalise the scheme.
+ */
+const INLINE_DATA = /data:[\w.+/-]+;base64,[A-Za-z0-9+/=]*/gi;
+
+/**
+ * Strip inline payloads out of a body before anything keeps it.
+ *
+ * A request to an image or video endpoint carries the photograph inline --
+ * `fal.mjs` builds a `data:image/...;base64,` URI from the bytes -- and a
+ * provider's 4xx echoes the request it refused, image included. `detail.body`
+ * is written to the manifest by `failStep`, and the manifest outlives the
+ * 7-day photo window, the customer's per-job delete and the purge that
+ * empties `input/`: the one file the retention promise says holds no image
+ * would hold a fragment of one. Measured on a real refusal, the echo put
+ * ~1.6 KB of prompt before the image, so the truncation below kept only the
+ * JPEG header -- a reordering upstream would have kept the top rows of a
+ * face instead. Redacting BEFORE truncating is the order that matters twice:
+ * no pixel data can survive whatever the provider puts first, and whatever
+ * the provider said AFTER the image is still there to read.
+ *
+ * The scheme and media type are kept so the field is still recognisable as
+ * "the image", which is exactly what an operator diagnosing a refusal wants
+ * to know.
+ */
+function redactInlineData(text) {
+  return text.replace(INLINE_DATA, (m) => `${m.slice(0, m.indexOf(',') + 1)}<redacted>`);
+}
+
+/**
  * HTTP status -> the one error class the pipeline should see.
  *
  * @param {number} status
@@ -116,7 +146,7 @@ function bodyText(body) {
  * @returns {ProviderError}             returned, not thrown -- the caller decides
  */
 export function classifyHttp(status, body = null, { provider = 'unknown' } = {}) {
-  const text = bodyText(body);
+  const text = redactInlineData(bodyText(body));
   const detail = { status, body: text.length > 2000 ? `${text.slice(0, 2000)}...` : text };
   const say = (what) => `${provider}: HTTP ${status} ${what}`;
 
