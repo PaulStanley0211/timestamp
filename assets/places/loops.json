@@ -2,14 +2,26 @@
   "_comment": "Mean luma of each loop, 0-255, averaged over every frame. The page derives its per-place scrim from this. Regenerate with: node scripts/tapedeck/place-loops.mjs",
   "raster": "1024x576",
   "loops": {
+    "amalfi-afternoon": {
+      "yavg": 160.3
+    },
     "kuechentisch-fruehstueck": {
       "yavg": 100.6
+    },
+    "new-york-times-square": {
+      "yavg": 90.9
     },
     "ostsee-strand": {
       "yavg": 164.9
     },
     "schrebergarten-august": {
       "yavg": 92.7
+    },
+    "space-centre": {
+      "yavg": 131.2
+    },
+    "tokyo-night": {
+      "yavg": 91.8
     },
     "wohnzimmer-abend": {
       "yavg": 49.1
