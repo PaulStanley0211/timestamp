@@ -2389,6 +2389,25 @@ input[type="file"]::file-selector-button {
 
 .is-landing .masthead { padding: 2.5rem 0 0; }
 
+/* THE NAV IS THE ONE PIECE OF TEXT ON THE LANDING THAT NEVER GOT A PLATE. The
+   menu, the "how" and "plain" sections all sit on the 0.62 plate below, which
+   is what lets their dim labels clear 4.5:1 over the brightest loop; the two
+   nav links sit directly on the blurred picture under a half-strength scrim,
+   in the same dim grey. Over the Amalfi loop -- the default ground since
+   2026-09-05, mean luma 160 -- that measures about 2:1. The owner's words:
+   "I cannot see that plans and sign in exist or not." So on this page the
+   links take the hero's own colour, and a soft dark shadow underneath them
+   for the loops that are brighter still. Hover keeps the cathode, restated
+   here because this rule has the same specificity as the base hover rule
+   and comes later in the sheet, so it would otherwise win on hover too. The
+   wordmark beside them stays held back on purpose (see .brand): it is a
+   mark, and the record light is the only thing that gets to shout. */
+.is-landing .nav a, .is-landing .nav button {
+  color: var(--l-bone);
+  text-shadow: 0 1px 14px rgba(7, 10, 17, 0.7);
+}
+.is-landing .nav a:hover, .is-landing .nav button:hover { color: var(--l-cathode); }
+
 /* ONE COLUMN NOW, because the column it used to balance was the 4:3 veil and
    the place is behind the whole page instead. The menu is capped rather than
    full-width: a plate that reaches both edges of a wide screen stops reading as

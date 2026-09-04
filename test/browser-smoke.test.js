@@ -472,6 +472,42 @@ test('the landing page fits a phone and a laptop with nothing off screen', { ski
   }
 });
 
+test('the landing nav is as bright as the hero, because it sits on the picture with no plate', { skip }, async () => {
+  // THE OWNER'S WORDS, 2026-09-05: "in the landing page it looks very fade. I
+  // cannot see that plans and sign in exist or not." Measured: the two links
+  // were painted in the landing's dim label colour (--l-dim, #8D8880) at
+  // 12px, directly on the blurred loop under the landing's half-strength
+  // scrim. Every other dim word on that page sits on a 0.62 plate that was
+  // solved for exactly this (see .lmenu in static.mjs); the nav is the one
+  // piece of text on the landing that never got one. Over the Amalfi loop --
+  // the default ground since 2026-09-05, mean luma 160 -- that is about 2:1,
+  // which is not faint, it is invisible.
+  //
+  // The rule pinned here: on the landing the nav links take the hero's own
+  // colour, and carry a shadow so they survive the brightest loop. Read from
+  // the real cascade rather than the stylesheet text, because a later
+  // landing-scoped rule of equal specificity would silently win again.
+  const s = await session();
+  await s.signOut();
+  for (const viewport of [PHONE, LAPTOP]) {
+    const page = await visit('/', viewport);
+    const r = await page.evaluate(`(() => {
+      const links = [...document.querySelectorAll('.nav a, .nav button')].map((a) => {
+        const cs = getComputedStyle(a);
+        return { text: a.textContent.trim(), color: cs.color, shadow: cs.textShadow };
+      });
+      const hero = getComputedStyle(document.querySelector('h1')).color;
+      return { links, hero };
+    })()`);
+    assert.ok(r.links.length >= 2, `expected Plans and Sign in in the landing nav at ${viewport.width}px, found ${r.links.length}`);
+    for (const link of r.links) {
+      assert.equal(link.color, r.hero,
+        `at ${viewport.width}px "${link.text}" is painted ${link.color}, not the hero's ${r.hero} -- dim text on the picture with no plate`);
+      assert.notEqual(link.shadow, 'none', `at ${viewport.width}px "${link.text}" has no shadow to survive a bright loop`);
+    }
+  }
+});
+
 test('the selection mark sits at the left of its card, in every row', { skip }, async () => {
   // THE OWNER SAW THE FRAME ROW'S DOT ON THE LEFT AND THE QUALITY ROW'S ON THE
   // RIGHT (2026-09-04) and asked for one answer everywhere: the mark on the
