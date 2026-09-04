@@ -549,6 +549,18 @@ function normalizeInput(input, jobId) {
       { code: 'BAD_INPUT', jobId });
   }
 
+  // THE SHOT ARC, when one was asked for: `six` (the vlog) or `three` (one
+  // continuous moment), see compose/prompt.mjs. It rides the input for the
+  // same reason `direct` does. Absent stays absent rather than becoming null,
+  // because every manifest written before 2026-09-04 has no arc and means the
+  // default. Validated here by name rather than against the composer's list:
+  // the job model sits below compose and must not import from it.
+  const arc = input.arc;
+  if (arc !== undefined && arc !== 'six' && arc !== 'three') {
+    throw new JobError(`input.arc must be six or three, got ${JSON.stringify(arc)}`,
+      { code: 'BAD_INPUT', jobId });
+  }
+
   let consent = null;
   if (input.consent != null) {
     if (input.consent.granted !== true) {
@@ -585,6 +597,7 @@ function normalizeInput(input, jobId) {
     },
     stillCount,
     direct,
+    ...(arc !== undefined ? { arc } : {}),
     // What was asked for, and therefore what was charged for. These have to
     // survive into the manifest because the manifest is the ONLY channel
     // between the web process and the worker -- the worker never sees the

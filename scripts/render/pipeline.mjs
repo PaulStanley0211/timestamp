@@ -776,6 +776,10 @@ async function stepCompose(ctx) {
       place, outfit, era: DEFAULT_ERA,
       placePhoto: Boolean(job.input.place.photoPath),
       seconds: segments.reduce((n, seg) => n + seg.seconds, 0),
+      // The arc rides the input like `direct` does -- the manifest is the only
+      // channel to the worker -- and is frozen into this prompt here, so a
+      // resume sends what the manifest describes. Absent means the default.
+      arc: job.input.arc ?? 'six',
     })
     : null;
   const stillPrompt = direct
@@ -2010,6 +2014,7 @@ export async function dryRun({
         place, outfit, era: DEFAULT_ERA,
         placePhoto: Boolean(input.place.photoPath),
         seconds: segments.reduce((n, seg) => n + seg.seconds, 0),
+        arc: input.arc ?? 'six',
       })
       : null,
     calls,

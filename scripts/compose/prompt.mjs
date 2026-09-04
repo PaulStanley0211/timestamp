@@ -405,13 +405,22 @@ export function composeMotionPrompt({ place, outfit, segment = 1, totalSegments 
  * @param {number} [args.seconds]    the whole tape in one call; 15 by default
  * @returns {{prompt: string, negativePrompt: string}}
  */
+/**
+ * The two shapes a direct tape can take. `six` is the vlog arc section 19
+ * wrote and section 53 corrected; `three` is one continuous moment. The CLI
+ * validates `--arc` against this list and the composer refuses anything else
+ * by name, so a typo costs a line rather than a render.
+ */
+export const ARCS = Object.freeze(['six', 'three']);
+
 export function composeReferencePrompt({
-  place, outfit, placePhoto = false, era = DEFAULT_ERA, seconds = 15, cameraMove = null,
+  place, outfit, placePhoto = false, era = DEFAULT_ERA, seconds = 15, cameraMove = null, arc = 'six',
 } = {}) {
   requirePreset(place, 'place', ['id', 'label', 'timeOfDay', 'motionHint',
     ...['scene', 'light', 'lens', 'framing'].map((f) => `prompt.${f}`)]);
   requirePreset(outfit, 'outfit', ['id', 'label', 'wardrobe']);
   if (!isNonEmptyString(era)) throw new TypeError('era must be a non-empty string');
+  if (!ARCS.includes(arc)) throw new TypeError(`arc must be one of ${ARCS.join(', ')}, got ${JSON.stringify(arc)}`);
 
   const move = CAMCORDER_MOVES[cameraMove ?? place.cameraMove] ?? CAMCORDER_MOVES.drift;
   const kelvin = Number.isFinite(place.whiteBalanceK)
@@ -450,7 +459,7 @@ export function composeReferencePrompt({
   // a shot list that never leaves the subject is a portrait in six pieces. What
   // changes is that it is now the ONLY one, and that the tape ends on the
   // person who paid for it.
-  const beats = [
+  const beatsSix = [
     'Wide. Walking in at the near edge, camera following a step behind and swinging round to catch up with them.',
     `Wide. The whole place, camera panning slowly across it -- ${place.motionHint} -- and holding at the far side.`,
     `Close. ${propSentence}, with them just behind it in the same frame, camera pushing in and steadying.`,
@@ -458,9 +467,29 @@ export function composeReferencePrompt({
     'Medium close. Turning back toward the lens mid-gesture, camera lifting to meet them.',
     'Wide. One last look across the place with them still standing in it, camera drifting and settling on them.',
   ];
-  const chosen = shotCount >= beats.length
+
+  // THREE BEATS, ONE CONTINUOUS MOMENT (2026-09-04). The owner watched two
+  // tapes from the same evening: the garden one read as an afternoon, the
+  // living-room one stood, sat, stood again with nothing carrying across the
+  // cuts. Six beats give the model six chances to drop the thread. Three give
+  // it three, every one naming the person, the pan folded into the arrival so
+  // the place is still seen with them in it, and the continuity said in words
+  // below. Fewer cuts and longer holds is also what a home recording actually
+  // looks like. A switch until a paid comparison has judged it; `six` stays
+  // the default.
+  const beatsThree = [
+    `Wide. Walking in at the near edge and looking around the whole place -- ${place.motionHint} -- `
+      + 'camera following a step behind and swinging round to stay with them.',
+    `Medium. ${place.prompt.moment ?? DEFAULT_MOMENT}, camera moving round to keep them in frame, `
+      + 'picking up exactly where the shot before left them.',
+    'Medium close. Turning back toward the lens and holding there, camera lifting to meet them and settling on them.',
+  ];
+
+  const beats = arc === 'three' ? beatsThree : beatsSix;
+  const wanted = arc === 'three' ? Math.min(shotCount, beats.length) : shotCount;
+  const chosen = wanted >= beats.length
     ? beats
-    : [beats[0], ...beats.slice(1, shotCount - 1), beats[beats.length - 1]];
+    : [beats[0], ...beats.slice(1, wanted - 1), beats[beats.length - 1]];
 
   const lines = [
     `${REFERENCE_SUBJECT}, wearing ${outfit.wardrobe}.`,
@@ -469,7 +498,7 @@ export function composeReferencePrompt({
     // change from the first direct run, whose camera clause said the operator
     // stood in one place and breathed -- and the model obeyed it exactly.
     'Somebody came along with a camera and is walking with them: hand-held at 63°, chest height, '
-      + `${shotCount} shots cut in camera, real speed throughout. ${SNAPSHOT_RULE}.`,
+      + `${chosen.length} shots cut in camera, real speed throughout. ${SNAPSHOT_RULE}.`,
     `Lens: ${place.prompt.lens}.`,
     `Light: ${place.prompt.light}. White balance ${kelvin}K, held across every shot.`,
     '',
@@ -479,6 +508,17 @@ export function composeReferencePrompt({
       + 'consistent with it, and nothing visible was manufactured later.',
     'Exactly one person in frame, and it is the same place, the same wardrobe and the same light '
       + 'in every shot.',
+    // THE PERSON IS NEVER A PROP. On the living-room tape the model painted
+    // the reference photograph onto the television, in a different shirt: it
+    // treats "the person" as something it may draw anywhere a face fits. Said
+    // in words, on both arcs.
+    'They appear only in the flesh: never on a television screen, in a mirror, in a photograph '
+      + 'or on a poster.',
+    ...(arc === 'three'
+      ? ['One continuous moment: the same spot, the same posture and the same light carried across '
+        + 'every cut, each shot picking up where the last one left off, at the unhurried pace of '
+        + 'somebody recording an afternoon.']
+      : []),
   ];
 
   return {

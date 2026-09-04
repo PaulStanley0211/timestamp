@@ -232,7 +232,7 @@ export function makeDeps({ ffmpeg = makeFfmpeg(), overrides = {} } = {}) {
   };
 }
 
-export function makeJob(root, { place, outfit, stillCount = 3, jobId, direct = false } = {}) {
+export function makeJob(root, { place, outfit, stillCount = 3, jobId, direct = false, arc } = {}) {
   return createJob({
     root,
     jobId,
@@ -243,6 +243,9 @@ export function makeJob(root, { place, outfit, stillCount = 3, jobId, direct = f
       outfit: outfit ?? { kind: 'preset', value: 'trainingsjacke' },
       stillCount,
       direct,
+      // Only when asked for, exactly as the CLI writes it: an absent arc is
+      // the default, and the manifest should not carry a key nobody set.
+      ...(arc ? { arc } : {}),
       consent: CONSENT,
     },
   });
@@ -907,6 +910,35 @@ test('a direct job never makes a still, and never asks anybody to choose one', a
   assert.equal(stepStatus(job, 'select'), 'skipped', 'and there is nothing to choose between');
   assert.equal(calls.still, 0, 'nothing was paid for a picture nobody was going to see');
   assert.equal(job.status, 'done', 'the job still finishes; the tape is the product');
+});
+
+test('the arc on the job input reaches the frozen reference prompt, and the dry run quotes it', async () => {
+  // `arc` is the switch between the six-beat vlog and the three-beat
+  // continuous moment (compose/prompt.mjs). It rides the input like `direct`
+  // does, because the manifest is the only channel to the worker, and it is
+  // frozen into the reference prompt at compose so a resume sends what the
+  // manifest describes.
+  const { provider } = makeProvider({ maxClipSeconds: 15 });
+  const plan = await dryRun({
+    provider,
+    input: {
+      place: { kind: 'preset', value: 'ostsee-strand' },
+      outfit: { kind: 'preset', value: 'sommerkleid' },
+      direct: true,
+      arc: 'three',
+    },
+    deps: makeDeps(),
+  });
+  const quoted = plan.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
+  assert.equal(quoted.length, 3, 'the dry run quoted the six-beat prompt for a three-beat order');
+
+  const { job } = await runFake({ input: { direct: true, arc: 'three' }, provider: { maxClipSeconds: 15 } });
+  const frozen = job.resolved.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
+  assert.equal(frozen.length, 3, 'the manifest froze the six-beat prompt for a three-beat order');
+
+  // And a job that says nothing gets the default, which is still six.
+  const { job: plain } = await runFake({ input: { direct: true }, provider: { maxClipSeconds: 15 } });
+  assert.equal(plain.resolved.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 6);
 });
 
 test('a direct job animates from the photographs, not from a start frame', async () => {

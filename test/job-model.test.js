@@ -889,6 +889,22 @@ test('the chosen shape is recorded on the job, and an old manifest still means 4
   assert.equal(old.input.aspect, '4:3');
 });
 
+test('the shot arc survives into the manifest when given, is absent when not, and is refused when unknown', () => {
+  // THE PROJECTION DROPPED IT. `normalizeInput` returns a fixed shape, so a
+  // field the CLI wrote and this function did not name read back as undefined
+  // -- the dry run quoted three beats while the frozen prompt carried six,
+  // which is the entriesOf trap CLAUDE.md records, one file over.
+  const { job } = makeJob({ input: baseInput({ arc: 'three' }) });
+  assert.equal(job.input.arc, 'three');
+
+  // Absent, not null: an old manifest has no arc and means the default, and a
+  // null would read as "no arc decided" rather than as six.
+  const { job: plain } = makeJob({ input: baseInput() });
+  assert.ok(!('arc' in plain.input), 'a job that said nothing carries an arc key anyway');
+
+  assert.throws(() => makeJob({ input: baseInput({ arc: 'nine' }) }), (err) => err.code === 'BAD_INPUT');
+});
+
 test('a provider refusal keeps the reason it gave, or nobody can fix it', () => {
   // MEASURED 2026-09-02, THE FIRST REAL PAID ORDER. fal answered HTTP 422 on
   // content grounds and the manifest recorded code, message, retriable, step

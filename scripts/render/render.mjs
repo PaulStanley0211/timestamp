@@ -39,6 +39,7 @@ import { resumeSettings, ResumeConflictError } from './resume.mjs';
 import { loadPricing, estimateJob } from '../providers/pricing.mjs';
 import { aspectIds } from '../tapedeck/frame.mjs';
 import { AVAILABLE_RESOLUTIONS, DEFAULT_RESOLUTION } from '../animate/plan.mjs';
+import { ARCS } from '../compose/prompt.mjs';
 
 /** Which shape, refused rather than defaulted when it is not one we make. */
 function cleanAspect(value, cfg) {
@@ -67,6 +68,21 @@ function cleanAspect(value, cfg) {
  * different line for it. A CLI run with no resolution is not a customer buying
  * the cheap tier.
  */
+/**
+ * Which shot list a direct tape is asked for: the six-beat vlog (default) or
+ * the three-beat continuous moment (compose/prompt.mjs). Left undefined when
+ * omitted so the manifest carries no key nobody set, and refused by name when
+ * it is not one the composer knows -- a typo here would otherwise cost a
+ * render before anything noticed.
+ */
+function cleanArc(value) {
+  if (value === undefined) return undefined;
+  if (!ARCS.includes(value)) {
+    throw new PipelineError(`--arc must be one of ${ARCS.join(', ')}, got "${value}"`, { code: 'BAD_ARG' });
+  }
+  return value;
+}
+
 function cleanResolution(value) {
   if (value === undefined) return null;
   if (!AVAILABLE_RESOLUTIONS.includes(value)) {
@@ -116,6 +132,8 @@ function usage(catalog) {
     '                        seconds. Nothing to approve, and no cheap rejection',
     '                        gate either -- a miss costs a whole video.',
     '  --video-model=<id>    override the video model (pair with --direct).',
+    '  --arc=<six|three>     the shot list a direct tape is asked for: six beats',
+    '                        (the vlog, default) or three (one continuous moment).',
     '  --still-model=<id>    override the still model for this run (Phase 0 bake-off).',
     '  --allow-unverified-model',
     '                        required alongside --still-model for a candidate that',
@@ -387,6 +405,7 @@ async function main() {
         direct,
         resolution: cleanResolution(args.resolution),
         aspect: cleanAspect(args.aspect, cfg),
+        ...(cleanArc(args.arc) ? { arc: cleanArc(args.arc) } : {}),
       },
       stillModelOverride, videoModelOverride, allowUnverifiedModel,
     });
@@ -427,6 +446,7 @@ async function main() {
       // reaches the pipeline costs a render; caught here it costs a line.
       aspect: cleanAspect(args.aspect, cfg),
       resolution: cleanResolution(args.resolution),
+      ...(cleanArc(args.arc) ? { arc: cleanArc(args.arc) } : {}),
       consent,
     },
   });

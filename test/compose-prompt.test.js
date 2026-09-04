@@ -634,3 +634,51 @@ test('at most one shot in the arc is the place without the person', () => {
       + `ends up without the customer:\n${empty.join('\n')}`);
   }
 });
+
+/**
+ * THE THREE-BEAT ARC (2026-09-04). The owner watched two tapes from the same
+ * evening: one read as an afternoon, the other stood, sat, stood again with
+ * nothing carrying across the cuts. Six beats give the model six chances to
+ * drop the thread; this arc gives it three, each naming the person, and says
+ * in words that it is one continuous moment with the same spot and posture
+ * carried across every cut. It is a switch, not the default, until a paid
+ * comparison has judged it.
+ */
+test('the three-beat arc is one continuous moment with the person in every shot', () => {
+  const { prompt } = composeReferencePrompt({ place, outfit, arc: 'three' });
+  const shots = prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
+  assert.equal(shots.length, 3, 'three beats at fifteen seconds');
+  for (const shot of shots) {
+    assert.match(shot, /\b(them|they|their)\b/i, `a beat without the person: ${shot}`);
+    assert.match(shot, /camera/i, `no camera direction: ${shot}`);
+  }
+  assert.match(prompt, /One continuous moment/, 'the continuity is not said in words');
+  assert.match(prompt, /same spot/, 'and it does not say what must carry across the cut');
+  // The last beat ends on the person, which is the ruling section 53 earned.
+  assert.match(shots[2], /settling on them/);
+  // A shorter tape keeps the ends and drops the middle.
+  const short = composeReferencePrompt({ place, outfit, arc: 'three', seconds: 5 }).prompt;
+  assert.equal(short.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 2, 'five seconds is two beats');
+});
+
+test('the six-beat arc is still the default, unchanged by the switch', () => {
+  const plain = composeReferencePrompt({ place, outfit }).prompt;
+  const six = composeReferencePrompt({ place, outfit, arc: 'six' }).prompt;
+  assert.equal(plain, six);
+  assert.equal(plain.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 6);
+});
+
+test('an arc this file has not written is refused, never defaulted', () => {
+  assert.throws(() => composeReferencePrompt({ place, outfit, arc: 'nine' }), TypeError);
+});
+
+test('the person appears only in the flesh, never on a screen, in a mirror or in a picture', () => {
+  // On the living-room tape the model painted the reference photograph onto
+  // the television, in a different shirt: it treats "the person" as something
+  // it may draw anywhere a face fits. Said in words, on both arcs.
+  for (const arc of ['six', 'three']) {
+    const { prompt } = composeReferencePrompt({ place, outfit, arc });
+    assert.match(prompt, /never on a television screen, in a mirror, in a photograph or on a poster/,
+      `${arc}: the prompt does not keep the person off the props`);
+  }
+});
