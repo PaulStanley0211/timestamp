@@ -1519,6 +1519,9 @@ export function createServer({
         // The shape is what decides whether the raster above is PAL or merely
         // shares its line rate, so the page needs it alongside the numbers.
         aspect: job.input?.aspect ?? null,
+        // And the size, because the status page lists the order as where,
+        // wearing and frame, and the frame is the shape AND the size.
+        resolution: job.input?.resolution ?? null,
       },
       selection: job.selection,
       createdAt: job.createdAt,

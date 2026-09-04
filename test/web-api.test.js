@@ -359,7 +359,7 @@ const goodParts = (extra = []) => ([
 
 /** Build a job straight through the model, to put the server in front of a state
  *  a worker would have produced, and hand it to an account. */
-function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a t-shirt', result = null, owner = null, aspect = null } = {}) {
+function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a t-shirt', result = null, owner = null, aspect = null, resolution = null } = {}) {
   const job = createJob({
     root,
     input: {
@@ -367,6 +367,7 @@ function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a 
       place: { kind: 'text', value: place },
       outfit: { kind: 'text', value: outfit },
       ...(aspect ? { aspect } : {}),
+      ...(resolution ? { resolution } : {}),
       stillCount: 3,
       consent: { granted: true, at: new Date().toISOString(), text: 'the wording' },
     },
@@ -1583,6 +1584,26 @@ test('the status page keeps its alert and credit-note surfaces for the poller', 
     const page = await (await get(base, `/j/${job.jobId}`, cookieA)).text();
     assert.match(page, /id="alert"[^>]*hidden/, 'the alert surface must exist, hidden, on a healthy job');
     assert.match(page, /id="creditnote"[^>]*hidden/, 'the credit-note surface must exist, hidden, on a healthy job');
+  });
+});
+
+test('the job view carries the frame it was ordered in, shape and size', async () => {
+  // The status page lists the order as where / wearing / frame, and the frame
+  // is the shape AND the size. The view exposed the shape already; the size
+  // was on the manifest and never projected, so the page could not say
+  // "9:16, 480p" without reading the manifest itself.
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    const job = seedJob(app, root, { status: 'running', owner: accountA, aspect: '9:16', resolution: '480p' });
+    const res = await fetch(`${base}/api/jobs/${job.jobId}`, { headers: { cookie: cookieA, accept: 'application/json' } });
+    assert.equal(res.status, 200);
+    const view = await res.json();
+    assert.equal(view.input.aspect, '9:16');
+    assert.equal(view.input.resolution, '480p');
+
+    // A job that froze no size says null, not a default the page would print.
+    const bare = seedJob(app, root, { status: 'running', owner: accountA });
+    const bareView = await (await fetch(`${base}/api/jobs/${bare.jobId}`, { headers: { cookie: cookieA, accept: 'application/json' } })).json();
+    assert.equal(bareView.input.resolution, null);
   });
 });
 

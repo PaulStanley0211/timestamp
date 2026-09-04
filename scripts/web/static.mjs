@@ -823,7 +823,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .bg { animation: none; transition: none; transform: scale(1.08); }
   .rec { animation: none; }
-  .seg-running { animation: none; }
 }
 
 .wrap { max-width: 44rem; margin: 0 auto; position: relative; z-index: 1; }
@@ -1891,22 +1890,34 @@ input[type="file"]::file-selector-button {
 
 /* --- progress ---------------------------------------------------------- */
 
-.bar { display: flex; gap: 3px; list-style: none; padding: 0; margin: 0 0 0.6rem; }
-/* The unlit track was a 8% BONE wash -- a light colour, which on paper is
-   invisible. It inverts to an ink wash: the track is a shadow on the page now,
-   not a highlight on a dark one. */
-.seg { flex: 1; height: 4px; border-radius: 1px; background: rgba(42, 33, 27, 0.12); }
-.seg-done { background: var(--accent-deep); }
-.seg-skipped { background: transparent; box-shadow: inset 0 0 0 1px var(--accent-deep); }
-.seg-running { background: var(--accent); animation: breathe 1.9s ease-in-out infinite; }
-.seg-failed { background: var(--alarm); }
+/* THE PHASES ARE ROWS, NOT A BAR (2026-09-04, from the design prototype). A
+   bar can only say how far; a row per phase says what is happening and what
+   is still to come, in words, with the record light on the one being filmed.
+   The counter above keeps the "2 of 3" a bar used to imply. */
+.status { max-width: 44rem; }
+.status .headline { font-size: var(--t-6); line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; }
+.counter { font-family: var(--osd); color: var(--faint); letter-spacing: 0.12em; text-transform: uppercase; font-size: var(--d-1); margin: var(--s-6) 0 var(--s-3); }
+.phases { list-style: none; padding: 0; margin: 0 0 var(--s-6); display: grid; gap: var(--s-4); }
+.phase { display: grid; grid-template-columns: 5rem minmax(0, 1fr) auto; column-gap: var(--s-4); align-items: baseline; }
+.phase-state { display: flex; align-items: center; gap: 0.5rem; font-family: var(--osd); font-size: var(--t-1); letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+.phase-state .dot { display: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+.phase-done .phase-state { color: var(--accent-deep); }
+.phase-done .phase-state .dot { display: inline-block; background: var(--accent-deep); }
+.phase-stopped .phase-state { color: var(--alarm); }
+.phase-stopped .phase-state .dot { display: inline-block; background: var(--alarm); }
+.phase-title { display: block; font-size: var(--t-3); line-height: 1.3; font-weight: 500; color: var(--ink); }
+.phase-note { display: block; font-size: var(--t-1); color: var(--faint); margin-top: var(--s-1); max-width: 48ch; }
+/* A phase still to come is a ghost, at the floor and no lower. Hierarchy in
+   the row is otherwise carried by size, which survives the opacity. */
+.phase-pending .phase-title { opacity: var(--ghost); }
+.phase-n { font-family: var(--osd); font-size: var(--d-1); letter-spacing: 0.12em; color: var(--faint); }
+@media (max-width: 27rem) {
+  .phase { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--s-1); }
+  .phase-state { grid-column: 1 / -1; }
+}
 
-@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-
-.counter { font-family: var(--osd); color: var(--faint); letter-spacing: 0.12em; font-size: var(--t-1); margin: 0 0 1.75rem; }
-
-/* THE RECORD LIGHT. Rendered only while the job is genuinely running -- see
-   statusPage -- so this never blinks over a tape that has already stopped.
+/* THE RECORD LIGHT. It sits on the phase being filmed and nowhere else -- see
+   statusPage -- so it never blinks over a tape that has already stopped.
 
    NOT '.rec': that class is already the dot inside the wordmark SVG, and
    sharing it would have made the brand mark and this indicator style each
@@ -1914,13 +1925,8 @@ input[type="file"]::file-selector-button {
 
    The blink is steps() rather than a fade, because a tally light is a lamp
    being switched, not something that breathes. */
-.reclight {
-  display: flex; align-items: center; gap: 0.5rem;
-  font-family: var(--osd); font-size: var(--t-1);
-  letter-spacing: 0.18em; color: var(--accent);
-  margin: 0 0 0.2rem;
-}
-.reclight .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: tally 1.6s steps(1, end) infinite; }
+.reclight { color: var(--accent); }
+.reclight .dot { display: inline-block; background: var(--accent); animation: tally 1.6s steps(1, end) infinite; }
 @keyframes tally { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) { .reclight .dot { animation: none; } }
 
@@ -1960,9 +1966,10 @@ input[type="file"]::file-selector-button {
 .step-current .step-mark { background: var(--accent); }
 .step-current .step-note { color: var(--muted); }
 
-.inputs { font-size: var(--t-1); color: var(--muted); line-height: 1.9; }
-.inputs .k { display: inline-block; min-width: 5rem; color: var(--faint); font-size: var(--t-label); text-transform: uppercase; letter-spacing: 0.2em; }
-.inputs .v { overflow-wrap: anywhere; }
+/* The order, as a definition list: where, wearing, frame. */
+.inputs { display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: var(--s-1) var(--s-4); margin: 0 0 var(--s-6); color: var(--muted); }
+.inputs dt { font-size: var(--t-label); text-transform: uppercase; letter-spacing: 0.22em; color: var(--faint); line-height: 1.6; }
+.inputs dd { margin: 0; overflow-wrap: anywhere; }
 
 /* --- contact sheet ----------------------------------------------------- */
 

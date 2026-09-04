@@ -1309,11 +1309,87 @@ test('the wait is three phases, not eleven pipeline steps', () => {
   // what leads is the three things actually happening.
   const html = statusPage({ view: elevenStepView() });
 
-  const segs = html.match(/<li class="seg[^"]*"/g) || [];
-  assert.equal(segs.length, 3,
-    `the progress bar still has ${segs.length} segments -- it must show phases, not steps`);
+  const rows = html.match(/<li class="phase[^"]*"/g) || [];
+  assert.equal(rows.length, 3,
+    `the phase list has ${rows.length} rows -- it must show phases, not steps`);
 
   assert.match(html, /of 3/, 'the counter must count phases');
+});
+
+/**
+ * THE STATUS PAGE FROM THE DESIGN PROTOTYPE (2026-09-04). The heading names
+ * the place and what is happening to it; the three phases are a list that
+ * says where each one stands, with the record light on the one being filmed;
+ * the order sits beneath as where / wearing / frame.
+ */
+test('the headline names the place and what is happening to it', () => {
+  const labels = { place: 'The balcony', outfit: 'Cotton summer dress' };
+  const running = statusPage({ view: elevenStepView(), labels });
+  assert.match(running,
+    /<h1 class="headline" id="headline"><span class="where">The balcony<\/span>, <span id="headstate">being filmed<\/span><\/h1>/,
+    'while the job runs the heading is the place, being filmed');
+
+  const failed = statusPage({ view: { ...elevenStepView(), status: 'failed' }, labels });
+  assert.match(failed, /<span id="headstate">stopped<\/span>/, 'a stopped job says so in the heading');
+
+  // The phase title moved off the heading and into the list: a heading that
+  // reads "Filming" is a build-log line, not the name of somebody's tape.
+  assert.ok(!/<h1[^>]*>\s*Filming\s*</.test(running), 'the heading is still the phase title');
+});
+
+test('each phase says where it stands: done, recording, or not yet', () => {
+  const html = statusPage({ view: elevenStepView('animate') });
+  const rows = html.match(/<li class="phase[^"]*"[\s\S]*?<\/li>/g) || [];
+  assert.equal(rows.length, 3, 'three phase rows');
+
+  assert.match(rows[0], /class="phase phase-done"/, 'the first phase is done');
+  assert.match(rows[0], /Done/, 'and says so');
+  assert.match(rows[1], /class="phase phase-running"/, 'the second phase is the one running');
+  assert.match(rows[1], /class="phase-state reclight"/, 'the record light sits on the running phase');
+  assert.match(rows[1], />REC</, 'and reads REC');
+  assert.match(rows[2], /class="phase phase-pending"/, 'the third phase is still to come');
+  assert.match(rows[2], /Not yet/, 'and says so');
+
+  // The title and note live in the row now, and the rows are numbered.
+  assert.match(rows[1], /Filming/, 'the phase title is in its row');
+  assert.match(rows[1], /where the minutes go/, 'and so is its note');
+  assert.match(rows[0], />01</, 'rows are numbered');
+  assert.match(rows[2], />03</, 'rows are numbered');
+
+  // A STOPPED JOB DOES NOT RECORD. The phase it died in says so, and there is
+  // no record light anywhere on the page.
+  const failed = statusPage({ view: { ...elevenStepView('animate'), status: 'failed' } });
+  const frows = failed.match(/<li class="phase[^"]*"[\s\S]*?<\/li>/g) || [];
+  assert.match(frows[1], /class="phase phase-stopped"/, 'the phase the job died in is marked stopped');
+  assert.match(frows[1], /Stopped/, 'and says so');
+  // The poller's source names the class it will paint, so the check is on the
+  // markup and not on the script.
+  const markup = failed.replace(/<script>[\s\S]*?<\/script>/, '');
+  assert.ok(!/reclight/.test(markup), 'a record light is still on a stopped job');
+});
+
+test('the order is listed under the phases: where, wearing, frame', () => {
+  const base = elevenStepView();
+  const view = { ...base, input: { ...base.input, aspect: '9:16', resolution: '480p' } };
+  const html = statusPage({ view, labels: { place: 'The balcony', outfit: 'Cotton summer dress' } });
+
+  const dl = html.match(/<dl class="inputs">([\s\S]*?)<\/dl>/);
+  assert.ok(dl, 'the order is not a definition list');
+  assert.match(dl[1], /<dt>Where<\/dt>\s*<dd>The balcony<\/dd>/, 'where');
+  assert.match(dl[1], /<dt>Wearing<\/dt>\s*<dd>Cotton summer dress<\/dd>/, 'wearing');
+  assert.match(dl[1], /<dt>Frame<\/dt>\s*<dd>9:16, 480p<\/dd>/, 'the frame is the shape and the size');
+
+  // A job that froze no shape gets no Frame row rather than a guessed one.
+  const bare = statusPage({ view: base, labels: { place: 'The balcony', outfit: 'x' } });
+  assert.ok(!/<dt>Frame<\/dt>/.test(bare), 'a frame row was invented for a job with no shape');
+});
+
+test('the poller repaints the phase rows and the heading, not a bar that is gone', () => {
+  const html = statusPage({ view: elevenStepView() });
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? '';
+  assert.match(script, /getElementById\('headstate'\)/, 'the poller never repaints the heading state');
+  assert.match(script, /querySelectorAll\('#phases \.phase'\)/, 'the poller never repaints the phase rows');
+  assert.ok(!/#bar \.seg/.test(script), 'the poller still paints the deleted bar');
 });
 
 test('every pipeline step is still reachable, one line away', () => {
@@ -1336,13 +1412,15 @@ test('the record light is on the page it is for', () => {
   // but the chrome. A blinking REC beside the phase is the single most
   // characteristic thing a camcorder does, it costs one element, and this is
   // the one screen in the product that is literally a recording in progress.
+  // IT SITS ON THE PHASE BEING FILMED (2026-09-04) rather than beside the
+  // stamp: the light belongs to the thing that is recording.
   const running = statusPage({ view: elevenStepView() });
-  assert.match(running, /class="reclight"/, 'the status page carries no record light');
+  assert.match(running, /class="phase-state reclight"/, 'the status page carries no record light');
 
   // AND IT MUST NOT BLINK OVER A FINISHED OR FAILED JOB. A record light on a
   // job that stopped is a lie about what the machine is doing.
   const failed = statusPage({ view: { ...elevenStepView(), status: 'failed' } });
-  assert.ok(!/class="reclight"/.test(failed),
+  assert.ok(!/class="phase-state reclight"/.test(failed),
     'the record light is still blinking on a job that is not running');
 });
 

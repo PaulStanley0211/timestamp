@@ -213,6 +213,41 @@ const STATUS_COPY = Object.freeze({
   cancelled: 'Cancelled',
 });
 
+/** The heading's second half: "The balcony, being filmed". Lower case because
+ *  it follows the place and a comma, and in the same order as STATUS_COPY so a
+ *  status added to one is visibly missing from the other. */
+const HEADLINE_COPY = Object.freeze({
+  queued: 'waiting for a machine',
+  pending: 'waiting for a machine',
+  running: 'being filmed',
+  'awaiting-selection': 'waiting for you',
+  done: 'finished',
+  failed: 'stopped',
+  cancelled: 'cancelled',
+});
+
+/** What a phase row says about itself. REC is the record light's own word. */
+const PHASE_STATE_COPY = Object.freeze({
+  done: 'Done',
+  running: 'REC',
+  pending: 'Not yet',
+  stopped: 'Stopped',
+});
+
+/**
+ * Where one phase stands, given which phase the job is in and how the job is.
+ * A phase before the current one is done and one after it is still to come;
+ * the current one is recording -- unless the job has stopped, in which case it
+ * stopped THERE and nothing on the page records. The poller carries the same
+ * four lines, so the first paint and every repaint agree.
+ */
+function phaseState(i, idx, status) {
+  if (status === 'done') return 'done';
+  if (i < idx) return 'done';
+  if (i > idx) return 'pending';
+  return status === 'failed' || status === 'cancelled' ? 'stopped' : 'running';
+}
+
 // ---------------------------------------------------------------------------
 // the inline scripts, as named constants, because the policy names them
 // ---------------------------------------------------------------------------
@@ -309,12 +344,14 @@ const STATUS_SCRIPT = `
   var root = document.getElementById('status');
   var id = root.dataset.job;
   var words = ${jsonInScript(STATUS_COPY)};
+  var heads = ${jsonInScript(HEADLINE_COPY)};
+  var states = ${jsonInScript(PHASE_STATE_COPY)};
   var phases = ${jsonInScript(PHASES)};
 
   // The same grouping the server rendered, from the same constant, so the
   // first paint and every repaint after it agree. An unknown step answers 0
   // for the reason phaseIndexOf gives: early work by definition, and a
-  // negative index would paint the bar as finished.
+  // negative index would paint the list as finished.
   function phaseIndexOf(step) {
     for (var i = 0; i < phases.length; i++) {
       if (phases[i].steps.indexOf(step) !== -1) return i;
@@ -322,25 +359,35 @@ const STATUS_SCRIPT = `
     return 0;
   }
 
+  // The same rule the server rendered with -- see phaseState in views.mjs.
+  function phaseState(i, idx, status) {
+    if (status === 'done') return 'done';
+    if (i < idx) return 'done';
+    if (i > idx) return 'pending';
+    return (status === 'failed' || status === 'cancelled') ? 'stopped' : 'running';
+  }
+
   function paint(v) {
     var idx = phaseIndexOf(v.step);
-    var p = phases[idx];
-    document.getElementById('headline').textContent = p.title;
-    document.getElementById('subline').textContent = p.note;
+    document.getElementById('headstate').textContent = heads[v.status] || v.status;
     document.getElementById('statusword').textContent = words[v.status] || v.status;
 
     document.getElementById('counter').firstChild.nodeValue =
       (idx + 1) + ' of ' + phases.length + ' \\u00b7 ';
 
-    // THE RECORD LIGHT STOPS WITH THE JOB. It is server-rendered only while
-    // running, so a job that fails mid-poll would otherwise keep blinking at
-    // somebody whose tape has already died.
-    var rec = document.querySelector('.reclight');
-    if (rec && v.status !== 'running' && v.status !== 'pending') rec.remove();
-
-    var segs = document.querySelectorAll('#bar .seg');
-    for (var i = 0; i < segs.length; i++) {
-      segs[i].className = 'seg seg-' + (i < idx ? 'done' : i === idx ? 'running' : 'pending');
+    // THE RECORD LIGHT STOPS WITH THE JOB. It sits on the phase being filmed
+    // and on nothing else, so a job that fails mid-poll stops blinking on the
+    // next paint rather than at somebody whose tape has already died.
+    // textContent only, so nothing here can become markup.
+    var prows = document.querySelectorAll('#phases .phase');
+    for (var i = 0; i < prows.length; i++) {
+      var state = phaseState(i, idx, v.status);
+      prows[i].className = 'phase phase-' + state;
+      var cell = prows[i].querySelector('.phase-state');
+      if (!cell) continue;
+      cell.className = 'phase-state' + (state === 'running' ? ' reclight' : '');
+      var word = cell.querySelector('.word');
+      if (word) word.textContent = states[state] || state;
     }
 
     var rows = document.querySelectorAll('#steps .step');
@@ -1682,39 +1729,49 @@ export function statusPage({ view, account = null, labels = {} }) {
   // step-by-step bar: the page counts phases now, and the per-step statuses
   // are read straight off `view.steps` where the detail list renders them.
   const phaseIdx = phaseIndexOf(view.step);
-  const phase = PHASES[phaseIdx];
+
+  /**
+   * THE HEADING IS THE PLACE AND WHAT IS HAPPENING TO IT (2026-09-04, from the
+   * design prototype): "The balcony, being filmed". It used to be the phase
+   * title, which read as a build-log line where the name of somebody's tape
+   * should be; the phase titles live in the list now. The second half follows
+   * the job's status and the poller repaints it. A job with no place name --
+   * a photograph of a place with no caption -- gets the state alone.
+   */
+  const where = labels.place ?? view.input?.place ?? null;
+  const headstate = HEADLINE_COPY[view.status] ?? view.status;
+  const heading = where
+    ? `<span class="where">${h(where)}</span>, <span id="headstate">${h(headstate)}</span>`
+    : `<span id="headstate">${h(headstate.charAt(0).toUpperCase() + headstate.slice(1))}</span>`;
+
+  /**
+   * THE FRAME IS THE SHAPE AND THE SIZE, read off the job's own input, and a
+   * job that froze neither gets no row rather than a printed default.
+   */
+  const frame = [view.input?.aspect, view.input?.resolution].filter(Boolean).join(', ');
+
+  const phaseRow = (p, i) => {
+    const state = phaseState(i, phaseIdx, view.status);
+    return `<li class="phase phase-${state}">
+      <span class="phase-state${state === 'running' ? ' reclight' : ''}"><span class="dot" aria-hidden="true"></span><span class="word">${h(PHASE_STATE_COPY[state])}</span></span>
+      <span class="phase-body"><span class="phase-title">${h(p.title)}</span><span class="phase-note">${h(p.note)}</span></span>
+      <span class="phase-n">${h(String(i + 1).padStart(2, '0'))}</span>
+    </li>`;
+  };
 
   const body = `
-<main data-job="${h(view.jobId)}" data-status="${h(view.status)}" id="status">
-  <section class="panel">
+<main class="status" data-job="${h(view.jobId)}" data-status="${h(view.status)}" id="status">
   <p class="stamp">${h(view.jobId)}</p>
-
-  ${/* THE RECORD LIGHT, ON THE ONE SCREEN IN THE PRODUCT THAT IS LITERALLY A
-       RECORDING IN PROGRESS. `--rec` has been a token since the mark landed
-       and appeared nowhere but the chrome. It is rendered only while the job
-       is actually running: a blinking REC over a finished or failed job is a
-       lie about what the machine is doing, and there is a test for it. The
-       blink honours prefers-reduced-motion in the stylesheet. */''}
-  ${view.status === 'running' || view.status === 'pending'
-    ? '<p class="reclight"><span class="dot" aria-hidden="true"></span>REC</p>'
-    : `<p class="eyebrow">${h(STATUS_COPY[view.status] ?? view.status)}</p>`}
-  <h1 class="headline" id="headline">${h(phase.title)}</h1>
-  <p class="sub" id="subline">${h(phase.note)}</p>
-
-  ${/* THREE SEGMENTS, ONE PER PHASE. This was one segment per pipeline step,
-       which spent four of its eleven on work that finishes in milliseconds and
-       two on the calls that take minutes -- a bar that moves fastest exactly
-       where the waiting is not. */''}
-  <ol class="bar" id="bar" aria-label="Progress">
-    ${PHASES.map((p, i) => `<li class="seg seg-${i < phaseIdx ? 'done' : i === phaseIdx ? 'running' : 'pending'}" title="${h(p.title)}"></li>`).join('')}
-  </ol>
-  <p class="counter" id="counter">${h(`${phaseIdx + 1} of ${PHASES.length}`)} &middot; <span id="statusword">${h(STATUS_COPY[view.status] ?? view.status)}</span></p>
+  <p class="eyebrow">Your tape</p>
+  <h1 class="headline" id="headline">${heading}</h1>
 
   ${/* THE MOST USEFUL SENTENCE ON A PAGE NOBODY WANTS TO SIT ON. The job is a
        queue entry and a worker claims it, so closing the browser changes
        nothing -- but the page never said so, and the honest reading of a live
-       progress bar is "stay here". Static, so the poller never touches it. */''}
-  <p class="hint">You can close this page and come back &mdash; the tape carries on without you.</p>
+       progress page is "stay here". Static, so the poller never touches it. */''}
+  <p class="sub">A few minutes, most of them in the middle phase. You can close this page and
+  come back &mdash; the tape carries on without you.</p>
+  <p class="hint">Fifteen seconds of tape, 375 frames.</p>
 
   ${''/* Both surfaces ALWAYS exist, hidden while empty: the poller repaints
         them, and a job that fails MID-POLL would otherwise never show its
@@ -1722,7 +1779,19 @@ export function statusPage({ view, account = null, labels = {} }) {
         already customer copy -- jobView ships the authored userMessage or one
         generic sentence, never the operator's exception text. */}
   <p class="alert" role="alert" id="alert"${view.error ? '' : ' hidden'}>${h(view.error?.message ?? '')}</p>
-  <p class="hint creditnote" id="creditnote"${view.creditNote ? '' : ' hidden'}>${h(view.creditNote ?? '')}</p>
+
+  ${/* THREE ROWS, ONE PER PHASE, EACH SAYING WHERE IT STANDS. This was a bar
+       of three segments, and before that one segment per pipeline step, which
+       spent four of its eleven on work that finishes in milliseconds and two
+       on the calls that take minutes. A row can say what is happening; a bar
+       can only say how far. THE RECORD LIGHT sits on the phase being filmed --
+       the one screen in the product that is literally a recording in progress
+       -- and on nothing else, so a finished or failed job never blinks. The
+       blink honours prefers-reduced-motion in the stylesheet. */''}
+  <p class="counter" id="counter">${h(`${phaseIdx + 1} of ${PHASES.length}`)} &middot; <span id="statusword">${h(STATUS_COPY[view.status] ?? view.status)}</span></p>
+  <ol class="phases" id="phases" aria-label="Progress">
+    ${PHASES.map(phaseRow).join('\n    ')}
+  </ol>
 
   ${/* THE ELEVEN, ONE LINE AWAY. Native <details>, so this costs no script and
        no fourth inline hash -- `script-src` names the shipped scripts by hash
@@ -1736,17 +1805,23 @@ export function statusPage({ view, account = null, labels = {} }) {
     </ol>
   </details>
 
-  <p class="inputs">
-    <span class="k">Where</span> <span class="v">${h(labels.place ?? view.input.place)}</span><br>
-    <span class="k">Wearing</span> <span class="v">${h(labels.outfit ?? view.input.outfit)}</span>
-  </p>
+  <p class="eyebrow">This tape</p>
+  <dl class="inputs">
+    <dt>Where</dt>
+    <dd>${h(labels.place ?? view.input?.place ?? '')}</dd>
+    <dt>Wearing</dt>
+    <dd>${h(labels.outfit ?? view.input?.outfit ?? '')}</dd>
+    ${frame ? `<dt>Frame</dt>
+    <dd>${h(frame)}</dd>` : ''}
+  </dl>
+
+  <p class="hint creditnote" id="creditnote"${view.creditNote ? '' : ' hidden'}>${h(view.creditNote ?? '')}</p>
 
   <p class="actions">
     <button type="button" class="quiet" id="cancel">Cancel this one</button>
     <a class="quiet" href="/">Back to the shelf</a>
   </p>
   <noscript><p class="hint">This page reloads every five seconds.</p></noscript>
-  </section>
 </main>
 
 <script>${STATUS_SCRIPT}</script>
