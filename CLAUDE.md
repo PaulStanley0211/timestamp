@@ -25,7 +25,7 @@ trunk is an open decision and the owner's** -- it changes the deploy runbook.
 
 ## READ §60 FIRST (2026-09-04): THE DESIGN PROTOTYPE IS IMPLEMENTED, PAGE BY PAGE, AND DEPLOYED AT `9272c9a`. FIVE COMMITS, ALL TEST-FIRST. THEN §59, §58, §57.
 
-**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2102 / 2099 / 0 / 3.
+**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2104 / 2101 / 0 / 3. **AND §60E: the first live checkout was refused by Stripe that evening, the cause was the audit's own card-only parameter, it is fixed at `123b415`, and ONE STRIPE DASHBOARD STEP IS THE OWNER'S** -- add `checkout.session.async_payment_succeeded` to the webhook's events.
 
 ## READ §59 FIRST (2026-09-03, evening): THE AUDIT'S CODE ITEMS ARE FIXED, DEPLOYED AT `bf84de3`, AND THE BOX IS KEY-ONLY. TWO CONSOLE STEPS ARE THE OWNER'S. THEN §58, THEN §57.
 
@@ -7624,6 +7624,49 @@ AWS agreement, fal's usage page, the Hetzner firewall and the mail records.
 **The prototype's one unbuilt idea is the landing's tape playing large**,
 which the premium spec (§3.1) already records as blocked on one genuinely
 good finished tape.
+
+#### E -- THE FIRST LIVE CHECKOUT WAS REFUSED, AND THE CAUSE WAS THE AUDIT'S OWN FIX (2026-09-04, evening)
+
+The owner pressed Buy Starter on the live site for the first time and got
+**502, "We could not start checkout."** The web log named it exactly:
+
+```
+stripe refused a checkout session: stripe: Unsupported parameter:
+payment_method_types. Managed Payments, which is enabled by default on your
+account, handles this parameter for you.
+```
+
+**`d86cd2d` (§59, the day before) added `payment_method_types[0]=card` to the
+checkout body** so that `completed` would always mean `paid`. The account
+sells through Managed Payments -- Stripe as merchant of record, the 3.5%
+decision in §46B -- and under it Stripe controls the method list and REFUSES
+that parameter, along with `excluded_payment_method_types`,
+`payment_method_configuration` and `payment_method_options` (read on Stripe's
+own "update Checkout for Managed Payments" page via `stripe docs`). **The
+tests fake Stripe, so 2102 of them passed over a checkout that could not
+start**, and no live Buy had ever been pressed before this one.
+
+**Fixed in `123b415`, test-first, three sabotages red.** The body names
+no method. What the parameter was guarding is handled where Stripe's own
+set-up page says to handle it: a method that settles later fires `completed`
+UNPAID and the money follows on `checkout.session.async_payment_succeeded`,
+which the webhook now grants on exactly as on a paid completion, keyed on its
+own event id. An unpaid completion still grants nothing and still logs, and
+the line now says which event the money arrives on.
+
+**ONE CONSOLE STEP IS THE OWNER'S AND IT IS NOT OPTIONAL:** in the Stripe
+dashboard, add `checkout.session.async_payment_succeeded` to the webhook
+endpoint's events beside `checkout.session.completed`. Until that is done a
+customer who pays by a delayed method is logged and never credited. Cards,
+Apple Pay, Google Pay and Link pay on `completed` and need nothing.
+
+**And the live purchase is STILL UNPROVEN.** The refusal happened before any
+money moved; the Starter-pack test in §57D is still owed.
+
+**Things that will bite:** `stripe docs /payments/...` from Git Bash needs
+`MSYS_NO_PATHCONV=1` or the path arrives as `C:/Program Files/Git/payments`
+and the page 404s. And a fake transport cannot see a parameter the real API
+refuses -- a change to the request body is only proven by one live call.
 
 ## Not in scope
 
