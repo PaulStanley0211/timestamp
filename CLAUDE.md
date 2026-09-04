@@ -7773,6 +7773,35 @@ what a person can read. Measure `segments/seg-01.mp4`, never `timestamp.mp4`
 (§53E). And "face" is BANNED vocabulary in a composed prompt (the `person`
 group), so a beat that wants to end on the face says "settling on them".
 
+**THE COMPARISON RAN THE SAME EVENING, AND THREE IS THE DEFAULT AS OF
+`4238a61`.** Same photo, same living room, same checked shirt, $0.75 a
+render, read one frame per second off the raw model output:
+
+| Job | Arc | Cuts | Person absent | Face on the TV | Connects? |
+|---|---|---|---|---|---|
+| `20260904-203732-348c9d` | three | 0 | 0 s | no | **yes** -- walk in, look, cross to the sofa, sit, watch, turn to the lens |
+| `20260904-204420-3b1ee9` | three | 0 | 0 s | no | **yes** -- the same shape on a second seed |
+| `20260904-205159-6104ce` | six | 1 | ~2 s | **twice** | **no** -- empty room, then his face on the set, sofa, then suddenly standing |
+
+**Two things worth keeping from it.** First, the three-beat prompt asks for
+"3 shots cut in camera" and the model answered with one continuous take and a
+following camera -- no hard cuts at all -- and that is the better result: the
+continuity sentence outweighed the cut count. Second, the screen clause was
+on BOTH arcs and the six-beat seed still put his face on the television,
+because its prop beat asks for "a close-up of <the television> with them just
+behind it in the same frame", which is an invitation. The three-beat arc has
+no prop close-up; that beat was the price of §19's "beach view", and the place
+is now seen in the arrival with the person in it instead.
+
+**Two tests changed deliberately:** the quality-marker sweep is
+word-boundaried (a bare `/ARRI/i` matched "carried", which the continuity
+sentence says -- the same false positive §19 recorded for "carriageway"),
+and "the vlog shows the place" pins the six-beat arc by name for its prop
+assertion while asserting the default opens wide on the place's own motion
+hint. `DEFAULT_ARC` is exported from `compose/prompt.mjs`; the pipeline's two
+call sites and the web app's orders all follow it, so a customer's tape is a
+three-beat continuous moment from this deploy on.
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT
