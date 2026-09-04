@@ -25,7 +25,7 @@ trunk is an open decision and the owner's** -- it changes the deploy runbook.
 
 ## READ §60 FIRST (2026-09-04): THE DESIGN PROTOTYPE IS IMPLEMENTED, PAGE BY PAGE, AND DEPLOYED AT `9272c9a`. FIVE COMMITS, ALL TEST-FIRST. THEN §59, §58, §57.
 
-**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2104 / 2101 / 0 / 3. **AND §60E: the first live checkout was refused by Stripe that evening, the cause was the audit's own card-only parameter, it is fixed at `123b415`, and the dashboard step is done. THE FIRST REAL CARD WAS CHARGED THAT AFTERNOON AND 92 CREDITS LANDED ONE SECOND LATER** -- the payment path is proven live, and every "no card has ever been charged" line in this file is history. **§60I's four famous places are BUILT, PHOTOGRAPHED AND DEPLOYED (§60J, 2026-09-04 late into 09-05): Times Square, Tokyo, the Amalfi coast and a space centre are live at https://timestamptapes.com, the box is at `660d3c7`, and every probe from outside passed. The owner generated the four cards himself and the New York and Tokyo presets were rewritten to describe them. §60H made the three-beat arc the default the same evening.**
+**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2104 / 2101 / 0 / 3. **AND §60E: the first live checkout was refused by Stripe that evening, the cause was the audit's own card-only parameter, it is fixed at `123b415`, and the dashboard step is done. THE FIRST REAL CARD WAS CHARGED THAT AFTERNOON AND 92 CREDITS LANDED ONE SECOND LATER** -- the payment path is proven live, and every "no card has ever been charged" line in this file is history. **§60I's four famous places are BUILT, PHOTOGRAPHED AND DEPLOYED (§60J, 2026-09-04 late into 09-05): Times Square, Tokyo, the Amalfi coast and a space centre are live at https://timestamptapes.com beside the garden, the kitchen table and the living room. THE MENU IS SEVEN PLACES: the out-of-season beach was retired the next morning in Amalfi's favour, the owner's call. The box is at `686ee62` and every probe from outside passed. The owner generated the four cards himself and the New York and Tokyo presets were rewritten to describe them. §60H made the three-beat arc the default the same evening.**
 
 ## READ §59 FIRST (2026-09-03, evening): THE AUDIT'S CODE ITEMS ARE FIXED, DEPLOYED AT `bf84de3`, AND THE BOX IS KEY-ONLY. TWO CONSOLE STEPS ARE THE OWNER'S. THEN §58, THEN §57.
 
@@ -7911,11 +7911,17 @@ the box is at `660d3c7`, web healthy, and every probe from outside passed** --
 | the swimming pool | `amalfi-afternoon` | The Amalfi coast, afternoon |
 | the balcony | `space-centre` | The space centre |
 
-**THE BEACH STAYS.** §60I lists it under "Stays" and says eight places as
-before, so it was built that way; the owner was asked twice and did not say
-otherwise. If he ever wants it gone, it is one preset, one jpg, one mp4, one
-`loops.json` entry, one `PLACE_HUES` line and one `RETIRED_PLACE_LABELS` line
--- and the expander's shared coast words then belong to Amalfi alone.
+**THE BEACH WENT THE NEXT MORNING, IN AMALFI'S FAVOUR (`686ee62`, deployed).**
+§60I listed it under "Stays", it was built that way, and the owner answered
+the question after seeing the live menu: one beach, and the summer one.
+**SEVEN PLACES NOW, three ordinary and four famous.** The retirement was the
+list above exactly -- preset, jpg, mp4, `loops.json`, `PLACE_HUES`,
+`RETIRED_PLACE_LABELS` -- plus the coast words moving to the harbour with
+`lake` and `riverbank` dropped to neutral, and twenty test edits, most of them
+tests that had used `ostsee-strand` as "any real preset id" and now use the
+harbour. Counts pinned at 7 places / 42 combinations. Verified from outside
+the same way: health ok, fourteen files 200, five retired ids 404, seven
+labels and none of the five old ones.
 
 **THE CARDS DECIDED THE SCENES, AND THE STREET-NOT-SIGN RULE BENT ONE LAYER
 DOWN.** The first drafts were a brownstone side street and a lantern back
