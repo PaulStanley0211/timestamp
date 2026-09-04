@@ -584,6 +584,48 @@ test('the landing plays the place full-bleed instead of framing it in a panel', 
   assert.ok(!/class="veils"/.test(html), 'the landing still frames the place in a 4:3 panel');
 });
 
+/**
+ * THE LANDING FROM THE DESIGN PROTOTYPE (2026-09-04): the hero in the sans
+ * face at the hero size with the proposition in one sentence beneath it, the
+ * rail kept, one call to action, and the price sitting with the claim in the
+ * closing plate rather than under the button.
+ */
+test('the hero is set in the sans face at the hero size, with the proposition beneath it', () => {
+  const html = landingPage({ places: PLACES_FIXTURE, account: null });
+  const css = createStylesheet({ places: PLACES_FIXTURE, outfits: [] }).css;
+
+  assert.match(html, /<h1 class="hero-line">One photograph\. Fifteen seconds of 2003\.<\/h1>/,
+    'the hero is one sentence in one face -- no lit fragment');
+  assert.match(html, /<p class="hero-sub">You, somewhere ordinary, in a decade that looks warmer than now\.<\/p>/,
+    'the proposition line is missing');
+
+  const hero = /\.hero-line\s*\{([^}]*)\}/.exec(css);
+  assert.ok(hero, 'no .hero-line rule');
+  assert.match(hero[1], /font-family:\s*var\(--sans\)/, 'the hero is not in the sans face');
+  assert.match(hero[1], /font-size:\s*var\(--t-hero\)/, 'the hero is not at the hero size');
+  assert.doesNotMatch(hero[1], /var\(--osd\)/, 'the hero is still the readout face');
+});
+
+test('the price sits with the claim, and the hero carries one action', () => {
+  const pricing = { fromCredits: 21, packUSD: 12, packCredits: 92 };
+  const html = landingPage({ places: PLACES_FIXTURE, account: null, pricing });
+
+  const strike = /<section class="strike">([\s\S]*?)<\/section>/.exec(html);
+  const plain = /<section class="plain">([\s\S]*?)<\/section>/.exec(html);
+  assert.ok(strike && plain, 'the hero and the closing plate are both required');
+
+  assert.match(strike[1], /class="cta"/, 'the hero lost its action');
+  assert.doesNotMatch(strike[1], /credits a tape/, 'the price is still under the button');
+  assert.match(plain[1], /From 21 credits a tape\. 92 credits is \$12, and tax is added at checkout\./,
+    'the price is not in the closing plate');
+  assert.match(plain[1], /href="\/pricing"/, 'the plate does not lead to the plans page');
+
+  // The Content sentence says what the motion has done since the vlog
+  // rewrite, not what the prompt it replaced asked for.
+  assert.match(html, /cuts six times in fifteen seconds/, 'the Content copy is stale');
+  assert.doesNotMatch(html, /goes nowhere in particular/, 'the Content copy still describes the single-take prompt');
+});
+
 test('the landing list is a rail that snaps, and its menu is a plate', () => {
   const html = landingPage({ places: PLACES_FIXTURE, account: null });
   const css = createStylesheet({ places: PLACES_FIXTURE, outfits: [] }).css;

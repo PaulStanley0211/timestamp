@@ -989,9 +989,12 @@ ${backgrounds}
 
   <section class="strike">
     <div class="lmenu">
-      <h1 class="hero-line">One photograph.<span class="lit">Fifteen seconds</span>of 2003.</h1>
-      <p class="hero-sub">Every place here is somewhere ordinary, and every one is
-      already present, unlit. Strike one and it is the afternoon you are standing in.</p>
+      ${/* THE HERO IN THE SANS FACE (2026-09-04), which is the design
+           prototype's default; its readout variant is what shipped before and
+           is one rule and one line away. One sentence, no lit fragment, and
+           the proposition beneath it in one more. */''}
+      <h1 class="hero-line">One photograph. Fifteen seconds of 2003.</h1>
+      <p class="hero-sub">You, somewhere ordinary, in a decade that looks warmer than now.</p>
 
       <ul class="lrail">${stack}
       </ul>
@@ -1009,9 +1012,6 @@ ${backgrounds}
       <p class="hero-do">
         <a class="cta" href="/signup">Make a tape &rarr;</a>
       </p>
-      ${pricing ? `<p class="hero-price">From ${h(String(pricing.fromCredits))} credits a tape.
-      ${h(String(pricing.packCredits))} credits is $${h(String(pricing.packUSD))}, and tax is added at checkout.
-      <a class="linky" href="/pricing">What a tape costs</a></p>` : ''}
     </div>
   </section>
 
@@ -1053,7 +1053,8 @@ ${backgrounds}
       <div>
         <h3 class="how-t how-t--sm">Content</h3>
         <p class="how-d">A plausible person, a plausible place, an outfit, and motion that
-        goes nowhere in particular. Your photograph is the only authority on the face.</p>
+        cuts six times in fifteen seconds, the way a home recording does. Your photograph
+        is the only authority on the face.</p>
       </div>
       <div>
         <h3 class="how-t how-t--sm">Consent</h3>
@@ -1077,6 +1078,11 @@ ${backgrounds}
     <p>It is not a filter. The picture is generated, then run through a real tape chain
     in ffmpeg &mdash; the grain goes on before the upscale, the date stamp degrades with
     the image, and the frame is matted the way a camcorder frame actually sat.</p>
+    ${/* THE PRICE SITS WITH THE CLAIM (2026-09-04, from the design prototype)
+         rather than under the button: the hero carries one action, and this
+         plate carries the two facts a visitor needs before deciding. One
+         honest line, and it says tax is added at checkout (§46B). */''}
+    ${pricing ? `<p class="plain-price">From ${h(String(pricing.fromCredits))} credits a tape. ${h(String(pricing.packCredits))} credits is $${h(String(pricing.packUSD))}, and tax is added at checkout. <a class="linky" href="/pricing">What a tape costs</a></p>` : ''}
   </section>
 
 </main>

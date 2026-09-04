@@ -2411,13 +2411,20 @@ input[type="file"]::file-selector-button {
 .is-landing .scrim { opacity: 0.5; }
 @media (max-width: 60rem) { .strike { grid-template-columns: 1fr; gap: 2.5rem; padding: 2rem 0 3.5rem; } }
 
+/* THE HERO IN THE SANS FACE (2026-09-04). The design prototype offers both
+   faces and defaults to this one: the body face at the hero size, weight 500,
+   held to thirteen characters a line so it breaks as two lines of a sentence
+   rather than a wall of a heading. The readout variant -- TapeOSD, uppercase,
+   a lit "Fifteen seconds" in cathode -- is what shipped before and is what
+   the design system's HeroLine component still draws; switching back is this
+   rule and one line of markup. */
 .hero-line {
-  font-family: var(--osd);
+  font-family: var(--sans);
   font-size: var(--t-hero);
-  line-height: 0.94; letter-spacing: 0.01em; text-transform: uppercase;
-  color: var(--l-bone); margin: 0 0 var(--s-5); max-inline-size: 14ch;
+  line-height: 1.02; letter-spacing: -0.02em; font-weight: 500;
+  color: var(--l-bone); margin: 0 0 var(--s-5); max-inline-size: 13ch;
+  text-wrap: balance;
 }
-.hero-line .lit { color: var(--l-cathode); text-shadow: 0 0 24px rgba(255, 138, 30, 0.42); display: block; }
 .hero-sub { color: #C8C2B8; margin: 0 0 var(--s-6); max-width: 42ch; font-size: var(--t-3); line-height: 1.6; }
 
 /* the ghost stack: every place present at once, one struck */
@@ -2490,21 +2497,21 @@ input[type="file"]::file-selector-button {
 
 /* the act */
 .hero-do { display: flex; gap: var(--s-6); align-items: baseline; flex-wrap: wrap; margin: 0; }
-/* The price sits UNDER the action, quietly, in the label size. It is a fact the
-   visitor needs before deciding, not a second thing competing with the button
-   -- putting it in body size beside the CTA would recreate the two-equal-things
-   problem that deleting the second CTA just solved. #B9B3A9 for the reason
-   .how-d carries it: this is text over the place photograph, and --l-dim
-   measures 2.86:1 there. */
-.hero-price {
+/* The price sits WITH THE CLAIM in the closing plate (2026-09-04), quietly,
+   in the small size. It is a fact the visitor needs before deciding, not a
+   second thing competing with the button -- putting it in body size beside
+   the CTA would recreate the two-equal-things problem that deleting the second
+   CTA solved. #B9B3A9 for the reason .how-d carries it: this is text over the
+   place photograph, and --l-dim measures 2.86:1 there. */
+.plain .plain-price {
   margin: var(--s-4) 0 0;
-  font-size: var(--t-label);
-  letter-spacing: 0.04em;
+  font-size: var(--t-1);
+  letter-spacing: 0.02em;
   line-height: 1.6;
   color: #B9B3A9;
-  max-width: 46ch;
+  max-width: 62ch;
 }
-.hero-price .linky { margin-left: var(--s-2); }
+.plain-price .linky { margin-left: var(--s-2); color: var(--l-bone); }
 .is-landing .cta {
   display: inline-block; text-decoration: none;
   font-family: var(--osd); font-size: var(--d-4); letter-spacing: 0.04em; text-transform: uppercase;
