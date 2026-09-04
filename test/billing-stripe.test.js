@@ -369,14 +369,16 @@ test('the session carries the account id, the price, and the pack as metadata', 
   assert.equal(body.get('amount'), null);
 });
 
-test('the session names its payment methods, so a completed session is always a paid one', async () => {
-  // The webhook grants on `checkout.session.completed` and reads
-  // `payment_status` off it. A card (and the wallets that ride on the card
-  // rail) settles before that event fires, so `completed` always means `paid`.
-  // Left unnamed, the Dashboard's own method list applies -- and a method that
-  // settles days later fires `completed` with `payment_status: unpaid`,
-  // followed by an event this product is not subscribed to. Naming the method
-  // here is what keeps the one event the webhook listens for sufficient.
+test('the session names no payment method, because Managed Payments refuses the parameter', async () => {
+  // THE FIRST LIVE CHECKOUT WAS REFUSED (2026-09-04): "Unsupported parameter:
+  // payment_method_types. Managed Payments ... handles this parameter for
+  // you." The account sells through Managed Payments (CLAUDE.md section 46B,
+  // a deliberate 3.5% decision), and under it Stripe controls which methods a
+  // customer sees; `payment_method_types`, `excluded_payment_method_types`,
+  // `payment_method_configuration` and `payment_method_options` are all
+  // refused on the request. So the body names none of them -- and a method
+  // that settles later is handled where Stripe says to handle it, on
+  // `checkout.session.async_payment_succeeded` in the webhook.
   let body = null;
   const fetchImpl = async (url, init) => {
     body = new URLSearchParams(init.body);
@@ -388,8 +390,10 @@ test('the session names its payment methods, so a completed session is always a 
     ...SESSION, fetchImpl, envImpl: () => ({ STRIPE_SECRET_KEY: 'sk_test_x' }),
   });
 
-  assert.deepEqual(body.getAll('payment_method_types[0]'), ['card']);
-  assert.equal(body.get('payment_method_types[1]'), null, 'exactly one method, and it is the immediate one');
+  const refused = [...body.keys()].filter((k) => /^(excluded_)?payment_method_/.test(k));
+  assert.deepEqual(refused, [], 'the body names a payment-method parameter Managed Payments refuses');
+  // The Price is still the only thing that sets what is paid.
+  assert.equal(body.get('line_items[0][price]'), SESSION.priceId);
 });
 
 test('the redirect urls must be absolute http(s), because Stripe will send somebody to them', async () => {

@@ -3606,24 +3606,31 @@ export function createServer({
         return sendJson(req, res, 200, { ok: true, granted: false, ignored: 'testmode' });
       }
 
-      // ONE EVENT, BECAUSE THERE IS ONE PACK. Everything else is acknowledged
-      // so Stripe stops retrying events this product does not act on.
-      if (event.type !== 'checkout.session.completed') {
+      // TWO EVENTS CARRY MONEY, AND BOTH ARE READ THE SAME WAY. A card pays
+      // before `checkout.session.completed` fires; a method that settles
+      // later -- which Managed Payments may offer, since it controls the
+      // method list and refuses `payment_method_types` on the request --
+      // fires `completed` unpaid and then `async_payment_succeeded` when the
+      // money lands. Each is granted on `payment_status`, keyed on its own
+      // event id, so a redelivery of either is a no-op and an unpaid
+      // completion has granted nothing for the later success to double.
+      // Everything else is acknowledged so Stripe stops retrying events this
+      // product does not act on.
+      const PAYMENT_EVENTS = ['checkout.session.completed', 'checkout.session.async_payment_succeeded'];
+      if (!PAYMENT_EVENTS.includes(event.type)) {
         return sendJson(req, res, 200, { ok: true, granted: false, ignored: event.type });
       }
       const session = event.data?.object ?? {};
       if (session.payment_status !== 'paid') {
-        // A completed session that was not paid is a real Stripe event and not
-        // a payment. Acknowledged, and nothing granted -- and SAID, because a
-        // 200 is the one answer Stripe never retries and never lists. The
-        // checkout body names cards only, so this branch should never run; if
-        // it does, a method that settles later has been enabled somewhere and
-        // the money will arrive on an event nobody is subscribed to. The line
-        // names the event and the session so both can be found in the
-        // Dashboard and the credits granted by hand.
-        logImpl(`[web] stripe event ${event.id}: session ${session.id ?? 'unknown'} completed UNPAID `
+        // A completed session that is not yet paid is a real Stripe event and
+        // not a payment: a delayed method has been chosen and the money is
+        // still on its way. Acknowledged, nothing granted -- and SAID, because
+        // a 200 is the one answer Stripe never retries and never lists. The
+        // line names the event and the session so both can be found in the
+        // Dashboard if the success event never arrives.
+        logImpl(`[web] stripe event ${event.id}: session ${session.id ?? 'unknown'} ${event.type} UNPAID `
           + `(payment_status ${JSON.stringify(session.payment_status ?? null)}) -- nothing granted; `
-          + 'if this pays later it must be credited by hand');
+          + 'the money arrives on checkout.session.async_payment_succeeded, which grants it');
         return sendJson(req, res, 200, { ok: true, granted: false, ignored: 'unpaid' });
       }
 

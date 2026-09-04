@@ -402,6 +402,61 @@ test('an unpaid session grants nothing and is not retried', async () => {
 });
 
 /**
+ * A DELAYED PAYMENT METHOD PAYS LATER, ON ITS OWN EVENT. Managed Payments
+ * controls which methods a customer sees and refuses `payment_method_types`
+ * on the request, so a method that settles later -- a bank debit, a voucher
+ * -- can be offered: `completed` then arrives UNPAID, and the money follows
+ * on `checkout.session.async_payment_succeeded`. That event grants exactly as
+ * a paid completion does, keyed on its own event id, so a redelivery of it is
+ * a no-op and the earlier unpaid completion granted nothing to double.
+ */
+test('a delayed payment that succeeds later grants the pack once, on its own event', async () => {
+  await withApp(async ({ base, root }) => {
+    const account = await makeAccount(root);
+    const opening = (await balanceOf(root, account.accountId)).credits;
+
+    const pending = completedSession({ id: 'evt_completed_unpaid', accountId: account.accountId, paymentStatus: 'unpaid' });
+    const first = await deliver(base, pending, { signature: stripeSignature(pending) });
+    assert.equal(first.status, 200);
+    assert.equal((await first.json()).granted, false, 'an unpaid completion granted');
+    assert.equal(await creditsGained(root, account.accountId, opening), 0);
+
+    const paid = completedSession({
+      id: 'evt_async_paid', accountId: account.accountId, paymentStatus: 'paid',
+      type: 'checkout.session.async_payment_succeeded',
+    });
+    const second = await deliver(base, paid, { signature: stripeSignature(paid) });
+    assert.equal(second.status, 200);
+    assert.deepEqual(await second.json(), { ok: true, granted: true, credits: PACK.credits });
+    assert.equal(await creditsGained(root, account.accountId, opening), PACK.credits,
+      'the money arrived and nothing was granted');
+
+    const again = await deliver(base, paid, { signature: stripeSignature(paid) });
+    assert.equal(again.status, 200);
+    assert.equal((await again.json()).granted, false, 'a redelivered success granted twice');
+    assert.equal(await creditsGained(root, account.accountId, opening), PACK.credits);
+    const rows = await paymentRows(root, account.accountId);
+    assert.equal(rows.length, 1, 'the ledger grew more than once for one payment');
+    assert.equal(rows[0].ref, 'evt_async_paid', 'the success event is the idempotency key');
+  }, { billing: configuredBilling() });
+});
+
+test('a delayed payment that fails grants nothing and is not retried', async () => {
+  await withApp(async ({ base, root }) => {
+    const account = await makeAccount(root);
+    const opening = (await balanceOf(root, account.accountId)).credits;
+    const failed = completedSession({
+      id: 'evt_async_failed', accountId: account.accountId, paymentStatus: 'unpaid',
+      type: 'checkout.session.async_payment_failed',
+    });
+    const res = await deliver(base, failed, { signature: stripeSignature(failed) });
+    assert.equal(res.status, 200, 'a non-2xx would make Stripe retry an event that changes nothing');
+    assert.equal((await res.json()).granted, false);
+    assert.equal(await creditsGained(root, account.accountId, opening), 0);
+  }, { billing: configuredBilling() });
+});
+
+/**
  * A test-mode event is signed exactly as honestly as a live one -- the
  * signature proves who sent it, not that money moved. A test card costs its
  * holder nothing, and credits buy real renders at real provider cost, so a

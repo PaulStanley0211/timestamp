@@ -331,18 +331,19 @@ export async function createCheckoutSession({
     mode: 'payment',
     'line_items[0][price]': priceId,
     'line_items[0][quantity]': '1',
-    // THE METHOD IS NAMED SO THAT `completed` ALWAYS MEANS `paid`. The webhook
-    // grants on `checkout.session.completed` and reads `payment_status` off
-    // it, and it is subscribed to that one event. A card -- and the wallets
-    // that ride on the card rail -- settles before the event fires. Left
-    // unnamed, the Dashboard's dynamic method list applies, and a method that
-    // settles days later (a bank debit, a transfer) fires `completed` with
-    // `payment_status: unpaid` and then an `async_payment_succeeded` nobody is
-    // listening for: money taken, credits never granted, and nothing on
-    // Stripe's failed list because every answer was a 200. Offering a
-    // delayed method is a deliberate change that adds a subscription and a
-    // second dedupe key (the session id); it is not a Dashboard toggle.
-    'payment_method_types[0]': 'card',
+    // NO PAYMENT METHOD IS NAMED, AND IT CANNOT BE. The account sells through
+    // Managed Payments (Stripe as merchant of record -- CLAUDE.md section 46B),
+    // and under it Stripe controls which methods a customer sees: the API
+    // refuses `payment_method_types`, `excluded_payment_method_types`,
+    // `payment_method_configuration` and `payment_method_options` outright.
+    // The first live checkout (2026-09-04) was refused with exactly that
+    // message because this body named cards, on the theory that it made
+    // `completed` always mean `paid`. The theory was right and the lever was
+    // wrong: a method that settles later can be offered here, so the webhook
+    // reads `payment_status` off `completed` and grants a delayed payment on
+    // `checkout.session.async_payment_succeeded`, which the endpoint must be
+    // subscribed to (docs/deploy-runbook.md). test/billing-stripe.test.js
+    // pins that none of the refused parameters is sent.
     // THE LINK BETWEEN A PAYMENT AND AN ACCOUNT, and the only one. Stripe hands
     // it back on the completed session, and the webhook reads it there.
     client_reference_id: accountId,
