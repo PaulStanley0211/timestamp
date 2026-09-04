@@ -26,17 +26,22 @@ must not use.
 
 ## The world
 
-**German / European suburban, 1999–2005. Warm and ordinary.**
+**1999–2005, on a camcorder. Warm and ordinary, wherever it is.**
 
-Not American nostalgia, and not liminal-empty-mall melancholy. The register is
-someone's actual home video: a garden in late summer, a tiled kitchen at
-breakfast, a grey Baltic beach. Nothing dramatic is happening. The feeling is
-"this was a normal afternoon and it is gone".
+The product is the era and the medium, not a country (CLAUDE.md §42F). Not
+liminal-empty-mall melancholy either. The register is someone's actual home
+video: a garden in late summer, a kitchen at breakfast, a grey beach out of
+season. Nothing dramatic is happening. The feeling is "this was a normal
+afternoon and it is gone".
 
-Balconies with drying laundry, Schrebergärten, Plattenbau stairwells, indoor
-swimming pools, Autobahn rest stops, tiled kitchens with patterned lino, a car
-back seat on a long drive. CRT televisions, wired phones, Opel and VW estates,
-plastic garden furniture, net curtains.
+Half the menu is ordinary and half is famous (§60I): a garden, a kitchen table,
+a living room and a beach beside a New York side street, a Tokyo back street,
+the Amalfi coast and a space centre. **A famous place is a street or a
+shoreline, never a sign.** `BASE_NEGATIVES` forbid text and logos because a
+model invents lettering that reads as generated, so New York is a brownstone
+block with a cab at the end of it rather than Times Square. The era still comes
+from named objects: CRT televisions, wired phones, payphones, disposable
+cameras, flip phones, estate cars with roof boxes, plastic garden furniture.
 
 If a preset needs something to happen in it, it is the wrong preset.
 
