@@ -510,7 +510,7 @@ export function pricingPage({
    * for the same reason: "1 tapes" is the sort of thing a reader notices
    * instead of the number.
    */
-  const tapeLines = (credits) => offered.map((r) => {
+  const tapeCounts = (credits) => offered.map((r) => {
     // THE SHAPE IS PART OF THE PRICE AND THIS COUNTED AT ONE SHAPE'S. `credits`
     // is the un-shaped figure, i.e. the 4:3 one. A non-default shape holds the
     // short edge and is exactly 4/3 the pixels, so it is charged 4/3 -- 28 CR
@@ -540,8 +540,9 @@ export function pricingPage({
         return m === 0 ? 'none' : String(m);
       })()} in 16:9 or 9:16)`
       : '';
-    return `<li>${h(line + suffix)}</li>`;
-  }).join('');
+    return line + suffix;
+  });
+  const tapeLines = (credits) => tapeCounts(credits).map((t) => `<li>${h(t)}</li>`).join('');
 
   /**
    * HOW LONG A TAPE ACTUALLY SURVIVES, read from the retention config rather
@@ -560,68 +561,90 @@ export function pricingPage({
     : null;
 
   /**
-   * THE LADDER, IN ORDER. The grant is first because it is where a reader
-   * starts, not because it is a product -- it has no price and no button, and
-   * `plans` holds exactly one row since the stale subscription tiers were
-   * deleted on 2026-08-27.
+   * THE GRANT IS A SENTENCE AND THE PACKS ARE THE ROW (2026-09-04, from the
+   * design prototype). A rung with no price and no button used to sit beside
+   * two purchases at equal width, and it read as a third purchase the visitor
+   * had somehow failed to make. It opens the page in words now: what an
+   * account starts with and exactly what that buys -- the wide-shape count
+   * included, because 21 credits buy a 4:3 tape and nothing in the phone
+   * shape, and this is the page that has to say so before anybody spends an
+   * upload.
+   *
+   * A plan WITH a price still gets a card. `plans` holds one grant row in
+   * production, but the test harness ships priced tiers, and DESIGN.md § 23's
+   * "which plan am I on" grammar is theirs.
    */
-  const rungs = [
-    ...plans.map((plan) => ({
-      id: plan.id,
-      label: plan.label,
-      priceUSD: plan.monthlyUSD,
-      credits: plan.creditsPerPeriod,
-      grant: true,
-      buyable: false,
-      current: plan.id === currentPlan,
-    })),
-    ...packs.map((pack) => ({
-      id: pack.id,
-      label: pack.label,
-      priceUSD: pack.priceUSD,
-      credits: pack.credits,
-      grant: false,
-      buyable: pack.buyable,
-      current: false,
-    })),
-  ];
+  const grants = plans.filter((plan) => plan.monthlyUSD === 0);
+  const tiers = plans.filter((plan) => plan.monthlyUSD !== 0);
 
-  const cards = rungs.map((rung) => {
+  const grantSentence = grants.map((plan) => {
+    const counts = tapeCounts(plan.creditsPerPeriod);
+    const buys = counts.length ? ` That is ${counts.join(', and ')}, before you buy anything.` : '';
+    return h(`Every account starts with ${plan.creditsPerPeriod} credits.${buys}`);
+  }).join(' ');
+
+  const tierCards = tiers.map((plan) => {
+    const current = plan.id === currentPlan;
+    return `
+    <section class="panel plan${current ? ' plan--current' : ''}">
+      ${current ? '<span class="mark">Your plan</span>' : ''}
+      <p class="eyebrow">${h(plan.label)}</p>
+      <p class="price">${h(`$${plan.monthlyUSD}`)}</p>
+      <p class="per">on sign-up</p>
+      <ul>
+        <li>${h(`${plan.creditsPerPeriod} credits`)}</li>
+        ${tapeLines(plan.creditsPerPeriod)}
+        <li>15 seconds, 25 fps, in 4:3, 16:9 or 9:16</li>
+        ${shelfLine ? `<li>${h(shelfLine)}</li>` : ''}
+      </ul>
+    </section>`;
+  }).join('');
+
+  /**
+   * THE RECOMMENDATION IS THE LARGER PACK, and only when there is more than
+   * one: a single pack "recommended" against nothing is a flag with no
+   * comparison behind it. Chosen by credit count rather than by name, so a
+   * repriced ladder moves the mark by itself.
+   */
+  const most = packs.length > 1 ? Math.max(...packs.map((pack) => pack.credits)) : null;
+
+  const packCards = packs.map((pack) => {
+    const recommended = most !== null && pack.credits === most;
     /**
-     * THE BROWSER SENDS A RUNG ID AND NOTHING ELSE -- no amount, no credit
+     * THE BROWSER SENDS A PACK ID AND NOTHING ELSE -- no amount, no credit
      * count, no price. A tampered form has nothing to tamper with, and
-     * test/web-auth.test.js asserts exactly this: one input, hidden, named
-     * `pack`. Adding a second field to this form fails that test, which is what
-     * the test is for.
+     * test/web-auth.test.js asserts exactly this: the hidden `pack` and the
+     * withdrawal acknowledgement, and no field named like money. Adding a
+     * third field to this form fails that test, which is what the test is for.
      */
-    const buy = rung.grant ? '' : `
+    const buy = `
       <form method="post" action="/api/billing/checkout">
-        <input type="hidden" name="pack" value="${h(rung.id)}">
+        <input type="hidden" name="pack" value="${h(pack.id)}">
         <label class="check check--buy">
           <input type="checkbox" name="withdrawal" value="yes" required>
           <span class="consent-text"><span>I want my credits straight away. I understand they are
           added to my account the moment I pay, and that I cannot then cancel them for a
           refund.</span></span>
         </label>
-        <button type="submit" class="record"${rung.buyable ? '' : ' disabled'}>
-          ${h(rung.buyable ? `Buy ${rung.label}` : 'Not open yet')}
+        <button type="submit" class="record${recommended ? '' : ' record--way'}"${pack.buyable ? '' : ' disabled'}>
+          ${h(pack.buyable ? `Buy ${pack.label}` : 'Not open yet')}
         </button>
       </form>
-      ${rung.buyable ? '' : '<p class="hint">Checkout opens once the price is set. Nothing is charged here.</p>'}`;
+      ${pack.buyable ? '' : '<p class="hint">Checkout opens once the price is set. Nothing is charged here.</p>'}`;
 
     return `
-    <section class="panel plan${rung.current ? ' plan--current' : ''}">
-      ${rung.current ? '<span class="mark">Your plan</span>' : ''}
-      <p class="eyebrow">${h(rung.label)}</p>
-      <p class="price">${h(rung.priceUSD === 0 ? 'FREE' : `$${rung.priceUSD}`)}</p>
-      <p class="per">${h(rung.grant ? 'on sign-up' : 'one payment')}</p>
+    <section class="pack${recommended ? ' pack--recommended' : ''}">
+      <p class="eyebrow pack-name">${h(pack.label)}${recommended ? ' <span class="mark">Recommended</span>' : ''}</p>
+      <p class="price">${h(`$${pack.priceUSD}`)}</p>
+      <p class="pack-credits">${h(`${pack.credits} credits`)}</p>
       <ul>
-        <li>${h(`${rung.credits} credits`)}</li>
-        ${tapeLines(rung.credits)}
+        ${tapeLines(pack.credits)}
         <li>15 seconds, 25 fps, in 4:3, 16:9 or 9:16</li>
         ${shelfLine ? `<li>${h(shelfLine)}</li>` : ''}
+        <li>Credits do not expire</li>
       </ul>
       ${buy}
+      <p class="hint">Tax is added at checkout.</p>
     </section>`;
   }).join('');
 
@@ -661,14 +684,21 @@ export function pricingPage({
   const returned = Object.hasOwn(RETURNED, key) ? RETURNED[key] : null;
 
   const body = `
-<main>
-  <section class="panel">
+<main class="pricing">
+  <header class="pricing-head">
     <p class="eyebrow">Credits</p>
     <h1 class="headline">What a tape costs</h1>
-    <p class="sub">A tape is fifteen seconds of generated video put through the tape deck.
-    You spend credits, and how many depends on the size the video is generated at before
-    the tape gets hold of it, and on the frame you choose.</p>
+    <p class="sub">${grantSentence || `A tape is fifteen seconds of generated video put
+    through the tape deck. You spend credits, and how many depends on the size the video
+    is generated at and on the frame you choose.`}</p>
     <p class="hint">${costs || 'Costs are unavailable right now.'}</p>
+    ${returned ? `<p class="notice">${h(returned)}</p>` : ''}
+  </header>
+
+  ${tierCards ? `<div class="plans">${tierCards}</div>` : ''}
+  ${packCards ? `<div class="packs">${packCards}</div>` : ''}
+
+  <section class="pricing-foot">
     ${/* THE LISTED PRICE IS BEFORE TAX, AND THE PAGE HAS TO SAY SO (2026-08-31).
          Measured in the Stripe dashboard rather than assumed: a $12 pack shows a
          German buyer a $14.28 total, VAT added on top and remitted for us.
@@ -682,16 +712,10 @@ export function pricingPage({
     <p class="hint">There is no payment form here and there is not one anywhere else either.
     Checkout is hosted by the payment provider on their own domain, and this application
     never sees a card number.</p>
-    ${returned ? `<p class="notice">${h(returned)}</p>` : ''}
-  </section>
-
-  <div class="plans">${cards}</div>
-
-  <section class="panel">
-    <p class="hint">Nothing here renews and nothing is a subscription. Credits do not expire,
-    and when you want more tapes you buy another bundle — including a second one the same
-    size. Every figure on this page is an estimate of provider cost until a metered run
-    proves it, and it will be revisited when one does.</p>
+    <p class="hint">Nothing here renews and nothing is a subscription. When you want more
+    tapes you buy another bundle — including a second one the same size. Every figure on
+    this page is an estimate of provider cost until a metered run proves it, and it will be
+    revisited when one does.</p>
     <p class="actions"><a class="quiet" href="/">Back to the shelf</a></p>
   </section>
 </main>

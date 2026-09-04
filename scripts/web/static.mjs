@@ -2208,8 +2208,40 @@ input[type="file"]::file-selector-button {
    account already has, and it has no button. Sitting at equal width it read as
    a purchase the visitor had somehow failed to make. It is narrower now, so
    the row shows two choices and one piece of context. */
-.plans { display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-5); }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--s-5); margin: 0 0 var(--s-6); }
 @media (max-width: 48rem) { .plans { grid-template-columns: 1fr; gap: var(--s-6); } }
+
+/* THE PACKS, FROM THE DESIGN PROTOTYPE (2026-09-04). The grant left the row:
+   it has no price and no button, and at equal width beside two purchases it
+   read as one the visitor had somehow failed to make. It is the sentence under
+   the heading now, and the row holds the two things that can actually be
+   bought -- which is the one equal grid DESIGN.md allows, because two packs
+   that differ only in size are genuine peers. The recommended pack sits on the
+   lifted plate and the other on bare paper: depth does the grouping, per the
+   one rule, and no line is drawn. */
+.pricing-head { max-width: 40rem; margin: var(--s-5) auto var(--s-7); text-align: center; }
+.pricing-head .headline { margin-bottom: var(--s-3); }
+.pricing-head .sub { margin: 0 auto; }
+.packs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-5); align-items: start; margin: 0 0 var(--s-7); }
+@media (max-width: 48rem) { .packs { grid-template-columns: 1fr; gap: var(--s-6); } }
+.pack { padding: var(--s-6); }
+.pack--recommended { background: var(--lift); }
+.pack .pack-name { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+/* A wash and a colour, like every other flag on the page -- the same shape as
+   .plan .mark, inline because it sits in the label row rather than on a corner. */
+.pack .mark { font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); background: rgba(168, 52, 42, 0.10); border-radius: 999px; padding: 0.15rem 0.6rem; }
+/* The price and its credit count are one figure in two sizes, both in the
+   readout face, so the eye reads "$12 / 92 credits" as a single stamp. */
+.pack .price { font-family: var(--osd); font-size: var(--t-8); line-height: 1; letter-spacing: 0.04em; color: var(--ink); margin: var(--s-3) 0 var(--s-1); }
+.pack .pack-credits { font-family: var(--osd); font-size: var(--d-2); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin: 0; }
+.pack ul { list-style: none; padding: 0; margin: var(--s-5) 0 0; color: var(--muted); font-size: var(--t-1); }
+.pack li { padding: 0.42rem 0; }
+/* The plainer pack takes the lifted button (the design system's "way"), so the
+   oxide button appears once on the page, on the pack the page recommends. */
+.record--way { background: var(--lift); color: var(--ink); }
+.record--way:hover { background: var(--lift); color: var(--accent-deep); }
+.pack > .hint { margin: var(--s-3) 0 0; text-align: center; }
+.pricing-foot { max-width: 44rem; margin: 0 auto; }
 /* EVERY VALUE PRESENT, ONE STRUCK -- the world's central mechanic, finally on
    the page that most needs it. DESIGN.md § 23 recorded the failure in its own
    words: the page that answers "which plan am I on?" was the one page not using

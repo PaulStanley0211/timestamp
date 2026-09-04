@@ -1359,7 +1359,12 @@ test('the pricing page lists the plans in credits and marks the current one', as
     const anon = await fetch(`${base}/pricing`);
     assert.equal(anon.status, 200);
     const anonHtml = await anon.text();
-    for (const label of ['Free', 'Shelf', 'Archive']) assert.ok(anonHtml.includes(label), `${label} is missing`);
+    // THE GRANT IS A SENTENCE, NOT A CARD (2026-09-04). A rung with no price
+    // and no button sat beside two purchases and read as a third one the
+    // visitor had somehow failed to make. It opens the page in words now and
+    // the paid plans keep their cards, so 'Free' is no longer a label here.
+    for (const label of ['Shelf', 'Archive']) assert.ok(anonHtml.includes(label), `${label} is missing`);
+    assert.match(anonHtml, /Every account starts with 51 credits/, 'the grant is stated as a sentence');
     assert.ok(anonHtml.includes('$10') && anonHtml.includes('$12'));
     assert.ok(!anonHtml.includes('Your plan'), 'nothing is marked for a signed-out visitor');
 

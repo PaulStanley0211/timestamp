@@ -1045,6 +1045,82 @@ test('a rung with no per-shape prices states the plain count and invents nothing
     'a shape price that was never supplied must not be inferred');
 });
 
+/**
+ * THE PLANS PAGE FROM THE DESIGN PROTOTYPE (2026-09-04): two packs side by
+ * side, the larger one lifted and marked, the free grant a sentence above them
+ * rather than a third card. The fixtures below are the shipped ladder -- one
+ * grant, two packs, two sizes -- so a rule that reads right against them reads
+ * right in production.
+ */
+const LADDER = Object.freeze({
+  plans: [{ id: 'free', label: 'Free', monthlyUSD: 0, creditsPerPeriod: 21 }],
+  resolutions: [
+    { id: '480p', credits: 21, available: true,
+      creditsByAspect: { '4:3': 21, '16:9': 28, '9:16': 28 } },
+    { id: '720p', credits: 46, available: true,
+      creditsByAspect: { '4:3': 46, '16:9': 61, '9:16': 61 } },
+  ],
+  packs: [
+    { id: 'starter', label: 'Starter', priceUSD: 12, credits: 92, buyable: true },
+    { id: 'standard', label: 'Standard', priceUSD: 19, credits: 138, buyable: true },
+  ],
+  currentPlan: null,
+});
+
+test('the two packs stand side by side, and the larger one is lifted and recommended', () => {
+  const html = pricingPage(LADDER);
+  const { css } = createStylesheet({});
+
+  const packs = html.match(/<section class="pack[^"]*"/g) ?? [];
+  assert.equal(packs.length, 2, 'one card per pack and nothing else in the row');
+  assert.equal(packs.filter((p) => p.includes('pack--recommended')).length, 1,
+    'exactly one pack is the recommended one');
+
+  // THE RECOMMENDATION IS THE LARGER PACK, read off its own card: the marked
+  // section must be the one carrying the 138-credit count.
+  const marked = html.slice(html.indexOf('pack--recommended'));
+  const nextCard = marked.indexOf('<section class="pack', 1);
+  const card = nextCard === -1 ? marked : marked.slice(0, nextCard);
+  assert.match(card, /Standard/, 'the recommended card is the Standard pack');
+  assert.match(card, /138 credits/, 'and it is the one with more credits');
+  assert.match(card, /Recommended/, 'and it says so in words');
+
+  // Two EQUAL columns. This is the one page DESIGN.md allows an equal grid on,
+  // because two purchases that differ only in size are genuinely peers.
+  assert.match(css, /\.packs\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
+    'the packs share one two-column grid');
+  assert.match(css, /\.pack--recommended\s*\{[^}]*background:\s*var\(--lift\)/,
+    'the recommended pack sits on the lifted plate');
+});
+
+test('the free grant opens the page as a sentence, not as a third card with no button', () => {
+  const html = pricingPage(LADDER);
+
+  assert.match(html, /Every account starts with 21 credits/, 'the grant is stated in words');
+  assert.match(html, /1 tape at 480p \(none in 16:9 or 9:16\)/,
+    'and it still says exactly what those credits buy, wide shapes included');
+  assert.ok(!/class="panel plan/.test(html), 'no plan card renders for the grant');
+  assert.ok(!/>FREE</.test(html), 'and no card prices it at FREE');
+});
+
+test('a pack states its price in the readout face with the credit count directly beneath it', () => {
+  const html = pricingPage(LADDER);
+  const { css } = createStylesheet({});
+
+  assert.match(html, /<p class="price">\$12<\/p>\s*<p class="pack-credits">92 credits<\/p>/,
+    'the price and its credit count are adjacent, price first');
+  assert.match(html, /<p class="price">\$19<\/p>\s*<p class="pack-credits">138 credits<\/p>/);
+  assert.match(css, /\.pack \.price\s*\{[^}]*font-family:\s*var\(--osd\)/, 'the price is set in the readout face');
+  assert.match(css, /\.pack \.price\s*\{[^}]*font-size:\s*var\(--t-8\)/, 'at the top of the type scale');
+  assert.match(css, /\.pack \.pack-credits\s*\{[^}]*font-family:\s*var\(--osd\)/,
+    'the count is a readout too, so the two read as one figure');
+
+  // TAX SITS BESIDE EACH BUTTON, where the decision is made, not only in the
+  // intro; a buyer reading one card should not have to scroll up for it.
+  const cards = html.split('<section class="pack').slice(1);
+  for (const card of cards) assert.match(card, /Tax is added at checkout\./, 'each pack says tax is added');
+});
+
 test('the signup page does not promise a recurring free allowance, because there is none', () => {
   // views-auth.mjs said "A free credit allowance every month" while the grant
   // is once-ever: reserveFreeTape runs inside createAccount and nothing in the
