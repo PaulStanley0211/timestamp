@@ -472,6 +472,44 @@ test('the landing page fits a phone and a laptop with nothing off screen', { ski
   }
 });
 
+test('the archive label sits in its gutter and never runs into the heading', { skip }, async () => {
+  // THE OWNER SAW "ARCHIVE" PRINTED THROUGH "Your tapes" (2026-09-04). The
+  // archive header borrows the step header's grid, whose gutter is a fixed
+  // width sized for the word STEP and a two-digit numeral; ARCHIVE is seven
+  // letters at the same size and tracking and overflowed the gutter into the
+  // heading column. Only a layout engine can see an overflow, so it is
+  // measured here: the label's right edge must stop before the heading's
+  // left edge, at both widths.
+  const s = await session();
+  await s.signIn();
+  for (const viewport of [PHONE, LAPTOP]) {
+    const page = await visit('/', viewport);
+    assert.deepEqual(page.errors, [], page.errors.join('; '));
+    // THE GLYPHS, NOT THE BOX. The label's own rect is the gutter it was given,
+    // and that never overlaps anything; the first version of this test
+    // measured it and passed against the broken page. A Range over the text
+    // returns the box the letters actually paint in, which is what the owner
+    // saw run into the heading.
+    const probe = await page.evaluate(`(() => {
+      const k = document.querySelector('.panel--archive .stepno-k');
+      const t = document.querySelector('.panel--archive .title');
+      if (!k || !t) return { found: false };
+      const range = document.createRange();
+      range.selectNodeContents(k);
+      const kr = range.getBoundingClientRect();
+      const tr = t.getBoundingClientRect();
+      return { found: true, textRight: kr.right, textWidth: kr.width, boxWidth: k.getBoundingClientRect().width,
+        headingLeft: tr.left, overlap: kr.right > tr.left && kr.bottom > tr.top && kr.top < tr.bottom };
+    })()`);
+    assert.ok(probe.found, 'the archive header lost its label or its heading');
+    assert.ok(probe.textWidth > 0, 'the label paints at zero width');
+    assert.ok(probe.textWidth <= probe.boxWidth + 0.5,
+      `at ${viewport.width}px the label's text (${probe.textWidth}px) is wider than the gutter it sits in (${probe.boxWidth}px)`);
+    assert.ok(!probe.overlap,
+      `at ${viewport.width}px the archive label (text right edge ${probe.textRight}px) runs into the heading (left edge ${probe.headingLeft}px)`);
+  }
+});
+
 test('a long email cannot carry Sign out off a phone screen', { skip }, async () => {
   // §36B, re-measured in the engine that found it: the fix was min-width on
   // TWO nested flex items, and a markup test can never see either of them.

@@ -1212,11 +1212,20 @@ body {
 
 /* --- the step header --------------------------------------------------- */
 
-/* Two columns: the number in a fixed gutter, everything said about the step in
-   the other. The gutter is what lines the four steps up as a sequence. */
+/* Two columns: the number in a gutter, everything said about the step in the
+   other. The gutter is what lines the four steps up as a sequence.
+
+   A MINIMUM, NOT A FIXED WIDTH (2026-09-04). The archive header borrows this
+   grid with the word ARCHIVE where a step has STEP over a numeral, and the
+   numeral is exactly 2.9rem wide while ARCHIVE at the label size and tracking
+   is about 4rem -- so for four days it overflowed the gutter and printed
+   through "Your tapes", and only the owner's eye caught it. max-content lets
+   a header's gutter grow to its own label; the four steps stay at 2.9rem
+   because nothing in them is wider than the numeral, so the sequence still
+   lines up. test/browser-smoke.test.js measures the glyphs, not the box. */
 .step-head {
   display: grid;
-  grid-template-columns: 2.9rem minmax(0, 1fr);
+  grid-template-columns: minmax(2.9rem, max-content) minmax(0, 1fr);
   column-gap: 1rem;
   align-items: start;
   margin: 0 0 var(--s-5);
