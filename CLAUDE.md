@@ -23,6 +23,10 @@ kept because the sections it lives in are records.
 **Whether the box and future work should move to `main` now that it is the
 trunk is an open decision and the owner's** -- it changes the deploy runbook.
 
+## READ §60 FIRST (2026-09-04): THE DESIGN PROTOTYPE IS IMPLEMENTED, PAGE BY PAGE, AND DEPLOYED AT `9272c9a`. FIVE COMMITS, ALL TEST-FIRST. THEN §59, §58, §57.
+
+**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2102 / 2099 / 0 / 3.
+
 ## READ §59 FIRST (2026-09-03, evening): THE AUDIT'S CODE ITEMS ARE FIXED, DEPLOYED AT `bf84de3`, AND THE BOX IS KEY-ONLY. TWO CONSOLE STEPS ARE THE OWNER'S. THEN §58, THEN §57.
 
 ## READ §57 FIRST. IT IS THE CURRENT STATE AND THE LIST. THEN §56, §55, §54.
@@ -7536,6 +7540,90 @@ roadmap never scheduled are also untouched; the report names them.
   on this checkout is the §49H blob dance. The message lists the four.
 
 ---
+
+---
+
+### 60. THE DESIGN PROTOTYPE, IMPLEMENTED PAGE BY PAGE (2026-09-04)
+
+**2083 / 2080 -> 2102 / 2099 pass / 0 fail / 3 skipped.** Five
+commits, `506d245..9272c9a`, every one test-first: the failing test watched
+against the unchanged page, then the markup and the stylesheet, then a
+sabotage that put the old shape back and watched the test go red before being
+restored from a copy. **Pushed, and deployed: the box is at `9272c9a`.**
+
+The owner built a design system and a seven-screen prototype in Claude Design
+(`Timestamp.dc.html`, project `4483b706-...`, read through the `DesignSync`
+tool after `/design-login`), and asked for it to be implemented after noting
+that the prototype "has only modified the landing page, but other pages
+remain the same, like pricing". **Its tokens are the shipped ones** -- the
+design system was built FROM `static.mjs`, so the work was layout and copy,
+and not one colour, size or spacing value changed.
+
+#### A -- What each page does now
+
+| Commit | Page | What it does |
+|---|---|---|
+| `506d245` | `/pricing` | The grant is a sentence under the heading; the two packs are one equal two-column row, the larger lifted and marked Recommended; the price in the readout face with the credit count beneath it; tax beside each button |
+| `47cd271` | `/j/:id` | The heading is the place and what is happening to it ("The balcony, being filmed"); the three phases are rows that say Done / REC / Not yet / Stopped, the record light on the one being filmed; the order as where / wearing / frame |
+| `fab423f` | `/j/:id/result` | The tape and its label beside the words: the place as heading, a sentence saying the file is theirs and how long the copy stays, the download, the file's facts under "The file"; the rest of the shelf beneath |
+| `0b5421c` | `/videos`, `/account` | The shelf on the paper under its label; the balance translated into tapes ("43 credits left. Enough for 2 more tapes at 480p.") from the same seam that prices an order |
+| `9272c9a` | `/` | The hero in the sans face at the hero size, the proposition line, the price moved into the closing plate, the Content sentence corrected |
+
+#### B -- Decisions, so nobody re-argues them
+
+- **No share link.** The prototype's result page offers "Copy a link" to a
+  public tape URL. No such route exists -- a tape is somebody's face behind
+  their own session -- and a test pins its absence. Building one is a
+  product decision about public tapes, not a page change.
+- **The legal pages stay three pages.** The prototype merges them into one
+  screen with generic copy. The live three carry the § 5 DDG citation, the
+  derived processor list and the entity, all of which tests pin; merging
+  would delete facts for a layout.
+- **The landing keeps its place rail.** The prototype's ground is the same
+  photograph; the rail is what lets a visitor choose it, and §30 built the
+  page around that mechanic. The hero face follows the prototype's DEFAULT
+  (sans); the prototype also carries an OSD variant, which is what shipped
+  before, so switching back is a one-rule change and a copy change.
+- **The status page's credit ledger table is not built.** The prototype
+  shows rows per grant and per tape; the view does not carry them and the
+  sentence `creditNoteFor` already writes says the same thing. Worth
+  building the day somebody asks where a credit went.
+- **`/videos` and `/account` share one commit**, against §58D's
+  one-per-item rule, for §49H's reason: both live in the same stylesheet and
+  test file, and partial staging on this checkout is the blob dance.
+
+#### C -- Things that will bite the next reader
+
+- **`DesignSync` needs `/design-login` first, in an interactive terminal.**
+  A bare call answers "needs design-system authorization"; the tool cannot
+  run the OAuth flow itself.
+- **`navigate` to a `file://` URL does not land in the Browser pane** -- it
+  opens a static snapshot elsewhere and the tab keeps its old page. The
+  pattern that works: render pages to `build/` with the stylesheet inlined
+  (`build/preview-pages.mjs`), serve `build/` with a ten-line static server
+  (`build/serve-preview.mjs`, port 3400) declared in `.claude/launch.json`,
+  and `preview_start` it. `build/` and `.claude/` are both gitignored.
+- **A test file edited while the full suite is running can turn a green run
+  red.** `node --test` starts files as it gets to them, and `web-*.test.js`
+  come late alphabetically; a RED test written mid-run is picked up by the
+  run. Wait for the notification before touching tests.
+- **`$TEMP` in Git Bash is `C:/Users/pauls/AppData/Local/Temp`, not the
+  scratchpad.** A `git commit -F "$TEMP/../scratchpad/x"` fails "no such
+  file"; the staged index survives it, so the retry with the absolute path
+  commits the same files.
+- **The Edit tool writes LF into CRLF files** (§59C), and it fired on every
+  file touched today. Git normalises on commit; the warnings are noise.
+- **`--test-name-pattern` with `|` on this shell reports every test as run.**
+  The fail count is still right; the pass count is not a count of matches.
+
+#### D -- What is left
+
+Unchanged from §57D and §59B: the realism check, one reviewer, the Starter
+pack purchase and refund, the Hetzner disk backup, the address decision, the
+AWS agreement, fal's usage page, the Hetzner firewall and the mail records.
+**The prototype's one unbuilt idea is the landing's tape playing large**,
+which the premium spec (§3.1) already records as blocked on one genuinely
+good finished tape.
 
 ## Not in scope
 
