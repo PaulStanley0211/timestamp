@@ -7678,6 +7678,26 @@ and expires on its own.
 and the page 404s. And a fake transport cannot see a parameter the real API
 refuses -- a change to the request body is only proven by one live call.
 
+#### F -- THE ARCHIVE LABEL WAS PRINTING THROUGH ITS HEADING, AND THE FIRST TEST FOR IT PASSED ANYWAY (2026-09-04, evening)
+
+The owner sent a screenshot of the signed-in home page: **ARCHIVE running
+into "Your tapes"**. The archive header borrows `.step-head`, whose gutter was
+a fixed `2.9rem` sized for STEP over a two-digit numeral; ARCHIVE at the label
+size and tracking measures **64px in a 46px box**, and had since §48's type
+scale on 2026-08-31. Fixed at `c1ecdac`: the gutter is
+`minmax(2.9rem, max-content)`, so the four steps stay at exactly 2.9rem (their
+numeral is that wide) and the archive gutter grows to its own label.
+
+**THE LESSON IS THE TEST.** The first version measured
+`.stepno-k.getBoundingClientRect()` and went GREEN against the broken page:
+the label's box IS the gutter, and a box never overlaps anything -- the
+GLYPHS overflow it. `document.createRange().selectNodeContents(el)` returns
+the box the letters paint in, and that is what the browser-smoke test reads
+now, at phone and laptop widths. **A layout test that reads an element's rect
+can pass over an overflow that is plain on the screen; read the text's rect.**
+Same family as §36B's regression test that went green while the page was
+still broken.
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT
