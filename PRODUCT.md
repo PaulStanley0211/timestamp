@@ -32,12 +32,12 @@ texture in the chrome competes with the artifact instead of framing it.
 
 ## Audience
 
-**Anyone who wants a made memory** — not a German-nostalgia audience. Four of
-the place presets are ordinary (a garden, a kitchen table, a living room, a
-beach out of season) and four are famous (a New York side street, a Tokyo back
-street, the Amalfi coast, a space centre); the ordinary ones are *set dressing
-chosen for their ordinariness*, not a cultural target, and the famous ones are
-streets and shorelines rather than signs. The proposition is "you, somewhere
+**Anyone who wants a made memory** — not a German-nostalgia audience. Three of
+the place presets are ordinary (a garden, a kitchen table, a living room) and
+four are famous (Times Square, a Tokyo crossing, the Amalfi coast, a space
+centre); the ordinary ones are *set dressing chosen for their ordinariness*,
+not a cultural target, and the famous ones are the places as everybody knows
+them, with the lettering kept off the tape. The proposition is "you, somewhere
 you remember or somewhere everybody knows, in a decade that looks warmer than
 now."
 

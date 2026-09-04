@@ -135,7 +135,6 @@ const PLACE_HUES = Object.freeze({
   'amalfi-afternoon': 190,         // the sea inside a harbour wall
   'kuechentisch-fruehstueck': 42,  // butter, early sun
   'new-york-times-square': 48,     // cab yellow under the billboard glow
-  'ostsee-strand': 212,            // cold Baltic
   'schrebergarten-august': 86,     // late-summer grass
   'space-centre': 222,             // a deep blue sky behind a white rocket
   'tokyo-night': 345,              // the red of the signboards over the crossing

@@ -442,7 +442,7 @@ test('nothing in expand/ imports anything but the catalog and itself', () => {
 });
 
 test('an expansion is a drop-in for a shipped preset -- same shape, same keys', async () => {
-  const shipped = catalog.places.get('ostsee-strand');
+  const shipped = catalog.places.get('amalfi-afternoon');
   const expanded = await expandPlace('a beach', opts);
   assert.deepEqual(Object.keys(expanded).sort(), Object.keys(shipped).sort());
 

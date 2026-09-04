@@ -617,7 +617,7 @@ test('uploading cannot assign the job to another account', async () => {
   await withTwoTenants(async ({ base, app, A, B, cookieB }) => {
     const parts = [
       { name: 'photo', filename: 'me.png', body: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]) },
-      { name: 'place', body: 'ostsee-strand' },
+      { name: 'place', body: 'amalfi-afternoon' },
       { name: 'outfit', body: 'fleecepulli' },
       { name: 'resolution', body: '480p' },
       { name: 'consent', body: 'yes' },
@@ -668,7 +668,7 @@ test('an unavailable resolution cannot be bought at any price', async () => {
         headers: { cookie: cookieB, 'content-type': `multipart/form-data; boundary=${BOUNDARY}` },
         body: multipartBody([
           { name: 'photo', filename: 'me.png', body: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9]) },
-          { name: 'place', body: 'ostsee-strand' },
+          { name: 'place', body: 'amalfi-afternoon' },
           { name: 'outfit', body: 'fleecepulli' },
           { name: 'consent', body: 'yes' },
           { name: 'resolution', body: resolution },

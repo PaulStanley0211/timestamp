@@ -400,12 +400,14 @@ test('GET / renders the fourteen presets as cards, from the preset files', async
     // Germany. The photographs and the ids are unchanged; only what a person
     // reads moved, to plain names that describe a memory rather than a country.
     // FOUR BECAME FAMOUS PLACES 2026-09-04, the owner's call: the stairwell,
-    // the car park, the swimming pool and the balcony went, and New York,
-    // Tokyo, the Amalfi coast and a space centre came. Four ordinary places
-    // stay beside them.
+    // the car park, the swimming pool and the balcony went, and Times Square,
+    // Tokyo, the Amalfi coast and a space centre came. The next morning the
+    // out-of-season beach went too, in Amalfi's favour: three ordinary places
+    // stay beside the four famous ones, seven in all.
+    assert.ok(!html.includes('The beach, out of season'), 'the retired beach is still on the menu');
     for (const label of [
       'The garden, in summer', 'Times Square, at night', 'Tokyo, at night',
-      'The Amalfi coast, afternoon', 'The kitchen table', 'The beach, out of season',
+      'The Amalfi coast, afternoon', 'The kitchen table',
       'The space centre', 'The living room, evening',
       'Half-zip fleece', 'Checked shirt and jeans', 'Cotton summer dress',
       'Knitted cardigan', 'Tracksuit jacket', 'Padded winter jacket',
@@ -415,7 +417,7 @@ test('GET / renders the fourteen presets as cards, from the preset files', async
 
     // Rendered FROM the catalog, not from a second copy of the menu: every id
     // the server loaded has a radio, and the count matches.
-    assert.equal(app.cards.places.length, 8);
+    assert.equal(app.cards.places.length, 7);
     assert.equal(app.cards.outfits.length, 6);
     for (const p of app.cards.places) {
       assert.ok(html.includes(`id="pl-${p.id}"`), `no card for place ${p.id}`);
@@ -666,7 +668,7 @@ test('a preset card and an uploaded place photo contradict each other, and are r
     const res = await post(base, '/api/jobs', multipart([
       { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
       { name: 'placePhoto', filename: 'garden.png', type: 'image/png', body: fakePhoto(20_000, 'g') },
-      { name: 'place', body: 'ostsee-strand' },
+      { name: 'place', body: 'amalfi-afternoon' },
       { name: 'outfit', body: 'winterjacke' },
       { name: 'consent', body: 'yes' },
     ]), cookieA);
@@ -1098,12 +1100,12 @@ test('a missing place photograph is a 404 and never a path the client chose', as
 test('a real place photograph is served when it is there', async () => {
   const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
   fs.mkdirSync(`${assets}/places`, { recursive: true });
-  fs.writeFileSync(`${assets}/places/ostsee-strand.jpg`, Buffer.from('not really a jpeg'));
+  fs.writeFileSync(`${assets}/places/amalfi-afternoon.jpg`, Buffer.from('not really a jpeg'));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
   const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), assetsRoot: assets });
   const port = await app.listen();
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/places/ostsee-strand.jpg`);
+    const res = await fetch(`http://127.0.0.1:${port}/places/amalfi-afternoon.jpg`);
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type'), 'image/jpeg');
     assert.equal(await res.text(), 'not really a jpeg');
@@ -1117,12 +1119,12 @@ test('a real place photograph is served when it is there', async () => {
 test('a place LOOP is served, and only for an id the catalog knows', async () => {
   const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
   fs.mkdirSync(`${assets}/places`, { recursive: true });
-  fs.writeFileSync(`${assets}/places/ostsee-strand.mp4`, Buffer.from('not really an mp4'));
+  fs.writeFileSync(`${assets}/places/amalfi-afternoon.mp4`, Buffer.from('not really an mp4'));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
   const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), assetsRoot: assets });
   const port = await app.listen();
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/places/ostsee-strand.mp4`);
+    const res = await fetch(`http://127.0.0.1:${port}/places/amalfi-afternoon.mp4`);
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type'), 'video/mp4');
 
@@ -1133,8 +1135,8 @@ test('a place LOOP is served, and only for an id the catalog knows', async () =>
     // These reach the handler and are refused there, by name.
     for (const target of [
       '/places/nope.mp4',            // not in the catalog
-      '/places/ostsee-strand.mp4.mp4', // a second suffix cannot join the id
-      '/places/ostsee-strand.webm',  // an extension this route does not serve
+      '/places/amalfi-afternoon.mp4.mp4', // a second suffix cannot join the id
+      '/places/amalfi-afternoon.webm',  // an extension this route does not serve
     ]) {
       assert.equal((await fetch(`http://127.0.0.1:${port}${target}`)).status, 404, target);
     }
@@ -1180,7 +1182,7 @@ test('the moving background is one element, and the page is finished without it'
     assert.ok(/\sloop/.test(video), 'the loop is six seconds long and is meant to repeat');
 
     // The still layers are the fallback and must survive. One per place.
-    assert.ok(/class="bg bg--pl-ostsee-strand"/.test(bgs), 'the still fallback layer is gone');
+    assert.ok(/class="bg bg--pl-amalfi-afternoon"/.test(bgs), 'the still fallback layer is gone');
 
     // TWO STATES, AND COLLAPSING THEM INTO ONE IS A REGRESSION WITH A LOOK.
     // The ground -- the per-place scrim and the plate under the panels -- keys
@@ -1619,9 +1621,11 @@ test('a tape made in a retired place keeps its old label on the shelf, not its i
   await withServer(async ({ base, root, app, cookieA, accountA }) => {
     seedJob(app, root, { status: 'done', owner: accountA, place: 'autobahn-raststaette' });
     seedJob(app, root, { status: 'done', owner: accountA, place: 'plattenbau-treppenhaus' });
+    seedJob(app, root, { status: 'done', owner: accountA, place: 'ostsee-strand' });
     const html = await (await get(base, '/videos', cookieA)).text();
     assert.ok(html.includes('<span class="what">The car park, at dusk</span>'), 'the retired car park is not captioned by its old label');
     assert.ok(html.includes('<span class="what">The stairwell</span>'), 'the retired stairwell is not captioned by its old label');
+    assert.ok(html.includes('<span class="what">The beach, out of season</span>'), 'the retired beach is not captioned by its old label');
     assert.ok(!html.includes('<span class="what">autobahn-raststaette</span>'), 'the id leaked onto the shelf as a caption');
   });
 });
@@ -1693,13 +1697,13 @@ test('a card beats the describe-it box when somebody fills in both', async () =>
   await withServer(async ({ base, root, cookieA }) => {
     const res = await post(base, '/api/jobs', multipart([
       { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
-      { name: 'place', body: 'ostsee-strand' },
+      { name: 'place', body: 'amalfi-afternoon' },
       { name: 'placeText', body: 'somewhere else entirely' },
       { name: 'outfit', body: 'fleecepulli' },
       { name: 'consent', body: 'yes' },
     ]), cookieA);
     const job = loadJob({ root, jobId: (await res.json()).jobId });
-    assert.equal(job.input.place.value, 'ostsee-strand', 'the card the person clicked wins');
+    assert.equal(job.input.place.value, 'amalfi-afternoon', 'the card the person clicked wins');
   });
 });
 
@@ -2263,7 +2267,7 @@ test('a tape, its poster and a still are never cached, because the next person a
       assert.equal(res.headers.get('cache-control'), 'no-store', `${url} is cacheable: ${res.headers.get('cache-control')}`);
       await res.arrayBuffer();
     }
-    const place = await get(base, '/places/ostsee-strand.jpg', cookieA);
+    const place = await get(base, '/places/amalfi-afternoon.jpg', cookieA);
     assert.equal(place.status, 200);
     assert.match(place.headers.get('cache-control') ?? '', /max-age=\d+/, 'a place photograph is still cacheable');
     await place.arrayBuffer();

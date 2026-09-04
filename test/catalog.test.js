@@ -188,9 +188,9 @@ test('one step apart is silent, because a checker that fires on a third of the m
 
 test('the shipped catalog loads, and every combination is composable', () => {
   const catalog = loadCatalog();
-  assert.equal(catalog.count.places, 8);
+  assert.equal(catalog.count.places, 7);
   assert.equal(catalog.count.outfits, 6);
-  assert.equal(catalog.count.combinations, 48);
+  assert.equal(catalog.count.combinations, 42);
   assert.match(catalog.hash, /^[0-9a-f]{16}$/);
 
   for (const place of catalog.places.values()) {

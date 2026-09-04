@@ -259,17 +259,6 @@ export const GENERIC_PLACE_NEGATIVES = Object.freeze([
  * than falling through to the token overlap below.
  */
 export const PLACE_AFFINITY = Object.freeze({
-  // The coast words are SHARED with the Amalfi harbour below, and the climate
-  // term in the score is what tells the two beaches apart: "a beach" is warm
-  // (CLIMATE_TERMS says so) and lands on the harbour, "a beach in winter" is
-  // cold and lands here. Before 2026-09-04 this was the only beach and a warm
-  // request lost its dressing to the neutral skeleton, which was honest and
-  // was also the weakest prompt the menu could produce for its most common
-  // request.
-  'ostsee-strand': Object.freeze([
-    'beach', 'seaside', 'sea', 'coast', 'shore', 'sand', 'dune', 'dunes', 'ocean',
-    'pier', 'promenade', 'harbour', 'harbor', 'lake', 'riverbank', 'waterfront', 'cliff',
-  ]),
   'schrebergarten-august': Object.freeze([
     'garden', 'allotment', 'lawn', 'hedge', 'greenhouse', 'orchard', 'meadow',
     'vegetable patch', 'back yard', 'campsite', 'picnic', 'field',
@@ -300,12 +289,18 @@ export const PLACE_AFFINITY = Object.freeze({
     'tokyo', 'japan', 'japanese', 'lantern', 'lanterns', 'izakaya', 'osaka',
     'kyoto', 'shibuya', 'shinjuku', 'ramen',
   ]),
-  // Shares the coast words with the out-of-season beach above; see the note
-  // there. The Italian words are its own.
+  // THE ONLY BEACH ON THE MENU since 2026-09-05, when the owner retired the
+  // out-of-season one in its favour, so it carries every coast word that
+  // beach used to carry. `lake` and `riverbank` were on that list and are
+  // deliberately not on this one: an inland shore borrowing striped umbrellas
+  // and fishing boats on the stones is the confidently-wrong scene the neutral
+  // skeleton exists to refuse. A winter beach still lands here as the nearest
+  // skeleton and loses the summer dressing on the climate gap.
   'amalfi-afternoon': Object.freeze([
     'amalfi', 'positano', 'sorrento', 'capri', 'italy', 'italian', 'riviera',
     'mediterranean', 'fishing village', 'marina', 'cove', 'lemon grove',
-    'beach', 'seaside', 'sea', 'coast', 'shore', 'harbour', 'harbor',
+    'beach', 'seaside', 'sea', 'coast', 'shore', 'sand', 'dune', 'dunes', 'ocean',
+    'pier', 'promenade', 'harbour', 'harbor', 'waterfront', 'cliff',
   ]),
   // `rocket` is here and `space` alone is not: "a parking space" and "an open
   // space" are places, and neither of them has a rocket in it.

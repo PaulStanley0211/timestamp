@@ -34,14 +34,15 @@ video: a garden in late summer, a kitchen at breakfast, a grey beach out of
 season. Nothing dramatic is happening. The feeling is "this was a normal
 afternoon and it is gone".
 
-Half the menu is ordinary and half is famous (§60I): a garden, a kitchen table,
-a living room and a beach beside a New York side street, a Tokyo back street,
-the Amalfi coast and a space centre. **A famous place is a street or a
-shoreline, never a sign.** `BASE_NEGATIVES` forbid text and logos because a
-model invents lettering that reads as generated, so New York is a brownstone
-block with a cab at the end of it rather than Times Square. The era still comes
-from named objects: CRT televisions, wired phones, payphones, disposable
-cameras, flip phones, estate cars with roof boxes, plastic garden furniture.
+Three of the seven places are ordinary and four are famous (§60I, §60J): a
+garden, a kitchen table and a living room beside Times Square, a Tokyo
+crossing, the Amalfi coast and a space centre. **On the tape, a famous place
+is never a sign.** `BASE_NEGATIVES` forbid text and logos because a model
+invents lettering that reads as generated, so the Times Square preset asks for
+lit colour panels and says so again in its own negatives; the CARD may show the
+real thing, because the card never reaches a model. The era still comes from
+named objects: CRT televisions, wired phones, payphones, disposable cameras,
+flip phones, estate cars with roof boxes, plastic garden furniture.
 
 If a preset needs something to happen in it, it is the wrong preset.
 
@@ -158,8 +159,8 @@ Three things will bite you:
    asserts no shipped preset is clamped.
 3. **Watch the sign on `colorbalance`.** `bm` *negative* adds **yellow**. Raising
    `cbBlueMid` towards zero makes a scene **cooler**, not warmer. This is
-   counter-intuitive and it is why `plattenbau-treppenhaus` and `ostsee-strand`
-   both carry a note about it.
+   counter-intuitive and it is why every preset that pulls towards cool
+   carries a note about it.
 
 An empty `{}` is a perfectly good answer for a scene the base profile suits.
 

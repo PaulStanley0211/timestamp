@@ -70,6 +70,9 @@ export const RETIRED_PLACE_LABELS = Object.freeze({
   'balkon-waesche': 'The balcony',
   'hallenbad-nachmittag': 'The swimming pool',
   'plattenbau-treppenhaus': 'The stairwell',
+  // Retired the next morning in the Amalfi coast's favour -- the owner's
+  // call that one beach is enough and it should be the summer one.
+  'ostsee-strand': 'The beach, out of season',
 });
 
 export const REPO_ROOT = path

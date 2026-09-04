@@ -200,12 +200,13 @@ test('an outfit climate is an array, and a winter jacket beats a jacket', () => 
 
 test('the nearest shipped place is the skeleton', () => {
   const expect = {
-    // "a beach" is warm (CLIMATE_TERMS says so) and two skeletons now answer
-    // to the word: the climate term picks the Amalfi harbour for a summer
-    // beach and the out-of-season one for a winter beach. Before 2026-09-04
-    // there was one beach and a warm request lost its dressing to neutral.
+    // "a beach" is warm (CLIMATE_TERMS says so) and the Amalfi harbour is the
+    // one beach on the menu since 2026-09-05, when the owner retired the
+    // out-of-season one in its favour. A winter beach still lands on it as
+    // the nearest skeleton and loses the summer dressing to neutral -- see
+    // the climate tests below.
     'a beach': 'amalfi-afternoon',
-    'a beach in winter': 'ostsee-strand',
+    'a beach in winter': 'amalfi-afternoon',
     "my grandmother's kitchen": 'kuechentisch-fruehstueck',
     'times square': 'new-york-times-square',
     'a side street in new york': 'new-york-times-square',
@@ -275,14 +276,15 @@ test('climate agreement is a tie-breaker and never a qualifier', () => {
 // ---------------------------------------------------------------------------
 
 test('light, lens and era props are inherited from the skeleton when nothing overrides them', () => {
-  // "in winter" is what makes this the out-of-season Baltic the preset is,
-  // rather than the summer beach most people mean by "a beach".
-  const beach = place('a beach in winter');
-  const ostsee = catalog.places.get('ostsee-strand');
-  assert.equal(beach.prompt.light, ostsee.prompt.light);
-  assert.equal(beach.prompt.lens, ostsee.prompt.lens);
-  assert.equal(beach.prompt.eraProps, ostsee.prompt.eraProps);
-  assert.equal(beach.motionHint, ostsee.motionHint);
+  // "in summer" agrees with the harbour's own climate, so everything the
+  // preset wrote by hand is lent to the request.
+  const beach = place('a beach in summer');
+  const amalfi = catalog.places.get('amalfi-afternoon');
+  assert.equal(beach._source.skeleton, 'amalfi-afternoon');
+  assert.equal(beach.prompt.light, amalfi.prompt.light);
+  assert.equal(beach.prompt.lens, amalfi.prompt.lens);
+  assert.equal(beach.prompt.eraProps, amalfi.prompt.eraProps);
+  assert.equal(beach.motionHint, amalfi.motionHint);
 });
 
 test('a stated time of day overrides the skeleton\'s light, which is the whole point of stating it', () => {
@@ -336,11 +338,11 @@ test('a borrowed clause that repeats the user\'s own noun phrase is dropped', ()
   assert.ok(!pebbles.prompt.scene.includes('striped umbrellas'), 'half of the duplicate clause survived');
   assert.ok(pebbles.prompt.scene.includes('lemon trees'), 'the clauses that do not repeat the phrase are still borrowed');
   // the one-word case is deliberately NOT dropped: it would throw away the best
-  // clause in the beach preset. The clause carrying the user's own word used to
-  // be "roofed wicker beach chairs"; the preset was de-nationalised on
-  // 2026-08-29 (a Strandkorb is a German object on a product that is not for
-  // Germany) and the loungers carry that job now.
-  assert.ok(place('a beach in winter').prompt.scene.includes('stacked plastic beach loungers'));
+  // clause in the beach preset. On the out-of-season beach that clause was
+  // "roofed wicker beach chairs", then "stacked plastic beach loungers" after
+  // the de-nationalisation; on the Amalfi harbour, the only beach since
+  // 2026-09-05, it is the pebble beach with its umbrellas and loungers.
+  assert.ok(place('a beach in summer').prompt.scene.includes('wooden loungers'));
 });
 
 test('a skeleton whose climate contradicts the request keeps its lens and loses its dressing', () => {
@@ -375,11 +377,21 @@ test('a skeleton whose climate contradicts the request keeps its lens and loses 
   assert.equal(snow.prompt.lens, catalog.places.get('schrebergarten-august').prompt.lens);
 });
 
-test('the same request with the season stated inherits everything', () => {
+test('the same request with the agreeing season inherits everything, and the contradicting one does not', () => {
+  const summer = place('a beach in summer');
+  assert.equal(summer.climate, 'warm');
+  assert.equal(summer._source.dressingFrom, 'skeleton:amalfi-afternoon');
+  assert.ok(summer.negatives.includes('modern yachts'));
+
+  // A winter beach is three steps from the harbour's climate: the skeleton is
+  // still the nearest thing on the menu, and its striped umbrellas are not
+  // lent to a request they would contradict.
   const winter = place('a beach in winter');
+  assert.equal(winter._source.skeleton, 'amalfi-afternoon');
   assert.equal(winter.climate, 'cold');
-  assert.equal(winter._source.dressingFrom, 'skeleton:ostsee-strand');
-  assert.ok(winter.negatives.includes('sunshine'));
+  assert.match(winter._source.dressingFrom, /^neutral/);
+  assert.ok(!winter.negatives.includes('modern yachts'));
+  assert.ok(!/umbrellas|lemon trees|fishing boats/.test(winter.prompt.scene));
 });
 
 test('climate is a term in the score, so a warm request prefers a warm skeleton', () => {

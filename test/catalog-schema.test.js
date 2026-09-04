@@ -361,14 +361,14 @@ test('every shipped place override names a real path and merges without being cl
   }
 });
 
-test('the night interior really does ask for more grain and more amber than the overcast beach', () => {
+test('the night interior really does ask for more grain and more amber than the harbour in the sun', () => {
   // Not a style assertion -- an assertion that the mechanism is wired up. If
   // every override merged to the same numbers, every one of them would be
   // decoration and nobody would notice for months.
   const night = loadLookProfile(base, PLACES.find((p) => p.id === 'wohnzimmer-abend').raw.lookOverride).look;
-  const beach = loadLookProfile(base, PLACES.find((p) => p.id === 'ostsee-strand').raw.lookOverride).look;
+  const beach = loadLookProfile(base, PLACES.find((p) => p.id === 'amalfi-afternoon').raw.lookOverride).look;
   assert.ok(night.tape.grainStrength > beach.tape.grainStrength,
-    'a CCD at full gain in a room lit by a television grains far harder than an overcast beach');
+    'a CCD at full gain in a room lit by a television grains far harder than a harbour in the afternoon sun');
   assert.ok(night.grade.cbRedMid > beach.grade.cbRedMid, 'the night interior is the warmer of the two');
 });
 

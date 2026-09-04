@@ -337,7 +337,7 @@ test('every shipped place, ambience and all, is inside the loudness contract', {
   // the menu changes.
   const dir = path.join(ROOT, 'presets/places');
   const ids = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -'.json'.length));
-  assert.ok(ids.length >= 8, `expected the shipped menu, found ${ids.length} place(s)`);
+  assert.ok(ids.length >= 7, `expected the shipped menu, found ${ids.length} place(s)`);
   for (const id of ids) {
     const audioFilter = withPlaceOverride(id);
     // Two noise sources: the hiss, and the place's own ambience. A preset with

@@ -314,7 +314,7 @@ const photoBytes = (salt = 'x') => Buffer.concat([
 
 const uploadParts = (salt = 'x', resolution = '480p') => ([
   { name: 'photo', filename: 'me.png', body: photoBytes(salt) },
-  { name: 'place', body: 'ostsee-strand' },
+  { name: 'place', body: 'amalfi-afternoon' },
   { name: 'outfit', body: 'fleecepulli' },
   { name: 'resolution', body: resolution },
   { name: 'consent', body: 'yes' },
@@ -1546,7 +1546,7 @@ test('a missing scripts/auth/ is a 503 with a sentence, and the assets still ser
     // `assets/places/` happened to be empty, and it went red on 2026-08-23 when
     // the eight photographs landed and it started answering 200. A 200 proves
     // the point better than a 404 did; a 503 would be the actual regression.
-    const placeRes = await fetch(`${base}/places/ostsee-strand.jpg`);
+    const placeRes = await fetch(`${base}/places/amalfi-afternoon.jpg`);
     assert.notEqual(placeRes.status, 503, 'the place route must not need the accounts module');
     assert.ok([200, 404].includes(placeRes.status), `unexpected ${placeRes.status} from the place route`);
 
