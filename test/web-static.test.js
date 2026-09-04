@@ -626,6 +626,20 @@ test('the price sits with the claim, and the hero carries one action', () => {
   assert.doesNotMatch(html, /goes nowhere in particular/, 'the Content copy still describes the single-take prompt');
 });
 
+test('no selection mark is pinned to the right of its card', () => {
+  // THE OWNER ASKED FOR THE MARK ON THE LEFT, EVERYWHERE (2026-09-04). The
+  // frame card drew its dot in the flow before the shape; the outfit and
+  // quality cards pinned theirs to the top-right corner. The browser-smoke
+  // test measures where each mark paints; this is the cheap guard that a
+  // rule does not quietly send one back to the right.
+  const { css } = createStylesheet(FOCUS_MENU);
+  for (const sel of ['.lookcard .tick', '.qualitycard .tick', '.framecard .tick', '.placecard .badge']) {
+    const rule = new RegExp(sel.replace(/\./g, '\\.') + '\\s*\\{([^}]*)\\}').exec(css);
+    assert.ok(rule, `no rule for ${sel}`);
+    assert.doesNotMatch(rule[1], /\bright:/, `${sel} is positioned from the right edge`);
+  }
+});
+
 test('the landing list is a rail that snaps, and its menu is a plate', () => {
   const html = landingPage({ places: PLACES_FIXTURE, account: null });
   const css = createStylesheet({ places: PLACES_FIXTURE, outfits: [] }).css;

@@ -472,6 +472,44 @@ test('the landing page fits a phone and a laptop with nothing off screen', { ski
   }
 });
 
+test('the selection mark sits at the left of its card, in every row', { skip }, async () => {
+  // THE OWNER SAW THE FRAME ROW'S DOT ON THE LEFT AND THE QUALITY ROW'S ON THE
+  // RIGHT (2026-09-04) and asked for one answer everywhere: the mark on the
+  // left, before the name, in the outfit grid, the place rail, the frame row
+  // and the quality row alike. Measured on the painted boxes, because a
+  // stylesheet test cannot see where an absolutely positioned mark ends up.
+  const s = await session();
+  await s.signIn();
+  const page = await visit('/', LAPTOP);
+  assert.deepEqual(page.errors, [], page.errors.join('; '));
+  const probe = await page.evaluate(`(() => {
+    const box = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, width: r.width }; };
+    const rows = [
+      ['outfit', '.looks .lookcard', '.tick', '.name'],
+      ['frame', '.frames label.framecard', '.tick', '.ratio'],
+      ['quality', '.quality label.qualitycard', '.tick', '.name'],
+    ].map(([row, card, mark, name]) => {
+      const c = document.querySelector(card);
+      if (!c) return { row, found: false };
+      const m = c.querySelector(mark); const n = c.querySelector(name);
+      return { row, found: Boolean(m && n), mark: m && box(m), name: n && box(n) };
+    });
+    const place = document.querySelector('.rail label.placecard:not(.placecard--own)');
+    const badge = place && place.querySelector('.badge');
+    const pc = place && box(place);
+    return { rows, place: place ? { found: Boolean(badge), card: pc, badge: badge && box(badge) } : { found: false } };
+  })()`);
+  for (const r of probe.rows) {
+    assert.ok(r.found, `the ${r.row} row has no card with a mark and a name`);
+    assert.ok(r.mark.width > 0, `the ${r.row} mark paints at zero width`);
+    assert.ok(r.mark.right <= r.name.left + 0.5,
+      `in the ${r.row} row the mark (right edge ${r.mark.right}px) is not to the left of the name (left edge ${r.name.left}px)`);
+  }
+  assert.ok(probe.place.found, 'the place rail has no preset card with a badge');
+  assert.ok(probe.place.badge.left < probe.place.card.left + probe.place.card.width / 2,
+    `the place badge (left edge ${probe.place.badge.left}px) sits on the right half of its card (${probe.place.card.left}px to ${probe.place.card.right}px)`);
+});
+
 test('the archive label sits in its gutter and never runs into the heading', { skip }, async () => {
   // THE OWNER SAW "ARCHIVE" PRINTED THROUGH "Your tapes" (2026-09-04). The
   // archive header borrows the step header's grid, whose gutter is a fixed

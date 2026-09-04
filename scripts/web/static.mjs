@@ -1446,9 +1446,18 @@ body {
    page would read as though everything were chosen. The checked radio is what
    actually conveys the state to assistive technology; these two are decoration,
    so their text belongs in the decoration. */
+/* THE MARK IS ON THE LEFT, BEFORE THE NAME, IN EVERY ROW (2026-09-04). The
+   frame card always drew its dot in the flow ahead of the shape; this card
+   pinned its own to the top-right corner, and the owner saw the two rows
+   disagree. A two-column grid gives the dot a gutter of its own, the way the
+   frame card's in-flow tick does: unlit it is invisible and the gutter is
+   empty, struck it sits on the name's baseline. Everything that is not the
+   tick lives in the second column, so the names align across the row. */
+.lookcard { display: grid; grid-template-columns: 0.9rem minmax(0, 1fr); column-gap: 0.5rem; align-items: baseline; }
+.lookcard > :not(.tick) { grid-column: 2; }
 .lookcard .tick {
-  position: absolute; top: 0.7rem; right: 0.8rem;
-  color: var(--accent); font-size: var(--t-label); letter-spacing: 0.12em;
+  grid-column: 1; grid-row: 1;
+  color: var(--accent); font-size: var(--t-label);
   opacity: 0; transition: opacity 140ms;
 }
 .lookcard .tick::before { content: "●"; }
@@ -1734,7 +1743,12 @@ input[type="file"]::file-selector-button {
 .qualitycard .cr--soon { display: block; }
 .qualitycard .detail { display: block; font-size: var(--t-1); color: var(--ink); margin-top: 0.35rem; }
 .qualitycard .flag { display: inline-block; font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); margin-top: 0.4rem; }
-.qualitycard .tick { position: absolute; top: 0.7rem; right: 0.8rem; color: var(--accent); font-size: var(--t-label); opacity: 0; transition: opacity 140ms; }
+/* The same gutter as .lookcard, for the same reason: the mark on the left,
+   before the name, in every row. The deferred card has no tick, and its
+   children take the second column too, so its name lines up with the rest. */
+.qualitycard { display: grid; grid-template-columns: 0.9rem minmax(0, 1fr); column-gap: 0.5rem; align-items: baseline; }
+.qualitycard > :not(.tick) { grid-column: 2; }
+.qualitycard .tick { grid-column: 1; grid-row: 1; color: var(--accent); font-size: var(--t-label); opacity: 0; transition: opacity 140ms; }
 .qualitycard .tick::before { content: "●"; }
 
 /* Unavailable options are a <span>, not a <label>: there is no radio behind
