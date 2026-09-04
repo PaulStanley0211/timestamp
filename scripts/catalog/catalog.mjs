@@ -54,6 +54,24 @@ import { CLIMATE_SCALE, PresetError, validateOutfit, validatePlace } from './sch
  *  that says "menu 4f2a9c" stops meaning one thing. */
 export const CATALOG_HASH_VERSION = 1;
 
+/**
+ * The labels of places that have left the menu, as they read the day they left.
+ *
+ * A manifest stores the preset ID, and the page translates it through the
+ * loaded catalog. A preset that is no longer in the catalog therefore falls
+ * through as its id, so the day the four ordinary places became famous ones
+ * (2026-09-04, section 60I) every tape anyone had made in the car park would
+ * have captioned as `autobahn-raststaette` on their shelf. The tape is theirs
+ * and its caption is part of it; a menu change must not rewrite it. A retired
+ * id is never reused for a new place, for the same reason.
+ */
+export const RETIRED_PLACE_LABELS = Object.freeze({
+  'autobahn-raststaette': 'The car park, at dusk',
+  'balkon-waesche': 'The balcony',
+  'hallenbad-nachmittag': 'The swimming pool',
+  'plattenbau-treppenhaus': 'The stairwell',
+});
+
 export const REPO_ROOT = path
   .resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
   .replace(/\\/g, '/');

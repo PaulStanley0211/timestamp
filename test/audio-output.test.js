@@ -327,12 +327,28 @@ function withPlaceOverride(id) {
   return buildAudioFilter(look, cfg);
 }
 
-test('the stairwell preset, buzz and all, is still inside the loudness contract', { skip }, async () => {
-  const audioFilter = withPlaceOverride('plattenbau-treppenhaus');
-  assert.ok(audioFilter.includes('[tone]'), 'this test proves nothing if the buzz never made it into the graph');
-  const lufs = parseIntegratedLufs((await runFfmpeg(bedLoudnessArgs({ audioFilter, cfg }))).stderr);
-  assert.ok(lufs >= -29 && lufs <= -25,
-    `the stairwell bed with its fluorescent buzz measured ${lufs} LUFS, outside [-29, -25]`);
+test('every shipped place, ambience and all, is inside the loudness contract', { skip }, async () => {
+  // Section 20 measured each place's bed by hand when ambience landed (-26.4
+  // to -27.1 LUFS across the menu) and never pinned it; the one per-place
+  // loudness test was the stairwell's buzz, and the stairwell was retired on
+  // 2026-09-04. This is the general form: a place added tomorrow with an
+  // ambience block loud enough to break "quiet" fails here rather than on a
+  // customer's tape. Read from the preset files, so it cannot go vacuous when
+  // the menu changes.
+  const dir = path.join(ROOT, 'presets/places');
+  const ids = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -'.json'.length));
+  assert.ok(ids.length >= 8, `expected the shipped menu, found ${ids.length} place(s)`);
+  for (const id of ids) {
+    const audioFilter = withPlaceOverride(id);
+    // Two noise sources: the hiss, and the place's own ambience. A preset with
+    // no ambience block would measure the bare bed, which is the number the
+    // base profile already proves, and this test would be saying nothing.
+    assert.ok((audioFilter.match(/anoisesrc/g) ?? []).length >= 2,
+      `${id}: this test proves nothing if the place's ambience never made it into the graph`);
+    const lufs = parseIntegratedLufs((await runFfmpeg(bedLoudnessArgs({ audioFilter, cfg }))).stderr);
+    assert.ok(lufs >= -29 && lufs <= -25,
+      `the ${id} bed measured ${lufs} LUFS, outside [-29, -25]`);
+  }
 });
 
 test('the kitchen preset, clock tick and all, is still inside the loudness contract', { skip }, async () => {

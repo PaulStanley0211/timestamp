@@ -210,8 +210,8 @@ test('the tracksuit refuses the three-stripe mark, not just a logo', () => {
   // asks for TWO white stripes and seedream drew THREE both times. Three
   // stripes on a navy tracksuit is not a generic sportswear cue, it is adidas's
   // registered trade dress, and it is among the more aggressively enforced
-  // marks in the EU -- which is exactly where every place in this catalog is
-  // set. `large brand logo` does not catch it, because three stripes is not a
+  // marks in the EU -- which is where this product is sold from, whichever
+  // city a tape is set in. `large brand logo` does not catch it, because three stripes is not a
   // logo applied to the garment; it IS the garment.
   //
   // The product generates commercial images of real people wearing whatever

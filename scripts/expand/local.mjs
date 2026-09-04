@@ -259,6 +259,13 @@ export const GENERIC_PLACE_NEGATIVES = Object.freeze([
  * than falling through to the token overlap below.
  */
 export const PLACE_AFFINITY = Object.freeze({
+  // The coast words are SHARED with the Amalfi harbour below, and the climate
+  // term in the score is what tells the two beaches apart: "a beach" is warm
+  // (CLIMATE_TERMS says so) and lands on the harbour, "a beach in winter" is
+  // cold and lands here. Before 2026-09-04 this was the only beach and a warm
+  // request lost its dressing to the neutral skeleton, which was honest and
+  // was also the weakest prompt the menu could produce for its most common
+  // request.
   'ostsee-strand': Object.freeze([
     'beach', 'seaside', 'sea', 'coast', 'shore', 'sand', 'dune', 'dunes', 'ocean',
     'pier', 'promenade', 'harbour', 'harbor', 'lake', 'riverbank', 'waterfront', 'cliff',
@@ -275,28 +282,36 @@ export const PLACE_AFFINITY = Object.freeze({
     'living room', 'sitting room', 'front room', 'sofa', 'television', 'lounge',
     'bedroom', 'hotel room', 'pub', 'bar', 'waiting room',
   ]),
-  'balkon-waesche': Object.freeze([
-    'balcony', 'washing line', 'laundry', 'courtyard', 'rooftop', 'veranda',
-    'window ledge', 'terrace',
+  // THE FOUR FAMOUS PLACES (2026-09-04, section 60I) replaced the stairwell,
+  // the car park, the swimming pool and the balcony. The retired entries are
+  // NOT re-pointed at these: the car park used to catch every roadside word
+  // -- street, road, bus stop, market, kiosk -- and its borrowed props (an
+  // estate car, a payphone, a route map) were plausible on any road on earth.
+  // A yellow cab and a hot-dog cart are not. "the street outside our house"
+  // borrowing Manhattan is the confidently-wrong scene the neutral skeleton
+  // exists to refuse, so a generic street, stairwell, pool or balcony falls
+  // through to neutral now, and only a request that NAMES one of these places
+  // gets its dressing.
+  'new-york-autumn': Object.freeze([
+    'new york', 'manhattan', 'brooklyn', 'nyc', 'brownstone', 'fire escape',
+    'yellow cab', 'fifth avenue', 'broadway',
   ]),
-  'plattenbau-treppenhaus': Object.freeze([
-    'stairwell', 'stairs', 'staircase', 'corridor', 'hallway', 'landing', 'lobby',
-    'entrance hall', 'basement', 'cellar', 'underpass', 'tunnel', 'block of flats',
+  'tokyo-night': Object.freeze([
+    'tokyo', 'japan', 'japanese', 'lantern', 'lanterns', 'izakaya', 'osaka',
+    'kyoto', 'shibuya', 'shinjuku', 'ramen',
   ]),
-  // Water only. `gym`, `sports hall` and `arena` were here in the first draft
-  // and produced "the school gym, pale blue tiles, lane ropes across the water,
-  // a lifeguard chair at the side" -- a prompt that generates a swimming pool
-  // when the user asked for a gym. A dry sports hall has no near neighbour in
-  // this menu, and the neutral skeleton's honest vagueness beats a confident
-  // wrong scene every time.
-  'hallenbad-nachmittag': Object.freeze([
-    'swimming pool', 'pool', 'swimming', 'baths', 'leisure centre', 'sauna', 'lido',
-    'changing room', 'lane ropes',
+  // Shares the coast words with the out-of-season beach above; see the note
+  // there. The Italian words are its own.
+  'amalfi-afternoon': Object.freeze([
+    'amalfi', 'positano', 'sorrento', 'capri', 'italy', 'italian', 'riviera',
+    'mediterranean', 'fishing village', 'marina', 'cove', 'lemon grove',
+    'beach', 'seaside', 'sea', 'coast', 'shore', 'harbour', 'harbor',
   ]),
-  'autobahn-raststaette': Object.freeze([
-    'car park', 'carpark', 'parking', 'motorway', 'autobahn', 'petrol station',
-    'service station', 'forecourt', 'layby', 'bus stop', 'train station', 'platform',
-    'kiosk', 'roundabout', 'junction', 'street', 'road', 'market',
+  // `rocket` is here and `space` alone is not: "a parking space" and "an open
+  // space" are places, and neither of them has a rocket in it.
+  'space-centre': Object.freeze([
+    'space centre', 'space center', 'rocket', 'rockets', 'nasa', 'cape canaveral',
+    'kennedy space', 'launch pad', 'spaceport', 'shuttle', 'rocket garden',
   ]),
 });
 
@@ -668,6 +683,34 @@ const STOPWORDS = new Set([
   'some', 'very', 'really', 'me', 'i', 'we', 'us', 'near', 'about', 'like', 'just',
 ]);
 
+/**
+ * Words that carry no evidence about WHICH place, excluded from the lexical
+ * score and nowhere else.
+ *
+ * The clock and the season have their own inference tables (TIME_TERMS,
+ * CLIMATE_TERMS) and their own bonus in choosePlaceSkeleton, so as tokens they
+ * are pure noise -- and expensive noise, because they sit in labels, ids and
+ * scenes at once. "Tokyo, at night" carries `night` in all three, which is 25
+ * points of overlap for every request that says "at night": "our street at
+ * night" would have borrowed paper lanterns, and "the pool in august" was
+ * already borrowing the garden's tablecloth off the `august` in its id before
+ * any famous place existed. `centre` is here for the same reason in a smaller
+ * way: "town centre", "leisure centre", "garden centre" are all about the
+ * word BEFORE it, and the space centre's label must not answer for them.
+ *
+ * STOPWORDS above is deliberately NOT extended for this. hasContent() reads it
+ * to decide whether a stripped clause still says anything, and "at night" is
+ * a clause that does -- it just does not say which place.
+ */
+const UNSCORED = new Set([
+  ...TIMES_OF_DAY.flatMap((t) => t.split(' ')),
+  'evening', 'dawn', 'sunrise', 'sunset', 'twilight', 'nighttime', 'midnight', 'noon',
+  'spring', 'summer', 'autumn', 'winter',
+  'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
+  'september', 'october', 'november', 'december',
+  'centre', 'center',
+]);
+
 /** Crude singularisation, on purpose. A real stemmer is a dependency and this
  *  only has to make "dunes" match "dune"; getting "buses" wrong costs one
  *  point of overlap on one skeleton. */
@@ -676,7 +719,7 @@ const stem = (word) => (word.length > 3 && word.endsWith('s') && !word.endsWith(
 export function tokenise(text) {
   return [...new Set(
     text.toLowerCase().split(/[^a-z0-9']+/)
-      .filter((w) => w.length >= 3 && !STOPWORDS.has(w))
+      .filter((w) => w.length >= 3 && !STOPWORDS.has(w) && !UNSCORED.has(w))
       .map(stem),
   )];
 }

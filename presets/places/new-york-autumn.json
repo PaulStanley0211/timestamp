@@ -1,0 +1,54 @@
+{
+  "_comment": "The first of the four famous places (2026-09-04, section 60I): the owner's call that a tape of you somewhere everybody recognises is the one people forward, and that 'me in New York in 2003' finds an audience 'somewhere ordinary' does not. FAMOUS PLACES ARE STREETS, NOT SIGNS. BASE_NEGATIVES forbid text and logos because a model invents lettering that reads as generated, so this is a brownstone side street with a cab at the end of it rather than Times Square -- still unmistakable, and better as 2003, when the side streets looked like this and the squares already did not.",
+  "id": "new-york-autumn",
+  "label": "New York, in autumn",
+  "climate": "cool",
+  "timeOfDay": "late afternoon",
+  "prompt": {
+    "_comment": "The cab is the one object that names the city on its own, and it is kept at the FAR end of the block on purpose: close enough to read, too far for the model to want to letter it. The fire escape and the stoop do the rest. Plane trees dropping leaves say autumn without a word about the season.",
+    "scene": "a Manhattan side street in autumn, brownstone stoops with black iron railings, a fire escape zigzagging up old brick, plane trees dropping yellow leaves onto the parked cars, a yellow cab passing at the far end of the block, steam rising from a grating in the road",
+    "light": "low autumn sun coming down the cross street from one side, long shadows across the pavement, the far end of the block already in shade with a few windows lit",
+    "lens": "a consumer zoom at its wide end from the pavement, the far cab going soft, a little barrel bend at the edges",
+    "framing": "waist-up on the pavement beside the stoop railings, the street running away behind",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "one arm up to hail the cab at the end of the block, half turned back towards the camera",
+    "eraProps": "a yellow cab with a roof light, a payphone in a steel hood on the corner, a newspaper vending box, a hot-dog cart under a striped umbrella"
+  },
+  "negatives": [
+    "modern cars",
+    "glass skyscraper",
+    "digital billboard",
+    "smartphone",
+    "crowds",
+    "Times Square"
+  ],
+  "motionHint": "yellow leaves come down onto the parked cars, the steam lifts from the grating and thins, and a cab crosses the far end of the block",
+  "lookOverride": {
+    "_comment": "Low autumn sun on brick: warm, a little more saturated than the base, halation open a touch for the cab's roof light and the lit windows at the shaded end. Grain just under the base -- a bright street shows it more than a dim room does.",
+    "grade": {
+      "cbRedMid": 0.06,
+      "cbBlueMid": -0.05,
+      "saturation": 0.84
+    },
+    "optics": {
+      "bloomStrength": 0.42
+    },
+    "tape": {
+      "grainStrength": 19
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "Traffic on the avenue at the end of the block, heard down a street of brick. Low and steady like the car park's motorway used to be, with a slightly quicker swell because a cross street's traffic comes in lights-controlled waves rather than a continuous stream, and a short echo because brick walls either side are what a side street sounds like.",
+        "amplitude": 0.3,
+        "color": "brown",
+        "highpass": 200,
+        "lowpass": 800,
+        "volume": 0.2,
+        "swellHz": 0.3,
+        "swellDepth": 0.35,
+        "echoDelayMs": 90,
+        "echoDecay": 0.25
+      }
+    }
+  }
+}

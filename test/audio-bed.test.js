@@ -545,20 +545,12 @@ test('the shipped base profile is silent for tone by default, like it is for amb
   assert.deepEqual(base.audio.ambience.tone.tones, [], 'and it names no partials by default');
 });
 
-test('the stairwell preset carries a fluorescent buzz in mains territory, continuous not ticking', () => {
-  // "The fluorescent buzz the preset mentions wants a TONE and this layer
-  // only makes noise" was the note left in the ambience commit -- this is
-  // that note closed out.
-  const raw = JSON.parse(fs.readFileSync(path.join(ROOT, 'presets/places/plattenbau-treppenhaus.json'), 'utf8'));
-  const tone = raw.lookOverride?.audio?.ambience?.tone;
-  assert.ok(tone && Array.isArray(tone.tones) && tone.tones.length >= 1,
-    'the flickering-tube preset should carry a tone');
-  for (const t of tone.tones) {
-    assert.ok(t.hz >= 50 && t.hz <= 400, `${t.hz} Hz is not mains-hum territory (50/60 Hz and its harmonics)`);
-    assert.ok(t.volume > 0 && t.volume <= 0.15, `${t.volume} is not a quiet, capstan-scale tone volume`);
-  }
-  assert.ok(!tone.tickHz, 'a fluorescent tube hums continuously, it does not tick');
-});
+// The stairwell preset carried a fluorescent buzz -- 100 Hz mains hum plus a
+// 300 Hz third harmonic, continuous, never ticking -- and a test pinned it here.
+// The stairwell was retired on 2026-09-04 (section 60I: four ordinary places
+// became famous ones) and the buzz went with it; the kitchen clock below is now
+// the only tone any shipped place carries. The tone MECHANISM is still proved by
+// the golden-string tests above, which do not depend on any preset.
 
 test('the kitchen preset carries a clock tick at one beat per second, not a hum', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(ROOT, 'presets/places/kuechentisch-fruehstueck.json'), 'utf8'));
@@ -571,7 +563,7 @@ test('the kitchen preset carries a clock tick at one beat per second, not a hum'
 });
 
 test('no other shipped place invented a tone of its own', () => {
-  const withTones = new Set(['plattenbau-treppenhaus', 'kuechentisch-fruehstueck']);
+  const withTones = new Set(['kuechentisch-fruehstueck']);
   const dir = path.join(ROOT, 'presets/places');
   for (const file of fs.readdirSync(dir)) {
     const id = file.replace(/\.json$/, '');
@@ -579,6 +571,6 @@ test('no other shipped place invented a tone of its own', () => {
     const raw = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
     const tone = raw.lookOverride?.audio?.ambience?.tone;
     assert.ok(!tone || !Array.isArray(tone.tones) || tone.tones.length === 0,
-      `${id} should not carry a tone -- only the fluorescent stairwell and the kitchen clock do`);
+      `${id} should not carry a tone -- only the kitchen clock does`);
   }
 });

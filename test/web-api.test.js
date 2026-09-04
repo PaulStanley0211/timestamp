@@ -399,10 +399,14 @@ test('GET / renders the fourteen presets as cards, from the preset files', async
     // -- Ostsee, Autobahn, Schrebergarten -- on a product that is not for
     // Germany. The photographs and the ids are unchanged; only what a person
     // reads moved, to plain names that describe a memory rather than a country.
+    // FOUR BECAME FAMOUS PLACES 2026-09-04, the owner's call: the stairwell,
+    // the car park, the swimming pool and the balcony went, and New York,
+    // Tokyo, the Amalfi coast and a space centre came. Four ordinary places
+    // stay beside them.
     for (const label of [
-      'The garden, in summer', 'The car park, at dusk', 'The balcony',
-      'The swimming pool', 'The kitchen table', 'The beach, out of season',
-      'The stairwell', 'The living room, evening',
+      'The garden, in summer', 'New York, in autumn', 'Tokyo, at night',
+      'The Amalfi coast, afternoon', 'The kitchen table', 'The beach, out of season',
+      'The space centre', 'The living room, evening',
       'Half-zip fleece', 'Checked shirt and jeans', 'Cotton summer dress',
       'Knitted cardigan', 'Tracksuit jacket', 'Padded winter jacket',
     ]) {
@@ -1602,6 +1606,23 @@ test('the result page lists the shelf\'s other finished tapes, and not the one o
     // The window the words promise is the one the purge enforces, read from
     // the same config -- 30 days in config/render.json.
     assert.match(html, /stays on the shelf for 30 days/, 'the retention window did not reach the page');
+  });
+});
+
+test('a tape made in a retired place keeps its old label on the shelf, not its id', async () => {
+  // Four presets were replaced on 2026-09-04 (section 60I). A manifest stores
+  // the preset ID, `labelsOf` translates it through the loaded catalog, and a
+  // preset that is no longer in the catalog fell through as itself -- so a
+  // tape somebody made in the car park last week would have captioned as
+  // `autobahn-raststaette` the day the menu changed. The retired labels stay
+  // known, exactly as they read when the tape was made.
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    seedJob(app, root, { status: 'done', owner: accountA, place: 'autobahn-raststaette' });
+    seedJob(app, root, { status: 'done', owner: accountA, place: 'plattenbau-treppenhaus' });
+    const html = await (await get(base, '/videos', cookieA)).text();
+    assert.ok(html.includes('<span class="what">The car park, at dusk</span>'), 'the retired car park is not captioned by its old label');
+    assert.ok(html.includes('<span class="what">The stairwell</span>'), 'the retired stairwell is not captioned by its old label');
+    assert.ok(!html.includes('<span class="what">autobahn-raststaette</span>'), 'the id leaked onto the shelf as a caption');
   });
 });
 

@@ -140,7 +140,15 @@ test('rule 3 -- a look word is stripped and what it was describing survives', as
   const place = await expandPlace('grainy VHS beach footage', opts);
   assert.equal(place.id, 'custom-a-beach');
   assert.ok(place.prompt.scene.startsWith('a beach,'));
-  assert.deepEqual(scanText(JSON.stringify(place), PLACE_GROUPS), []);
+  // The PROMPT strings, not the whole JSON. This used to stringify the entire
+  // draft, and passed only because "a beach" lost its dressing to neutral and
+  // so carried an empty lookOverride: the moment a warm beach skeleton existed
+  // (2026-09-04) the borrowed `grade` and `tape` KEYS -- ffmpeg parameter
+  // names, never sent to a model, and exempt from the schema's scan for that
+  // reason -- tripped the look list. promptStrings() is the schema's own view.
+  for (const value of promptStrings(place)) {
+    assert.deepEqual(scanText(value, PLACE_GROUPS), [], value);
+  }
   assert.doesNotThrow(() => validatePlace(place, { id: place.id, baseLook }));
 });
 

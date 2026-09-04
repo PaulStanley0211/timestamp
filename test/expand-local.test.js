@@ -200,18 +200,53 @@ test('an outfit climate is an array, and a winter jacket beats a jacket', () => 
 
 test('the nearest shipped place is the skeleton', () => {
   const expect = {
-    'a beach': 'ostsee-strand',
+    // "a beach" is warm (CLIMATE_TERMS says so) and two skeletons now answer
+    // to the word: the climate term picks the Amalfi harbour for a summer
+    // beach and the out-of-season one for a winter beach. Before 2026-09-04
+    // there was one beach and a warm request lost its dressing to neutral.
+    'a beach': 'amalfi-afternoon',
+    'a beach in winter': 'ostsee-strand',
     "my grandmother's kitchen": 'kuechentisch-fruehstueck',
-    'a car park at night': 'autobahn-raststaette',
-    'a stairwell': 'plattenbau-treppenhaus',
-    'the balcony of our old flat': 'balkon-waesche',
-    'the swimming pool': 'hallenbad-nachmittag',
+    'a side street in new york': 'new-york-autumn',
+    'a back street in tokyo': 'tokyo-night',
+    'the harbour at positano': 'amalfi-afternoon',
+    'the space centre': 'space-centre',
     'the living room with the tv on': 'wohnzimmer-abend',
     'my allotment garden': 'schrebergarten-august',
   };
   for (const [text, id] of Object.entries(expect)) {
     assert.equal(choosePlaceSkeleton(text, catalog, 0).skeleton.id, id, `"${text}"`);
   }
+});
+
+test('the four retired places fall to neutral dressing rather than to a stranger\'s props', () => {
+  // The stairwell, the car park, the swimming pool and the balcony were
+  // replaced by famous places on 2026-09-04 (section 60I). A typed stairwell
+  // has no near neighbour in the menu now, and the car park's roadside words
+  // -- street, road, bus stop, market -- went with it rather than onto New
+  // York: borrowing a yellow cab and a hot-dog cart for "the street outside
+  // our house" is the confidently-wrong scene the neutral skeleton exists to
+  // refuse. Neutral is the honest answer for all four.
+  for (const text of ['a car park at night', 'a stairwell', 'the balcony of our old flat', 'the swimming pool', 'the street outside our house']) {
+    const draft = place(text);
+    assert.equal(draft._source.skeleton, '_neutral', `"${text}" borrowed ${draft._source.skeleton}`);
+    assert.equal(draft.prompt.eraProps, NEUTRAL_PLACE.prompt.eraProps, `"${text}"`);
+  }
+});
+
+test('a time of day or a season is not lexical evidence for a skeleton', () => {
+  // "Tokyo, at night" carries the word night in its label, its id and its
+  // scene, which is 25 points of overlap for every request that says "at
+  // night" -- so "our street at night" would have borrowed paper lanterns.
+  // The clock and the season have their own inference tables and their own
+  // bonus in the score; as tokens they are noise, and they are excluded.
+  for (const text of ['our street at night', 'the yard at dusk', 'the pool in august', 'the park in autumn', 'the town centre']) {
+    const choice = choosePlaceSkeleton(text, catalog, 0);
+    assert.equal(choice.strong, false, `"${text}" matched ${choice.skeleton.id} on ${choice.reasons.join(', ')}`);
+  }
+  // and the same words still reach the skeleton they name
+  assert.equal(choosePlaceSkeleton('tokyo at night', catalog, 0).skeleton.id, 'tokyo-night');
+  assert.equal(choosePlaceSkeleton('new york in autumn', catalog, 0).skeleton.id, 'new-york-autumn');
 });
 
 test('a request that resembles nothing gets neutral set dressing rather than a stranger\'s props', () => {
@@ -248,10 +283,11 @@ test('light, lens and era props are inherited from the skeleton when nothing ove
 });
 
 test('a stated time of day overrides the skeleton\'s light, which is the whole point of stating it', () => {
-  const carpark = place('a car park at night');
-  assert.equal(carpark.timeOfDay, 'night');
-  assert.equal(carpark.prompt.light, LIGHT_BY_TIME.night);
-  assert.notEqual(carpark.prompt.light, catalog.places.get('autobahn-raststaette').prompt.light);
+  const street = place('a side street in new york at night');
+  assert.equal(street._source.skeleton, 'new-york-autumn', 'the request must land on a real skeleton for the override to mean anything');
+  assert.equal(street.timeOfDay, 'night');
+  assert.equal(street.prompt.light, LIGHT_BY_TIME.night);
+  assert.notEqual(street.prompt.light, catalog.places.get('new-york-autumn').prompt.light);
 });
 
 test('stated weather beats a stated time of day', () => {
@@ -285,8 +321,15 @@ test('the skeleton\'s prop clauses are carried over, including detail behind a "
 });
 
 test('a borrowed clause that repeats the user\'s own noun phrase is dropped', () => {
-  const carpark = place('a car park at night');
-  assert.equal(carpark.prompt.scene.match(/car park/g).length, 1);
+  // The Amalfi skeleton's second clause opens "a pebble beach with rows of
+  // striped umbrellas"; a request for the pebble beach must not get it twice.
+  const pebbles = place('the pebble beach in summer');
+  assert.equal(pebbles._source.skeleton, 'amalfi-afternoon', 'the request must land on the skeleton whose clause repeats it');
+  assert.equal(pebbles.prompt.scene.match(/pebble beach/g).length, 1);
+  // the WHOLE clause goes, umbrellas and all -- a clause is the unit, and half
+  // a clause reads as a typo
+  assert.ok(!pebbles.prompt.scene.includes('striped umbrellas'), 'half of the duplicate clause survived');
+  assert.ok(pebbles.prompt.scene.includes('lemon trees'), 'the clauses that do not repeat the phrase are still borrowed');
   // the one-word case is deliberately NOT dropped: it would throw away the best
   // clause in the beach preset. The clause carrying the user's own word used to
   // be "roofed wicker beach chairs"; the preset was de-nationalised on
@@ -296,31 +339,35 @@ test('a borrowed clause that repeats the user\'s own noun phrase is dropped', ()
 });
 
 test('a skeleton whose climate contradicts the request keeps its lens and loses its dressing', () => {
-  // "a beach" is warm and ostsee-strand is a cold out-of-season Baltic. The
-  // prose it would lend is internally coherent, which is what makes this the
-  // bad kind of wrong: nothing downstream catches it, and the `warm` field then
-  // suppresses the compatibility warning a grey October beach would deserve.
-  const summer = place('a beach');
-  assert.equal(summer._source.skeleton, 'ostsee-strand');
-  assert.equal(summer.climate, 'warm');
-  assert.match(summer._source.dressingFrom, /^neutral/);
+  // "a garden in january" is cold and schrebergarten-august is a warm late
+  // summer. The prose it would lend is internally coherent, which is what
+  // makes this the bad kind of wrong: nothing downstream catches it, and the
+  // `cold` field then suppresses the compatibility warning a tablecloth in
+  // January would deserve. (This was "a beach" against the out-of-season beach
+  // until 2026-09-04, when the Amalfi coast gave a warm beach a warm skeleton
+  // to land on -- the right outcome, and no longer this test's subject. A
+  // month rather than "snow", because stated weather owns the light outright
+  // and the climate light is what this test is about.)
+  const snow = place('a garden in january');
+  assert.equal(snow._source.skeleton, 'schrebergarten-august');
+  assert.equal(snow.climate, 'cold');
+  assert.match(snow._source.dressingFrom, /^neutral/);
 
-  assert.equal(summer.prompt.light, LIGHT_BY_CLIMATE.warm);
-  assert.equal(summer.prompt.eraProps, NEUTRAL_PLACE.prompt.eraProps);
-  assert.equal(summer.motionHint, NEUTRAL_PLACE.motionHint);
-  assert.deepEqual(summer.lookOverride, {});
-  // "sunshine" is one of ostsee's negatives and would fight the request outright
-  assert.ok(!summer.negatives.includes('sunshine'));
-  // Named against the dressing the preset ACTUALLY carries. These were
-  // `wicker|groyne|marram` until the de-nationalisation removed those words
-  // from the repository entirely -- at which point the assertion could no
-  // longer fail for any reason, which is the vacuous-absence trap this file's
-  // own siblings have been caught by. The words below are present in the
-  // preset and must be absent from THIS expansion.
-  assert.ok(!/kiosk|loungers|tarpaulin/.test(summer.prompt.scene));
+  assert.equal(snow.prompt.light, LIGHT_BY_CLIMATE.cold);
+  assert.equal(snow.prompt.eraProps, NEUTRAL_PLACE.prompt.eraProps);
+  assert.equal(snow.motionHint, NEUTRAL_PLACE.motionHint);
+  assert.deepEqual(snow.lookOverride, {});
+  // "manicured lawn" is one of the garden's negatives; a lawn under snow is
+  // not the frame it was written against
+  assert.ok(!snow.negatives.includes('manicured lawn'));
+  // Named against the dressing the preset ACTUALLY carries -- proved PRESENT
+  // in the agreeing expansion first, so this cannot go vacuous the way the
+  // `wicker|groyne|marram` version of this assertion once did.
+  assert.match(place('a garden in august').prompt.scene, /tablecloth|watering can|shed/);
+  assert.ok(!/tablecloth|watering can|shed/.test(snow.prompt.scene));
 
   // the lens is not dressing -- a focal length has no season
-  assert.equal(summer.prompt.lens, catalog.places.get('ostsee-strand').prompt.lens);
+  assert.equal(snow.prompt.lens, catalog.places.get('schrebergarten-august').prompt.lens);
 });
 
 test('the same request with the season stated inherits everything', () => {
@@ -342,24 +389,26 @@ test('climate is a term in the score, so a warm request prefers a warm skeleton'
 });
 
 test('a lookOverride tuned for one light is carried one step along the time axis and no further', () => {
-  // dusk -> night is the same sodium lamps; midday -> night is not.
+  // late afternoon -> dusk is the same low autumn sun; late afternoon -> midday
+  // is not.
   //
   // THE AUDIO BLOCK JOINED THIS EXPECTATION on 2026-08-24 and it belongs here:
-  // a car park at night borrowing the Autobahn's motorway rumble is the same
+  // a New York street at dusk borrowing the preset's traffic is the same
   // one-step rule the grade follows, applied to the other half of the tape.
   // The `_comment` arguing for those numbers is stripped at every depth -- see
-  // the test below.
-  assert.deepEqual(place('a car park at night').lookOverride, {
-    grade: { cbRedMid: 0.07, cbBlueMid: -0.06, saturation: 0.8 },
-    optics: { bloomStrength: 0.52 },
-    tape: { grainStrength: 26 },
+  // the test below. (This was the car park until 2026-09-04.)
+  assert.deepEqual(place('a side street in new york at dusk').lookOverride, {
+    grade: { cbRedMid: 0.06, cbBlueMid: -0.05, saturation: 0.84 },
+    optics: { bloomStrength: 0.42 },
+    tape: { grainStrength: 19 },
     audio: {
       ambience: {
-        amplitude: 0.34, color: 'brown', highpass: 200, lowpass: 600,
-        volume: 0.22, swellHz: 0.25, swellDepth: 0.4,
+        amplitude: 0.3, color: 'brown', highpass: 200, lowpass: 800,
+        volume: 0.2, swellHz: 0.3, swellDepth: 0.35, echoDelayMs: 90, echoDecay: 0.25,
       },
     },
   });
+  assert.deepEqual(place('a side street in new york at midday').lookOverride, {});
   assert.deepEqual(place('a stairwell at night').lookOverride, {});
 });
 

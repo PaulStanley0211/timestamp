@@ -73,7 +73,7 @@ import {
   JobError,
 } from '../render/job.mjs';
 import { purgeJobMedia } from '../render/purge.mjs';
-import { loadCatalog } from '../catalog/catalog.mjs';
+import { loadCatalog, RETIRED_PLACE_LABELS } from '../catalog/catalog.mjs';
 import { CONSENT_TEXT, recordConsent } from '../safety/consent.mjs';
 import { LIMITS } from '../intake/photo.mjs';
 import { runFfprobe } from '../ffmpeg/run.mjs';
@@ -1535,13 +1535,15 @@ export function createServer({
   }
 
   /** A preset id is not a label. The manifest stores the id, which is what the
-   *  pipeline needs; the page shows what the person actually picked. Free text
-   *  has no entry and falls through as itself. */
+   *  pipeline needs; the page shows what the person actually picked. A place
+   *  that has since left the menu keeps the label it had when the tape was
+   *  made (RETIRED_PLACE_LABELS). Free text has no entry and falls through as
+   *  itself. */
   function labelsOf(job) {
     const place = job.input?.place?.value ?? null;
     const outfit = job.input?.outfit?.value ?? null;
     return {
-      place: cards.places.find((p) => p.id === place)?.label ?? place,
+      place: cards.places.find((p) => p.id === place)?.label ?? RETIRED_PLACE_LABELS[place] ?? place,
       outfit: cards.outfits.find((o) => o.id === outfit)?.label ?? outfit,
     };
   }

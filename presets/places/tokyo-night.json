@@ -1,0 +1,54 @@
+{
+  "_comment": "The second famous place (2026-09-04, section 60I), and the darkest scene in the menu now that the car park has gone. A lantern-lit back street rather than a neon crossing, for the rule every famous place follows here: BASE_NEGATIVES forbid text and logos, and a neon crossing is nothing but lettering. The lanterns carry the city on their own, and a wet back street under power lines is exactly what a 2003 holiday tape of Tokyo looked like.",
+  "id": "tokyo-night",
+  "label": "Tokyo, at night",
+  "climate": "mild",
+  "timeOfDay": "night",
+  "prompt": {
+    "_comment": "Two light sources that do not match -- warm paper lanterns and the cold white of a vending machine -- is the same trick the kitchen preset plays with a bulb and a window, and it is what makes an interior or a night street read as real rather than lit for a shoot. The wet asphalt is doing the work a second light would: every lantern appears twice.",
+    "scene": "a narrow back street in Tokyo at night, red and white paper lanterns hung along the eaves of low wooden-fronted eateries, a tangle of power lines overhead, a lit drinks vending machine on the corner, wet asphalt holding every light, a bicycle with a front basket leaning on a pole",
+    "light": "the lanterns are the main source, warm red and orange from just above head height, a cold white spill from the vending machine cutting across it, everything above the wires going to black",
+    "lens": "wide and close in the narrow street, the far end lost behind the lanterns, every light drawing a hard point, a little barrel bend at the edges",
+    "framing": "chest-up under the nearest lantern, the street narrowing away behind",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "just stepping out from under a shop's split curtain, one hand still holding it aside, half turned back to the camera",
+    "eraProps": "a flip phone with a dangling charm, a lit drinks vending machine, a folded paper map, a clear plastic umbrella hooked on a bicycle handlebar"
+  },
+  "negatives": [
+    "neon signboards",
+    "modern LED screens",
+    "smartphone",
+    "crowds",
+    "daylight",
+    "skyscrapers"
+  ],
+  "motionHint": "the lanterns sway a little on their hooks, a scooter passes at the far end, and the wet asphalt holds and loses each light as it moves",
+  "lookOverride": {
+    "_comment": "Paper lanterns are a warm source in a dark scene, so this takes the amber push the car park used to have and opens halation further still: every lantern and the vending machine's front are blown highlights on wet ground. The most grain in the menu, because the scene is dark without being flat.",
+    "grade": {
+      "cbRedMid": 0.07,
+      "cbBlueMid": -0.05,
+      "saturation": 0.86
+    },
+    "optics": {
+      "bloomStrength": 0.56
+    },
+    "tape": {
+      "grainStrength": 26
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "A city at night heard from a side street: the hum of the vending machine and distant traffic as one low bed, a slow shallow swell for the scooter the motionHint sends past, and a short echo because the street is narrow and the fronts are close. Quieter than the car park was -- a back street at night is quiet, and the point of the lanterns is that nothing much is happening under them.",
+        "amplitude": 0.24,
+        "color": "brown",
+        "highpass": 200,
+        "lowpass": 1400,
+        "volume": 0.16,
+        "swellHz": 0.2,
+        "swellDepth": 0.35,
+        "echoDelayMs": 120,
+        "echoDecay": 0.3
+      }
+    }
+  }
+}

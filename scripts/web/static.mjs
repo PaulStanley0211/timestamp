@@ -124,20 +124,21 @@ const TIME_HUES = Object.freeze({
  * and the app is a visibly different colour for every memory somebody picks.
  * Decoration would have been eight tints of the same thing.
  *
- * THESE ARE OBSERVATIONS, NOT PREFERENCES. Sodium lamps on an Autobahn at dusk
- * really are orange; a Hallenbad really is that chlorinated cyan; a television
- * in a dark living room really does throw violet. The palette is vivid because
- * the places are, which is what keeps it from reading as a theme applied over
- * the top.
+ * THESE ARE OBSERVATIONS, NOT PREFERENCES. Paper lanterns in a Tokyo back
+ * street really are that red; the sea inside an Amalfi harbour wall really is
+ * that turquoise; a television in a dark living room really does throw violet.
+ * The palette is vivid because the places are, which is what keeps it from
+ * reading as a theme applied over the top. (The sodium-vapour car park and the
+ * chlorinated pool that used to anchor this argument were retired 2026-09-04.)
  */
 const PLACE_HUES = Object.freeze({
-  'autobahn-raststaette': 24,      // sodium vapour
-  'balkon-waesche': 197,           // midday sky
-  'hallenbad-nachmittag': 176,     // chlorinated teal
+  'amalfi-afternoon': 190,         // the sea inside a harbour wall
   'kuechentisch-fruehstueck': 42,  // butter, early sun
+  'new-york-autumn': 30,           // brick and plane leaves in low sun
   'ostsee-strand': 212,            // cold Baltic
-  'plattenbau-treppenhaus': 154,   // institutional green
   'schrebergarten-august': 86,     // late-summer grass
+  'space-centre': 222,             // a deep blue sky behind a white rocket
+  'tokyo-night': 10,               // paper lanterns
   'wohnzimmer-abend': 290,         // the television
 });
 

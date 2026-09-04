@@ -1,0 +1,53 @@
+{
+  "_comment": "The fourth famous place (2026-09-04, section 60I), and the one that started as something else. The owner first asked for an astronaut travelling in a rocket. A camcorder in 2003 could film you in New York and could not film you in space; every place on this menu is somewhere a person could actually have stood, the outfits make no sense inside a rocket, and it steps toward the cartoons this product stays out of. A visitor's day at a space centre gives the astronaut feeling in a form the tape can honour -- you, on the concrete, with the rocket behind you -- and he agreed. THE ROCKET IS ON ITS STAND, NEVER LAUNCHING: the negatives say so, because a launch is the one thing a model asked for a rocket wants to draw.",
+  "id": "space-centre",
+  "label": "The space centre",
+  "climate": "warm",
+  "timeOfDay": "midday",
+  "prompt": {
+    "_comment": "The rope barrier and the chain-link fence are not clutter, they are what says VISITOR rather than launch crew: a person on the public side of a rope. No flags on the masts on purpose -- a flag names a country the way a sign names a street, and the product is the era, not the country.",
+    "scene": "the visitor grounds of a space centre on a clear day, a white rocket standing upright on its display stand across a wide lawn, a low rope barrier and a chain-link fence in front of it, a concrete path, a row of floodlight masts, a souvenir kiosk with a striped canopy and a coach park glinting beyond",
+    "light": "hard midday sun straight down, the white rocket almost blown out against a deep blue sky, short shadows, the concrete apron bright enough to squint at",
+    "lens": "wide and low with the rocket filling the frame behind, the sky one big flat block, a little barrel bend at the edges",
+    "framing": "waist-up on the concrete path, the rocket rising up behind over one shoulder",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "pointing back up at the rocket with one arm, half turned to the camera and mid-sentence",
+    "eraProps": "a disposable camera with a wind-on wheel, a souvenir model rocket in a cardboard box, a folded visitor map, a drink carton with a straw, a coach with a curved windscreen and a roof-mounted air conditioner"
+  },
+  "negatives": [
+    "rocket launch",
+    "astronaut",
+    "outer space",
+    "smartphone",
+    "crowds",
+    "night",
+    "modern electric vehicles"
+  ],
+  "motionHint": "heat shimmer wobbles the far masts, the rope barrier swings a little, and a coach pulls slowly through the car park at the edge of frame",
+  "lookOverride": {
+    "_comment": "Midday sun on white paint and pale concrete: the brightest, flattest daylight in the menu, so saturation stays near the base, the warmth is barely pushed, and halation is open for the rocket's blown-out flank against the sky. Grain at the floor with the two beaches, for the same reason -- there is nothing dark here for it to hide in.",
+    "grade": {
+      "cbRedMid": 0.03,
+      "cbBlueMid": -0.03,
+      "saturation": 0.82
+    },
+    "optics": {
+      "bloomStrength": 0.46
+    },
+    "tape": {
+      "grainStrength": 15
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "Open ground in the heat: a light wind across a lawn and a concrete apron, with a slow shallow swell for the gusts. Pink rather than brown because there is no surf and no traffic underneath it -- just air moving over a very large flat space, which sits higher in the band than either.",
+        "amplitude": 0.24,
+        "color": "pink",
+        "highpass": 220,
+        "lowpass": 1000,
+        "volume": 0.15,
+        "swellHz": 0.15,
+        "swellDepth": 0.4
+      }
+    }
+  }
+}
