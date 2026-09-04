@@ -25,7 +25,7 @@ trunk is an open decision and the owner's** -- it changes the deploy runbook.
 
 ## READ §60 FIRST (2026-09-04): THE DESIGN PROTOTYPE IS IMPLEMENTED, PAGE BY PAGE, AND DEPLOYED AT `9272c9a`. FIVE COMMITS, ALL TEST-FIRST. THEN §59, §58, §57.
 
-**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2104 / 2101 / 0 / 3. **AND §60E: the first live checkout was refused by Stripe that evening, the cause was the audit's own card-only parameter, it is fixed at `123b415`, and ONE STRIPE DASHBOARD STEP IS THE OWNER'S** -- add `checkout.session.async_payment_succeeded` to the webhook's events.
+**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2104 / 2101 / 0 / 3. **AND §60E: the first live checkout was refused by Stripe that evening, the cause was the audit's own card-only parameter, it is fixed at `123b415`, and the dashboard step is done. THE FIRST REAL CARD WAS CHARGED THAT AFTERNOON AND 92 CREDITS LANDED ONE SECOND LATER** -- the payment path is proven live, and every "no card has ever been charged" line in this file is history.
 
 ## READ §59 FIRST (2026-09-03, evening): THE AUDIT'S CODE ITEMS ARE FIXED, DEPLOYED AT `bf84de3`, AND THE BOX IS KEY-ONLY. TWO CONSOLE STEPS ARE THE OWNER'S. THEN §58, THEN §57.
 
@@ -7660,8 +7660,18 @@ endpoint's events beside `checkout.session.completed`. Until that is done a
 customer who pays by a delayed method is logged and never credited. Cards,
 Apple Pay, Google Pay and Link pay on `completed` and need nothing.
 
-**And the live purchase is STILL UNPROVEN.** The refusal happened before any
-money moved; the Starter-pack test in §57D is still owed.
+**THE FIRST CARD WAS CHARGED AT 14:03 UTC THE SAME DAY, AND THE CREDITS LANDED
+ONE SECOND AFTER THE EVENT.** Read off the live account from inside the web
+container and off the ledger on the box, not off a dashboard: session
+`cs_live_a1vSbk...` complete and paid, $14.28 (the $12 pack plus German VAT,
+exactly as §46B measured), `client_reference_id` the owner's account; event
+`evt_1UBxioPFjb61BCp65vJGtfTU` `checkout.session.completed`, `payment_status`
+paid, `pending_webhooks` 0; ledger row `+92 grant:pack:starter` with that
+event id as its `ref`, balance 92. **Every "no card has ever been charged"
+line above this section is history as of 2026-09-04.** The owner added
+`checkout.session.async_payment_succeeded` to the endpoint before buying, so
+that step is closed too. An abandoned session from 13:38 sits `open unpaid`
+and expires on its own.
 
 **Things that will bite:** `stripe docs /payments/...` from Git Bash needs
 `MSYS_NO_PATHCONV=1` or the path arrives as `C:/Program Files/Git/payments`
