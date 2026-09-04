@@ -2064,13 +2064,28 @@ input[type="file"]::file-selector-button {
   .label .lsub { grid-column: 1; grid-row: 3; }
 }
 
-/* THE SPEC LINE DEMOTES ON THE PAYOFF PAGE ONLY. A frame count and a raster
-   are true and a customer has no use for them where they meet a memory, so
-   here the line sits under the buttons at the ghost floor instead of
-   captioning the picture. It is a stylesheet change rather than a second
-   class because the tests read 'class="meta"' exactly -- and because where a
-   fact sits in the hierarchy is a design decision, not a markup one. */
-.page-result .meta { font-size: var(--t-label); margin: 1.1rem 0 0.6rem; }
+/* --- the result: the tape beside the words (2026-09-04) ---------------- */
+
+/* Two columns: the tape at a fixed 20rem with its label beneath, the words
+   taking the rest. On a phone they stack and the tape still comes first. */
+.result-grid { display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: var(--s-7); align-items: start; margin: 0 0 var(--s-8); }
+@media (max-width: 48rem) { .result-grid { grid-template-columns: 1fr; gap: var(--s-6); } }
+.result-words { padding-top: var(--s-2); }
+.result-words .headline { font-size: var(--t-6); line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; max-inline-size: 18ch; }
+.result-words .sub { max-width: 44ch; }
+/* A label in the readout face, for a section whose content is a readout --
+   "The file", "Earlier tapes". The same size and tracking as the status
+   page's counter. */
+.eyebrow--osd { font-family: var(--osd); font-size: var(--d-1); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin: 0 0 var(--s-2); }
+/* THE SPEC LINE IS A LABELLED READOUT ON THE PAYOFF PAGE, under "The file",
+   rather than a caption on the picture: a frame count and a raster are what
+   the tape physically is, and beneath their own label they read as a fact
+   about the file rather than as a description of a memory. It is a
+   stylesheet change rather than a second class because the tests read
+   'class="meta"' exactly -- and because where a fact sits in the hierarchy is
+   a design decision, not a markup one. */
+.page-result .meta { font-family: var(--osd); font-size: var(--d-2); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); margin: 0 0 var(--s-5); }
+.earlier .shelf { margin-top: var(--s-4); }
 
 /* --- buttons and links ------------------------------------------------- */
 

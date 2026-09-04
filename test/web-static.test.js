@@ -1250,6 +1250,76 @@ test('the payoff page does not caption the tape with a heading', () => {
   assert.ok(!/Here it is/.test(html), 'the tape is still being captioned by a heading');
 });
 
+/**
+ * THE RESULT PAGE FROM THE DESIGN PROTOTYPE (2026-09-04): the tape and its
+ * label in one column, the words about it in the other -- the place as the
+ * heading, a sentence saying the file is theirs and how long the copy stays,
+ * the download, then the file's own facts under a label -- and the rest of
+ * the shelf beneath, when there is one.
+ */
+const FINISHED = Object.freeze({
+  jobId: '20260901-143022-8f2a1c',
+  status: 'done',
+  result: { durationSeconds: 15, frames: 375, tape: { width: 720, height: 576 } },
+  input: { place: 'schrebergarten-august', outfit: 'trainingsjacke', aspect: '4:3' },
+});
+const FINISHED_LABELS = Object.freeze({ place: 'The garden, in summer', outfit: 'Tracksuit jacket' });
+
+test('the result page is the tape beside the words about it', () => {
+  const html = resultPage({ view: FINISHED, labels: FINISHED_LABELS, retentionDays: 30 });
+  const { css } = createStylesheet({});
+
+  assert.match(html,
+    /<div class="result-grid">\s*<div class="result-tape">[\s\S]*?<video[\s\S]*?<p class="label">[\s\S]*?<\/div>\s*<div class="result-words">/,
+    'the tape column comes first and holds the player and the label');
+  assert.match(html,
+    /<div class="result-words">[\s\S]*?<p class="stamp">[\s\S]*?<h1 class="headline">The garden, in summer<\/h1>/,
+    'the words column names the place as its heading');
+  assert.match(css, /\.result-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*20rem\)\s*minmax\(0,\s*1fr\)/,
+    'the two columns are the tape at 20rem and the words taking the rest');
+});
+
+test('the words say the file is theirs, and how long the copy stays', () => {
+  const html = resultPage({ view: FINISHED, labels: FINISHED_LABELS, retentionDays: 30 });
+  assert.match(html, /The file is yours to download and keep; this copy stays on the shelf for 30 days\./,
+    'the retention window is read in, not asserted');
+
+  // A page that was not told the window promises nothing about it.
+  const unknown = resultPage({ view: FINISHED, labels: FINISHED_LABELS });
+  assert.match(unknown, /The file is yours to download and keep\./);
+  assert.ok(!/stays on the shelf for/.test(unknown), 'a window was invented');
+});
+
+test('the spec line is labelled as the file, and there is no share link this product does not have', () => {
+  const html = resultPage({ view: FINISHED, labels: FINISHED_LABELS });
+  assert.match(html, /<p class="eyebrow eyebrow--osd">The file<\/p>\s*<p class="meta">/,
+    'the file facts sit under their own label');
+  // The prototype offers "Copy a link" to a public tape URL. No such route
+  // exists -- a tape is somebody's face behind their session -- so the page
+  // must not offer it.
+  assert.ok(!/Copy a link/.test(html), 'the page offers a share link that goes nowhere');
+});
+
+test('earlier tapes show under the result, and only when there are any', () => {
+  const tapes = [{
+    jobId: '20260814-101010-aaaaaa', status: 'done', place: 'The car park, at dusk',
+    posterUrl: '/api/jobs/20260814-101010-aaaaaa/poster', href: '/j/20260814-101010-aaaaaa/result', aspect: '4:3',
+  }];
+  const withEarlier = resultPage({ view: FINISHED, labels: FINISHED_LABELS, tapes });
+  assert.match(withEarlier, /Earlier tapes/, 'the shelf below is not labelled');
+  assert.match(withEarlier, /class="shelf"/, 'the earlier tapes are not the shelf grid');
+  assert.match(withEarlier, /The car park, at dusk/, 'the earlier tape is not on it');
+
+  const alone = resultPage({ view: FINISHED, labels: FINISHED_LABELS });
+  assert.ok(!/Earlier tapes/.test(alone), 'an empty shelf still gets a heading');
+
+  // THE TAPE ON SCREEN IS NEVER LISTED UNDER ITSELF, whatever the page was
+  // handed. The server filters it too; this is the page's own refusal.
+  const self = { ...tapes[0], jobId: FINISHED.jobId, place: 'The garden, in summer', href: `/j/${FINISHED.jobId}/result` };
+  const handedItself = resultPage({ view: FINISHED, labels: FINISHED_LABELS, tapes: [self] });
+  assert.ok(!/Earlier tapes/.test(handedItself), 'the tape on screen is listed as an earlier tape');
+});
+
 test('nothing in the soft tier is also ghosted', () => {
   // SECTION 31 SOLVED THE GHOST FLOOR FOR `--ink` AND FOR NOTHING ELSE. 0.63 is
   // the least opacity at which `--ink` still clears 4.5:1 over `--paper`, and

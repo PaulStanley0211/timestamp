@@ -2119,7 +2119,15 @@ export function createServer({
     resultPage(req, res, { params, account }) {
       const job = ownedJob(account, params.id);
       if (job.status !== 'done') return redirect(res, `/j/${job.jobId}`);
-      return sendHtml(req, res, 200, resultPage({ view: jobView(job), account, labels: labelsOf(job) }));
+      // The rest of the shelf under the tape, never the tape itself, from the
+      // same ownership-indexed read the home page and /videos use.
+      return sendHtml(req, res, 200, resultPage({
+        view: jobView(job),
+        account,
+        labels: labelsOf(job),
+        tapes: shelfFor(account).filter((t) => t.jobId !== job.jobId),
+        retentionDays: cfg?.retention?.jobDays ?? null,
+      }));
     },
 
     // --- accounts --------------------------------------------------------

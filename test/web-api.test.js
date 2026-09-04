@@ -1587,6 +1587,24 @@ test('the status page keeps its alert and credit-note surfaces for the poller', 
   });
 });
 
+test('the result page lists the shelf\'s other finished tapes, and not the one on screen', async () => {
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    const shown = seedJob(app, root, { status: 'done', owner: accountA, place: 'the garden' });
+    const other = seedJob(app, root, { status: 'done', owner: accountA, place: 'the car park' });
+    const html = await (await get(base, `/j/${shown.jobId}/result`, cookieA)).text();
+
+    assert.ok(html.includes('Earlier tapes'), 'the rest of the shelf is missing');
+    const earlier = html.slice(html.indexOf('Earlier tapes'));
+    assert.ok(earlier.includes('the car park'), 'the other tape is not on the shelf below');
+    assert.ok(earlier.includes(`/j/${other.jobId}/result`), 'and it does not link through');
+    assert.ok(!earlier.includes(`/j/${shown.jobId}/result`), 'the tape on screen is listed under itself');
+
+    // The window the words promise is the one the purge enforces, read from
+    // the same config -- 30 days in config/render.json.
+    assert.match(html, /stays on the shelf for 30 days/, 'the retention window did not reach the page');
+  });
+});
+
 test('the job view carries the frame it was ordered in, shape and size', async () => {
   // The status page lists the order as where / wearing / frame, and the frame
   // is the shape AND the size. The view exposed the shape already; the size

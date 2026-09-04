@@ -1878,7 +1878,7 @@ export function selectPage({ view, stills, account = null }) {
 // the result
 // ---------------------------------------------------------------------------
 
-export function resultPage({ view, account = null, labels = {} }) {
+export function resultPage({ view, account = null, labels = {}, tapes = [], retentionDays = null }) {
   // Assembled as text and escaped once, rather than stitched out of escaped
   // fragments with raw entities between them -- that pattern is where a
   // double-escape or a missed escape hides.
@@ -1920,58 +1920,97 @@ export function resultPage({ view, account = null, labels = {} }) {
     ? `${Math.round(Number(seconds))} seconds`
     : null;
   const labelSub = [labels.outfit ?? view.input?.outfit ?? null, runtime].filter(Boolean).join(' · ');
+  const place = labels.place ?? view.input?.place ?? null;
+
+  /**
+   * THE WINDOW THE WORDS PROMISE IS THE ONE THE PURGE ENFORCES, read from the
+   * config `scripts/render/purge-cli.mjs` deletes by, and threaded in rather
+   * than written here. A page that was not told the window promises nothing
+   * about it.
+   */
+  const keep = Number.isFinite(retentionDays) && retentionDays > 0
+    ? `The file is yours to download and keep; this copy stays on the shelf for ${retentionDays} days.`
+    : 'The file is yours to download and keep.';
+  const finished = runtime ? `${runtime.charAt(0).toUpperCase()}${runtime.slice(1)}, finished.` : 'Finished.';
+
+  // The rest of the shelf, never the tape on screen. The server filters it
+  // too; this is the page refusing to list a tape under itself whatever it
+  // was handed.
+  const earlier = tapes.filter((t) => t.jobId !== view.jobId);
+
   const body = `
-<main>
-  <section class="panel">
-  <p class="stamp">${h(view.jobId)}</p>
+<main class="result">
+  ${/* THE TAPE BESIDE THE WORDS (2026-09-04, from the design prototype). The
+       picture and its label are one column; the place, the sentence, the
+       download and the file's facts are the other. On a phone the columns
+       stack and the tape still comes first. */''}
+  <div class="result-grid">
+    <div class="result-tape">
+      <div class="player">
+        <video controls playsinline preload="metadata"
+               poster="/api/jobs/${h(view.jobId)}/poster"
+               src="/api/jobs/${h(view.jobId)}/video"></video>
+      </div>
 
-  ${/* THE PICTURE OPENS THE PAGE. There was an eyebrow and an <h1> saying
-       "Here it is" above this, which captioned something already on the
-       screen -- the clearest kind of filler. The naming that heading was
-       doing badly is done properly by the label below, which is also where
-       the date went. */''}
-  <div class="player">
-    <video controls playsinline preload="metadata"
-           poster="/api/jobs/${h(view.jobId)}/poster"
-           src="/api/jobs/${h(view.jobId)}/video"></video>
+      ${/* THE LABEL IS THE OBJECT THIS PRODUCT IMITATES. A cassette carries a
+           label saying where and when, and so does this: place, then outfit
+           and runtime, then the date in the accent. It is a fill rather than a
+           box, so DESIGN.md's no-borders rule is untouched. The human labels,
+           never the preset ids: this is the most-read line on the page and
+           therefore the worst place to leak `schrebergarten-august` at
+           somebody. */''}
+      <p class="label">
+        <span class="lname">${h(place ?? '')}</span>
+        <span class="lsub">${h(labelSub)}</span>
+        <span class="ldate">${h(stampDate(view.jobId))}</span>
+      </p>
+    </div>
+
+    <div class="result-words">
+      <p class="stamp">${h(view.jobId)}</p>
+      <p class="eyebrow">Your tape</p>
+      ${/* THE HEADING IS THE PLACE, which names the tape rather than
+           captioning the picture -- "Here it is" was the caption, and it is
+           gone. */''}
+      ${place ? `<h1 class="headline">${h(place)}</h1>` : ''}
+      <p class="sub">${h(finished)} ${h(keep)}</p>
+
+      <p class="actions">
+        ${/* Both halves on purpose: the download attribute is what a
+             same-origin click uses, and ?download=1 makes the server send
+             Content-Disposition, so the file still arrives named correctly
+             when the attribute is ignored (right-click save-as, an in-app
+             browser, a copied link).
+
+             IT COMES BEFORE THE FINE PRINT. It is the reason the page exists,
+             and the last thing on the payoff page must be the tape and not a
+             disclaimer. There is deliberately NO share link: a tape is
+             somebody's face behind their own session, and no public route to
+             one exists. */''}
+        <a class="go" href="/api/jobs/${h(view.jobId)}/video?download=1" download="timestamp-${h(view.jobId)}.mp4">Download</a>
+        <a class="quiet" href="/">Make another</a>
+      </p>
+
+      ${/* THE FILE'S OWN FACTS, labelled as such: a frame count and a raster
+           are what the tape physically is, and under their own label they read
+           as a readout rather than as a caption on the picture. `metaLineOf`
+           in the tests reads `class="meta"` exactly. */''}
+      <p class="eyebrow eyebrow--osd">The file</p>
+      <p class="meta">${h(metaLine)}</p>
+
+      ${/* EU AI Act Art. 50: the disclosure lives on the page where a person
+           meets the content, not only in file metadata a browser never shows.
+           The file-side half is the provenance tags in scripts/audio/mix.mjs.
+           It stays VISIBLE and it stays on this page. */''}
+      <p class="fine">Made with AI &mdash; a generative model built this scene from your photograph. It did not happen.</p>
+    </div>
   </div>
-
-  ${/* THE LABEL IS THE OBJECT THIS PRODUCT IMITATES. A cassette carries a
-       label saying where and when, and so does this: place, then outfit and
-       runtime, then the date in the accent. It replaces the old eyebrow, the
-       old headline and the two-row Where/Wearing table with one element that
-       carries all of it -- and it is a fill rather than a box, so DESIGN.md's
-       no-borders rule is untouched. The human labels, never the preset ids:
-       this is the most-read line on the page and therefore the worst place to
-       leak `schrebergarten-august` at somebody. */''}
-  <p class="label">
-    <span class="lname">${h(labels.place ?? view.input.place)}</span>
-    <span class="lsub">${h(labelSub)}</span>
-    <span class="ldate">${h(stampDate(view.jobId))}</span>
-  </p>
-
-  <p class="actions">
-    ${/* Both halves on purpose: the download attribute is what a same-origin
-         click uses, and ?download=1 makes the server send Content-Disposition,
-         so the file still arrives named correctly when the attribute is ignored
-         (right-click save-as, an in-app browser, a copied link).
-
-         IT COMES BEFORE THE FINE PRINT NOW. It is the reason the page exists
-         and it used to sit last, underneath the Art. 50 sentence, so the final
-         thing on the payoff page was a disclaimer rather than the tape. */''}
-    <a class="go" href="/api/jobs/${h(view.jobId)}/video?download=1" download="timestamp-${h(view.jobId)}.mp4">Download</a>
-    <a class="quiet" href="/">Make another</a>
-  </p>
-
-  <p class="meta">${h(metaLine)}</p>
-
-  ${/* EU AI Act Art. 50: the disclosure lives on the page where a person
-       meets the content, not only in file metadata a browser never shows.
-       The file-side half is the provenance tags in scripts/audio/mix.mjs.
-       It stays VISIBLE and it stays on this page -- moving the download above
-       it changes the order and nothing else. */''}
-  <p class="fine">Made with AI &mdash; a generative model built this scene from your photograph. It did not happen.</p>
-  </section>
+  ${earlier.length ? `
+  <section class="earlier">
+    <p class="eyebrow eyebrow--osd">Earlier tapes</p>
+    <p class="sub">The rest of your shelf. Press one to watch it.</p>
+    <div class="shelf">${earlier.map(shelfTile).join('')}</div>
+  </section>` : ''}
 </main>
 `;
   return layout({ title: 'Timestamp - finished', body, bodyClass: 'page-result', account });
