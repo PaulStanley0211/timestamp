@@ -292,9 +292,9 @@ export const PLACE_AFFINITY = Object.freeze({
   // exists to refuse, so a generic street, stairwell, pool or balcony falls
   // through to neutral now, and only a request that NAMES one of these places
   // gets its dressing.
-  'new-york-autumn': Object.freeze([
-    'new york', 'manhattan', 'brooklyn', 'nyc', 'brownstone', 'fire escape',
-    'yellow cab', 'fifth avenue', 'broadway',
+  'new-york-times-square': Object.freeze([
+    'new york', 'times square', 'manhattan', 'brooklyn', 'nyc', 'broadway',
+    'yellow cab', 'fifth avenue', 'brownstone', 'fire escape',
   ]),
   'tokyo-night': Object.freeze([
     'tokyo', 'japan', 'japanese', 'lantern', 'lanterns', 'izakaya', 'osaka',
@@ -697,6 +697,8 @@ const STOPWORDS = new Set([
  * any famous place existed. `centre` is here for the same reason in a smaller
  * way: "town centre", "leisure centre", "garden centre" are all about the
  * word BEFORE it, and the space centre's label must not answer for them.
+ * `square` is the same word one city over -- "the market square" is not
+ * Times Square, and the label "Times Square, at night" would score it at 12.
  *
  * STOPWORDS above is deliberately NOT extended for this. hasContent() reads it
  * to decide whether a stripped clause still says anything, and "at night" is
@@ -708,7 +710,7 @@ const UNSCORED = new Set([
   'spring', 'summer', 'autumn', 'winter',
   'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
   'september', 'october', 'november', 'december',
-  'centre', 'center',
+  'centre', 'center', 'square',
 ]);
 
 /** Crude singularisation, on purpose. A real stemmer is a dependency and this

@@ -207,7 +207,8 @@ test('the nearest shipped place is the skeleton', () => {
     'a beach': 'amalfi-afternoon',
     'a beach in winter': 'ostsee-strand',
     "my grandmother's kitchen": 'kuechentisch-fruehstueck',
-    'a side street in new york': 'new-york-autumn',
+    'times square': 'new-york-times-square',
+    'a side street in new york': 'new-york-times-square',
     'a back street in tokyo': 'tokyo-night',
     'the harbour at positano': 'amalfi-afternoon',
     'the space centre': 'space-centre',
@@ -240,13 +241,15 @@ test('a time of day or a season is not lexical evidence for a skeleton', () => {
   // night" -- so "our street at night" would have borrowed paper lanterns.
   // The clock and the season have their own inference tables and their own
   // bonus in the score; as tokens they are noise, and they are excluded.
-  for (const text of ['our street at night', 'the yard at dusk', 'the pool in august', 'the park in autumn', 'the town centre']) {
+  // `square` joined `centre` the day the New York card became Times Square:
+  // "the town square" and "the market square" are about the word before it.
+  for (const text of ['our street at night', 'the yard at dusk', 'the pool in august', 'the park in autumn', 'the town centre', 'the market square']) {
     const choice = choosePlaceSkeleton(text, catalog, 0);
     assert.equal(choice.strong, false, `"${text}" matched ${choice.skeleton.id} on ${choice.reasons.join(', ')}`);
   }
   // and the same words still reach the skeleton they name
   assert.equal(choosePlaceSkeleton('tokyo at night', catalog, 0).skeleton.id, 'tokyo-night');
-  assert.equal(choosePlaceSkeleton('new york in autumn', catalog, 0).skeleton.id, 'new-york-autumn');
+  assert.equal(choosePlaceSkeleton('times square at night', catalog, 0).skeleton.id, 'new-york-times-square');
 });
 
 test('a request that resembles nothing gets neutral set dressing rather than a stranger\'s props', () => {
@@ -283,11 +286,13 @@ test('light, lens and era props are inherited from the skeleton when nothing ove
 });
 
 test('a stated time of day overrides the skeleton\'s light, which is the whole point of stating it', () => {
-  const street = place('a side street in new york at night');
-  assert.equal(street._source.skeleton, 'new-york-autumn', 'the request must land on a real skeleton for the override to mean anything');
-  assert.equal(street.timeOfDay, 'night');
-  assert.equal(street.prompt.light, LIGHT_BY_TIME.night);
-  assert.notEqual(street.prompt.light, catalog.places.get('new-york-autumn').prompt.light);
+  // Times Square is a night preset, so the override that proves the rule is
+  // the other way round: the same square asked for at midday.
+  const square = place('times square at midday');
+  assert.equal(square._source.skeleton, 'new-york-times-square', 'the request must land on a real skeleton for the override to mean anything');
+  assert.equal(square.timeOfDay, 'midday');
+  assert.equal(square.prompt.light, LIGHT_BY_TIME.midday);
+  assert.notEqual(square.prompt.light, catalog.places.get('new-york-times-square').prompt.light);
 });
 
 test('stated weather beats a stated time of day', () => {
@@ -389,26 +394,25 @@ test('climate is a term in the score, so a warm request prefers a warm skeleton'
 });
 
 test('a lookOverride tuned for one light is carried one step along the time axis and no further', () => {
-  // late afternoon -> dusk is the same low autumn sun; late afternoon -> midday
-  // is not.
+  // night -> dusk is the same billboards coming on; night -> midday is not.
   //
   // THE AUDIO BLOCK JOINED THIS EXPECTATION on 2026-08-24 and it belongs here:
-  // a New York street at dusk borrowing the preset's traffic is the same
-  // one-step rule the grade follows, applied to the other half of the tape.
-  // The `_comment` arguing for those numbers is stripped at every depth -- see
+  // Times Square at dusk borrowing the preset's traffic is the same one-step
+  // rule the grade follows, applied to the other half of the tape. The
+  // `_comment` arguing for those numbers is stripped at every depth -- see
   // the test below. (This was the car park until 2026-09-04.)
-  assert.deepEqual(place('a side street in new york at dusk').lookOverride, {
-    grade: { cbRedMid: 0.06, cbBlueMid: -0.05, saturation: 0.84 },
-    optics: { bloomStrength: 0.42 },
-    tape: { grainStrength: 19 },
+  assert.deepEqual(place('times square at dusk').lookOverride, {
+    grade: { cbRedMid: 0.05, cbBlueMid: -0.04, saturation: 0.88 },
+    optics: { bloomStrength: 0.58 },
+    tape: { grainStrength: 25 },
     audio: {
       ambience: {
-        amplitude: 0.3, color: 'brown', highpass: 200, lowpass: 800,
-        volume: 0.2, swellHz: 0.3, swellDepth: 0.35, echoDelayMs: 90, echoDecay: 0.25,
+        amplitude: 0.34, color: 'brown', highpass: 200, lowpass: 900,
+        volume: 0.22, swellHz: 0.3, swellDepth: 0.35, echoDelayMs: 110, echoDecay: 0.3,
       },
     },
   });
-  assert.deepEqual(place('a side street in new york at midday').lookOverride, {});
+  assert.deepEqual(place('times square at midday').lookOverride, {});
   assert.deepEqual(place('a stairwell at night').lookOverride, {});
 });
 

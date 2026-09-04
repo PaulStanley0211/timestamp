@@ -124,9 +124,9 @@ const TIME_HUES = Object.freeze({
  * and the app is a visibly different colour for every memory somebody picks.
  * Decoration would have been eight tints of the same thing.
  *
- * THESE ARE OBSERVATIONS, NOT PREFERENCES. Paper lanterns in a Tokyo back
- * street really are that red; the sea inside an Amalfi harbour wall really is
- * that turquoise; a television in a dark living room really does throw violet.
+ * THESE ARE OBSERVATIONS, NOT PREFERENCES. The signboards over a Tokyo
+ * crossing really are that red; the sea inside an Amalfi harbour wall really
+ * is that turquoise; a television in a dark living room really does throw violet.
  * The palette is vivid because the places are, which is what keeps it from
  * reading as a theme applied over the top. (The sodium-vapour car park and the
  * chlorinated pool that used to anchor this argument were retired 2026-09-04.)
@@ -134,11 +134,11 @@ const TIME_HUES = Object.freeze({
 const PLACE_HUES = Object.freeze({
   'amalfi-afternoon': 190,         // the sea inside a harbour wall
   'kuechentisch-fruehstueck': 42,  // butter, early sun
-  'new-york-autumn': 30,           // brick and plane leaves in low sun
+  'new-york-times-square': 48,     // cab yellow under the billboard glow
   'ostsee-strand': 212,            // cold Baltic
   'schrebergarten-august': 86,     // late-summer grass
   'space-centre': 222,             // a deep blue sky behind a white rocket
-  'tokyo-night': 10,               // paper lanterns
+  'tokyo-night': 345,              // the red of the signboards over the crossing
   'wohnzimmer-abend': 290,         // the television
 });
 

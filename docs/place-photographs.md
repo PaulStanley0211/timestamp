@@ -31,34 +31,54 @@ the next one is written the same way.
 
 ## The four prompts, 2026-09-04
 
-### `new-york-autumn`
+**A rule that bent, and how far.** The first drafts of New York and Tokyo were
+a brownstone side street and a lantern-lit back street, on the argument that a
+famous place is a street and not a sign. The owner asked for Times Square and
+a lit crossing -- the places as everybody knows them -- and he was right that
+those are the pictures people forward. The rule survives one layer down: the
+tape prompt still forbids readable words and brand logos, so on the tape the
+billboards are lit colour panels rather than adverts, and each preset's
+negatives say so twice. On the CARD, Higgsfield invents lettering whatever the
+prompt says; it took three tries for Times Square and the best of them still
+carries gibberish on the billboards, which is invisible at card size and
+accepted at full bleed. Every prompt below ends with the line that finally
+emptied the pavements.
 
-> A photograph of a quiet Manhattan side street in autumn, late afternoon.
-> Brownstone stoops with black iron railings, a fire escape zigzagging up old
-> brick, plane trees dropping yellow leaves onto parked cars from around 2003,
-> steam rising from a grating in the road. A yellow cab with a roof light
-> passing at the far end of the block. Low sun coming down the cross street
-> from one side, long shadows across the pavement, the far end already in
-> shade with a few windows lit. On the corner a payphone in a steel hood, a
-> newspaper vending box, a hot-dog cart under a striped umbrella. Shot on a
-> consumer zoom at its wide end, the far cab going soft, slight bend at the
-> edges. Nobody in the picture. No readable text, signs or logos, no modern
-> cars, no glass skyscrapers, no digital billboards. Landscape 16:9.
+### `new-york-times-square`
+
+> Photorealistic photograph, Times Square in New York at night in 2003, the
+> wedge of tall buildings above 42nd Street stacked with towering illuminated
+> billboards and glowing video screens in red and blue and white, yellow cabs
+> with roof lights lined up at the lights and a police kiosk on the traffic
+> island, wet pavement and crosswalk stripes reflecting every screen, the
+> whole square lit from above by the billboards with cold white spill from the
+> screens and warm sodium from the street lamps, a hot-dog cart under a
+> striped umbrella and a payphone bank and a newspaper vending box on the
+> corner, electric overwhelming turn-of-the-millennium big-city energy, wide
+> from the pavement looking up the square with the far end going soft, slight
+> barrel bend at the edges, natural colour, no people, billboards as abstract
+> colour panels with no readable words or brand logos, no modern cars or LED
+> wraparound screens or smartphones, landscape 16:9, the hot-dog cart standing
+> alone with no vendor, every billboard and screen a plain colour panel or
+> abstract picture with no lettering, words, numbers or faces of any kind
 
 ### `tokyo-night`
 
-> A photograph of a narrow back street in Tokyo at night. Red and white paper
-> lanterns hung along the eaves of low wooden-fronted eateries, a tangle of
-> power lines overhead, a lit drinks vending machine on the corner, wet
-> asphalt holding every light, a bicycle with a front basket leaning on a
-> pole, a plastic umbrella hooked on its handlebar. The lanterns are the main
-> light, warm red and orange from just above head height, a cold white spill
-> from the vending machine cutting across it, everything above the wires going
-> to black. Shot wide and close in the narrow street, the far end lost behind
-> the lanterns, every light a hard point, slight bend at the edges. Nobody in
-> the picture. No readable text or lettering on the lanterns or the machine,
-> no neon signboards, no LED screens, no skyscrapers, no daylight. Landscape
-> 16:9.
+> Photorealistic photograph, the Shibuya scramble crossing in Tokyo at night
+> in 2003, the wide five-way intersection ringed by tall buildings faced with
+> glowing video screens and vertical illuminated signboards in white and red
+> and blue, taxis with roof lights waiting at the lights and a train bridge
+> crossing the far side, wet asphalt and white crosswalk stripes reflecting
+> every screen, the whole crossing lit from above by the screens with cold
+> white light and warm spill from the shopfronts below, a lit drinks vending
+> machine and a payphone booth and a bicycle with a front basket at the
+> corner, dense electric turn-of-the-millennium Tokyo energy, wide from the
+> pavement looking across the empty crossing with the far buildings going
+> soft, slight barrel bend at the edges, natural colour, no people, screens
+> and signboards as abstract colour panels with no readable characters or
+> brand logos, no modern cars or smartphones, landscape 16:9, nobody anywhere
+> in the picture, every sign or panel a plain colour with no lettering, words,
+> numbers or faces of any kind
 
 ### `amalfi-afternoon`
 
@@ -93,11 +113,20 @@ the next one is written the same way.
 
 ## After the photograph lands
 
+Higgsfield hands back a PNG at 1696x960 with a generated filename. Convert it
+to a metadata-free JPEG under the preset's id (the first eight were 2048x1152;
+1696x960 is plenty for a 272px card and a 1024x576 loop):
+
 ```bash
-node scripts/tapedeck/place-loops.mjs --only=<id>   # cuts the loop, measures its luma
-cp build/place-loops/<id>.mp4 assets/places/
-cp build/place-loops/loops.json assets/places/
+ffmpeg -i ~/Downloads/hf_<whatever>.png -map_metadata -1 -q:v 3 assets/places/<id>.jpg
+cp assets/places/loops.json build/place-loops/loops.json   # the cutter merges into the BUILD copy
+node scripts/tapedeck/place-loops.mjs --only=<id>          # cuts the loop, measures its luma
+cp build/place-loops/<id>.mp4 build/place-loops/loops.json assets/places/
 ```
+
+The second line matters: the cutter reads and writes `build/place-loops/loops.json`,
+not the shipped one, so without seeding it from `assets/places/loops.json` a
+`--only` run merges into whatever stale manifest the build directory holds.
 
 `loops.json` carries each loop's mean luma, which the page reads to solve a
 per-place scrim (section 30). A place with no entry gets the full-strength

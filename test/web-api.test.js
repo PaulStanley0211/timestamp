@@ -404,7 +404,7 @@ test('GET / renders the fourteen presets as cards, from the preset files', async
     // Tokyo, the Amalfi coast and a space centre came. Four ordinary places
     // stay beside them.
     for (const label of [
-      'The garden, in summer', 'New York, in autumn', 'Tokyo, at night',
+      'The garden, in summer', 'Times Square, at night', 'Tokyo, at night',
       'The Amalfi coast, afternoon', 'The kitchen table', 'The beach, out of season',
       'The space centre', 'The living room, evening',
       'Half-zip fleece', 'Checked shirt and jeans', 'Cotton summer dress',
