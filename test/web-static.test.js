@@ -43,7 +43,7 @@ import {
 } from '../scripts/web/views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
-  resetPage, resetCompletePage, onboardingPage,
+  resetPage, resetCompletePage, onboardingPage, accountPage,
 } from '../scripts/web/views-auth.mjs';
 
 /** The `.statehook` block, from its selector to its closing brace. */
@@ -1318,6 +1318,76 @@ test('earlier tapes show under the result, and only when there are any', () => {
   const self = { ...tapes[0], jobId: FINISHED.jobId, place: 'The garden, in summer', href: `/j/${FINISHED.jobId}/result` };
   const handedItself = resultPage({ view: FINISHED, labels: FINISHED_LABELS, tapes: [self] });
   assert.ok(!/Earlier tapes/.test(handedItself), 'the tape on screen is listed as an earlier tape');
+});
+
+/**
+ * THE SHELF PAGE FROM THE DESIGN PROTOTYPE (2026-09-04): a label, the heading
+ * at page-title size, two sentences, and the tiles on the paper -- no panel.
+ */
+test('the shelf page leads with its label and heading on the paper, not in a panel', () => {
+  const tapes = [{
+    jobId: '20260814-101010-aaaaaa', status: 'done', place: 'The car park, at dusk',
+    posterUrl: '/p', href: '/j/20260814-101010-aaaaaa/result',
+    videoUrl: '/api/jobs/20260814-101010-aaaaaa/video', aspect: '4:3',
+  }];
+  const html = videosPage({ tapes, retentionDays: 30 });
+  const { css } = createStylesheet({});
+
+  assert.match(html, /<main class="videos">\s*<p class="eyebrow eyebrow--osd">The shelf<\/p>\s*<h1 class="headline">My videos<\/h1>/,
+    'the page does not open on its label and heading');
+  assert.match(html, /Finished tapes are kept for 30 days\. Download the ones you want to keep\./,
+    'the retention window is read in, not asserted');
+  assert.ok(!/panel--archive/.test(html), 'the shelf is still boxed in the home page archive panel');
+  assert.match(html, /class="shelf"/, 'the tiles are gone');
+
+  assert.match(css, /\.videos \.headline\s*\{[^}]*font-size:\s*var\(--t-7\)/, 'the heading is the page-title size');
+  assert.match(css, /\.videos \.shelf\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(10rem,\s*1fr\)\)/,
+    'the tiles sit on the prototype grid');
+
+  // A page that was not told the window promises nothing about it.
+  const unknown = videosPage({ tapes });
+  assert.ok(!/kept for/.test(unknown), 'a window was invented');
+});
+
+/**
+ * THE ACCOUNT PAGE FROM THE DESIGN PROTOTYPE (2026-09-04): the address as the
+ * heading, a sentence saying what the credits are good for, the two sections
+ * under readout labels, and the deletion in a narrow column.
+ */
+test('the account page says what the credits are good for, in tapes', () => {
+  const account = { email: 'paul@example.com', accountId: 'x', plan: 'free' };
+  const cheapest = { id: '480p', credits: 21 };
+
+  const two = accountPage({ account, balance: { credits: 43, planId: 'free' }, csrf: 'c', cheapest });
+  assert.match(two, /<h1 class="headline">paul@example\.com<\/h1>/, 'the heading is the address');
+  assert.match(two, /43 credits left\. Enough for 2 more tapes at 480p\./, 'the count is translated into tapes');
+
+  const one = accountPage({ account, balance: { credits: 21, planId: 'free' }, csrf: 'c', cheapest });
+  assert.match(one, /21 credits left\. Enough for 1 more tape at 480p\./, 'singular');
+
+  const none = accountPage({ account, balance: { credits: 5, planId: 'free' }, csrf: 'c', cheapest });
+  assert.match(none, /5 credits left\. Not enough for another tape at 480p\./, 'and the honest zero');
+
+  // With no price to measure against, the count stands alone rather than
+  // being measured against a guess.
+  const bare = accountPage({ account, balance: { credits: 43, planId: 'free' }, csrf: 'c' });
+  assert.match(bare, /43 credits left\./);
+  assert.ok(!/more tape/.test(bare), 'a tape count was invented with no price to derive it from');
+});
+
+test('the account page sections carry readout labels, and the deletion sits in a narrow column', () => {
+  const account = { email: 'paul@example.com', accountId: 'x', plan: 'free' };
+  const html = accountPage({ account, balance: { credits: 43, planId: 'free' }, csrf: 'c' });
+  const { css } = createStylesheet({});
+
+  assert.match(html, /<h2 class="subhead subhead--osd">Your data<\/h2>/, 'the data section has no readout label');
+  assert.match(html, /<h2 class="subhead subhead--osd">Delete this account<\/h2>/, 'the deletion section has no readout label');
+  assert.match(html, /<a class="go" href="\/api\/account\/export" download>Export your data<\/a>/,
+    'the export is not the go button');
+  assert.match(html, /<div class="account-danger">\s*<form method="post" action="\/account\/delete">/,
+    'the deletion form is not in its own column');
+  assert.match(css, /\.account-danger\s*\{[^}]*max-width:\s*22rem/, 'the column is not narrow');
+  assert.match(css, /\.subhead--osd\s*\{[^}]*font-family:\s*var\(--osd\)/, 'the label is not in the readout face');
 });
 
 test('nothing in the soft tier is also ghosted', () => {

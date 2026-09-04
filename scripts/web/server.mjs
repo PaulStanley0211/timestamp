@@ -1696,6 +1696,16 @@ export function createServer({
     return rows;
   }
 
+  /** The least expensive offered size, at the default shape -- what the
+   *  account page measures a balance against. Null when nothing is on offer,
+   *  so the page states the count alone rather than against a guess. */
+  async function cheapestTape() {
+    const offered = (await resolutionRows()).filter((r) => r.available && Number(r.credits) > 0);
+    if (!offered.length) return null;
+    const least = offered.reduce((a, b) => (Number(b.credits) < Number(a.credits) ? b : a));
+    return { id: least.id, credits: Number(least.credits) };
+  }
+
   /**
    * Which option starts selected.
    *
@@ -3231,7 +3241,7 @@ export function createServer({
       const [{ token, setCookie }, balance] = await Promise.all([
         auths.csrfIssue(req), balanceOf(account),
       ]);
-      return sendHtml(req, res, 200, accountPage({ account, balance, csrf: token }),
+      return sendHtml(req, res, 200, accountPage({ account, balance, csrf: token, cheapest: await cheapestTape() }),
         setCookie ? { 'Set-Cookie': setCookie } : {});
     },
 
@@ -3320,7 +3330,7 @@ export function createServer({
         const headers = setCookie ? { 'Set-Cookie': setCookie } : {};
         if (wantsHtml(req)) {
           return sendHtml(req, res, status,
-            accountPage({ account, balance, csrf: token, error: message }), headers);
+            accountPage({ account, balance, csrf: token, error: message, cheapest: await cheapestTape() }), headers);
         }
         return sendJson(req, res, status, { error: { status, message, code } }, headers);
       };

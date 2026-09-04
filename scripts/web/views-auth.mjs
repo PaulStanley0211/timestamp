@@ -396,27 +396,48 @@ export function onboardingPage({ account = null, consentText = '', csrf = '', er
  * payment records, because those live at Stripe under Stripe's own legal
  * basis and pretending otherwise would be a promise this code cannot keep.
  */
-export function accountPage({ account, balance = null, csrf = '', error = null } = {}) {
+export function accountPage({ account, balance = null, csrf = '', error = null, cheapest = null } = {}) {
+  /**
+   * WHAT THE CREDITS ARE GOOD FOR, IN TAPES (2026-09-04, from the design
+   * prototype). "43 credits" tells a first-time reader nothing; "enough for 2
+   * more tapes at 480p" is the fact they came for. `cheapest` is the least
+   * expensive offered size, read by the server off the same seam that prices
+   * an order, so a repriced tape moves this sentence by itself. With no price
+   * to measure against the count stands alone rather than against a guess.
+   */
+  const credits = balance ? Number(balance.credits) : NaN;
+  let creditLine = '';
+  if (Number.isFinite(credits)) {
+    const per = Number(cheapest?.credits);
+    const n = cheapest && Number.isFinite(per) && per > 0 ? Math.floor(credits / per) : null;
+    const tapes = n === null ? ''
+      : n === 0 ? ` Not enough for another tape at ${cheapest.id}.`
+        : ` Enough for ${n} more ${n === 1 ? 'tape' : 'tapes'} at ${cheapest.id}.`;
+    creditLine = `${credits} credits left.${tapes}`;
+  }
+
   const body = `
-<main>
-  <section class="panel">
-    <p class="eyebrow">Your account</p>
-    <h1 class="headline">${h(account?.email ?? '')}</h1>
-    <p class="sub">${balance ? `${h(String(balance.credits))} credits on the ${h(String(balance.planId ?? account?.plan ?? ''))} plan.` : ''}</p>
+<main class="account">
+  <p class="eyebrow">Your account</p>
+  <h1 class="headline">${h(account?.email ?? '')}</h1>
+  ${creditLine ? `<p class="sub">${h(creditLine)}</p>` : ''}
 
-    ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
+  ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
 
-    <h2 class="subhead">Your data</h2>
-    <p class="sub">One JSON document: your account record, your credit history, and the
-    order details of every tape on your shelf. The tapes themselves are on the shelf --
-    download any of them there.</p>
-    <p><a class="button" href="/api/account/export" download>Export your data</a></p>
+  <h2 class="subhead subhead--osd">Your data</h2>
+  <p class="sub">One JSON document: your account record, your credit history, and the
+  order details of every tape on your shelf. The tapes themselves are on the shelf --
+  download any of them there.</p>
+  <p><a class="go" href="/api/account/export" download>Export your data</a></p>
 
-    <h2 class="subhead">Delete this account</h2>
-    <p class="sub">Your photo, your tapes, your credit history and your sign-in are deleted
-    together, immediately, everywhere this service keeps them. There is no undo and nothing
-    to restore from. If a tape is still rendering, cancel it first.</p>
+  <h2 class="subhead subhead--osd">Delete this account</h2>
+  <p class="sub">Your photo, your tapes, your credit history and your sign-in are deleted
+  together, immediately, everywhere this service keeps them. There is no undo and nothing
+  to restore from. If a tape is still rendering, cancel it first.</p>
 
+  ${/* THE ONE-WAY DOOR IN A NARROW COLUMN, so the field and the button read as
+       one control and the button cannot stretch to the width of the prose. */''}
+  <div class="account-danger">
     <form method="post" action="/account/delete">
       ${csrfField(csrf)}
       ${field({
@@ -425,7 +446,7 @@ export function accountPage({ account, balance = null, csrf = '', error = null }
   })}
       <button type="submit" class="record record--danger">Delete my account</button>
     </form>
-  </section>
+  </div>
 </main>
 `;
 
@@ -433,7 +454,6 @@ export function accountPage({ account, balance = null, csrf = '', error = null }
     title: 'Timestamp - your account',
     body,
     bodyClass: 'page-account',
-    wrapClass: 'wrap--narrow',
     account,
     balance,
   });

@@ -1676,21 +1676,24 @@ function videoTile(tape) {
  * account's tape cannot appear here.
  */
 export function videosPage({ account = null, balance = null, tapes = [], retentionDays = null } = {}) {
+  // THE SHELF ON THE PAPER (2026-09-04, from the design prototype): a readout
+  // label, the heading at page-title size, two sentences, and the tiles. No
+  // panel -- the home page's archive strip is boxed because it sits inside a
+  // form; here the shelf is the page.
   const body = `
-<main>
-  <section class="panel panel--archive">
-    <h1 class="app-h1">My videos</h1>
-    <p class="lede">Every tape you have made. Press play to watch one here, or download it.</p>
-    <p class="hint">${h(Number.isFinite(retentionDays) && retentionDays > 0
-    ? `Every recording stays on the shelf for ${retentionDays} days.`
+<main class="videos">
+  <p class="eyebrow eyebrow--osd">The shelf</p>
+  <h1 class="headline">My videos</h1>
+  <p class="sub">Every tape you have made. Press play to watch one here, or download it.</p>
+  <p class="hint">${h(Number.isFinite(retentionDays) && retentionDays > 0
+    ? `Finished tapes are kept for ${retentionDays} days. Download the ones you want to keep.`
     : 'Every finished recording lands here.')}</p>
 
-    ${tapes.length ? `<div class="shelf">${tapes.map(videoTile).join('')}</div>` : `
-    <div class="empty">
-      <p class="title">No videos yet</p>
-      <p>Make your first tape and it lands here &mdash; <a class="linky" href="/">start one</a>.</p>
-    </div>`}
-  </section>
+  ${tapes.length ? `<div class="shelf">${tapes.map(videoTile).join('')}</div>` : `
+  <div class="empty">
+    <p class="title">No videos yet</p>
+    <p>Make your first tape and it lands here &mdash; <a class="linky" href="/">start one</a>.</p>
+  </div>`}
 </main>
 `;
   return layout({ title: 'My videos', body, bodyClass: 'page-videos', account, balance });

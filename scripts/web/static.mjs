@@ -2087,6 +2087,25 @@ input[type="file"]::file-selector-button {
 .page-result .meta { font-family: var(--osd); font-size: var(--d-2); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); margin: 0 0 var(--s-5); }
 .earlier .shelf { margin-top: var(--s-4); }
 
+/* --- the shelf page and the account page (2026-09-04) ------------------ */
+
+/* The shelf is the page: label, heading at page-title size, two sentences,
+   tiles on the paper. The tiles keep the prototype's grid rather than the
+   home strip's, because here they are the content and not an aside. */
+.videos .headline { font-size: var(--t-7); line-height: 1.1; letter-spacing: -0.02em; max-inline-size: 18ch; margin: 0 0 var(--s-3); }
+.videos .sub { margin: 0 0 var(--s-2); }
+.videos > .hint { margin: 0 0 var(--s-7); }
+.videos .shelf { grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--s-6) var(--s-5); }
+
+/* The account: the address as the heading (it can be long, so it may break
+   anywhere), the sections under readout labels, the one-way door in a narrow
+   column so the field and the button read as one control. */
+.account { max-width: 44rem; }
+.account .headline { font-size: var(--t-6); line-height: 1.1; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.subhead--osd { font-family: var(--osd); font-size: var(--d-1); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); font-weight: 400; margin: var(--s-7) 0 var(--s-2); }
+.account-danger { max-width: 22rem; }
+.account-danger .record { margin-top: var(--s-4); }
+
 /* --- buttons and links ------------------------------------------------- */
 
 .go {
