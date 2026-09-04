@@ -25,7 +25,7 @@ trunk is an open decision and the owner's** -- it changes the deploy runbook.
 
 ## READ §60 FIRST (2026-09-04): THE DESIGN PROTOTYPE IS IMPLEMENTED, PAGE BY PAGE, AND DEPLOYED AT `9272c9a`. FIVE COMMITS, ALL TEST-FIRST. THEN §59, §58, §57.
 
-**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2104 / 2101 / 0 / 3. **AND §60E: the first live checkout was refused by Stripe that evening, the cause was the audit's own card-only parameter, it is fixed at `123b415`, and the dashboard step is done. THE FIRST REAL CARD WAS CHARGED THAT AFTERNOON AND 92 CREDITS LANDED ONE SECOND LATER** -- the payment path is proven live, and every "no card has ever been charged" line in this file is history.
+**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2104 / 2101 / 0 / 3. **AND §60E: the first live checkout was refused by Stripe that evening, the cause was the audit's own card-only parameter, it is fixed at `123b415`, and the dashboard step is done. THE FIRST REAL CARD WAS CHARGED THAT AFTERNOON AND 92 CREDITS LANDED ONE SECOND LATER** -- the payment path is proven live, and every "no card has ever been charged" line in this file is history. **THE NEXT SESSION STARTS AT §60I: four place presets become famous places, decided and not started; §60H made the three-beat arc the default the same evening.**
 
 ## READ §59 FIRST (2026-09-03, evening): THE AUDIT'S CODE ITEMS ARE FIXED, DEPLOYED AT `bf84de3`, AND THE BOX IS KEY-ONLY. TWO CONSOLE STEPS ARE THE OWNER'S. THEN §58, THEN §57.
 
@@ -7801,6 +7801,96 @@ assertion while asserting the default opens wide on the place's own motion
 hint. `DEFAULT_ARC` is exported from `compose/prompt.mjs`; the pipeline's two
 call sites and the web app's orders all follow it, so a customer's tape is a
 three-beat continuous moment from this deploy on.
+
+#### I -- NEXT SESSION: FOUR PLACES BECOME FAMOUS ONES (decided 2026-09-04, late evening; NOT STARTED)
+
+**THE DECISION, THE OWNER'S, TAKEN AFTER THE ARGUMENT FOR ADDING RATHER THAN
+REPLACING WAS MADE AND OVERRULED.** His reasoning: famous places attract an
+audience that "somewhere ordinary" does not, and "me in Tokyo in 2003" is a
+tape somebody forwards. The counter-argument (the ordinary places carry the
+memory, the landing's proposition is "you, somewhere ordinary", and the
+manifests could measure famous against ordinary in a month) is recorded here
+so nobody re-argues it; he heard it and chose replace.
+
+| Goes | Comes |
+|---|---|
+| `plattenbau-treppenhaus` (the stairwell) | **New York** -- a Manhattan side street in autumn, a yellow cab passing |
+| `autobahn-raststaette` (the car park) | **Tokyo** -- a back street at night under paper lanterns |
+| `hallenbad-nachmittag` (the swimming pool) | **The Amalfi coast** -- a famous shoreline in the afternoon |
+| `balkon-waesche` (the balcony) | **The space centre** -- a visitor's day, a rocket on its stand behind you |
+
+**Stays:** `schrebergarten-august` (the garden), `wohnzimmer-abend` (the living
+room), `kuechentisch-fruehstueck` (the kitchen table), `ostsee-strand` (the
+beach, out of season). **Eight places, as before.** First minute of the next
+session: confirm with the owner whether the out-of-season beach also goes,
+since Amalfi is a beach too -- the conversation left that one implicit.
+
+**THE ROCKET WAS REFUSED AND THE SPACE CENTRE IS THE ANSWER.** He first wanted
+"an astronaut travelling in a rocket". A camcorder in 2003 could film you in
+New York and could not film you in space; every place on the site is
+somewhere a person could actually have stood, the outfits make no sense
+inside a rocket, and it steps toward the "cartoons" a friend suggested the
+same day, which is the crowded market this product stays out of. A visitor's
+day at a space centre gives the astronaut feeling in a form the tape can
+honour. He agreed.
+
+**FAMOUS PLACES ARE STREETS AND SHORELINES, NOT SIGNS.** `BASE_NEGATIVES`
+forbids text, letters and logos because a model invents unreadable lettering
+that reads as AI, so New York is a wet avenue with a cab rather than Times
+Square, and Tokyo a lantern back street rather than a neon crossing. Still
+unmistakable, and better as 2003.
+
+**WHAT ONE PLACE TOUCHES -- every file, so the next session does not find
+them one at a time:**
+
+- `presets/places/<id>.json` -- the shape is in any existing one: `id`,
+  `label`, `climate`, `timeOfDay`, `prompt.{scene,light,lens,framing,moment,
+  eraProps}`, `negatives`, `motionHint`, `lookOverride.{grade,tape,optics,
+  audio.ambience}`. `scripts/catalog/schema.mjs` enforces the vocabulary:
+  no look words, no person words, and **no wardrobe words in a place**
+  ("sleeve" failed once, §42G). Era comes from named props, never from the
+  words vintage/retro/nostalgic (banned).
+- `assets/places/<id>.jpg` -- **the owner generates it in Higgsfield Soul
+  Cinema** from a prompt written off the preset's own scene/light/eraProps
+  (§10): 16:9, 2048x1152, no people, no VHS/grain words. The shipped
+  photograph reaches only the card and the landing ground, never a model.
+- `assets/places/<id>.mp4` and `loops.json` -- regenerated for free by
+  `scripts/tapedeck/place-loops.mjs` (§30); `scrimOpacity()` reads the loop's
+  mean luma from `loops.json`.
+- `scripts/expand/local.mjs` -- free text is mapped onto the NEAREST preset as
+  a skeleton, and there is a per-place table (search `'autobahn-raststaette'`
+  in it). **The car park was the roadside template for typed places** (§42F);
+  removing it needs a replacement skeleton, and the four new places need
+  entries.
+- `scripts/web/static.mjs` mentions old ids in comments and generated rules;
+  grep before assuming.
+- **Tests that pin the current eight:** `test/web-api.test.js` ("fourteen
+  presets", `places.length === 8`), `test/expand-local.test.js` (place ids),
+  `test/audio-bed.test.js` and `test/audio-output.test.js` (the stairwell's
+  fluorescent buzz -- §44E -- goes with the stairwell), the German sweep, and
+  the landing rail. `DESIGN.md` and §42F's table describe the current eight.
+- **Old manifests name old ids.** A tape on somebody's shelf made in the car
+  park would caption as `autobahn-raststaette` once the preset is gone, because
+  `labelsOf` falls back to the id. Keep a retired-label map, or accept it.
+
+**THE PROMPTS COME FIRST, then the presets test-first while he generates.**
+The ordering that wastes nobody's evening: write the four Higgsfield prompts,
+hand them over, build the four preset files and the tests while the pictures
+are being made, then loops, then the shelf and rail, then deploy. Judging the
+tapes themselves costs $0.75 a render and is his.
+
+**KICKOFF PROMPT FOR THE NEXT SESSION** (paste as the first message):
+
+> Read CLAUDE.md section 60I first, then 60H and 60. Replace four place
+> presets exactly as 60I records: the stairwell, the car park, the swimming
+> pool and the balcony go; New York (a Manhattan side street in autumn), Tokyo
+> (a lantern-lit back street at night), the Amalfi coast (afternoon) and the
+> space centre (a visitor's day, a rocket on its stand) come. First give me
+> the four Higgsfield prompts so I can generate the photographs; then build
+> the four presets and their tests while I do that; then the loops, the
+> expand skeletons, the rail and the shelf; then deploy. Confirm with me in
+> the first minute whether the out-of-season beach stays alongside Amalfi.
+> Do not change the prompt arc or anything else.
 
 ## Not in scope
 
