@@ -7717,6 +7717,62 @@ guard refuses any of the four marks being positioned from the right edge.**
 preview never shows a struck card at all -- it proves gutters and alignment,
 not selection. The real-server browser test is the instrument for selection.
 
+#### H -- "IT IS NOT CONNECTING": A THREE-BEAT ARC BEHIND A SWITCH, AND THE PERSON OFF THE PROPS (2026-09-04, evening)
+
+The owner's own words: the tape is not broken, but "for 5 seconds, 10
+seconds, it is not connecting ... it has to be like a story ... he has to
+time travel back." A friend had just said the same thing the other way round
+(the tape looked like her; the question was the product). So the raw model
+output of the owner's two 2 September tapes was read one frame per second,
+the §53 way, before anything was changed.
+
+**The garden tape (`af12f6`, the one he praised): five cuts, six shots, and
+they follow §19's arc** -- walk in and look for six seconds, wide of the empty
+table, close on the bottle, reach for it, turn to the lens, wide with him at
+the table. It reads as one afternoon.
+
+**The living-room tape (`cee3af`): two cuts, three shots, and two defects.**
+(1) **His face was on the television**, in a different shirt -- the model
+painted the reference photograph onto a prop, because it treats "the person"
+as something it may draw wherever a face fits. (2) **The beats did not
+connect**: four seconds standing, then suddenly reclining on the sofa, then
+suddenly standing again. Each beat is generated as its own little scene and
+this model does not always carry pose and position across a cut. The seed
+decides which tape you get; the era read correctly in both.
+
+**Fixed and built at `3e49a60`, test-first, four sabotages red:**
+
+- **Every reference prompt now ends with the person off the props:** "never
+  on a television screen, in a mirror, in a photograph or on a poster." This
+  one is LIVE on every tape, both arcs.
+- **A three-beat arc exists beside the six** -- arrive and look around (the
+  pan folded into the arrival, so the place is still seen with them in it),
+  do the one thing, turn to the lens and settle -- every beat naming the
+  person, and the continuity said in words: the same spot, the same posture
+  and the same light carried across every cut, at the unhurried pace of
+  somebody recording an afternoon. **It is a switch, not the default.**
+  `--arc=six|three` on the render command, `input.arc` on the job (the job
+  model's projection had to learn the field -- the dry run quoted three beats
+  while the frozen prompt carried six, the `entriesOf` trap one file over),
+  frozen into the reference prompt at compose. The web app does not set it.
+
+**WHAT DECIDES IT IS A PAID COMPARISON THE OWNER RUNS, ~$3:** the same photo,
+place and outfit, two seeds of each arc, read frame by frame for cuts,
+presence and whether the beats connect. Until then six stays the default,
+because §19's ruling holds: one prompt change per render, or the render
+measures nothing.
+
+```bash
+node --env-file-if-exists=.env scripts/render/render.mjs --photo=assets/test-photos/face.jpg --place=wohnzimmer-abend --outfit=hemd-jeans --consent --provider=fal --direct --resolution=480p --arc=three
+node --env-file-if-exists=.env scripts/render/render.mjs --photo=assets/test-photos/face.jpg --place=wohnzimmer-abend --outfit=hemd-jeans --consent --provider=fal --direct --resolution=480p --arc=six
+```
+
+**Things that will bite:** `scdet` on the raw segment with `select='gt(scene,0.3)'`
+finds the cuts; a `fps=1,tile=4x4` contact sheet is one image per tape and is
+what a person can read. Measure `segments/seg-01.mp4`, never `timestamp.mp4`
+(§53E). And "face" is BANNED vocabulary in a composed prompt (the `person`
+group), so a beat that wants to end on the face says "settling on them".
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT
