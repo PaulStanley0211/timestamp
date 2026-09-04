@@ -7698,6 +7698,25 @@ can pass over an overflow that is plain on the screen; read the text's rect.**
 Same family as §36B's regression test that went green while the page was
 still broken.
 
+#### G -- THE SELECTION MARK IS ON THE LEFT IN EVERY ROW (2026-09-04, evening)
+
+The owner saw the frame row's dot before the shape on the left and the
+quality row's in the top-right corner, and asked for one answer everywhere.
+The frame card had always drawn its tick in the flow; `.lookcard` and
+`.qualitycard` pinned theirs `position: absolute; right: 0.8rem`; the place
+card's badge was already top-left. Fixed at `e4bed08`: the outfit and
+quality cards are a two-column grid, the mark in a 0.9rem gutter of its own
+and everything else in the second column, so names align across a row whether
+or not a card is struck and the deferred quality card (no tick) lines up too.
+**A browser-smoke test measures the painted mark against the painted name in
+all three rows and the badge against its card in the rail; a stylesheet
+guard refuses any of the four marks being positioned from the right edge.**
+
+**What will bite:** `build/preview-pages.mjs` renders the home page with
+`createStylesheet({})`, which emits no per-catalog `:checked` rules, so the
+preview never shows a struck card at all -- it proves gutters and alignment,
+not selection. The real-server browser test is the instrument for selection.
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT
