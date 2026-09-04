@@ -8078,6 +8078,23 @@ reporting this and it is not a defect.
 so after restarting the server the computed colour still read the OLD value
 (§36F). `fetch('/styles.css', {cache: 'reload'})` then `location.reload()`
 is the two-line way past it without restarting the pane.
+
+**AND THE SIGN-IN DIALOG WAS BONE ON CREAM (`5539e9a`, the same morning).**
+The owner sent a screenshot of the dialog and asked "did you find any
+mistake"; the two foot links read as ghost text. Measured on the page: the
+links, the typed email, its caret and its placeholder were all `#EDE7DC` on
+the `#FAF7F2` plate, about 1.06:1 -- **a person typing their address into
+the landing's sign-in box could not see it.** The dialog sits on paper by
+design (§48B), but it lives inside `body.is-landing`, whose alias block
+re-points `--ink`, `--muted`, `--faint`, `--accent` and `--ghost` at the
+dark world's values; every dialog rule that named a literal tier came out
+right, and every rule that read a TOKEN -- the shared input rule, `.linky`
+-- came out in bone. `.signin-box` restates the eleven paper aliases now.
+**The lesson is the one §31 already carries, one layer down: an alias layer
+is a place where a colour is decided, and a component that moves between
+grounds has to decide again.** A browser test opens the dialog at both
+widths, types into the field and reads the cascade for the input, the caret
+and both links; it went red first. Suite 2120 / 2117 / 0 / 3.
 - **The Edit tool writes LF into CRLF files** (§59C, §60C), and it did so on
   every file touched today. Git normalises on commit.
 
