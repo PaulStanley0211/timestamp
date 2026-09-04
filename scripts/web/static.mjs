@@ -2204,6 +2204,32 @@ input[type="file"]::file-selector-button {
    it from the page. */
 .signin { border: 0; padding: 0; background: transparent; max-width: min(26rem, calc(100vw - 2rem)); }
 .signin::backdrop { background: rgba(7, 10, 17, 0.72); }
+/* AND IT CARRIES THE PAPER'S TOKENS, because the paragraph above was only half
+   true until 2026-09-05. The dialog lives inside body.is-landing, whose alias
+   block re-points --ink, --muted, --faint, --accent and --ghost at the dark
+   world's values. Every rule below that names a literal tier (--ink-strong,
+   --ink-soft) came out right; every rule that reads a TOKEN -- the shared
+   input rule, .linky at the foot -- came out in BONE ON CREAM, about 1.06:1.
+   The owner's screenshot showed the two foot links as ghost text; measured on
+   the page, the typed email, its caret and its placeholder were the same
+   colour, so a person could not see their own address as they typed it. The
+   eleven aliases :root sets for the paper are restated here, same values, so
+   the dialog is what the comment above says it is: a piece of the application,
+   whichever page it is opened from. A browser test reads the cascade. */
+.signin-box {
+  --ground: var(--paper);
+  --accent: var(--oxide);
+  --accent-bright: var(--oxide-deep);
+  --accent-deep: var(--oxide);
+  --ink: var(--ink-strong);
+  --muted: var(--ink-strong);
+  --faint: var(--ink-soft);
+  --alarm: var(--oxide);
+  --rec: var(--oxide);
+  --frost-lit: var(--lift);
+  --ghost: 0.63;
+  --ghost-hover: 0.82;
+}
 .signin-box {
   position: relative;
   background: var(--paper);

@@ -508,6 +508,52 @@ test('the landing nav is as bright as the hero, because it sits on the picture w
   }
 });
 
+test('the sign-in dialog on the landing is ink on paper, typed text and foot links included', { skip }, async () => {
+  // THE OWNER'S SCREENSHOT, 2026-09-05: "Forgot password?" and "No account
+  // yet? Make a tape." as ghost text at the foot of the cream dialog. Measured
+  // on the running page: both links, the typed email, its caret and its
+  // placeholder were painted in the LANDING'S bone (#EDE7DC) on the dialog's
+  // cream plate -- about 1.06:1. Somebody typing their address into this box
+  // could not see what they typed.
+  //
+  // WHY. The dialog sits on paper by design (see .signin-box in static.mjs)
+  // but it lives inside body.is-landing, whose alias block re-points --ink,
+  // --muted, --faint, --accent and --ghost at the dark world's values. Every
+  // dialog rule that named a literal tier (--ink-strong, --ink-soft) came out
+  // right; every rule that read a TOKEN -- the shared input rule, .linky --
+  // came out in bone. The fix is the dialog restating the paper's tokens, and
+  // this test reads the real cascade because that is the only layer that can
+  // see the difference.
+  const s = await session();
+  await s.signOut();
+  for (const viewport of [PHONE, LAPTOP]) {
+    const page = await visit('/', viewport);
+    const r = await page.evaluate(`(() => {
+      const d = document.getElementById('signin');
+      if (!d.open) d.showModal();
+      const input = d.querySelector('#signin-email');
+      input.value = 'someone@example.com';
+      const title = getComputedStyle(d.querySelector('.signin-t')).color;
+      const plate = getComputedStyle(d.querySelector('.signin-box')).backgroundColor;
+      const ics = getComputedStyle(input);
+      return {
+        open: d.open, plate, title,
+        input: ics.color, caret: ics.caretColor,
+        links: [...d.querySelectorAll('.signin-alt a')].map((a) => ({ text: a.textContent.trim(), color: getComputedStyle(a).color })),
+      };
+    })()`);
+    assert.ok(r.open, `the dialog did not open at ${viewport.width}px`);
+    assert.equal(r.input, r.title,
+      `at ${viewport.width}px the typed email is ${r.input} on ${r.plate}, not the dialog's ink ${r.title}`);
+    assert.equal(r.caret, r.title, `at ${viewport.width}px the caret is ${r.caret}, invisible on ${r.plate}`);
+    assert.equal(r.links.length, 2, 'the dialog should end on exactly two links');
+    for (const link of r.links) {
+      assert.equal(link.color, r.title,
+        `at ${viewport.width}px "${link.text}" is painted ${link.color} on ${r.plate}, not the dialog's ink ${r.title}`);
+    }
+  }
+});
+
 test('the selection mark sits at the left of its card, in every row', { skip }, async () => {
   // THE OWNER SAW THE FRAME ROW'S DOT ON THE LEFT AND THE QUALITY ROW'S ON THE
   // RIGHT (2026-09-04) and asked for one answer everywhere: the mark on the
