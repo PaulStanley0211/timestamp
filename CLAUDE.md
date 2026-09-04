@@ -25,7 +25,7 @@ trunk is an open decision and the owner's** -- it changes the deploy runbook.
 
 ## READ §60 FIRST (2026-09-04): THE DESIGN PROTOTYPE IS IMPLEMENTED, PAGE BY PAGE, AND DEPLOYED AT `9272c9a`. FIVE COMMITS, ALL TEST-FIRST. THEN §59, §58, §57.
 
-**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2104 / 2101 / 0 / 3. **AND §60E: the first live checkout was refused by Stripe that evening, the cause was the audit's own card-only parameter, it is fixed at `123b415`, and the dashboard step is done. THE FIRST REAL CARD WAS CHARGED THAT AFTERNOON AND 92 CREDITS LANDED ONE SECOND LATER** -- the payment path is proven live, and every "no card has ever been charged" line in this file is history. **THE NEXT SESSION STARTS AT §60I: four place presets become famous places, decided and not started; §60H made the three-beat arc the default the same evening.**
+**THE SITE LOOKS LIKE THE PROTOTYPE NOW.** Pricing is two packs with the grant as a sentence, the status page is three phase rows with the record light on the one being filmed, the result is the tape beside the words with the rest of the shelf beneath, the shelf and the account are on the paper under readout labels, and the landing hero is in the sans face. **Three things were deliberately NOT built and §60B says why:** the share link, the merged legal page, and the status ledger table. Suite 2104 / 2101 / 0 / 3. **AND §60E: the first live checkout was refused by Stripe that evening, the cause was the audit's own card-only parameter, it is fixed at `123b415`, and the dashboard step is done. THE FIRST REAL CARD WAS CHARGED THAT AFTERNOON AND 92 CREDITS LANDED ONE SECOND LATER** -- the payment path is proven live, and every "no card has ever been charged" line in this file is history. **§60I's four famous places are BUILT AND PUSHED at `41cf89a` (§60J, 2026-09-04 late): New York, Tokyo, the Amalfi coast and a space centre are in the menu, the tests, the expander and the shelf. NOT DEPLOYED -- the box is at `1db55f2` until the owner's four photographs exist; §60J has the four commands that finish it. §60H made the three-beat arc the default the same evening.**
 
 ## READ §59 FIRST (2026-09-03, evening): THE AUDIT'S CODE ITEMS ARE FIXED, DEPLOYED AT `bf84de3`, AND THE BOX IS KEY-ONLY. TWO CONSOLE STEPS ARE THE OWNER'S. THEN §58, THEN §57.
 
@@ -7891,6 +7891,97 @@ tapes themselves costs $0.75 a render and is his.
 > expand skeletons, the rail and the shelf; then deploy. Confirm with me in
 > the first minute whether the out-of-season beach stays alongside Amalfi.
 > Do not change the prompt arc or anything else.
+
+#### J -- THE FOUR FAMOUS PLACES ARE BUILT AND PUSHED; THE PHOTOGRAPHS ARE THE OWNER'S (2026-09-04, late)
+
+**2102 / 2099 -> 2118 / 2115 pass / 0 fail / 3 skipped.** Two commits,
+`37e9bff` (the menu, the expander, the shelf) and `41cf89a` (docs), every
+test written red first, two guards sabotaged and watched go red before being
+restored from copies, all seven `guards.yml` steps run verbatim and counted
+7/7 (35 commit messages scanned). **PUSHED, AND NOT DEPLOYED: the box is
+still at `1db55f2`.** §60I's own order was loops, then deploy, and the loops
+are cut from photographs that only the owner can make. Deploying four cards
+with no picture behind them would put the page's gradient fallback in front
+of the friends reviewing the site this week, so the deploy waits.
+
+| Slot | Id | Label |
+|---|---|---|
+| the car park | `new-york-autumn` | New York, in autumn |
+| the stairwell | `tokyo-night` | Tokyo, at night |
+| the swimming pool | `amalfi-afternoon` | The Amalfi coast, afternoon |
+| the balcony | `space-centre` | The space centre |
+
+**THE BEACH STAYS.** §60I lists it under "Stays" and says eight places as
+before, so it was built that way; the owner was asked in the first message
+and had not answered by the end of the session. If he wants it gone, it is
+one preset, one jpg, one mp4, one `loops.json` entry, one `PLACE_HUES` line
+and one `RETIRED_PLACE_LABELS` line -- and the expander's shared coast words
+then belong to Amalfi alone.
+
+**WHAT THE OWNER DOES NEXT, in order, and none of it is code:** generate the
+four pictures from the prompts in `docs/place-photographs.md` (16:9,
+2048x1152, nobody in frame, no lettering), save each as
+`assets/places/<id>.jpg`, then either paste them and say go, or:
+
+```bash
+node scripts/tapedeck/place-loops.mjs
+cp build/place-loops/*.mp4 build/place-loops/loops.json assets/places/
+git add assets/places && git commit -m "assets: the four famous places, photographed and looped" && git push
+ssh root@178.105.77.16 'cd /opt/timestamp && git pull && docker compose up -d --build'
+```
+
+Then read `/api/health` from outside and click all eight cards on the live
+landing page.
+
+**FOUR THINGS FOUND ON THE WAY, each pinned by a test:**
+
+1. **The expander was scoring the clock.** A label, an id and a scene are
+   lexical evidence at 12, 8 and 5 points, so "Tokyo, at night" would have
+   answered every typed place that said "at night" with paper lanterns --
+   and **"the pool in august" was already borrowing the garden's tablecloth
+   off the `august` in `schrebergarten-august`, before any famous place
+   existed.** Time-of-day, season and month words, plus `centre`, are
+   excluded from the lexical score now (`UNSCORED` in `local.mjs`); the
+   clock and the season have their own inference tables and their own bonus.
+   `STOPWORDS` was deliberately NOT widened, because `hasContent` reads it to
+   decide whether a stripped clause still says anything, and "at night" does.
+2. **A warm beach has a skeleton now.** The out-of-season beach is cold, so a
+   typed "a beach" used to lose all its dressing to neutral; the coast words
+   are shared between the two beaches and the climate term decides. **The
+   contradicting-climate test moved to "a garden in january"** -- a month
+   rather than "snow", because stated weather owns the light outright and
+   the test is about the climate light.
+3. **The car park's roadside words were dropped, not re-pointed.** Its
+   borrowed props (an estate car, a payphone, a route map) were plausible on
+   any road; a yellow cab and a hot-dog cart are not. A generic street,
+   stairwell, pool or balcony falls to neutral; only a request that NAMES a
+   famous place gets its dressing.
+4. **`test/expand.test.js` was scanning the whole draft JSON for banned
+   words and passing by accident.** The `grade` and `tape` KEYS of an
+   inherited lookOverride are look vocabulary, and the test only survived
+   because "a beach" carried an empty override. It scans the prompt strings
+   now, which is the schema's own view.
+
+**The shelf keeps the old captions.** `RETIRED_PLACE_LABELS` in
+`catalog.mjs`; `labelsOf` consults it before falling back to the id, and a
+retired id is never reused. The stairwell's fluorescent-buzz tests went with
+the stairwell; a loudness test over EVERY shipped place replaced the one it
+had, so a preset added tomorrow with a loud ambience fails in the suite.
+
+**Things that will bite:**
+
+- **The dedupe drops the WHOLE clause.** "the pebble beach" against Amalfi's
+  "a pebble beach with rows of striped umbrellas and wooden loungers" loses
+  the umbrellas too; the first version of that assertion was written the
+  other way round and went red against correct code.
+- **Weather beats climate in the expander.** "in the snow" is
+  `LIGHT_BY_WEATHER.snow`, never `LIGHT_BY_CLIMATE.cold`; use a month to test
+  the climate light.
+- **A local page shows five 404s until the pictures exist** -- the four jpgs
+  and the first place's mp4 (Amalfi sorts first now, so it is the landing's
+  default ground). That is the designed fallback, not a bug.
+- **The Edit tool writes LF into CRLF files** (§59C, §60C), and it did so on
+  every file touched today. Git normalises on commit.
 
 ## Not in scope
 
