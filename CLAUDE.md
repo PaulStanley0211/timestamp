@@ -8046,6 +8046,38 @@ had, so a preset added tomorrow with a loud ambience fails in the suite.
   background.** It was done once here for a few seconds and the run stayed
   green, by luck of timing; §60C's warning about test files applies to the
   code under test just as much.
+
+#### K -- THE LANDING NAV WAS INVISIBLE OVER THE NEW GROUND (2026-09-05, morning)
+
+**2118 / 2115 -> 2119 / 2116 pass / 0 fail / 3 skipped.** One commit,
+`936fe6c`, test-first, deployed. The owner, looking at the live landing page:
+*"it looks very fade. I cannot see that plans and sign in exist or not."*
+
+**The two nav links were painted in the landing's dim label grey (`--l-dim`)
+at 12px directly on the blurred loop under the half-strength scrim.** Every
+other dim word on that page sits on the 0.62 plate `.lmenu` was solved for
+(§31); the nav is the one piece of text on the landing that never got one.
+Over the Amalfi loop -- the default ground since the beach went, mean luma
+160 -- that measured about 2:1, and in the browser pane the top-right corner
+read as empty. Before §60J the default ground was the car park at luma 69,
+where the same grey was merely dim, which is why nobody had seen it.
+
+On the landing the links take the hero's colour (`--l-bone`) and a soft
+dark shadow; hover keeps the cathode, restated because the new rule has the
+same specificity as the base hover rule and comes later. The wordmark beside
+them stays held back on purpose (§30). **A browser test reads the real
+cascade at phone and laptop width** and went red against the old sheet first
+-- a stylesheet-text test would not have caught a later rule of equal
+specificity winning again.
+
+**The sign-in page has no nav links and that is by design** (§48: the auth
+five are carved out, form only, wordmark home). The owner noticed it while
+reporting this and it is not a defect.
+
+**What will bite:** the browser pane holds `/styles.css` for five minutes,
+so after restarting the server the computed colour still read the OLD value
+(§36F). `fetch('/styles.css', {cache: 'reload'})` then `location.reload()`
+is the two-line way past it without restarting the pane.
 - **The Edit tool writes LF into CRLF files** (§59C, §60C), and it did so on
   every file touched today. Git normalises on commit.
 
