@@ -936,9 +936,15 @@ test('the arc on the job input reaches the frozen reference prompt, and the dry 
   const frozen = job.resolved.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
   assert.equal(frozen.length, 3, 'the manifest froze the six-beat prompt for a three-beat order');
 
-  // And a job that says nothing gets the default, which is still six.
+  // And a job that says nothing gets the default, which is three as of the
+  // 2026-09-04 comparison -- the web app never sets an arc, so this IS what
+  // a customer's order composes.
   const { job: plain } = await runFake({ input: { direct: true }, provider: { maxClipSeconds: 15 } });
-  assert.equal(plain.resolved.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 6);
+  assert.equal(plain.resolved.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 3);
+
+  // Six is still reachable by name.
+  const { job: six } = await runFake({ input: { direct: true, arc: 'six' }, provider: { maxClipSeconds: 15 } });
+  assert.equal(six.resolved.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 6);
 });
 
 test('a direct job animates from the photographs, not from a start frame', async () => {

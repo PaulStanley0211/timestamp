@@ -407,14 +407,19 @@ export function composeMotionPrompt({ place, outfit, segment = 1, totalSegments 
  */
 /**
  * The two shapes a direct tape can take. `six` is the vlog arc section 19
- * wrote and section 53 corrected; `three` is one continuous moment. The CLI
- * validates `--arc` against this list and the composer refuses anything else
- * by name, so a typo costs a line rather than a render.
+ * wrote and section 53 corrected; `three` is one continuous moment, and THE
+ * DEFAULT since the comparison of 2026-09-04 (CLAUDE.md section 60H): same
+ * photo, room and outfit, two seeds of three connected end to end, the six
+ * seed lost the person, put his face on the television and jumped from the
+ * sofa to standing. The CLI validates `--arc` against this list and the
+ * composer refuses anything else by name, so a typo costs a line rather than
+ * a render.
  */
 export const ARCS = Object.freeze(['six', 'three']);
+export const DEFAULT_ARC = 'three';
 
 export function composeReferencePrompt({
-  place, outfit, placePhoto = false, era = DEFAULT_ERA, seconds = 15, cameraMove = null, arc = 'six',
+  place, outfit, placePhoto = false, era = DEFAULT_ERA, seconds = 15, cameraMove = null, arc = DEFAULT_ARC,
 } = {}) {
   requirePreset(place, 'place', ['id', 'label', 'timeOfDay', 'motionHint',
     ...['scene', 'light', 'lens', 'framing'].map((f) => `prompt.${f}`)]);
@@ -475,8 +480,8 @@ export function composeReferencePrompt({
   // it three, every one naming the person, the pan folded into the arrival so
   // the place is still seen with them in it, and the continuity said in words
   // below. Fewer cuts and longer holds is also what a home recording actually
-  // looks like. A switch until a paid comparison has judged it; `six` stays
-  // the default.
+  // looks like. Judged the same evening (section 60H) and made the default;
+  // six stays reachable by name for the next comparison.
   const beatsThree = [
     `Wide. Walking in at the near edge and looking around the whole place -- ${place.motionHint} -- `
       + 'camera following a step behind and swinging round to stay with them.',

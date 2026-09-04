@@ -467,9 +467,14 @@ test('no quality marker reaches the reference prompt either', () => {
   // installed opens every one of its templates with these exact words. The
   // skill's @Image token structure is used; its style vocabulary is refused,
   // which is the same ruling section 14 recorded for the motion prompt.
-  const { prompt } = composeReferencePrompt({ place, outfit });
-  for (const m of ['8K', '4K', 'photoreal', 'film grain', 'cinematic', 'filmic', 'Kodak', 'bokeh', 'anamorphic', 'ARRI']) {
-    assert.ok(!new RegExp(m, 'i').test(prompt), `"${m}" must never appear`);
+  // Word-boundaried, as the catalog-wide sweep below already is: a bare /ARRI/i
+  // matches "carried", which the continuity sentence says, and "carriageway",
+  // which the car park says twice. The target is the camera brand.
+  for (const arc of ['six', 'three']) {
+    const { prompt } = composeReferencePrompt({ place, outfit, arc });
+    for (const m of ['8K', '4K', 'photoreal', 'film grain', 'cinematic', 'filmic', 'Kodak', 'bokeh', 'anamorphic', 'ARRI']) {
+      assert.ok(!new RegExp(`\\b${m}\\b`, 'i').test(prompt), `${arc}: "${m}" must never appear`);
+    }
   }
 });
 
@@ -512,18 +517,22 @@ test('the reference prompt keeps the anti-slop work the still prompt earned', ()
 // ---------------------------------------------------------------------------
 
 test('the reference prompt is a numbered shot list, not one long stare', () => {
-  const { prompt } = composeReferencePrompt({ place, outfit });
-  const shots = [...prompt.matchAll(/^Shot (\d+): /gm)].map((m) => Number(m[1]));
-  assert.ok(shots.length >= 4, `expected a real shot list, got ${shots.length} shot(s)`);
-  assert.deepEqual(shots, shots.map((_, i) => i + 1), 'numbered from 1, in order, no gaps');
+  for (const arc of ['six', 'three']) {
+    const { prompt } = composeReferencePrompt({ place, outfit, arc });
+    const shots = [...prompt.matchAll(/^Shot (\d+): /gm)].map((m) => Number(m[1]));
+    assert.ok(shots.length >= 3, `${arc}: expected a real shot list, got ${shots.length} shot(s)`);
+    assert.deepEqual(shots, shots.map((_, i) => i + 1), `${arc}: numbered from 1, in order, no gaps`);
+  }
 });
 
 test('the shot count scales with the runtime, off the skill own table', () => {
   // 2 to 2.5 seconds a shot, from the seedance-prompt skill Paul installed.
   // Paul's complaint measured the failure precisely: one action over five or
   // six seconds reads as lag, and this is the number that fixes it.
+  // This is the six-beat arc's table; the three-beat arc holds at three and
+  // drops to two only under six seconds.
   const shotsFor = (seconds) =>
-    [...composeReferencePrompt({ place, outfit, seconds }).prompt.matchAll(/^Shot \d+: /gm)].length;
+    [...composeReferencePrompt({ place, outfit, seconds, arc: 'six' }).prompt.matchAll(/^Shot \d+: /gm)].length;
   assert.equal(shotsFor(15), 6, '14-15s is six shots');
   assert.equal(shotsFor(12), 5);
   assert.equal(shotsFor(6), 3);
@@ -574,7 +583,11 @@ test('everything that was never about stillness is still refused', () => {
 test('the vlog shows the place, which is the half Paul said was missing', () => {
   // "If I am on a beach it has to be ... the beach view, and everything."
   // A shot list that never leaves the subject is a portrait in six pieces.
-  const { prompt } = composeReferencePrompt({ place, outfit });
+  // THE SIX-BEAT VLOG, BY NAME: the prop close-up is its beat, and it is the
+  // beat the three-beat arc deliberately dropped -- on the living-room tapes a
+  // close-up of the television with the person "just behind it" is exactly
+  // what invited the model to paint the person onto the screen.
+  const { prompt } = composeReferencePrompt({ place, outfit, arc: 'six' });
   const shots = prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
   assert.ok(shots.some((s) => /wide/i.test(s)), 'at least one wide shot of the place');
   // Case-insensitive on the first letter only: the prop opens a sentence in the
@@ -582,6 +595,13 @@ test('the vlog shows the place, which is the half Paul said was missing', () => 
   const firstProp = place.prompt.eraProps.split(',')[0].trim();
   const anyCase = `[${firstProp[0].toLowerCase()}${firstProp[0].toUpperCase()}]${firstProp.slice(1)}`;
   assert.match(prompt, new RegExp(anyCase), 'and a named object from this place, close');
+
+  // The default still shows the place -- the beach view is folded into the
+  // arrival, with the person in it, through the place's own motion hint.
+  const plain = composeReferencePrompt({ place, outfit }).prompt;
+  const first = plain.split('\n').find((l) => /^Shot 1: /.test(l));
+  assert.match(first, /wide/i, 'the default opens wide');
+  assert.ok(first.includes(place.motionHint), 'and looks around the place as the preset describes it');
 });
 
 test('rule 1 and the look ban survive the rewrite, across the whole catalog', () => {
@@ -661,11 +681,20 @@ test('the three-beat arc is one continuous moment with the person in every shot'
   assert.equal(short.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 2, 'five seconds is two beats');
 });
 
-test('the six-beat arc is still the default, unchanged by the switch', () => {
+test('the three-beat arc is the default, and six is still there by name', () => {
+  // JUDGED 2026-09-04, SAME PHOTO, SAME ROOM, SAME OUTFIT. Two seeds of the
+  // three-beat arc were one continuous moment each: walk in, look, cross to
+  // the sofa, sit, watch, turn to the lens. The six-beat seed lost the person
+  // for two seconds, put his face on the television twice, and jumped from
+  // the sofa to standing -- the same defects as the 2 September tape. The
+  // web app orders whatever the default is, so the default is the arc that
+  // connects; six stays reachable for the comparison that decided this.
   const plain = composeReferencePrompt({ place, outfit }).prompt;
+  const three = composeReferencePrompt({ place, outfit, arc: 'three' }).prompt;
+  assert.equal(plain, three);
+  assert.equal(plain.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 3);
   const six = composeReferencePrompt({ place, outfit, arc: 'six' }).prompt;
-  assert.equal(plain, six);
-  assert.equal(plain.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 6);
+  assert.equal(six.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 6);
 });
 
 test('an arc this file has not written is refused, never defaulted', () => {
