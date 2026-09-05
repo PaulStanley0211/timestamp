@@ -108,9 +108,11 @@ The OFL text is committed beside each file. The font files are fetched from
 the Google Fonts GitHub release at implementation; the fetch names the files
 and sizes and waits for the owner's go, because it is a download.
 
-**Display is always uppercase**, tight leading (0.9–0.92), no tracking. Body
-is never uppercase except the tracked 12px label role, which keeps its
-existing token. The size scale keeps its roles and its ratio (`--t-*` and the
+**Display is always uppercase**, tight leading (0.9–0.92), no tracking.
+**Anton is never set below 18px.** Anything smaller that wants to read as a
+label — nav links, the small nav buttons, "Remove", the archive label — is the
+tracked 12px label role in Inter 600, which keeps its existing token. Body
+is never uppercase except that label role. The size scale keeps its roles and its ratio (`--t-*` and the
 display ladder `--d-*`), with one substitution: every place the sheet names the readout face
 for a display role (`--d-3` card titles, `--d-4` section headings, the hero,
 the pricing figures) now names Anton. Because Anton reads larger than VT323 at
@@ -147,7 +149,10 @@ the old "no borders" rule. The rule is inverted deliberately:
   guard that refuses literal-colour borders survives unchanged.
 - `<hr>` stays banned; separation is still space and the outline of the thing
   itself, not a rule between things.
-- The focus outline stays exactly as it is: 2px, lime, never removed.
+- The focus outline stays 2px, offset 2px, never removed — but it is drawn
+  in `--ink` on dark surfaces and `--on-lime` on lime ones. A lime ring on a
+  chosen lime card would be invisible, and a chosen card is exactly where the
+  keyboard focus sits after a selection.
 
 ### 2.5 Motion
 
@@ -161,14 +166,17 @@ the record light. The hero tape and the place loops respect
 
 The eight slots of the reference, filled with Timestamp's own content.
 Everything the reference has and this product cannot back is dropped, named
-in §3.9.
+in §3.10.
 
 ### 3.1 Hero (lime, speckled)
 
 - Nav: wordmark left (set in Anton, with the `.rec` dot); Places, Pricing,
-  Sign in as text links; a black-on-lime **"Make a tape"** pill right. Signed
-  in, the pill reads "My videos" and Sign in becomes the account link — the
-  existing nav logic, restyled.
+  Sign in as label-role links; a black-on-lime **"Make a tape"** pill right
+  that opens the existing sign-in dialog. "Places" is an in-page anchor to the
+  band of §3.4 on the landing and `/#places` from any other public page. The
+  landing is only ever seen signed out: a signed-in visitor to `/` gets the
+  order form, whose nav keeps today's items (email, credits, My videos,
+  Plans, Account, Sign out), restyled.
 - Headline in Anton at `--t-hero`: **"One photograph. Fifteen seconds of
   2003."**, centred, three lines at desktop.
 - One sentence: "Upload one photo of your face, choose a place and an outfit,
@@ -245,8 +253,12 @@ minus on open via CSS. No script. Six questions, copy drafted from
 `PRODUCT.md` and the legal pages and reviewed by the owner before shipping:
 
 1. Is it free? (21 credits, one tape, no card; packs after that)
-2. What happens to my photograph? (fal.ai renders it; deleted after seven days; location data stripped on intake)
-3. How long does a tape take? (a few minutes; the status page shows the three phases)
+2. What happens to my photograph? (rendered by the processors `/privacy`
+   names, from the same derivation, so an added classifier appears here the
+   day it appears there; deleted after seven days; location data stripped on
+   intake)
+3. How long does a tape take? (usually under ten minutes — the three tapes
+   of 2026-09-05 took six to eight; the status page shows the three phases)
 4. Does it look real? (the tape is built in ffmpeg, the model only does the scene; the file is marked AI-generated)
 5. Which shapes and qualities? (4:3, 16:9, 9:16; 480p and 720p; the same price in every shape)
 6. Can I delete everything? (the account page; export first if wanted)
@@ -263,7 +275,25 @@ support@timestamptapes.com — then the giant **"TIMESTAMP."** in Anton, lime,
 edge to edge, then the copyright and the AI-disclosure line the footer already
 carries. No social icons until accounts exist.
 
-### 3.9 Dropped from the reference, on purpose
+### 3.9 At phone width
+
+The reference's mobile screens were shown and the page follows them, without
+a hamburger menu, because a menu needs a script and the nav already wraps
+below 30rem. At 320, 375, 414, 768, 1024 and 1440px, the six widths this
+project tests at, the page has no horizontal overflow, and:
+
+- the hero stacks: wordmark and pill on one line, links beneath, headline at
+  the fluid hero size, the tape at full content width under the button;
+- the manifesto sentence shrinks with the viewport and the stickers stay
+  inline, smaller;
+- the two cards, the three fact cards, the two demo tapes and the footer
+  columns stack in one column;
+- the place rail scrolls sideways as it does today, snapping, with the
+  photograph behind it;
+- the FAQ rows and the giant wordmark span the full width, the wordmark
+  shrinking to fit rather than wrapping.
+
+### 3.10 Dropped from the reference, on purpose
 
 The five-star strip (no reviews), the Monthly/Yearly toggle (one-off packs),
 the compare-all-plans table on the landing (there is one product; §5.3 gives
@@ -298,8 +328,9 @@ public and git history is permanent, so **none of them is committed**.
   The delivered tapes are never served: they are 35–37 MB and exist to be
   downloaded, not streamed.
 - **Absent means fall back, never break.** With the directory unset or a file
-  missing, the hero shows a place photograph in the tape's slot with the same
-  caption line, the manifesto renders without stickers, the demo band shows
+  missing, the hero shows a place photograph in the tape's slot captioned
+  with that place's own name (never the tape's caption, which would then be
+  untrue), the manifesto renders without stickers, the demo band shows
   place cards. The page is fully testable with no face on the machine, and
   that is the state every test runs in.
 - **The Art. 50 line stays.** The metadata tags survive the re-encode
@@ -336,10 +367,12 @@ checkout body naming an amount or a credit count survives.
 ### 5.3 The comparison table — 480p against 720p
 
 The reference compares plans; this product has one product and two
-qualities, so the table compares those. Rows: credits per tape; the source the
-model renders (640x480 / 960x720 ordered); the delivered file (1080 lines,
-full-bleed in the wide shapes, matted in 4:3); the grain (identical, by
-design); what each pack buys at that quality. The second column is the
+qualities, so the table compares those. Rows: credits per tape (21 / 46, from
+the pricing seam); source detail (480 lines / 720 lines — never the pixel
+raster the model is ordered at, because the supplier does not always deliver
+what is ordered and a printed raster invites "that is not what I got"); the
+delivered file (1080 lines in both, full-bleed in the wide shapes, matted in
+4:3); the grain (identical, by design); what each pack buys at that quality. The second column is the
 recommended one and carries the lime highlight, as the reference's middle
 column does.
 
@@ -358,9 +391,11 @@ The same components as the landing, rendered by the same functions.
 Structure unchanged from 2026-09-04; world changed. Per page:
 
 - **Order form (`/`, signed in).** Four step cards outlined on the ground,
-  step numbers in Anton, the option cards outlined with the chosen one lime
-  (text on it `--on-lime`), the photo and place dropzones a dashed `--line`
-  outline, the Record button lime with the price beside it, the archive strip
+  step numbers in Anton, the option cards outlined. The chosen **text** card
+  (outfit, shape, quality) fills lime with `--on-lime` text; the chosen
+  **photograph** card (a place) keeps its picture and takes a 2px lime outline
+  and a lime badge, because a fill would cover the thing being chosen. The
+  photo and place dropzones a dashed `--line` outline, the Record button lime with the price beside it, the archive strip
   beneath. Same four steps, same order, same controls, same scripts.
 - **Status (`/j/:id`).** Heading in Anton ("The garden, being filmed"), the
   three phase rows as outlined cards, the record light red on the one filming.
@@ -389,8 +424,13 @@ Structure unchanged from 2026-09-04; world changed. Per page:
   read aliases follow on their own; rules that name the readout face for a
   display role are re-pointed to Anton.
 - **No new inline script.** FAQ is `<details>`; the counter is static markup;
-  the hero and demo videos are plain `<video>` elements; the rail reuses
-  `BG_SCRIPT`; the wipe reuses `WIPE_SCRIPT`. `INLINE_SCRIPT_HASHES` follows
+  the rail reuses `BG_SCRIPT`; the wipe reuses `WIPE_SCRIPT`. The hero and
+  demo `<video>` elements ship with a poster and **no `src` and no
+  `autoplay`**, exactly as the place loops do: `BG_SCRIPT` assigns the source
+  and plays them only when motion is permitted and the codec is playable, so
+  no script, reduced motion, save-data, or a missing showcase file each leave
+  the poster standing. `BG_SCRIPT`'s text changes for this and its hash
+  follows. `INLINE_SCRIPT_HASHES` follows
   any script text change automatically, as it does today.
 - **Shared components.** `faq()` and `siteFooter()` are functions in
   `views.mjs` used by both public pages; the fact cards and the pricing cards
@@ -434,6 +474,11 @@ and `test/browser-smoke.test.js`:
   recommended" — becomes three cards, the Standard lifted and recommended.
 - "a pack states its price in the readout face with the credit count directly
   beneath it" — the figure is in Anton; the credit count stays beneath it.
+- "the price sits with the claim, and the hero carries one action" — the hero
+  still carries one action; the price line beneath it is the free-grant
+  sentence, and the pack prices live on the pricing page.
+- `test/deploy-topology.test.js` learns the showcase bind mount: web only,
+  read-only, and no other service mounts it.
 - "the landing list is a rail that snaps, and its menu is a plate" — the rail
   assertions survive in the band; the plate assertion goes with the plate.
 - The dim-tier-needs-a-plate rule from §63C — deleted: the plate exists to
@@ -444,6 +489,9 @@ and `test/browser-smoke.test.js`:
 **Deleted with the rule:**
 - The `--frost-lit` plate assertions for onboarding and the sign-in dialog's
   alias restatement (§60K, §63B) — there is one world.
+- The browser test that the landing's nav links take bone plus a shadow over
+  the loop (§60K) — the nav sits on the lime panel now, and the contrast
+  sweep covers it like any other text.
 
 **Kept unchanged:**
 - "no border in the sheet draws a line of its own colour", "no page emits an
@@ -482,6 +530,9 @@ and `test/browser-smoke.test.js`:
 - **The brand-guidelines PDF** describes the old world. It is untracked and is
   not committed; if a brand document is wanted again it is regenerated from
   the new `DESIGN.md` after the site ships.
+- **`docs/deploy-runbook.md`** gains the showcase step: create
+  `/opt/timestamp/showcase`, copy the files the producer script wrote, set
+  `TIMESTAMP_SHOWCASE_DIR` in `.env.web`, and the compose mount.
 - **`CLAUDE.md`** gets a section recording what shipped, the reference's
   description, the decisions and their reasons, once the work is done.
 
@@ -502,6 +553,8 @@ One commit per step, test-first, every guard sabotage-verified:
 5. Pricing, §5.
 6. **First deploy**, after 4 and 5 together and the showcase files copied to
    the box, so the live site never shows two worlds. Verified from outside.
+   **Between steps 1 and 6 nothing is pulled on the box**: the branch carries
+   the new world with old layouts, and the box tracks this branch.
 7. Order form, status, result.
 8. My videos, account, onboarding, the auth five and the dialog.
 9. Legal pages and the error trio.
