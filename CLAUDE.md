@@ -7,6 +7,25 @@ Warm, grainy, quiet.
 
 ---
 
+## START HERE (2026-09-06) — READ §69 FIRST. THE VISUAL WORLD IS BEING REPLACED, THE SPEC IS APPROVED AND COMMITTED, AND NOTHING OF IT IS BUILT.
+
+**The owner chose a Dribbble reference (acid lime on near-black, Anton-style
+display type, outlined cards) for EVERY page on 2026-09-06, knowing it
+replaces DESIGN.md and the brand PDF.** The design was brainstormed question by
+question and on browser mockups, and is written up in
+**`docs/superpowers/specs/2026-09-06-lime-redesign-design.md`** (`64aaaa7`,
+tightened at `f8ac48c`). **Read that spec before touching any page**: its §8
+names every test that pins the OLD world and what happens to each, and its §10
+is the order of work. **The next step is the implementation plan
+(`superpowers:writing-plans`), then the code, one page at a time.** The three
+tapes for the landing exist and are checked (§69). **DO NOT `git pull` ON THE
+BOX until the landing and pricing are both done** — the tokens commit puts
+every page in the new world with its old layout, and the live site must never
+show two worlds. Everything below this block is the record of the site AS IT
+IS LIVE TODAY, and it stays true until that first deploy.
+
+## (the banner below is 2026-09-05, late, and describes the live site)
+
 ## START HERE (2026-09-05, late) — READ §68, §67, §66 AND §65 FIRST; THEY ARE THE LATEST WORK AND ALL FOUR ARE LIVE. THEN §61 FOR THE REMAINING LIST, THEN §64, §63, §62, §60, §57.
 
 # THE PRODUCT IS LIVE AT https://timestamptapes.com, IT TAKES MONEY, AND EVERY REMAINING ITEM IS THE OWNER'S EXCEPT ONE.
@@ -9068,6 +9087,105 @@ disk, 10 accounts / 7 owners / 1 refund.
   **The Hetzner disk-level one is a console toggle, is still OFF, and is the
   only thing that would carry the three `.env` files** — which the app-level
   backup deliberately excludes (§46F).
+
+### 69. THE VISUAL WORLD IS BEING REPLACED — DESIGNED, SPECIFIED, NOT BUILT (2026-09-06)
+
+**Two commits, both documentation: `64aaaa7` the spec, `f8ac48c` the spec
+tightened after a cold review.** No code changed, no test changed, the suite
+is the 2127 / 2124 / 0 / 3 of §67, and the live site is exactly what §68
+left. **Read `docs/superpowers/specs/2026-09-06-lime-redesign-design.md`
+before doing anything; this section is the record of how it came to exist and
+what the next session does.**
+
+#### A — What the owner asked for, and what he decided
+
+He brought three Dribbble screenshots of a video-editing product called MAXS:
+acid-lime panels on a near-black ground, a heavy condensed all-capitals
+display face, a fine printed speckle on the lime, crumpled-paper testimonial
+cards, outlined rounded cards, FAQ accordions, a column footer under a giant
+wordmark. *"I want it everywhere. It should match our website."* **The images
+are the designer's work and are NOT in the repo**; the spec's §1 describes
+them so it stands alone.
+
+Every decision below was his, taken with the cost stated, and is in the spec
+so nobody re-argues it:
+
+| Question | Decision |
+|---|---|
+| How far does it go? | **Everywhere.** One world, every page, DESIGN.md and the brand PDF superseded |
+| Where does the landing's place demo go? | Into the **full-bleed band** lower down (the reference's slot 4); the hero is the lime poster with a **tape playing** in it |
+| The testimonial band, with no customers? | **Facts** in the three cards, built so real quotes drop in later |
+| Display face (shown on mockups) | **Anton** over Bebas Neue and Barlow Condensed |
+| Texture on the lime (shown) | **Printed speckle**, not flat, not crumpled; crumpled paper only on the three fact cards |
+| The hero's tape (shown) | **Breaks out of the panel** onto the dark ground, the reference's move |
+
+**THE BRAND PDF IS THE OLD WORLD.** `docs/Timestamp-Brand-Guidelines.pdf`
+(3 September, untracked) documents cream paper, no borders, no texture, one
+brick-red accent. It is superseded and stays untracked; do not commit it.
+
+#### B — The three tapes, chosen and checked frame by frame
+
+| Slot | Job | Where | Checked |
+|---|---|---|---|
+| Hero, **16:9** 720p, Times Square | `20260905-221822-a32b2a` | **local** `out/jobs/` (CLI render, $1.50 est., not metered) | in every sampled second, ends on his face, 4 cuts, 30fps raw, no audio |
+| Phone, **9:16** 720p, Times Square | `20260905-125257-3a448b` | on the box | full-bleed portrait, the strongest tape he has |
+| **4:3** 480p, space centre | `20260905-200239-931272` | on the box | 4 MB, one cut at 7.7s, rocket and food cart read as 2004 |
+
+**He said the Times Square tape was 16:9; it is 9:16.** Read the manifest
+before trusting a shape. The hero was rendered from this machine because his
+account had no credits and the accounts list on the box is behind a
+permission the session lacks; the render CLI takes `--aspect=16:9
+--resolution=720p`. **fal delivered exactly the ordered 1280x720 for the first
+wide order** (the 4:3 orders had always come back larger), so the short-edge
+tier rule holds and §66C's open question is answered on the raster side. **The
+delivered hero is 37 MB, at the 20 Mbit/s ceiling** — the landing gets a
+separate web encode (a 2.5 MB crf-30 test encode plays fine), never the
+delivered file. **None of the three goes into the public repo**: spec §4, a
+directory on the box outside git, served under `/showcase/` by allow-list.
+
+#### C — What the next session does, in order
+
+1. **`superpowers:writing-plans` against the spec.** The plan follows §10:
+   fonts and tokens (DESIGN.md rewritten in the same commit), shared
+   components, the showcase route, the landing, pricing, **first deploy**,
+   then the order form / status / result, then the rest, then a second deploy.
+2. **Test-first, one commit per step, every guard sabotage-verified**, exactly
+   as every section above did it. Spec §8 lists by name which tests are
+   rewritten, deleted and added; the palette's contrast floors are re-measured
+   with real values, not asserted.
+3. **The owner looks at each page rendered before the next starts** —
+   `build/preview-*.mjs` plus the `preview` launch config is the pattern
+   (§60C, §65E). He finds what the suite cannot.
+4. **Three things need his word during the build**: a go for the font
+   download when the files and sizes are named (Anton and Inter, SIL OFL);
+   one read of the six FAQ answers; which four frames become the manifesto
+   stickers.
+
+#### D — Things that will bite
+
+- **The brainstorming visual companion works on this machine**, and it is
+  how the three visual decisions were made: `start-server.sh --project-dir
+  <repo> --open --foreground` with `run_in_background: true` on Windows, then
+  read `.superpowers/brainstorm/<session>/state/server-info` for the URL.
+  The mockups from this session persist in
+  `.superpowers/brainstorm/912-1788647405/content/` (gitignored). It serves
+  `.mp4` as `application/octet-stream` and Chrome plays it anyway.
+- **The Browser pane painted this session** (it did not in §62 and §65) but
+  `zoom` regions are unsupported and `tab-2` is pinned; `tabs_create` first.
+- **A `while read` loop, a heredoc, and a `node -e` string all still eat
+  escapes.** Use Write/Edit for anything with a backslash (§31 onward).
+- **The classifier blocks listing accounts on the box** even read-only; it
+  allowed job listings and file pulls. Give the owner the command instead.
+- **Spec §8's list of tests was built from `test/web-static.test.js` and
+  `test/browser-smoke.test.js` by name; `web-api`, `web-legal` and
+  `auth-accounts` also match the old world's vocabulary** and the plan should
+  grep them before the tokens commit rather than discover them red.
+
+#### E — The owner's list, unchanged by this
+
+Everything in §61E still stands: the realism check, the friends' feedback,
+the Hetzner firewall rule and disk backup, the mail records, GitHub
+two-factor, fal's usage page. Plus the metering of `a32b2a` ($1.50 estimated).
 
 ## Not in scope
 
