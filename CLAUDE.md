@@ -7,16 +7,51 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-05) — READ §61 FIRST. IT IS THE CURRENT STATE, THE FOUR DECISIONS TAKEN IN CONVERSATION, AND THE WHOLE REMAINING LIST. THEN §60, THEN §59, §58, §57.
+## START HERE (2026-09-05, evening) — READ §64, §63 AND §62 FIRST; THEY ARE TODAY'S WORK AND THEY ARE ALL LIVE. THEN §61 FOR THE REMAINING LIST, THEN §60, §59, §58, §57.
 
 # THE PRODUCT IS LIVE AT https://timestamptapes.com, IT TAKES MONEY, AND NOTHING LEFT ON THE LIST IS BLOCKED ON CODE.
 
-**LOCAL, `origin/supabase-identity-slice` AND THE BOX ARE IN SYNC**, and the
-last change to the application itself is `5539e9a` (the sign-in dialog, §60K).
-Suite **2120 / 2117 pass / 0 fail / 3 skipped**, all seven `guards.yml` steps
-green, `/api/health` reports `{"ok":true,"degraded":[]}` from outside. **Seven
-places** — the garden, the kitchen table, the living room, Times Square,
-Tokyo, the Amalfi coast and a space centre (§60J).
+**LOCAL, `origin/supabase-identity-slice` AND THE BOX ARE ALL AT `f2cd1cb`.**
+Suite **2126 / 2123 pass / 0 fail / 3 skipped**, all seven `guards.yml` steps
+green, `/api/health` reports `{"ok":true,"degraded":[]}` from outside, verified
+after deploying. **Seven places** — the garden, the kitchen table, the living
+room, Times Square, Tokyo, the Amalfi coast and a space centre (§60J).
+
+**THREE THINGS SHIPPED ON 2026-09-05 AND ALL THREE ARE DEPLOYED:**
+
+- **§62 `977c914` — the landing shows the grade instead of claiming it.** A
+  drag-to-wipe before/after between the hero and the how block: one place
+  photograph, and that same photograph through `buildVideoFilter`. Ported from
+  a 21st.dev React/Tailwind component that was NOT installed and could not be
+  — §62A has the verification, and the answer to "why not just use the file"
+  if it is ever asked again.
+- **§63 `de4be69` — onboarding keeps the landing's world.** The cream now
+  begins at `/`, where the work is. It also fixed the landing's FOOTER, which
+  had been dim text on the photograph since that ground existed.
+- **§64 `f2cd1cb` — a tape is watchable over a domestic connection.** Delivery
+  quality was a MASTERING crf 19 on a look made of GRAIN, which is
+  incompressible: 130 MB for fifteen seconds. Now crf 26, about 20 MB, keeping
+  81% of the grain. **The five tapes already on the box were re-encoded in
+  place** (366 MB → 78 MB), because a config change fixes only future renders.
+
+**THE SINGLE MOST USEFUL THING TO KNOW FROM TODAY, and it is §64C:** every
+assertion in the delivery-contract test passed on a 130 MB tape nobody could
+watch. Frames, duration, LUFS, black floor, chroma, date stamp — all correct,
+on a file that would not stream. **That is §56 recurring: the measurements were
+right and the product was broken.** The new guard measures deliverability.
+
+**PUSHES TO THIS BRANCH RUN NO CI.** PR #1 is MERGED, and both workflows
+trigger only on `pull_request` or a push to `main` — so `977c914`, `de4be69`
+and `f2cd1cb` have **zero CI runs** between them and were verified on Windows
+only, while the box is Linux. §4 and §47 record three Linux-only failures this
+project has already been bitten by. **§57A's open question — whether the box
+and future work should move to `main` — is now also the difference between
+deploying Linux-tested code and deploying code never run on Linux. It is the
+owner's and it is worth closing.**
+
+**THE OWNER HAS A QUESTION HE HAS NOT ASKED YET.** He said so at the end of
+2026-09-05 and intended to clear the session and ask it fresh. If a new session
+opens with a question that seems to assume context, this is why.
 
 **§61 IS THE HANDOFF AND IT IS THE ONLY SECTION THAT IS NOT A RECORD.** It
 carries the marketing plan (gate first, the tape is the advert, then seeding),
@@ -8538,6 +8573,114 @@ wholly dead while every assertion about it is true.**
   `build/preview-onboarding.mjs` renders it standalone with the stylesheet
   inlined and the place photograph copied beside it; serve `build/` with the
   `preview` launch config and open `/build/preview-onboarding.html`.
+
+---
+
+### 64. A TAPE NOBODY COULD WATCH -- EVERY ASSERTION PASSED ON A 130 MB FILE (2026-09-05)
+
+**2126 / 2123 pass / 0 fail / 3 skipped**, unchanged: this added an assertion
+to an existing test rather than a test. **`f2cd1cb`, pushed and DEPLOYED**, and
+the five tapes already on the box were re-encoded in place.
+
+**THE OWNER'S REPORT:** *"when the tape is generated, it is taking a lot lot
+lot of time to load the video."* He was right, and the cause was not where it
+looks.
+
+#### A -- IT WAS NEVER THE SERVER
+
+Checked before touching anything, because these are what usually cause it:
+`sendFile` honours **range requests** (`Accept-Ranges`, 206, 416, ETag, 304);
+`-movflags +faststart` is used; and the `moov` atom sits at **byte 32** of a
+real tape. Playback COULD begin immediately. What it could not do is keep up.
+
+**THE FILE WAS 130 MB FOR FIFTEEN SECONDS -- about 67 Mbit/s.** Netflix streams
+4K at roughly 15. No domestic connection sustains that, so the browser buffers.
+
+**THE CAUSE IS TWO INDIVIDUALLY SENSIBLE SETTINGS COLLIDING.** `encode.crf` was
+**19**, a MASTERING quality -- and this product's look is **GRAIN**. Grain is
+random noise, random noise is incompressible, and x264 faithfully spent
+whatever the quality setting asked for on encoding it. Neither the quality
+setting nor the grain was wrong on its own.
+
+#### B -- MEASURED ON A REAL TAPE BEFORE CHANGING ANYTHING
+
+Frame-to-frame grain energy is the thing being traded away, measured the §54A
+way (`tblend=all_mode=difference` then `signalstats` YAVG, averaged):
+
+| crf | size | bitrate | grain kept |
+|---|---|---|---|
+| **19** (shipped until today) | 76 MB | 42.3 Mbit/s | 100% |
+| **26** (shipped now) | 20 MB | 10.9 | **81%** |
+| 28 | 12 MB | 6.3 | 72% |
+| 30 | 5 MB | 2.3 | 61% |
+
+For scale, §54A's realism-check re-encode -- judged good enough to send to
+strangers as representative -- kept 88%. **The owner looked at all four as 1:1
+crops and chose 26.** At 30 the grain visibly goes smooth and the face starts
+to read waxy, which is the tell §17 spent a session removing.
+
+#### C -- THE GUARD IS BEHAVIOURAL, AND ITS ABSENCE IS THE REAL LESSON
+
+`test/ffmpeg-output.test.js` fails the delivery contract above **20 Mbit/s**,
+measured as BYTES because the duration is pinned at 15.000s two assertions
+above and bytes are what a customer waits for. **It went red at 54.7 MB on the
+synthetic source before the change**, so the fixture is representative.
+
+**EVERY OTHER ASSERTION IN THAT FILE PASSED ON THE 130 MB TAPE.** Frames,
+duration, LUFS, the black floor, the highlights, the composite, the chroma, the
+date stamp -- all correct, on a file nobody could watch. **That is §56 again:
+the measurements were right and the product was broken.** A tape has to be
+DELIVERABLE, and nothing measured that until now.
+
+**IT REACHES EVERYTHING, CHECKED RATHER THAN ASSUMED.** All four `-crf` call
+sites read `cfg.encode.crf`; none hardcodes a value. Every tier and every frame
+shape delivers ~2.07M pixels (§13 holds the short edge), so sizes are
+comparable across the menu.
+
+#### D -- THE FIVE EXISTING TAPES WERE RE-ENCODED IN PLACE
+
+**A config change fixes only FUTURE tapes.** Everything already rendered keeps
+its size, which meant the owner's own tape and every one his friends had made
+would still have loaded slowly. Done on the box with `build/reencode.sh`
+(gitignored; it is twenty lines and the shape matters more than the file):
+**verify-then-replace**, so an original is removed only after its replacement
+is probed and agrees on frames, duration and the Art. 50 disclosure.
+
+```
+20260902-164149-d3ca07   55 MB ->  11 MB
+20260902-180140-cee3af   80 MB ->  20 MB
+20260904-143745-05f041   56 MB ->   6 MB
+20260904-145040-13a623   44 MB ->   3 MB
+20260905-125257-3a448b  130 MB ->  35 MB   <- the one he complained about
+                        366 MB ->  78 MB
+```
+
+Independently re-probed afterwards, not trusted from the script's own report:
+all five **1080x1920, 375 frames, 15.000000s**, disclosure intact, zero
+leftover temp files.
+
+**`-map_metadata 0` IS LOAD-BEARING HERE.** The delivered tape carries the EU
+AI Act Art. 50 disclosure in its `comment` and `description` tags (§38B). A
+re-encode without it silently strips a legal compliance marking, and nothing
+downstream would ever notice. The script asserts the disclosure survived before
+it replaces anything.
+
+#### E -- Things that will bite
+
+- **ffmpeg PICKS ITS MUXER FROM THE OUTPUT EXTENSION.** The first run of the
+  re-encode wrote to `timestamp.mp4.reenc` and every one of the five failed
+  with *"Unable to find a suitable output format"*. It read as a permissions or
+  ffmpeg-missing problem on the box and was neither -- the same command by hand
+  worked instantly. Temp files for ffmpeg keep the real extension:
+  `timestamp.mp4.reenc.mp4`.
+- **DO NOT SUPPRESS ffmpeg's STDERR IN A LOOP.** `2>/dev/null` on that same run
+  turned a one-line diagnosis into three round trips to the box. Capture it and
+  print it on failure.
+- **`-v error` SUPPRESSES `metadata=print`**, so the grain-energy measurement
+  returns nothing and an averaging `awk` divides by zero. §56D already records
+  this and it caught me anyway. Use `-v info`.
+- **A CONFIG CHANGE IS NOT A DEPLOY AND A DEPLOY IS NOT A BACKFILL.** Three
+  separate steps, and stopping after any of them leaves somebody's video slow.
 
 ## Not in scope
 
