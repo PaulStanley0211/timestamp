@@ -105,6 +105,32 @@ test('the output honours the delivery contract exactly', { skip }, async () => {
   // Stated plainly because it is the assertion the whole PAL decision bought:
   assert.equal(Number(video.nb_read_frames), 375);
   assert.equal(Number(video.nb_read_frames) / cfg.fps, 15);
+
+  // A TAPE HAS TO BE WATCHABLE OVER A DOMESTIC CONNECTION, AND THIS IS THE
+  // ONE PROPERTY NOTHING ELSE HERE MEASURES.
+  //
+  // The look is GRAIN, and grain is random noise, which is incompressible --
+  // so x264 spends whatever bitrate the quality setting asks for on encoding
+  // noise faithfully. At the mastering-grade crf 19 this product shipped
+  // until 2026-09-05 that came to 42.3 Mbit/s: a 15-second tape weighing
+  // 76 MB, which the owner reported as "taking a lot of time to load" and
+  // which no ordinary connection can stream. Every other assertion in this
+  // file passed on that file, because frames, duration, luma and chroma are
+  // all perfectly correct in a file nobody can watch.
+  //
+  // The ceiling is deliberately far above the configured setting rather than
+  // snug against it: this renders a synthetic source whose noise floor is not
+  // a real tape's, so a tight bound would be measuring the fixture. What it
+  // catches is the failure that actually happened -- somebody setting the
+  // delivery quality back to mastering grade because higher looked better.
+  // Measured as BYTES rather than probed as a bitrate, for two reasons: the
+  // duration is pinned at exactly 15.000s two assertions above, so size IS
+  // bitrate here; and bytes are the thing the customer actually waits for.
+  // 37.5 MB over 15 seconds is 20 Mbit/s.
+  const bytes = fs.statSync(file).size;
+  assert.ok(bytes < 37_500_000,
+    `the delivered tape is ${(bytes / 1e6).toFixed(1)} MB for 15 seconds `
+    + `(${(bytes * 8 / 15 / 1e6).toFixed(1)} Mbit/s) -- mastering quality on grain, which nobody can stream`);
 });
 
 test('the tape image is centred on a dark surround', { skip }, async () => {
