@@ -7,17 +7,94 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-05, evening) — READ §64, §63 AND §62 FIRST; THEY ARE TODAY'S WORK AND THEY ARE ALL LIVE. THEN §61 FOR THE REMAINING LIST, THEN §60, §59, §58, §57.
+## START HERE (2026-09-05, late) — READ §68, §67, §66 AND §65 FIRST; THEY ARE THE LATEST WORK AND ALL FOUR ARE LIVE. THEN §61 FOR THE REMAINING LIST, THEN §64, §63, §62, §60, §57.
 
-# THE PRODUCT IS LIVE AT https://timestamptapes.com, IT TAKES MONEY, AND NOTHING LEFT ON THE LIST IS BLOCKED ON CODE.
+# THE PRODUCT IS LIVE AT https://timestamptapes.com, IT TAKES MONEY, AND EVERY REMAINING ITEM IS THE OWNER'S EXCEPT ONE.
 
-**LOCAL, `origin/supabase-identity-slice` AND THE BOX ARE ALL AT `f2cd1cb`.**
-Suite **2126 / 2123 pass / 0 fail / 3 skipped**, all seven `guards.yml` steps
-green, `/api/health` reports `{"ok":true,"degraded":[]}` from outside, verified
-after deploying. **Seven places** — the garden, the kitchen table, the living
-room, Times Square, Tokyo, the Amalfi coast and a space centre (§60J).
+**LOCAL, `origin/supabase-identity-slice` AND THE BOX ARE ALL AT `52e7889`.**
+Suite **2127 / 2124 pass / 0 fail / 3 skipped**, all seven `guards.yml` steps
+run verbatim and green, `/api/health` reports `{"ok":true,"degraded":[]}` from
+outside, verified after each of four deploys today. **Seven places** — the
+garden, the kitchen table, the living room, Times Square, Tokyo, the Amalfi
+coast and a space centre (§60J). **Five outfits, and every one of them goes on
+anybody** (§65).
 
-**THREE THINGS SHIPPED ON 2026-09-05 AND ALL THREE ARE DEPLOYED:**
+**THE SUITE COUNT WENT DOWN AND THAT IS CORRECT** — §67 deleted ten tests that
+pinned an expression which no longer exists and added two that measure the
+condition under which it would be wanted again.
+
+## THE FOUR THINGS SHIPPED LATE ON 2026-09-05, ALL DEPLOYED AND VERIFIED
+
+- **§65 `4467db5` — the outfits go on anybody, and step 2 stops being a wall.**
+  Five unisex garments, the summer dress and the cardigan retired, and a plain
+  t-shirt and jeans **checked on load and leading the row**. The outfit radios
+  were the only group on the page with nothing checked while the server
+  required one, so pressing Record without scrolling through step 2 earned a
+  400 after the upload was spent. **A test now fails if any card names a
+  single-gender garment** — the schema has banned the WORDS since it was
+  written, and `sommerkleid` passed every run for a fortnight by never naming
+  one.
+- **§66 `17eca22` — the frame shape is free.** 16:9 and 9:16 cost what 4:3
+  costs. The 4/3 surcharge was right for Seedance's token billing and **Wan has
+  no pixel term**; the cost side of the codebase had asserted that since
+  2026-09-02 and nothing recomputes a customer price when a supplier changes.
+  **21 free credits now buy a tape in the phone shape**, which they could not.
+- **§68 `32f453a` — the nightly backup had never run.** Four nights, silently,
+  with a real payment in the middle. Two faults in one published cron line, and
+  the second (`A && B >> log` binds the redirect to `B` alone) is why the first
+  was invisible. **An absent log reads exactly like a quiet success.**
+- **§67 `52e7889` — the judder scatter is gone, because the judder is.** Wan
+  delivers 30fps so the retiming decimates rather than duplicating. Measured
+  before removing, with a Seedance tape as the control.
+
+**THE SINGLE MOST USEFUL THING TO KNOW FROM TODAY IS §68's SECOND FAULT.** The
+backup did not fail loudly and get missed; it failed into a log file that was
+never created, and nothing distinguishes that from four clean nights. **The
+check is `tail /var/log/timestamp-backup.log` on the box, and a MISSING file is
+the alarm rather than the reassurance.** That is §56 and §64C in a third
+costume: the thing that reports health was not measuring health.
+
+## WHAT IS LEFT, WHOLE (2026-09-05, late)
+
+**THE OWNER'S:**
+
+1. **Send the realism check** — free, ten minutes, packet unsent at
+   `out/realism-check/` since 2026-09-02. Two people who have NOT seen the
+   stills; the message is *"What do you think of this?"* and nothing else.
+2. **Turn on the Hetzner disk backup** — the console toggle, ~€4.76/mo. The
+   app-level backup is fixed and running (§68), but it deliberately excludes
+   the three `.env` files, and the disk backup is the only thing that carries
+   them. His own trigger was "the day before real money moves"; a card was
+   charged on 2026-09-04.
+3. **Check the Hetzner firewall rule exists** (port 22 restricted). Cannot be
+   verified from the box — port 22 answers from his own address whether the
+   rule is there or not.
+4. **Read fal's usage page** for the six 2026-09-02 refusals. The only owner
+   item with a code consequence: `420bf2b` hands credits back on a 4xx on the
+   basis that refusals are not billed. If they ARE, revert it.
+5. **GitHub two-factor and branch protection.**
+
+**AGENT-BUILDABLE: exactly one item, and it is gated on his taste, not on
+code** — put a real finished tape on the landing page, large and muted. The
+premium spec (§3.1) has called it the centrepiece since 2026-08-31 and it was
+blocked on one genuinely good tape; several exist now. **He picks which, because
+the face in it is his or a friend's.**
+
+**THE ADDRESS DECISION IS CLOSED AND MARKETING IS UNBLOCKED (2026-09-05).** He
+chose to publish the home address rather than rent a business one, on the
+stated reasoning that he does not know how long he will be in Germany and a
+twelve-month address contract is a bad trade against that. **Nothing had to be
+built: the Impressum has carried the full entity since the first deploy** —
+checked live, name, street, postcode, city, country, no placeholder, § 5 DDG
+cited. **If he leaves Germany it is one line of `TIMESTAMP_LEGAL_ENTITY` in
+`.env` on the box plus a restart**, and a stale Impressum address is itself a
+defect, so it moves the week he does. §57C's correction still stands and is the
+reason this mattered: **`noindex` was never the gate on marketing — the address
+was.**
+
+## (the record below is 2026-09-05 evening and earlier)
+
+**THREE THINGS SHIPPED EARLIER ON 2026-09-05 AND ALL THREE ARE DEPLOYED:**
 
 - **§62 `977c914` — the landing shows the grade instead of claiming it.** A
   drag-to-wipe before/after between the hero and the how block: one place
@@ -40,14 +117,17 @@ watch. Frames, duration, LUFS, black floor, chroma, date stamp — all correct,
 on a file that would not stream. **That is §56 recurring: the measurements were
 right and the product was broken.** The new guard measures deliverability.
 
-**PUSHES TO THIS BRANCH RUN NO CI.** PR #1 is MERGED, and both workflows
-trigger only on `pull_request` or a push to `main` — so `977c914`, `de4be69`
-and `f2cd1cb` have **zero CI runs** between them and were verified on Windows
-only, while the box is Linux. §4 and §47 record three Linux-only failures this
-project has already been bitten by. **§57A's open question — whether the box
-and future work should move to `main` — is now also the difference between
-deploying Linux-tested code and deploying code never run on Linux. It is the
-owner's and it is worth closing.**
+**PUSHES TO THIS BRANCH RUN NO CI, AND THE COUNT KEEPS GROWING.** PR #1 is
+MERGED, and both workflows trigger only on `pull_request` or a push to `main` —
+so `977c914`, `de4be69`, `f2cd1cb`, `4467db5`, `123f53a`, `17eca22`, `32f453a`
+and `52e7889` have **zero CI runs between them**, and every one was verified on
+Windows only while the box is Linux. §4 and §47 record three Linux-only
+failures this project has already been bitten by, and §59C records one test
+(`test/ops-backup.test.js`'s mode assertion) whose first real run on Linux has
+still never happened. **§57A's open question — whether the box and future work
+should move to `main` — is now also the difference between deploying
+Linux-tested code and deploying code never run on Linux. It is the owner's, it
+has been open since 2026-09-03, and every deploy makes it worth more.**
 
 **THE OWNER HAS A QUESTION HE HAS NOT ASKED YET.** He said so at the end of
 2026-09-05 and intended to clear the session and ask it fresh. If a new session
@@ -8933,6 +9013,61 @@ should find the previous answer rather than re-derive it. §44B is the part wort
 re-reading if that day comes: the rates must be SLOW, and the nudge must be zero
 at N=0 and never negative, and both were established by measurement after being
 reasoned wrong.
+
+---
+
+### 68. THE NIGHTLY BACKUP HAD NEVER RUN (2026-09-05, between §66 and §67)
+
+**Found by checking rather than by an alarm, because there was no alarm to go
+off.** The owner asked whether the Hetzner backup was already on; checking the
+box turned up something worse than "not yet".
+
+**THE CRON FIRED EVERY NIGHT SINCE 2026-09-01 AND PRODUCED NOTHING EVERY
+TIME** — 2nd, 3rd, 4th, 5th, all four visible in syslog. The only archive on
+disk was the manual one from the day it was installed. **A real card was
+charged on 2026-09-04, in the middle of that window.**
+
+#### A — Two faults, and the second is why the first was invisible
+
+1. **`install -d -o 1000 -g 1000` fails `invalid user: '1000'`.** GNU `install`
+   resolves `-o` through the passwd database, and this Ubuntu 26.04 image has no
+   user with uid 1000 — confirmed with `getent`. **`chown` takes a bare numeric
+   id and does not consult passwd**, which is why ownership belongs there. The
+   tell was visible all along and unread: `ls -l` printed the owner as `1000`
+   rather than a name.
+2. **`A && B >> log 2>&1` BINDS THE REDIRECT TO `B` ALONE.** The chain died at
+   `A`, so its stderr went to cron's mail — discarded, no MTA installed — and
+   `/var/log/timestamp-backup.log` **was never created at all.** An absent log
+   reads exactly like a quiet success. The whole chain is braced now, so a
+   failure in the setup lands in the log like any other.
+
+**THIS IS THE SECOND TIME THIS ONE PUBLISHED LINE HAS FAILED SILENTLY.** §54E
+fixed an `EACCES` in it by making the job create its own destination; this is
+the same line failing one step earlier, in the code that fix added.
+`test/ops-backup.test.js` now asserts both properties **against the runbook
+text**, because the runbook is what the next box gets pasted into it.
+
+#### B — Fixed, and proved rather than assumed
+
+Crontab repaired on the box, the destination hardened to 0700, and **the
+repaired line run in a cron-like environment** (`env -i PATH=/usr/bin:/bin`)
+before anything was written up: exit 0, log file created, second archive on
+disk, 10 accounts / 7 owners / 1 refund.
+
+#### C — Things that will bite
+
+- **`ls -l` PRINTING A NUMERIC OWNER MEANS NO SUCH USER EXISTS.** It is the
+  cheapest possible signal and it was on screen for four days.
+- **AN ABSENT LOG IS NOT A QUIET SUCCESS.** `tail /var/log/timestamp-backup.log`
+  is the check; a missing file is the alarm, not the reassurance.
+- **`set -e` PLUS `grep -v` IS A TRAP.** `crontab -l | grep -v X > f` exits 1
+  when it filters everything out, which is the normal case for a one-job
+  crontab, and killed the repair script silently. `|| true`.
+- **The two backups are different things and are easy to confuse.** The
+  app-level one (accounts, owners, refunds) is this cron and is now working.
+  **The Hetzner disk-level one is a console toggle, is still OFF, and is the
+  only thing that would carry the three `.env` files** — which the app-level
+  backup deliberately excludes (§46F).
 
 ## Not in scope
 
