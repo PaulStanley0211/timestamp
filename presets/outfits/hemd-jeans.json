@@ -1,9 +1,9 @@
 {
-  "_comment": "The neutral option, and the one most likely to be picked by someone who does not want to think about wardrobe. Stonewashed and straight-leg are the two words doing the period work; without them a model returns a modern slim jean every time.",
+  "_comment": "Stonewashed and straight-leg are the two words doing the period work; without them a model returns a modern slim jean every time. REWORDED 2026-09-05: the shirt is worn OPEN OVER A T-SHIRT rather than 'sleeves rolled to the elbow, tucked into' the jeans. Tucked-in-with-a-belt is the detail that made this read as a man's outfit -- the garment was never gendered, the way of wearing it was -- and open over a tee is both plainer and closer to how everybody actually wore a flannel shirt in 2003. The neutral role this preset used to hold passed to tshirt-jeans, which is the default now; this one is the same idea with one more layer.",
   "id": "hemd-jeans",
   "label": "Checked shirt and jeans",
   "climate": ["mild", "warm", "indoor"],
-  "wardrobe": "a checked flannel shirt with the sleeves rolled to the elbow, tucked into stonewashed straight-leg jeans with a plain brown leather belt",
+  "wardrobe": "a checked flannel shirt worn open over a plain t-shirt, with stonewashed straight-leg jeans",
   "negatives": [
     "skinny jeans",
     "ripped denim",

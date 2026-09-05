@@ -21,7 +21,7 @@
  * Usage:
  *   npm run render -- --photo=assets/test-photos/face.jpg --place=schrebergarten-august --outfit=trainingsjacke --consent
  *   npm run render -- --photo=face.jpg --place="my grandmother's kitchen" --outfit="an old fleece" --consent
- *   npm run render -- --photo=face.jpg --place-photo=garden.jpg --outfit=strickjacke --consent
+ *   npm run render -- --photo=face.jpg --place-photo=garden.jpg --outfit=fleecepulli --consent
  *   npm run render -- --resume=20260820-144501-a3f19c --still=2
  *   npm run render -- --photo=... --place=... --outfit=... --dry-run
  */

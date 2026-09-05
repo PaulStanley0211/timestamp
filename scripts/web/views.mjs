@@ -87,6 +87,7 @@ const WORDMARK_SVG = fs
  * blank the tab icon.
  */
 import { placeSlug, outfitSlug, qualitySlug, aspectSlug } from './static.mjs';
+import { DEFAULT_OUTFIT_ID } from '../catalog/catalog.mjs';
 
 // ---------------------------------------------------------------------------
 // escaping
@@ -1277,9 +1278,34 @@ export function homePage({
   const chosen = offered.some((r) => r.id === resolution) ? resolution : (offered[0]?.id ?? null);
   // The radios, hoisted out of the form. `form="tape"` is what puts them back
   // into the submission; the CSS needs them here.
+  // STEP 2 OPENS ON AN OUTFIT (2026-09-05). Until today this group was the only
+  // one on the page with nothing checked, while the server required an outfit --
+  // so pressing Record without scrolling through step 2 earned a 400, after the
+  // upload was already spent, over the one choice that changes neither the price
+  // nor the length of the tape.
+  //
+  // NAMED, WITH A FALLBACK TO THE FIRST CARD. `DEFAULT_OUTFIT_ID` is the plain
+  // t-shirt and jeans; if it ever leaves the menu the first outfit takes the
+  // job, because SOMETHING has to be checked or this reverts to the defect
+  // above. What must never happen is two, which is why the flag is computed per
+  // card from one resolved id rather than written into a preset file.
+  const defaultOutfit = outfits.some((o) => o.id === DEFAULT_OUTFIT_ID)
+    ? DEFAULT_OUTFIT_ID
+    : (outfits[0]?.id ?? null);
+  // AND IT LEADS THE STEP. The catalog sorts by id, which put the chosen card
+  // fourth of five and into the second row of the grid -- four cards to read
+  // before the one already ticked. Section 43 settled this when the own-place
+  // card went to the front of the place rail: what leads a step is what that
+  // step is telling you, and step 2 is telling you that you need not choose.
+  // The radios are reordered with the cards, because the cards are labels and
+  // the radios are what a keyboard actually walks.
+  const orderedOutfits = [
+    ...outfits.filter((o) => o.id === defaultOutfit),
+    ...outfits.filter((o) => o.id !== defaultOutfit),
+  ];
   const hooks = [
-    ...outfits.map((o) => (
-      `<input class="statehook" type="radio" form="tape" name="outfit" id="${h(outfitSlug(o.id))}" value="${h(o.id)}">`
+    ...orderedOutfits.map((o) => (
+      `<input class="statehook" type="radio" form="tape" name="outfit" id="${h(outfitSlug(o.id))}" value="${h(o.id)}"${o.id === defaultOutfit ? ' checked' : ''}>`
     )),
     ...places.map((p) => (
       `<input class="statehook" type="radio" form="tape" name="place" id="${h(placeSlug(p.id))}" value="${h(p.id)}">`
@@ -1332,7 +1358,7 @@ export function homePage({
   // ground does not cost a single interaction.
   const preBody = hooks;
 
-  const lookCards = outfits.map((o) => `
+  const lookCards = orderedOutfits.map((o) => `
     <label class="lookcard lookcard--${h(outfitSlug(o.id))}" for="${h(outfitSlug(o.id))}">
       <span class="tick" aria-hidden="true"></span>
       <span class="name">${h(o.label)}</span>
@@ -1513,18 +1539,50 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
     </div>
   </section>
 
-  <section class="panel panel--choice">
+  <section class="panel panel--choice" id="look">
     ${stepHead(2, 'The look', 'Only what is on the body — the place carries everything else.')}
     <div class="looks">${lookCards}</div>
-    <details class="aside">
-      <summary>Or describe what you are wearing</summary>
-      <p class="hint">Used only when no card above is chosen.</p>
+    ${/* THE BOX IS OUT OF ITS DISCLOSURE (2026-09-05), and that is what makes a
+         five-card menu honest rather than narrow.
+
+         The cards are five garments that go on anybody -- no dress, no skirt,
+         nothing cut for one gender -- so that nobody is ever asked which list
+         they belong in and nobody opens this step to find a single option
+         written for them. `test/catalog.test.js` pins that as a rule rather
+         than a preference. The cost of that decision is that a garment which IS
+         gendered is no longer a card, and the whole answer to that cost is this
+         box: it takes any garment at all, a sundress and a sari and a suit
+         included. Behind a <summary> it could not do that job. Section 43 fixed
+         the identical shape one step down and wrote the rule -- a signpost to
+         the back of the room is still the back of the room.
+
+         AND THE TEXT BEATS THE CARD, WHICH IS THE OPPOSITE OF STEP 3. Worth
+         stating because the asymmetry looks like an oversight and is not. On
+         step 3 a card can be un-chosen: `pl-own` exists, it is checked on load,
+         and it is the way out of a radio group, so there the card can safely
+         win. Step 2 now opens with a card already selected and has no such
+         escape hatch -- a radio group cannot be cleared without JavaScript. So
+         if the card won here, filling this box would do nothing at all, which
+         is section 49's dead control exactly: a label pointing at an
+         already-selected radio, passing every markup test ever written. Typing
+         is therefore read as the only available way to say "none of these". */''}
+    <div class="aside">
+      <p class="hint">Or describe what you are wearing — anything you type here is
+      used instead of the card above.</p>
       <input type="text" name="outfitText" maxlength="200" autocomplete="off" spellcheck="false"
-             placeholder="a green anorak" value="${h(values.outfit)}">
-    </details>
+             aria-label="Describe what you are wearing"
+             ${/* THE PLACEHOLDER NAMES SOMETHING THAT IS NOT A CARD, on purpose.
+                  It read "a green anorak" until 2026-09-05, which since the
+                  padded jacket exists was a hint to type a garment already on
+                  the menu -- it demonstrated the box without demonstrating the
+                  point of it. A dress is the example that carries the whole
+                  design: the cards are five garments that go on anybody, and
+                  this is where everything else lives. */''}
+             placeholder="a cotton summer dress" value="${h(values.outfit)}">
+    </div>
   </section>
 
-  <section class="panel panel--choice">
+  <section class="panel panel--choice" id="place">
     ${stepHead(3, 'The place', 'Your own place beats any description of one. Start there.')}
 
     ${/* STEP 3 LEADS WITH YOUR OWN PLACE (2026-08-30).

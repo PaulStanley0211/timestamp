@@ -388,7 +388,7 @@ function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a 
 // the home page -- the redesign
 // ---------------------------------------------------------------------------
 
-test('GET / renders the fourteen presets as cards, from the preset files', async () => {
+test('GET / renders the twelve presets as cards, from the preset files', async () => {
   await withServer(async ({ base, cookieA, app }) => {
     const res = await get(base, '/', cookieA);
     assert.equal(res.status, 200);
@@ -409,8 +409,13 @@ test('GET / renders the fourteen presets as cards, from the preset files', async
       'The garden, in summer', 'Times Square, at night', 'Tokyo, at night',
       'The Amalfi coast, afternoon', 'The kitchen table',
       'The space centre', 'The living room, evening',
-      'Half-zip fleece', 'Checked shirt and jeans', 'Cotton summer dress',
-      'Knitted cardigan', 'Tracksuit jacket', 'Padded winter jacket',
+      // THE MENU BECAME FIVE UNISEX GARMENTS 2026-09-05, the owner's call:
+      // the outfits "should combine both genders". The summer dress was the
+      // only single-gender card and the cardigan the fussiest, and both came
+      // off; a plain t-shirt and jeans came on as the default step 2 opens
+      // with. Anyone wanting a dress still types one into the box beneath.
+      'T-shirt and jeans', 'Checked shirt and jeans', 'Zip-up fleece',
+      'Tracksuit', 'Padded jacket',
     ]) {
       assert.ok(html.includes(label), `${label} is missing from the page`);
     }
@@ -418,7 +423,7 @@ test('GET / renders the fourteen presets as cards, from the preset files', async
     // Rendered FROM the catalog, not from a second copy of the menu: every id
     // the server loaded has a radio, and the count matches.
     assert.equal(app.cards.places.length, 7);
-    assert.equal(app.cards.outfits.length, 6);
+    assert.equal(app.cards.outfits.length, 5);
     for (const p of app.cards.places) {
       assert.ok(html.includes(`id="pl-${p.id}"`), `no card for place ${p.id}`);
     }
@@ -537,6 +542,72 @@ test('the page opens on "your own place", so the presets are examples rather tha
       assert.doesNotMatch(html, new RegExp(`id="pl-${p.id}"[^>]*\\bchecked\\b`),
         `preset ${p.id} is checked on load`);
     }
+  });
+});
+
+test('step 2 opens on a simple outfit, so nobody is stopped at the look', async () => {
+  // THE OUTFIT WAS THE ONE REQUIRED CHOICE WITH NO DEFAULT (fixed 2026-09-05,
+  // section 65). Place, resolution and frame have all been checked on load for
+  // months; the outfit radios were the only group with nothing selected, while
+  // `cleanText(..., 'outfit', { required: true })` refused a post without one.
+  // So a person who uploaded a photo, picked a place and pressed Record without
+  // scrolling through step 2 got a 400 -- after spending the upload, on the
+  // choice that changes neither the price nor the length of the tape.
+  await withServer(async ({ base, cookieA, app }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+
+    assert.match(html, /id="of-tshirt-jeans"[^>]*\bchecked\b/,
+      'step 2 opens with nothing chosen, so an order that skips it is refused');
+
+    // Exactly one, for the reason the place group already documents: a second
+    // `checked` in a radio group makes the default whichever the browser
+    // happened to parse last.
+    for (const o of app.cards.outfits.filter((o) => o.id !== 'tshirt-jeans')) {
+      assert.doesNotMatch(html, new RegExp(`id="of-${o.id}"[^>]*\\bchecked\\b`),
+        `outfit ${o.id} is also checked on load`);
+    }
+  });
+});
+
+test('the outfit the page opens on is the first card, not the fourth', async () => {
+  // Presets are keyed by id and the catalog sorts by id, so the default landed
+  // fourth of five -- fleecepulli, hemd-jeans, trainingsjacke, tshirt-jeans --
+  // and the one card already chosen sat in the second row of the grid, after
+  // four the eye reads first. Found by looking at the rendered page; every
+  // assertion about the default passed while it was buried there.
+  //
+  // Section 43 settled the principle one step down when the own-place card
+  // went to the front of the place rail: what leads a step is what that step
+  // is telling you to do, and here the instruction is "you need not choose".
+  //
+  // THE TAB ORDER MOVES WITH IT. The visible cards are labels; the focusable
+  // controls are the hoisted radios, in their own order. Reordering only the
+  // cards would leave somebody tabbing through step 2 in an order that does
+  // not match what they are reading.
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    const cards = [...html.matchAll(/class="lookcard lookcard--of-([a-z0-9-]+)"/g)].map((m) => m[1]);
+    const hooks = [...html.matchAll(/name="outfit" id="of-([a-z0-9-]+)"/g)].map((m) => m[1]);
+    assert.equal(cards[0], 'tshirt-jeans', 'the chosen outfit is not the first card in the step');
+    assert.equal(hooks[0], 'tshirt-jeans', 'the cards were reordered and the tab order was not');
+    assert.deepEqual(cards, hooks, 'the reading order and the tab order disagree');
+    assert.equal(cards.length, 5);
+  });
+});
+
+test('the "describe it yourself" box is visible, not folded into a disclosure', async () => {
+  // Section 43 fixed exactly this shape on the place step and named the rule:
+  // a signpost to the back of the room is still the back of the room. The
+  // outfit escape hatch had the same defect -- a collapsed <details> at the
+  // bottom of the panel -- and promoting it is what makes a five-card unisex
+  // menu honest. Anybody whose garment is not on the cards, which after
+  // 2026-09-05 includes anyone who wants a dress, has to be able to SEE that
+  // they can ask for it.
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    const step2 = html.slice(html.indexOf('id="look"'), html.indexOf('id="place"'));
+    assert.ok(step2.includes('name="outfitText"'), 'the free-text box left step 2 entirely');
+    assert.ok(!step2.includes('<details'), 'the free-text box is still folded away behind a summary');
   });
 });
 
@@ -1350,6 +1421,36 @@ test('POST /api/jobs is 201 immediately, and the bytes land intact', async () =>
   });
 });
 
+test('typing an outfit beats the card, because the card can no longer be un-chosen', async () => {
+  // THE CONTROL THE DEFAULT WOULD OTHERWISE HAVE KILLED (2026-09-05).
+  //
+  // Step 2 now opens with a card already selected, and a radio group cannot be
+  // cleared without JavaScript -- so a browser posts BOTH `outfit` and, if the
+  // person typed one, `outfitText`, on every single order. Under the old
+  // `firstFilled(fields.outfit, fields.outfitText)` the card would win every
+  // time and the free-text box would do nothing at all, for anybody, ever.
+  // That is section 49's dead own-place card exactly: a live-looking control
+  // pointing at an already-selected radio, passing every markup assertion in
+  // the suite. It matters more here than it did there, because after the menu
+  // became five unisex garments this box is the ONLY way to order a dress.
+  //
+  // So typing is read as the one available way to say "none of these".
+  await withServer(async ({ base, root, cookieA }) => {
+    const res = await post(base, '/api/jobs', multipart([
+      { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
+      { name: 'place', body: 'schrebergarten-august' },
+      // Exactly what a browser sends: the default card, plus a typed garment.
+      { name: 'outfit', body: 'tshirt-jeans' },
+      { name: 'outfitText', body: 'a long floral summer dress' },
+      { name: 'consent', body: 'yes' },
+    ]), cookieA);
+    assert.equal(res.status, 201);
+    const job = loadJob({ root, jobId: (await res.json()).jobId });
+    assert.equal(job.input.outfit.kind, 'text');
+    assert.equal(job.input.outfit.value, 'a long floral summer dress');
+  });
+});
+
 test('a card posts its preset id and the describe-it box posts free text', async () => {
   await withServer(async ({ base, root, cookieA }) => {
     const free = await post(base, '/api/jobs', multipart([
@@ -1714,6 +1815,23 @@ test('a tape made in a retired place keeps its old label on the shelf, not its i
     assert.ok(html.includes('<span class="what">The stairwell</span>'), 'the retired stairwell is not captioned by its old label');
     assert.ok(html.includes('<span class="what">The beach, out of season</span>'), 'the retired beach is not captioned by its old label');
     assert.ok(!html.includes('<span class="what">autobahn-raststaette</span>'), 'the id leaked onto the shelf as a caption');
+  });
+});
+
+test('a tape made in a retired outfit keeps its old label, not its id', async () => {
+  // The same courtesy places got on 2026-09-04, owed to outfits from the day
+  // the menu became five unisex garments (2026-09-05, section 65). The summer
+  // dress and the cardigan came off the cards; `labelsOf` translated the outfit
+  // id through the loaded catalog and nothing else, so a tape somebody ordered
+  // in the dress would have said `sommerkleid` on its own status page.
+  //
+  // THE STATUS PAGE AND NOT THE SHELF, because the shelf caption is the place
+  // -- the outfit appears in the order block, under "wearing".
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA, outfit: 'sommerkleid' });
+    const html = await (await get(base, `/j/${job.jobId}`, cookieA)).text();
+    assert.ok(html.includes('Cotton summer dress'), 'the retired dress is not captioned by its old label');
+    assert.ok(!html.includes('sommerkleid'), 'the id leaked onto the page as a caption');
   });
 });
 

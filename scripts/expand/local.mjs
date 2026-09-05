@@ -310,15 +310,28 @@ export const PLACE_AFFINITY = Object.freeze({
   ]),
 });
 
-/** Same idea for the six outfits. `suit`, `wedding` and `tie` are deliberately
- *  absent: nothing in the menu is formalwear, and pointing a suit at the
- *  cardigan would inherit "modern knitwear" as a negative and call it a match. */
+/** Same idea for the five outfits. `suit`, `wedding` and `tie` are deliberately
+ *  absent: nothing in the menu is formalwear, and pointing a suit at the fleece
+ *  would inherit "modern sportswear branding" as a negative and call it a match.
+ *
+ *  THE DRESS AND CARDIGAN WORDS ARE GONE WITH THEIR PRESETS (2026-09-05). What
+ *  a retired entry cost is worth stating, because it is the price of the unisex
+ *  menu and it is small: a typed "a summer dress" no longer finds a skeleton to
+ *  borrow scene-appropriate negatives from, so it expands against the neutral
+ *  fallback instead. The garment itself still reaches the model verbatim -- this
+ *  table decides which preset's DRESSING a typed outfit inherits, never whether
+ *  it is allowed. Nobody is refused a dress; it simply arrives undressed by a
+ *  neighbour, which is the correct outcome when it has no neighbour.
+ *
+ *  `dress`, `skirt` and `blouse` are therefore NOT re-pointed at a surviving
+ *  preset. Aiming them at the t-shirt would hand a sundress "skinny jeans" and
+ *  "ripped denim" as negatives and call that a match -- the same mistake the
+ *  suit paragraph above already refuses. */
 export const OUTFIT_AFFINITY = Object.freeze({
-  fleecepulli: Object.freeze(['fleece', 'hoodie', 'hoody', 'sweatshirt', 'jumper', 'pullover', 'sweater', 'half-zip']),
+  fleecepulli: Object.freeze(['fleece', 'hoodie', 'hoody', 'sweatshirt', 'jumper', 'pullover', 'sweater', 'half-zip', 'knit', 'knitted', 'wool', 'cardigan']),
   trainingsjacke: Object.freeze(['tracksuit', 'trackie', 'sports top', 'zip-up', 'bomber', 'windbreaker', 'football shirt']),
-  'hemd-jeans': Object.freeze(['jeans', 'denim', 'checked shirt', 'flannel', 'trousers', 'chinos', 'shirt']),
-  sommerkleid: Object.freeze(['sundress', 'summer dress', 'dress', 'skirt', 'floral', 'linen']),
-  strickjacke: Object.freeze(['cardigan', 'knit', 'knitted', 'wool', 'blouse', 'waistcoat', 'blazer']),
+  'hemd-jeans': Object.freeze(['checked shirt', 'flannel', 'shirt', 'overshirt']),
+  'tshirt-jeans': Object.freeze(['t-shirt', 'tshirt', 'tee', 'jeans', 'denim', 'trousers', 'chinos', 'vest top']),
   winterjacke: Object.freeze(['coat', 'parka', 'anorak', 'padded jacket', 'puffer', 'quilted', 'scarf', 'gloves', 'snow boots']),
 });
 

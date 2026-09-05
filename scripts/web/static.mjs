@@ -1613,10 +1613,13 @@ body {
 
 /* --- the free-text escape hatch ---------------------------------------- */
 
+/* NO SUMMARY RULES HERE ANY MORE (2026-09-05). The outfit box was the last
+   disclosure on the page and it is a plain block now, so the three
+   'aside summary' rules that used to sit here matched nothing at all. Deleted
+   rather than left: a rule that matches nothing is how dead markup survives a
+   review, which is the reasoning section 30 used when it took the 4:3 veil's
+   markup and its rule out together. */
 .aside { margin-top: 1.1rem; }
-.aside summary { color: var(--faint); font-size: var(--t-1); cursor: pointer; }
-.aside summary:hover { color: var(--accent); }
-.aside[open] summary { margin-bottom: 0.7rem; }
 
 input[type="text"], input[type="email"], input[type="password"], select {
   width: 100%;

@@ -37,7 +37,7 @@ for (const place of catalog.places.values()) {
 }
 
 const place = getPlace(catalog, 'schrebergarten-august');
-const outfit = getOutfit(catalog, 'sommerkleid');
+const outfit = getOutfit(catalog, 'tshirt-jeans');
 
 const occurrences = (haystack, needle) => haystack.split(needle).length - 1;
 

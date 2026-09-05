@@ -73,7 +73,7 @@ import {
   JobError,
 } from '../render/job.mjs';
 import { purgeJobMedia } from '../render/purge.mjs';
-import { loadCatalog, RETIRED_PLACE_LABELS } from '../catalog/catalog.mjs';
+import { loadCatalog, RETIRED_OUTFIT_LABELS, RETIRED_PLACE_LABELS } from '../catalog/catalog.mjs';
 import { CONSENT_TEXT, recordConsent } from '../safety/consent.mjs';
 import { LIMITS } from '../intake/photo.mjs';
 import { runFfprobe } from '../ffmpeg/run.mjs';
@@ -1546,14 +1546,15 @@ export function createServer({
   /** A preset id is not a label. The manifest stores the id, which is what the
    *  pipeline needs; the page shows what the person actually picked. A place
    *  that has since left the menu keeps the label it had when the tape was
-   *  made (RETIRED_PLACE_LABELS). Free text has no entry and falls through as
+   *  made (RETIRED_PLACE_LABELS), and so does an outfit
+   *  (RETIRED_OUTFIT_LABELS). Free text has no entry and falls through as
    *  itself. */
   function labelsOf(job) {
     const place = job.input?.place?.value ?? null;
     const outfit = job.input?.outfit?.value ?? null;
     return {
       place: cards.places.find((p) => p.id === place)?.label ?? RETIRED_PLACE_LABELS[place] ?? place,
-      outfit: cards.outfits.find((o) => o.id === outfit)?.label ?? outfit,
+      outfit: cards.outfits.find((o) => o.id === outfit)?.label ?? RETIRED_OUTFIT_LABELS[outfit] ?? outfit,
     };
   }
 
@@ -3923,7 +3924,20 @@ export function createServer({
         const placeText = cleanText(firstFilled(fields.place, fields.placeText), 'place', {
           required: placePhoto === null,
         });
-        const outfitText = cleanText(firstFilled(fields.outfit, fields.outfitText), 'outfit', { required: true });
+        // THE TYPED GARMENT WINS, AND IT IS THE OPPOSITE OF `place` ABOVE.
+        // The asymmetry is deliberate and it follows from step 2 having a
+        // default (2026-09-05). A radio group cannot be cleared without
+        // JavaScript, so once a card is checked on load the browser posts one
+        // on EVERY order; read the card first and `outfitText` could never win
+        // for anybody, which is a live-looking control that does nothing --
+        // section 49's dead own-place card, one panel up. Step 3 does not have
+        // this problem because `pl-own` is a real way to un-choose a place.
+        //
+        // It also carries more weight than it used to: since the menu became
+        // five garments that go on anybody, this box is the only way to order
+        // one that does not, a dress included. Typing is the single available
+        // way to say "none of these", so it is read as meaning exactly that.
+        const outfitText = cleanText(firstFilled(fields.outfitText, fields.outfit), 'outfit', { required: true });
         refuseStillCount(fields.stillCount);
 
         const placeId = placeText ? presetLookup.place.get(placeText.toLowerCase()) ?? null : null;

@@ -412,7 +412,7 @@ test('--dry-run names every call and its price and never touches the provider', 
     provider,
     input: {
       place: { kind: 'preset', value: 'amalfi-afternoon' },
-      outfit: { kind: 'preset', value: 'sommerkleid' },
+      outfit: { kind: 'preset', value: 'tshirt-jeans' },
       stillCount: 3,
     },
     deps: makeDeps(),
@@ -665,7 +665,7 @@ test('consent missing from the manifest is refused before anything is generated'
     input: {
       photo: { path: 'input/photo.jpg' },
       place: { kind: 'preset', value: 'amalfi-afternoon' },
-      outfit: { kind: 'preset', value: 'sommerkleid' },
+      outfit: { kind: 'preset', value: 'tshirt-jeans' },
       stillCount: 1,
     },
   });
@@ -754,7 +754,7 @@ test('a job staged by the web app runs with no --photo, extension or not', async
       input: {
         photo: { path: `input/${name}` },
         place: { kind: 'preset', value: 'amalfi-afternoon' },
-        outfit: { kind: 'preset', value: 'sommerkleid' },
+        outfit: { kind: 'preset', value: 'tshirt-jeans' },
         stillCount: 1,
         consent: CONSENT,
       },
@@ -923,7 +923,7 @@ test('the arc on the job input reaches the frozen reference prompt, and the dry 
     provider,
     input: {
       place: { kind: 'preset', value: 'amalfi-afternoon' },
-      outfit: { kind: 'preset', value: 'sommerkleid' },
+      outfit: { kind: 'preset', value: 'tshirt-jeans' },
       direct: true,
       arc: 'three',
     },

@@ -1,0 +1,15 @@
+{
+  "_comment": "THE DEFAULT, and the only preset in the menu whose job is to be unremarkable. It is what step 2 arrives already showing, so a person who does not care about wardrobe never has to touch that step at all -- before 2026-09-05 the outfit radios were the one group on the page with nothing checked while the server required one, so skipping the step earned a 400 after the upload was already spent. Written to be the plainest garment two people of any gender both own: no cut, no fit, no colour that belongs to one of them. THE PERIOD IS CARRIED BY TWO WORDS AND THEY ARE LOAD-BEARING -- 'stonewashed' and 'straight-leg'. Drop either and the model returns a modern slim jean every time, which is the same finding hemd-jeans records; this preset is deliberately simpler than that one but it is NOT vaguer, because section 30 measured that this model honours what is PRESENT and ignores anything counted or qualified. Shorter prose, same number of era cues.",
+  "id": "tshirt-jeans",
+  "label": "T-shirt and jeans",
+  "climate": ["warm", "mild", "indoor"],
+  "wardrobe": "a plain cotton t-shirt with a plain crew neck, worn loose over stonewashed straight-leg jeans with a plain brown leather belt",
+  "negatives": [
+    "skinny jeans",
+    "ripped denim",
+    "printed graphic",
+    "designer branding",
+    "fitted cut",
+    "cropped length"
+  ]
+}

@@ -190,9 +190,12 @@ const FOCUS_MENU = Object.freeze({
     { id: 'schrebergarten-august', label: 'Schrebergarten', timeOfDay: 'August afternoon' },
     { id: 'ostsee-strand', label: 'Ostsee', timeOfDay: 'Late morning' },
   ],
+  // The ids are real ones, because `homePage` resolves the default outfit by
+  // id -- a fake menu of invented ids would exercise only the fallback and
+  // never the path every visitor actually gets.
   outfits: [
-    { id: 'trainingsjacke', label: 'Trainingsjacke', wardrobe: 'a zipped track top, collar up' },
-    { id: 'sommerkleid', label: 'Sommerkleid', wardrobe: 'a cotton summer dress' },
+    { id: 'tshirt-jeans', label: 'T-shirt and jeans', wardrobe: 'a plain cotton t-shirt and jeans' },
+    { id: 'trainingsjacke', label: 'Tracksuit', wardrobe: 'a zipped track top, collar up' },
   ],
   resolutions: [
     { id: '480p', width: 640, height: 480, available: true },
@@ -1749,4 +1752,34 @@ test('the onboarding page takes the landing world when it is given a ground, and
   assert.ok(!/is-landing/.test(noGround), 'with no ground the page still claims the dark palette');
   assert.ok(!/class="bgs"/.test(noGround), 'with no ground the page still emits empty background layers');
   assert.match(noGround, /Agree and continue/, 'the consent form is gone from the degraded page');
+});
+
+test('an outfit is always checked on load, even if the named default leaves the menu', () => {
+  // THE FALLBACK EXISTS SO THIS CANNOT SILENTLY REGRESS (2026-09-05).
+  //
+  // `DEFAULT_OUTFIT_ID` names a preset file, and a preset file is one `git rm`
+  // away from not existing. If the id ever misses, the honest failure is for
+  // some other card to take the job -- because the alternative is an outfit
+  // group with nothing checked, which is exactly the state that made step 2 a
+  // required choice with no default and answered a skipped step with a 400
+  // after the upload was spent.
+  //
+  // The condition is asserted rather than the id: what matters is that exactly
+  // one card is checked, not which one wins a fallback nobody should reach.
+  const checked = (html) => [...html.matchAll(/id="of-([a-z0-9-]+)"[^>]*\bchecked\b/g)].map((m) => m[1]);
+
+  const shipped = homePage({ ...FOCUS_MENU, consentText: 'I agree' });
+  assert.deepEqual(checked(shipped), ['tshirt-jeans'], 'the named default is not the one selected');
+
+  const withoutDefault = homePage({
+    ...FOCUS_MENU,
+    outfits: FOCUS_MENU.outfits.filter((o) => o.id !== 'tshirt-jeans'),
+    consentText: 'I agree',
+  });
+  assert.equal(checked(withoutDefault).length, 1,
+    'with the named default gone, step 2 opens with nothing chosen again');
+
+  // An empty menu has nothing to check and must not invent one.
+  const empty = homePage({ ...FOCUS_MENU, outfits: [], consentText: 'I agree' });
+  assert.deepEqual(checked(empty), [], 'an empty menu checked a card that does not exist');
 });

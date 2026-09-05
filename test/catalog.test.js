@@ -189,8 +189,8 @@ test('one step apart is silent, because a checker that fires on a third of the m
 test('the shipped catalog loads, and every combination is composable', () => {
   const catalog = loadCatalog();
   assert.equal(catalog.count.places, 7);
-  assert.equal(catalog.count.outfits, 6);
-  assert.equal(catalog.count.combinations, 42);
+  assert.equal(catalog.count.outfits, 5);
+  assert.equal(catalog.count.combinations, 35);
   assert.match(catalog.hash, /^[0-9a-f]{16}$/);
 
   for (const place of catalog.places.values()) {
@@ -243,5 +243,46 @@ test('the tracksuit refuses the three-stripe mark, not just a logo', () => {
   // And the four that keep it in its decade must not be traded away for it.
   for (const guard of ['modern performance wear', 'technical fabric', 'sharply tailored cut']) {
     assert.ok(negatives.includes(guard), `the tracksuit lost its period guard: ${guard}`);
+  }
+});
+
+test('no shipped outfit is a single-gender garment', () => {
+  // THE RULE THE MENU EXISTS TO KEEP (2026-09-05). The owner's requirement, in
+  // his own words: the outfits "should combine both genders". Every card has to
+  // be a garment that goes on anybody, so that nobody is ever asked which list
+  // they belong in and nobody opens step 2 to find one option written for them.
+  //
+  // WHY THIS GUARD IS NEEDED WHEN THE SCHEMA ALREADY BANS GENDER WORDS. The
+  // `person` ban catches man/woman/male/female/boy/girl in an outfit's prose,
+  // and it has since the catalog was written -- but it checks WORDS, not
+  // GARMENTS. `sommerkleid` described a sundress for a fortnight without once
+  // naming a gender, and passed every run. The garment is the thing that
+  // excludes somebody, so the garment is what has to be pinned.
+  //
+  // A GARMENT LIST AND NOT AN ADJECTIVE LIST, deliberately. "Feminine" and
+  // "masculine" are already impossible here (both are person words), and a cut
+  // is a matter of degree that no test can adjudicate. A dress is a dress.
+  //
+  // Anyone who wants one of these still gets it: the free-text box on step 2
+  // takes any garment at all and is the reason this menu can afford to be
+  // narrow. Removing a card is not removing an option.
+  const singleGender = [
+    'dress', 'sundress', 'frock', 'gown', 'skirt', 'blouse', 'bodice',
+    'corset', 'petticoat', 'leggings', 'tights', 'heels', 'handbag',
+    'necktie', 'bow tie', 'waistcoat', 'tuxedo',
+  ];
+  const catalog = loadCatalog();
+  for (const outfit of catalog.outfits.values()) {
+    // The wardrobe line AND the negatives, for the reason the look ban already
+    // gives: a negative is exactly where a tired author hides the word they
+    // were told not to use, and "no floral dress" is still "dress" in the
+    // conditioning.
+    const prose = `${outfit.label} ${outfit.wardrobe} ${outfit.negatives.join(' ')}`.toLowerCase();
+    for (const garment of singleGender) {
+      assert.ok(
+        !new RegExp(`\\b${garment}\\b`).test(prose),
+        `outfit "${outfit.id}" names "${garment}", which is not a garment everyone wears`,
+      );
+    }
   }
 });
