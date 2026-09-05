@@ -243,8 +243,26 @@ job is self-healing if the directory is ever lost.
 ```bash
 crontab -e
 # 03:10 nightly; keep two weeks
-10 3 * * * install -d -m 700 -o 1000 -g 1000 /var/backups/timestamp && cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14 >> /var/log/timestamp-backup.log 2>&1
+10 3 * * * { install -d -m 700 /var/backups/timestamp && chown 1000:1000 /var/backups/timestamp && cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14 ; } >> /var/log/timestamp-backup.log 2>&1
 ```
+
+**TWO THINGS IN THAT LINE ARE SCAR TISSUE AND MUST NOT BE TIDIED AWAY.**
+
+**`chown` AND NOT `install -o 1000`.** GNU `install` resolves `-o` through the
+passwd database, and a fresh Ubuntu cloud image has no user with uid 1000 — so
+`install -d -o 1000` fails `invalid user: '1000'` on every run. `chown` takes a
+bare numeric id and does not consult passwd. This shipped in the runbook from
+2026-09-01 to 2026-09-05 and the nightly backup did not run once in that time.
+
+**THE BRACES, WHICH ARE THE HALF THAT MATTERS.** In `A && B >> log 2>&1` the
+redirect binds to `B` alone. The chain above died at `A`, so its stderr went to
+cron's mail — discarded, because no MTA is installed — and
+`/var/log/timestamp-backup.log` was never created at all. **An absent log reads
+exactly like a quiet success**, which is how four nights passed unnoticed with a
+real payment in the middle of them. The braced group puts the whole chain inside
+the redirect, so any failure, including one in the setup, lands in the log.
+
+`test/ops-backup.test.js` asserts both properties against this file.
 
 **RUN IT ONCE BY HAND BEFORE TRUSTING THE SCHEDULE** — everything after
 `crontab -e` in the line above is invisible until 03:10, and a backup that has

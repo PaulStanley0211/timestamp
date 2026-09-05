@@ -153,3 +153,45 @@ test('package.json wires npm run backup to the CLI', () => {
   const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.match(pkg.scripts.backup ?? '', /ops\/backup-cli\.mjs/);
 });
+
+test('the runbook cron line can actually run, and cannot fail silently', () => {
+  // THIS LINE HAS NOW BROKEN TWICE IN PRODUCTION, both times silently, both
+  // times in the setup that runs BEFORE the backup. It is published in the
+  // runbook, so whoever builds the next box pastes it verbatim; that is why it
+  // is asserted here rather than left to be discovered on the box again.
+  //
+  // ONE (2026-09-01, section 54E): the destination was root-owned and the
+  // container runs as uid 1000, so every run died on EACCES. Fixed by having
+  // the cron line create its own destination.
+  //
+  // TWO (2026-09-05): that fix used `install -d -o 1000 -g 1000`, and GNU
+  // install resolves -o through the passwd database. Ubuntu 26.04 has no user
+  // with uid 1000, so it failed "invalid user: '1000'" on EVERY run -- four
+  // nights, no backup, and a real card had been charged in the middle of them.
+  // `chown` takes a bare numeric id and does not consult passwd, so ownership
+  // belongs there.
+  //
+  // AND THE REASON NOBODY NOTICED IS THE REDIRECT, which is the more important
+  // half. In `A && B >> log 2>&1` the redirect binds to B ALONE. The chain died
+  // at A, so its stderr went to cron's mail -- discarded, no MTA installed --
+  // and the log file the operator would have checked was never even created.
+  // An absent log read exactly like a quiet success. The whole chain has to sit
+  // inside the redirect, or a setup failure is invisible by construction.
+  const runbook = fs.readFileSync(new URL('../docs/deploy-runbook.md', import.meta.url), 'utf8');
+  const line = runbook.split('\n').find((l) => l.includes('backup-cli.mjs') && l.startsWith('10 3'));
+  assert.ok(line, 'the runbook no longer publishes a backup cron line under this shape');
+
+  assert.ok(!/install\s+-d[^&|]*-o\s*\d/.test(line),
+    'the cron line hands a numeric uid to `install -o`, which resolves it through passwd '
+    + 'and fails on a box with no such user -- use chown, which does not');
+
+  // The redirect must cover the setup as well as the backup. A braced group or
+  // an explicit sub-shell both do it; what must not appear is a bare `&&` chain
+  // with the redirect hanging off the last command only.
+  const redirected = /^\s*\{.*\}\s*>>/.test(line.replace(/^10 3 \* \* \* /, ''))
+    || /^\s*\(.*\)\s*>>/.test(line.replace(/^10 3 \* \* \* /, ''))
+    || /sh\s+-c\s+.*>>/.test(line);
+  assert.ok(redirected,
+    'the redirect covers only the last command, so a failure in the setup before it '
+    + 'writes no log at all and reads as a quiet success');
+});
