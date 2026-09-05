@@ -8876,6 +8876,64 @@ or its tier assignment turns out to differ by SHAPE rather than by short edge,
 this moves again. One metered wide render settles it and `npm run ledger` names
 the gap.
 
+---
+
+### 67. THE JUDDER SCATTER IS GONE, BECAUSE THE JUDDER IS (2026-09-05)
+
+**2135 / 2132 -> 2127 / 2124 pass / 0 fail / 3 skipped.** The suite SHRINKS by
+eight: ten tests pinned an expression that no longer exists and two replace
+them. All seven guards verbatim, 7/7.
+
+**§44 IS NOW HISTORY AND §55E's NOTE IS ACTIONED.** `transport.judderScatter`,
+`judderExpr` and the `setpts` in front of the tape chain's `fps` filter are all
+removed, along with the CLAMPS entry that bounded the value.
+
+**MEASURED BEFORE REMOVING, NOT TRUSTED FROM THE NOTE**, on the real segments
+on this disk, with a Seedance tape as the control:
+
+| job | source | after `fps=25` |
+|---|---|---|
+| `20260824-122201-af8b0d` (Seedance) | 24fps, 361 frames | 376 frames, **15 duplicates** |
+| `20260902-160924-af12f6` (Wan) | 30fps, 450 frames | 375 frames, **0 duplicates** |
+| `20260904-203732-348c9d` (Wan) | 30fps, 450 frames | 375 frames, **0 duplicates** |
+
+The control reproduces §26 and §44 exactly, which is what makes the other two
+rows believable — §55E's own first attempt at this measurement reported 0 for
+both clips and was a broken awk parser, not a finding.
+
+**WHAT THE TRADE ACTUALLY IS.** A source below 25fps brings the duplicates
+back, on a flat 25-frame cadence, and **nothing warns about it**:
+`assembleFrameWarnings` asks whether there is enough TIME to fill the contract
+and is deliberately silent when the duration holds and only the rate differs —
+that silence is itself a fix (§18: a warning that cries wolf is how the real
+one stops being read). So a model change back to 24fps reintroduces metronomic
+judder quietly.
+
+**THAT IS WHY ONE TEST SURVIVED, AND IT MEASURES THE CONDITION RATHER THAN THE
+FIX.** `test/tapedeck-judder.test.js` is two tests now: one that a 24fps source
+still duplicates on a flat 25 while a 30fps source fills the contract exactly —
+asserted together so the file cannot pass by measuring nothing — and one that
+the shipped chain opens on its `fps` filter with nothing in front of it. **A
+bare `!/setpts=/` over the graph would have been wrong**: the corner-soften
+mask carries a legitimate `setpts=PTS-STARTPTS`, so the guard is scoped to the
+head of the input chain and to the removed expression's own `FR*TB` signature.
+
+**Sabotage-verified by putting the scatter back**, which the head-of-chain
+assertion catches.
+
+**The golden spine in `tapedeck-look.test.js` did not move**, correctly and for
+the reason §44D records: it builds from the FIXTURE profile, which never set a
+scatter. The SHIPPED chain does change — a real render now decimates 30fps
+cleanly with no timing nudge — and `ffmpeg-output.test.js` still measures 375
+frames at 15.000s, so the delivery contract holds without it.
+
+**The expression is in git history at 2026-09-05** and both `config/look/base.json`
+and `look.mjs` carry a note saying so, because the next person to meet judder
+should find the previous answer rather than re-derive it. §44B is the part worth
+re-reading if that day comes: the rates must be SLOW, and the nudge must be zero
+at N=0 and never negative, and both were established by measurement after being
+reasoned wrong.
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT
