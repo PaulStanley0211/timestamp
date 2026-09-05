@@ -7,9 +7,28 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-01) — IT IS DEPLOYED, CURRENT, AND STRIPE IS ACTIVATED. READ §49 FIRST, THEN §46, §45, §44, §43, §42, §41, §40, §39, §38, §37. (§47 is CI only — read it if CI is red.)
+## START HERE (2026-09-05) — READ §61 FIRST. IT IS THE CURRENT STATE, THE FOUR DECISIONS TAKEN IN CONVERSATION, AND THE WHOLE REMAINING LIST. THEN §60, THEN §59, §58, §57.
 
-# THE PRODUCT IS LIVE AT https://timestamptapes.com AND IT CAN TAKE MONEY.
+# THE PRODUCT IS LIVE AT https://timestamptapes.com, IT TAKES MONEY, AND NOTHING LEFT ON THE LIST IS BLOCKED ON CODE.
+
+**LOCAL, `origin/supabase-identity-slice` AND THE BOX ARE IN SYNC**, and the
+last change to the application itself is `5539e9a` (the sign-in dialog, §60K).
+Suite **2120 / 2117 pass / 0 fail / 3 skipped**, all seven `guards.yml` steps
+green, `/api/health` reports `{"ok":true,"degraded":[]}` from outside. **Seven
+places** — the garden, the kitchen table, the living room, Times Square,
+Tokyo, the Amalfi coast and a space centre (§60J).
+
+**§61 IS THE HANDOFF AND IT IS THE ONLY SECTION THAT IS NOT A RECORD.** It
+carries the marketing plan (gate first, the tape is the advert, then seeding),
+the sign-in decision (keep Google AND the email code, never a phone number,
+with the reasoning so it is not re-argued), the honest answer about the API
+keys, and the consolidated list of what is left and whose each item is.
+**Everything below §61 is history kept for its reasoning; where two sections
+disagree, the higher number wins.**
+
+**THE ONE CORRECTION MOST WORTH CARRYING FORWARD: `noindex` is NOT the gate on
+marketing — the Impressum address is** (§57C, §61A). Any public link exposes a
+home address exactly as surely as a search result would.
 
 **PR #1 IS MERGED. `origin/main` IS `251acab` AND CARRIES THE WHOLE
 APPLICATION** (2026-09-02, 252 commits, all five checks green on the exact
@@ -8097,6 +8116,168 @@ widths, types into the field and reads the cascade for the input, the caret
 and both links; it went red first. Suite 2120 / 2117 / 0 / 3.
 - **The Edit tool writes LF into CRLF files** (§59C, §60C), and it did so on
   every file touched today. Git normalises on commit.
+
+---
+
+### 61. FOUR DECISIONS TAKEN IN CONVERSATION, AND THE WHOLE REMAINING LIST (2026-09-05)
+
+**No code. Nothing was committed but this section.** The morning of 2026-09-05
+was spent on questions rather than building, and every answer below is either
+the owner's decision or a position argued and accepted. **They are recorded so
+nobody re-argues them**, which is the same reason §32 and §41 exist.
+
+#### A -- THE MARKETING PLAN, IN THREE STAGES, GATE FIRST
+
+**STAGE 0 -- THE GATE, AND IT IS ALL THE OWNER'S.** Nothing below it happens
+first.
+
+1. **The Impressum address.** Every page links to the legal notice and it
+   carries a home address. **§57C is the correction that matters and it was
+   read wrongly for several sessions: `noindex` is NOT the gate on marketing,
+   the address is.** A post on X, a Reddit thread or a TikTok caption exposes
+   it exactly as surely as a search result would; `noindex` only stops Google
+   listing the site, and Certificate Transparency published the hostname the
+   moment Caddy issued the certificate. The usual answer is a business-address
+   service at roughly EUR 10-20/mo, and whether a given provider is acceptable
+   for a DDG notice is worth asking somebody qualified.
+2. **Image moderation on** (§52). The code is built, tested and guarded -- the
+   worker refuses to start if it holds AWS keys `/privacy` does not declare.
+   What is missing is the account and the agreement. **Strangers uploading
+   faces at scale without it is the one risk that can end the product.**
+3. **The realism check.** Free, ten minutes, unsent since 2026-09-02, packet
+   at `out/realism-check/`. It can change the marketing message before a cent
+   is spent, which is why it is in the gate rather than after it.
+4. **The friends' feedback.** The only outside signal the product has.
+
+**STAGE 1 -- THE TAPE IS THE ADVERT. Three items, each the owner's decision
+and then a small test-first change.**
+
+- **A real tape playing on the landing page**, large and muted. The premium
+  spec (§3.1) has called this the centrepiece since 2026-08-31 and it was
+  blocked on one genuinely good finished tape; several exist now. **Nobody
+  searches for a 2003 camcorder tape of themselves -- they see one and want
+  one.** The owner picks which tape, because the face in it is his or a
+  friend's.
+- **Drop the 4/3 surcharge on 16:9 and 9:16** (§55D, open since 2026-09-02
+  and the item most likely to be forgotten). It was derived from Seedance's
+  pixel billing and Wan bills seconds at a flat tier rate, so a wide tape now
+  costs exactly what a 4:3 tape costs. **It has a real acquisition cost: 21
+  free credits buy a 4:3 tape and not a 28-credit 9:16 one, so a newcomer who
+  picks the phone shape -- the obvious choice, on the product that delivers to
+  phones -- is refused at the button on their first visit.**
+- **The product's name burnt into the FREE tape only.** A tape leaves the site
+  as a file and gets posted with nothing on it saying where it came from. A
+  small `timestamptapes.com` in the corner, in the same burnt-in style as the
+  date stamp, is the growth loop; **paid tapes stay clean**, because somebody
+  who paid is not an advertising surface. Owner's call, then an afternoon.
+
+**STAGE 2 -- SEEDING, and it is the owner's to run.** Ten tapes of himself and
+friends in the famous places, posted as Reels, Shorts and TikToks, captioned
+"me in Tokyo in 2003" -- vertical, fifteen seconds, sound on. Credits to five
+small nostalgia or Y2K creators, at about $0.75 a tape. **Raise the free-tape
+global ceiling (currently 100) as the marketing budget** -- it is the cheapest
+acquisition this product will ever buy, and §49B's grant of 21 is final while
+the CEILING is the dial. Product Hunt and Reddit only after moderation is on.
+
+**What to measure, and none of it is built:** sign-ups, tapes finished,
+free-to-paid conversion, cost per tape.
+
+#### B -- SIGN-IN: KEEP GOOGLE AND THE EMAIL CODE. NO PHONE NUMBER.
+
+A friend of the owner's suggested phone-number sign-in, on the reasoning that
+one person can open many accounts with many mailboxes and drain the free
+grant. **The concern is real and already bounded; the fix is worse than the
+problem, and it was refused with the argument below.**
+
+- **The exposure is bounded twice over.** Every account needs a mailbox that
+  receives a six-digit code or a real Google round trip (§34E), so it is work
+  per account and not a script; and the free grant has a LIFETIME global
+  ceiling across every account ever (§3), so the worst case is that pool
+  emptying faster than real customers would empty it.
+- **SMS costs money per code and invites SMS-pumping fraud**, which is a named
+  attack on small operators: an attacker triggers thousands of codes to
+  premium numbers. It also needs another provider, another agreement, and it
+  fails to deliver in some countries.
+- **A phone number is more sensitive personal data than an email**, on a
+  product that already holds people's faces, and `/privacy` would have to
+  grow a processor.
+- **It does not stop farming.** Virtual numbers are as cheap as throwaway
+  mailboxes.
+- **It adds friction at the exact moment somebody is deciding whether to try a
+  fun thing.** Google is one click.
+
+**BOTH DOORS STAY, GOOGLE FIRST.** Dropping the email code would not make
+farming harder -- a fresh Google account is as easy to make as a fresh mailbox
+-- and would turn away the share of people with no Google account or no wish
+to hand Google their face, which on iPhones is not small. **The right time to
+reconsider is after the friends test**, because the accounts record which door
+each person came through, so in a month the data decides rather than the
+argument. **If farming ever actually shows up in the ledger, the levers are
+address normalisation (§35F's open decision, narrow form only) or a lower
+grant / a card before the free tape** -- both cost nothing and change nothing
+for honest users.
+
+#### C -- "ARE MY API KEYS SAFE?" -- THE HONEST ANSWER, AND WHY IT IS NOT "YES"
+
+The owner asked twice whether the keys "cannot be hacked at any cost". **The
+answer given was no, nothing is, and the next session should give the same
+answer rather than a comforting one.** What IS true, and every line of it is
+verified in this file rather than asserted:
+
+- The keys exist only in three `chmod 600` files on the box (§51E), have never
+  been committed (§58A, verified by path log AND object enumeration), are not
+  in the image (§34A), and a guard fails the build if a `.env` is ever tracked.
+- **The internet-facing process does not hold the spending key and the worker
+  does not hold the payments key** (§51E, proved on the running containers), so
+  a compromise of the website is an identity incident rather than a
+  money-and-spend one.
+- No key reaches a log, a page or a manifest, and the fal credential is refused
+  to every host but the queue's, redirects included (§28 item 5, §34C).
+- SSH is key-only, root is locked, fail2ban is active and had counted 66
+  attempts within the hour (§59A).
+- **The likeliest leak is the owner or this Windows laptop** -- a key pasted
+  into a chat (it has happened once, §46D), or the machine itself, which holds
+  development copies. **Rotation takes minutes at each console and has been
+  done once successfully.**
+
+#### D -- UI DESIGN WITHOUT DESIGN SKILLS: THE TOOL IS ALREADY IN HAND
+
+The owner asked how to make the interface more interesting without writing
+code and without design training. **The answer is the loop he already ran on
+2026-09-04 (§60):** build the screen in **Claude Design** (`/design-login`,
+then `DesignSync`), which reads this codebase and applies its design system,
+then hand the prototype to Claude Code, which implements it test-first.
+**One page at a time, not the whole site.**
+
+To learn enough to judge the result: **Refactoring UI** (Schoger and Wathan)
+first, then **Laws of UX** (free), **Mobbin** for patterns, Dribbble for
+taste. `/design-review` in this repo does a designer's-eye pass on the live
+site and found a real defect the last time it ran (§33).
+
+#### E -- SO WHAT IS ACTUALLY LEFT, WHOLE
+
+**THE OWNER'S, in the order worth doing:** the address decision (gates all
+marketing); image moderation on (AWS agreement); send the realism check; read
+the friends' feedback; the Hetzner firewall rule and the two DNS mail records
+(§59B, both ten-minute console steps); the Hetzner disk backup toggle, now
+that real money has moved (§57D); GitHub two-factor and branch protection;
+read fal's usage page for the six 2026-09-02 refusals, which decides whether
+`420bf2b`'s refund rule stays or is reverted (§55G); and the free-grant
+register decision.
+
+**AGENT-BUILDABLE AND GATED ON A DECISION, NOT ON CODE:** the three Stage 1
+items in §61A.
+
+**AGENT-BUILDABLE AND UNGATED, both small and neither urgent:** removing
+§44's now-redundant judder scatter (Wan delivers 30fps, so retiming decimates
+rather than duplicates and there is no judder to scatter -- §55E), and giving
+`falVideoBody` the same per-model treatment the reference path got in §55C if
+the still route is ever revived.
+
+**THE STATE AT THE END OF THIS SESSION:** live at https://timestamptapes.com,
+local / `origin/supabase-identity-slice` / the box all at `319d5a3`, health
+`{"ok":true,"degraded":[]}`, suite **2120 / 2117 pass / 0 fail / 3 skipped**,
+seven places, all seven `guards.yml` steps green.
 
 ## Not in scope
 
