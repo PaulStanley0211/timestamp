@@ -216,30 +216,48 @@ test('the numbers: 21 credits at 480p, 46 at 720p, measured', async () => {
   assert.equal(creditCost({ resolution: '720p' }), 46);
   assert.equal(TAPE, 21, 'the default is 480p, the cheap tier');
 
-  // A SHAPE THAT IS NOT 4:3 COSTS 4/3, AND THE PRICE SAYS SO.
+  // THE FRAME SHAPE IS FREE, AND IT STOPPED BEING FREE-IN-COST BEFORE IT
+  // STOPPED BEING FREE-IN-PRICE (2026-09-05).
   //
-  // 4:3 is the squarest shape this product ships and a resolution label holds
-  // the SHORT edge, so 16:9 and 9:16 are exactly 4/3 the pixels at the same
-  // tier -- 854x480 against 640x480. fal bills tokens as pixels x seconds, so
-  // that is 4/3 the provider cost, and charging the 4:3 price for it would
-  // sell every wide tape a third below cost.
+  // Section 34D charged 4/3 for 16:9 and 9:16 and the derivation was right for
+  // the model of the day: Seedance billed TOKENS -- pixels x seconds -- and a
+  // resolution label holds the SHORT edge, so a wide shape is exactly 4/3 the
+  // pixels and therefore 4/3 the cost. Charging 4:3's price for it would have
+  // sold every wide tape a third below cost.
   //
-  // THIS IS NOT A HYPOTHETICAL FAILURE MODE. 480p sat at 16 CR against a real
-  // 21 for weeks, invisible from both ends, because the button, the ledger and
-  // the manifest all agreed on the same wrong number. The only thing that
-  // catches it is an assertion tying the price to the pixels.
-  // 61 AND NOT 62, AND THE DIFFERENCE IS WHERE THE ROUNDING HAPPENS. The
-  // multiplier applies to the DOLLAR figure and the ceiling is taken once, at
-  // the end: $4.5646 x 4/3 / $0.10 = 60.86 -> 61. Multiplying the already-
-  // rounded 46 CR instead gives 61.33 -> 62, which charges a credit for a
-  // rounding step rather than for pixels. Rounding twice always inflates, and
-  // `creditsFor` has taken the ceiling once since it was written.
-  assert.equal(creditCost({ resolution: '480p', aspect: '16:9' }), 28);
-  assert.equal(creditCost({ resolution: '480p', aspect: '9:16' }), 28);
-  assert.equal(creditCost({ resolution: '720p', aspect: '16:9' }), 61);
-  assert.equal(creditCost({ resolution: '720p', aspect: '9:16' }), 61);
+  // THE PRODUCT MOVED TO `alibaba/wan-3.0/reference-to-video` ON 2026-09-02 AND
+  // WAN HAS NO PIXEL TERM. It bills seconds at a flat rate per tier, so a 15s
+  // 9:16 tape and a 15s 4:3 tape both cost $0.75. `test/provider-contract.js`
+  // has proved that on the COST side since the switch -- "anything that still
+  // charges 4/3 on this model is overcharging" -- and this is the PRICE side
+  // catching up. The multiplier was not wrong; the billing model under it went
+  // away, and a surcharge outlived its reason by three days.
+  //
+  // WHAT IT COST WHILE IT STOOD, which is why it was worth fixing rather than
+  // leaving: the free grant is 21 credits, so 21 bought one 4:3 tape and could
+  // not buy a 28-credit 9:16 one. 9:16 is the phone shape on a product that
+  // delivers to phones, so a new account met "not enough credits" on the shape
+  // it most likely wanted, on its first visit, before ever seeing a tape.
+  //
+  // THE MULTIPLIER IS 1, NOT ABSENT. Deleting the entries would take the two
+  // shapes out of `known` and UNKNOWN_ASPECT would refuse them outright -- the
+  // refusal below is built from the same map that prices them.
+  assert.equal(creditCost({ resolution: '480p', aspect: '16:9' }), 21);
+  assert.equal(creditCost({ resolution: '480p', aspect: '9:16' }), 21);
+  assert.equal(creditCost({ resolution: '720p', aspect: '16:9' }), 46);
+  assert.equal(creditCost({ resolution: '720p', aspect: '9:16' }), 46);
   assert.equal(creditCost({ resolution: '480p', aspect: '4:3' }), 21,
     'naming the default shape must cost the same as not naming it');
+
+  // EVERY OFFERED SHAPE IS NOW REACHABLE ON THE FREE GRANT, which is the whole
+  // point of the change and the assertion that would have caught the problem
+  // when the supplier moved. It is stated as a relation and not as 21 == 21, so
+  // it still means something if either number moves.
+  for (const aspect of aspectIds(RENDER_CFG)) {
+    assert.ok(creditCost({ resolution: '480p', aspect }) <= PLANS.free.creditsPerPeriod,
+      `a new account cannot afford a 480p tape in ${aspect}, so the shape it most `
+      + 'wants is refused at the button on its first visit');
+  }
 
   // The two non-default shapes cost the same as each other: a portrait tape and
   // a landscape one are the same pixels turned ninety degrees.

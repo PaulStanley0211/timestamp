@@ -570,15 +570,24 @@ export function pricingPage({
       ? `not enough for a ${r.id} tape`
       : `${n} ${n === 1 ? 'tape' : 'tapes'} at ${r.id}`;
 
-    // Both wide shapes cost the same 4/3, but the number is READ rather than
-    // assumed: a shape the pricing refuses has no entry, and a shape priced
-    // differently one day would be reported as it is rather than as 4/3.
+    // The number is READ rather than assumed: a shape the pricing refuses has
+    // no entry, and a shape priced differently one day is reported as it is.
+    //
+    // AND IT IS SAID ONLY WHEN THERE IS SOMETHING TO SAY (2026-09-05). The
+    // surcharge came off when the price caught up with Wan's per-second
+    // billing, so all three shapes now cost the same and this would read
+    // "4 tapes at 480p (4 in 16:9 or 9:16)" -- true, and noise. A parenthetical
+    // is for an EXCEPTION; one that restates the number it follows teaches the
+    // reader that the shapes differ, which is the opposite of what it says.
+    // Derived rather than deleted, so a supplier that bills by pixels again
+    // brings the sentence back without anybody remembering to.
     const wide = ['16:9', '9:16']
       .map((a) => r.creditsByAspect?.[a])
       .filter((c) => Number.isFinite(c) && c > 0);
-    const suffix = wide.length && n > 0
+    const dearest = wide.length ? Math.max(...wide) : base;
+    const suffix = wide.length && n > 0 && dearest !== base
       ? ` (${(() => {
-        const m = Math.floor(credits / Math.max(...wide));
+        const m = Math.floor(credits / dearest);
         return m === 0 ? 'none' : String(m);
       })()} in 16:9 or 9:16)`
       : '';

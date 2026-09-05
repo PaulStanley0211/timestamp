@@ -1621,11 +1621,31 @@ test('the quoted price matches the charge for every shape, not just 4:3', async 
       }
     }
 
-    // And the wide price must be genuinely different from the 4:3 one, so the
-    // assertion above cannot pass because every shape quotes the same number.
-    const square = await app.sessions.cost({ resolution: '480p', seconds: 15, aspect: '4:3' });
-    const wide = await app.sessions.cost({ resolution: '480p', seconds: 15, aspect: '9:16' });
-    assert.notEqual(square, wide, 'a wide shape costs 4/3 and must quote differently');
+    // THE ANTI-VACUITY GUARD HAD TO CHANGE, AND NOT BECAUSE IT WAS WEAKENED.
+    //
+    // It used to assert that a wide shape quotes a DIFFERENT number from 4:3,
+    // which was both true and the only thing stopping the loop above passing
+    // against a page that printed one number for everything. The frame-shape
+    // surcharge went on 2026-09-05 -- Wan bills seconds at a flat tier rate
+    // with no pixel term, so every shape genuinely costs the same now -- and an
+    // assertion that the numbers differ would fail on correct code.
+    //
+    // TWO THINGS REPLACE IT, and between them the loop still cannot pass by
+    // printing one number for everything:
+    //   the TIERS must still quote differently from each other, and
+    //   the page must still carry one quote span PER SHAPE, which is the
+    //   machinery that lets a shape move the price at all. The numbers
+    //   coincide today; if a future supplier bills by pixels again, that
+    //   machinery is what the new multiplier flows through, and deleting it
+    //   because "every shape costs the same" is the regression this guards.
+    const cheap = await app.sessions.cost({ resolution: '480p', seconds: 15, aspect: '4:3' });
+    const dear = await app.sessions.cost({ resolution: '720p', seconds: 15, aspect: '4:3' });
+    assert.notEqual(cheap, dear, 'both tiers quote the same number, so the loop above proves nothing');
+
+    for (const slug of ['a-4x3', 'a-16x9', 'a-9x16']) {
+      assert.match(html, new RegExp(`class="cr cr--${slug}"`),
+        `no per-shape quote for ${slug}: the page can no longer express a shape that costs more`);
+    }
   });
 });
 

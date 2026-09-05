@@ -8806,6 +8806,76 @@ box has covered it in the meantime.
   page.** A rule that matches nothing is how dead markup survives a review --
   §30's reasoning when it took the 4:3 veil's markup and rule out together.
 
+---
+
+### 66. THE FRAME SHAPE IS FREE, THREE DAYS LATE (2026-09-05)
+
+**2133 / 2130 -> 2134 / 2131 pass / 0 fail / 3 skipped.** All seven guards
+verbatim, 7/7.
+
+**16:9 and 9:16 cost what 4:3 costs.** `config/credits.json`'s `aspects` map
+goes 1.3333 -> **1**, so 480p is 21 CR in every shape and 720p is 46.
+
+**THE SURCHARGE WAS NEVER WRONG -- THE BILLING MODEL UNDER IT WENT AWAY.**
+§34D derived 4/3 correctly for Seedance, which billed TOKENS (pixels x seconds)
+against a label that holds the SHORT edge. **Wan has no pixel term**: it bills
+seconds at a flat tier rate, so a 15s tape is $0.75 at 480p whatever shape it
+is. `test/provider-contract.test.js` has asserted that on the COST side since
+the 2026-09-02 switch, in a test whose own comment says *"anything that still
+charges 4/3 on this model is overcharging"* -- **the cost side knew for three
+days and nothing recomputes a customer price when a supplier changes.**
+
+**WHAT IT COST WHILE IT STOOD, and it is the reason this was worth an hour:**
+the free grant is 21, so 21 bought one 4:3 tape and could not buy a 28-credit
+9:16 one -- **the phone shape, on a product that delivers to phones.** A new
+account met a refusal on the shape it most likely wanted, on its first visit,
+before ever seeing a tape. §49B recorded that as legitimate and it was, at 4/3.
+
+**A test now asserts every offered shape is affordable on the free grant**,
+stated as a relation rather than 21 == 21. That is the assertion that would
+have caught this the day the supplier moved, and it is the durable half.
+
+**1 AND NOT ABSENT.** `creditCost` builds its `known` list from the keys of
+that map, so deleting the entries would make both shapes `UNKNOWN_ASPECT` and
+refuse them outright rather than pricing them at 4:3. A shape nobody priced is
+still refused; a 1:1 tape still needs its own entry before it can be ordered.
+
+#### A -- TWO TESTS CHANGED SHAPE, AND NEITHER WAS WEAKENED
+
+- **`the quoted price matches the charge for every shape`** ended with an
+  anti-vacuity guard asserting a wide shape quotes a DIFFERENT number -- which
+  was the only thing stopping its loop passing against a page that printed one
+  number for everything, and which now fails on correct code. **Two things
+  replace it:** the two TIERS must still quote differently, and the page must
+  still carry one `cr--<shape>` span per shape. The numbers coincide today; that
+  machinery is what a future pixel-billing supplier's multiplier would flow
+  through, and deleting it because "every shape costs the same" is the
+  regression the new guard exists for.
+- **`a rung counts tapes in every shape it sells` IS DELIBERATELY UNTOUCHED**
+  and a second test sits beside it. That one drives a fixture where the shapes
+  DO differ and proves the exception is still stated; the new one proves the
+  parenthetical disappears when they do not. **Together they pin the rule --
+  name the difference when there is one, say nothing when there is not --
+  rather than either of today's numbers.**
+
+#### B -- THE COPY IS DERIVED, SO IT FOLLOWED BY ITSELF, EXCEPT ONCE
+
+`/pricing` now reads *"That is 1 tape at 480p, and not enough for a 720p tape"*
+and *"480p — ~21 CR"*. The range line already collapsed on `low === high`. The
+per-rung parenthetical did not: it would have read **"4 tapes at 480p (4 in
+16:9 or 9:16)"** -- true, and noise. **A parenthetical is for an EXCEPTION; one
+that restates the number it follows teaches the reader that the shapes differ,
+which is the opposite of what it now says.** Suppressed by comparing the two
+prices rather than by deleting the sentence, so a supplier that bills by pixels
+again brings it back without anybody remembering to.
+
+#### C -- What is still unmeasured, unchanged
+
+**No non-4:3 shape has ever been ORDERED from fal.** If Wan's delivered raster
+or its tier assignment turns out to differ by SHAPE rather than by short edge,
+this moves again. One metered wide render settles it and `npm run ledger` names
+the gap.
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT

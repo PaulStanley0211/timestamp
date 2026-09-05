@@ -1088,6 +1088,49 @@ test('a rung counts tapes in every shape it sells, not just the default', () => 
     'the rung still claims 4:3 is the shape, on a product selling three');
 });
 
+/**
+ * AND WHEN EVERY SHAPE COSTS THE SAME, THE PARENTHETICAL GOES (2026-09-05).
+ *
+ * The surcharge came off the day the price caught up with Wan's per-second
+ * billing, so `creditsByAspect` now holds one number three times. The suffix is
+ * computed rather than written, so it does not become wrong -- it becomes
+ * "4 tapes at 480p (4 in 16:9 or 9:16)", which is true, and noise. A
+ * parenthetical exists to name an EXCEPTION; one that restates the number it
+ * follows teaches a reader that the shapes differ, which is the opposite of
+ * what it now says.
+ *
+ * THE TEST ABOVE IS DELIBERATELY LEFT ALONE and this one sits beside it. That
+ * one drives a fixture where the shapes DO differ and proves the exception is
+ * still stated; together they pin the rule -- name the difference when there is
+ * one, say nothing when there is not -- rather than either of today's numbers.
+ * If a future supplier bills by pixels again, the first test is what proves the
+ * copy comes back on its own.
+ */
+test('a rung says nothing about shape when every shape costs the same', () => {
+  const plans = [{ id: 'free', label: 'Free', monthlyUSD: 0, creditsPerPeriod: 21 }];
+  const resolutions = [
+    { id: '480p', credits: 21, available: true,
+      creditsByAspect: { '4:3': 21, '16:9': 21, '9:16': 21 } },
+    { id: '720p', credits: 46, available: true,
+      creditsByAspect: { '4:3': 46, '16:9': 46, '9:16': 46 } },
+  ];
+  const packs = [{ id: 'starter', label: 'Starter', priceUSD: 12, credits: 92, buyable: true }];
+
+  const html = pricingPage({ plans, resolutions, packs, currentPlan: null });
+
+  // PRESENT FIRST: a page that rendered no rungs satisfies every absence below.
+  assert.match(html, /4 tapes at 480p/, 'the count is gone entirely');
+  assert.match(html, /2 tapes at 720p/, 'the 720p count is gone entirely');
+
+  assert.ok(!/in 16:9 or 9:16/.test(html),
+    'the page still carves out the wide shapes when they cost exactly the same');
+
+  // The summary line collapses to a single figure for the same reason, and it
+  // already did -- asserted so the two halves cannot drift apart.
+  assert.match(html, /480p — ~21 CR/, 'the summary still quotes a range over one price');
+  assert.ok(!/~21-21 CR/.test(html), 'the summary prints a range whose ends are equal');
+});
+
 test('a rung with no per-shape prices states the plain count and invents nothing', () => {
   // `resolutionRows` builds creditsByAspect by asking the same function that
   // charges, and skips a pair the pricing refuses. A row that came back without
