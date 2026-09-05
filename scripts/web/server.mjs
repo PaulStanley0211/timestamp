@@ -88,6 +88,7 @@ import { createStylesheet, sendFile } from './static.mjs';
 import { aspectIds } from '../tapedeck/frame.mjs';
 import {
   homePage, landingPage, statusPage, selectPage, resultPage, videosPage, errorPage, INLINE_SCRIPT_HASHES,
+  singlePlaceGround,
   privacyPage, termsPage, impressumPage,
 } from './views.mjs';
 // The ONE fact the web layer takes from the provider layer: whether a provider
@@ -3182,7 +3183,14 @@ export function createServer({
     async onboardingPage(req, res, { account }) {
       if (account.consent == null) {
         const { token, setCookie } = await auths.csrfIssue(req);
-        return sendHtml(req, res, 200, onboardingPage({ account, consentText, csrf: token }),
+        // THE SAME GROUND THEY JUST CAME FROM. The landing's place choice is a
+        // CSS-only radio named `lplace` and is never submitted, so the actual
+        // choice cannot be known here -- carrying it would mean plumbing it
+        // through signup AND surviving the six-digit round trip, for a
+        // cosmetic continuity. The landing's own default is the first card,
+        // which is what anybody who did not click a place was looking at.
+        const ground = singlePlaceGround(cards.places[0]?.id ?? null);
+        return sendHtml(req, res, 200, onboardingPage({ account, consentText, csrf: token, ground }),
           setCookie ? { 'Set-Cookie': setCookie } : {});
       }
       // NOTHING TO ASK MEANS NOTHING TO RENDER. This used to answer with a

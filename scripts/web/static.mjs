@@ -781,6 +781,12 @@ body {
 }
 .bgs.is-showing .bgv { opacity: 1; }
 
+/* ONE LAYER, LIT BY A CLASS INSTEAD OF BY A RADIO. The landing lights whichever
+   background its CSS-only place radio selects; onboarding carries the same
+   ground with no menu behind it, so the single layer says so itself. Same blur,
+   same drift, same scrim over it -- only the switch differs. */
+.bg--lit { opacity: 1; }
+
 /* The scrim. Heavy, and heavier at the top where the wordmark sits. */
 .scrim {
   position: fixed; inset: 0; z-index: -1; pointer-events: none;
@@ -2363,6 +2369,18 @@ input[type="file"]::file-selector-button {
 /* --- foot -------------------------------------------------------------- */
 
 /* --- the landing page: STRUCK ------------------------------------------ */
+
+/* THE PRIMARY BUTTON, RESTATED FOR THE DARK WORLD.
+   .record sets its label to --paper and its own comment explains why: oxide is
+   a mid-dark red, so cream on it is 6.16:1 while dark ink would be 2.4:1. That
+   reasoning is a property of OXIDE, and body.is-landing re-points --accent to
+   --l-cathode (#FF8A1E), which is the opposite kind of colour -- bright. Cream
+   on it measures 2.21:1, the same number §31 records for why the cathode can
+   never come to a light ground. The ground's own near-black is what reads on
+   it. This is the sign-in dialog's lesson (§60K) arriving at the next
+   component: a rule that names a literal tier does not follow the palette. */
+body.is-landing .record { color: var(--l-ground); }
+
 /* DESIGN.md owns this world. ITS ONE RULE: no borders, no rules, no dividers,
    anywhere inside the page. Grouping is depth, gauze density and space. The
    moment a line appears to separate two things, this stops being a cathode
@@ -2433,6 +2451,37 @@ input[type="file"]::file-selector-button {
   text-shadow: 0 1px 14px rgba(7, 10, 17, 0.7);
 }
 .is-landing .nav a:hover, .is-landing .nav button:hover { color: var(--l-cathode); }
+
+/* THE FOOTER, FOR THE REASON THE NAV ABOVE WAS FIXED, AND MISSED BY IT.
+   .foot is var(--faint), which body.is-landing re-points to --l-dim -- the
+   colour §31 measured at 2.86:1 over the brightest place loop and named the
+   footer as one of exactly three places this product ships it. §60K solved the
+   nav and stopped there, so the fine print has been sitting unreadable on the
+   photograph ever since; putting a second page on this ground is what made it
+   worth finding.
+
+   BONE, AND SIZE CARRIES THE HIERARCHY. Fine print set in the body colour
+   sounds too loud until you remember §31's own ruling: inside a world where a
+   ground can move, rank is carried by SIZE, which survives being composited,
+   and not by colour, which does not. The footer stays small and stays quiet. */
+.is-landing .foot, .is-landing .foot .fine, .is-landing .foot .quiet {
+  color: var(--l-bone);
+  text-shadow: 0 1px 14px rgba(7, 10, 17, 0.7);
+}
+.is-landing .foot .quiet:hover { color: var(--l-cathode); }
+
+/* A PANEL ON THE PHOTOGRAPH GETS §30's PLATE.
+   --frost is transparent, which is right on paper where there is nothing to
+   separate text from, and wrong the moment a picture is behind it: §30 built
+   --frost-lit (rgba(12, 17, 27, 0.66) on this ground) as the least tint that
+   lets the dim tokens clear 4.5:1, and it is why the scrim could come down off
+   the places in the first place. Without it the eyebrow here is dim text
+   directly on a sunlit beach, and the panel reads as words floating rather
+   than as an object on the picture.
+
+   The landing itself renders no .panel -- checked -- so this reaches exactly
+   the pages that put an app panel on this ground, which today is onboarding. */
+.is-landing .panel { background: var(--frost-lit); padding: var(--s-6) var(--s-5); }
 
 /* ONE COLUMN NOW, because the column it used to balance was the 4:3 veil and
    the place is behind the whole page instead. The menu is capped rather than

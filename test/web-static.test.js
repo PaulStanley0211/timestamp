@@ -39,7 +39,7 @@ import fs from 'node:fs';
 import { createStylesheet } from '../scripts/web/static.mjs';
 import {
   creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, videosPage, errorPage,
-  privacyPage, termsPage, impressumPage,
+  privacyPage, termsPage, impressumPage, singlePlaceGround,
 } from '../scripts/web/views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
@@ -1711,4 +1711,42 @@ test('the photo preview does not borrow a class that positions itself elsewhere'
   assert.deepEqual(offenders, [],
     'the upload preview reuses a class that other components style -- it will '
     + `inherit their geometry, which is how .thumb put the preview over STEP 01:\n${offenders.join('\n')}`);
+});
+
+/**
+ * ONBOARDING CARRIES THE LANDING'S WORLD, ASSERTED WITHOUT A BROWSER.
+ *
+ * The load-bearing check is in browser-smoke.test.js, which measures every word
+ * on the page against the brightest ground a photograph can make -- that is the
+ * one that catches dark-on-dark. This is the cheap half: that the page asks for
+ * the dark world at all, and that it still renders honestly when it is given no
+ * ground (the degraded path, where the place catalog is empty).
+ */
+test('the onboarding page takes the landing world when it is given a ground, and not when it is not', () => {
+  const withGround = onboardingPage({
+    account: { email: 'a@b.com', consent: null },
+    consentText: 'I confirm.',
+    csrf: 't',
+    ground: singlePlaceGround('amalfi-afternoon'),
+  });
+  assert.match(withGround, /class="[^"]*is-landing/, 'onboarding does not ask for the landing palette');
+  assert.match(withGround, /class="bgs"/, 'onboarding carries no place photograph');
+  assert.match(withGround, /class="scrim"/, 'onboarding has a photograph and no scrim over it');
+  assert.match(withGround, /bg--lit/, 'the single background layer is never lit, so the ground is invisible');
+  assert.match(withGround, /bg--pl-amalfi-afternoon/, 'the ground does not name the place it was given');
+
+  // NO <video>. BG_SCRIPT swaps a loop's source by reading the landing's place
+  // radios, which do not exist here; a loop would need a sixth inline script
+  // and a fifth CSP hash to earn nothing the still does not already give.
+  assert.ok(!/<video/.test(withGround), 'onboarding ships a video it has no script to drive');
+
+  // THE DEGRADED PATH IS STILL A PAGE. An empty catalog means no ground, and
+  // the page must then be the cream one rather than the dark palette over
+  // nothing -- which would be bone text on a bone-less background.
+  const noGround = onboardingPage({
+    account: { email: 'a@b.com', consent: null }, consentText: 'I confirm.', csrf: 't',
+  });
+  assert.ok(!/is-landing/.test(noGround), 'with no ground the page still claims the dark palette');
+  assert.ok(!/class="bgs"/.test(noGround), 'with no ground the page still emits empty background layers');
+  assert.match(noGround, /Agree and continue/, 'the consent form is gone from the degraded page');
 });

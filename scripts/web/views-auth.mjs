@@ -346,7 +346,28 @@ export function resetCompletePage({ email = '', error = null, csrf = '' } = {}) 
  * record never sees this branch; re-asking somebody who already agreed would
  * be asking a person to agree to a photo they have not even uploaded yet.
  */
-export function onboardingPage({ account = null, consentText = '', csrf = '', error = null } = {}) {
+/**
+ * ONBOARDING KEEPS THE LANDING'S WORLD, AND THAT IS A DELIBERATE NARROWING OF
+ * §31's RULE RATHER THAN A DRIFT FROM IT.
+ *
+ * §31 put every page on cream except the landing. That rule was argued about
+ * the WORKSPACE: the signed-in page is where somebody reads prices and makes
+ * choices, and text over a moving photograph competes with the work. This page
+ * is not a workspace. It is a four-second gate, and the person arriving at it
+ * has just come from the dark world -- they picked a place, watched the wipe,
+ * signed up, typed six digits -- so dropping them onto a plain cream form is a
+ * hard cut at the exact moment they have committed. The world holds until the
+ * work starts; the cream begins at `/`, where the work is.
+ *
+ * WHAT THAT COSTS, AND IT COST IT ONCE ALREADY. `body.is-landing` re-points
+ * nine palette aliases and --ghost, so every rule here that names a TOKEN
+ * follows the ground and every rule that names a literal tier does not. That is
+ * exactly how the sign-in dialog broke on 2026-09-05 -- typed text at 1.06:1,
+ * invisible, with 2119 tests green over it. The panel is restated for the dark
+ * ground in `static.mjs`, and `browser-smoke.test.js` measures every word on
+ * this page against the brightest ground a photograph can make.
+ */
+export function onboardingPage({ account = null, consentText = '', csrf = '', error = null, ground = '' } = {}) {
   const body = `
 <main>
   <section class="panel">
@@ -374,7 +395,8 @@ export function onboardingPage({ account = null, consentText = '', csrf = '', er
   return layout({
     title: 'Timestamp - onboarding',
     body,
-    bodyClass: 'page-onboarding',
+    preBody: ground,
+    bodyClass: ground ? 'is-landing page-onboarding' : 'page-onboarding',
     wrapClass: 'wrap--narrow',
     account,
   });

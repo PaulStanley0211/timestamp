@@ -1025,3 +1025,176 @@ test('the landing before/after wipe is draggable, and its two halves are aligned
       `at ${viewport.width}px the grip is still drawn with wipe--live removed -- a handle nobody can drag`);
   }
 });
+
+/**
+ * ONBOARDING CARRIES THE LANDING'S WORLD, AND THIS IS THE TEST THAT CATCHES THE
+ * WAY THAT GOES WRONG.
+ *
+ * `body.is-landing` re-points nine palette aliases and --ghost. A rule naming a
+ * TOKEN follows; a rule naming a literal tier (--ink-strong, --ink-soft) does
+ * not, and comes out dark ink on a dark ground -- invisible, while every markup
+ * assertion in the suite still passes. That is not hypothetical: it is exactly
+ * what happened to the sign-in dialog on 2026-09-05, where the address a person
+ * typed measured 1.06:1 and 2119 tests were green over it.
+ *
+ * THE GROUND IS A PHOTOGRAPH, SO THE COMPARISON IS AGAINST THE WORST CASE IT
+ * CAN BE. §31 solved the on-image tiers against a pure WHITE photograph under
+ * the scrim for this reason -- the actual pixels vary per place and per frame,
+ * and a test that measured one of them would pass or fail by luck. Compositing
+ * each element's background chain over white is the honest bound: clear it and
+ * no photograph can defeat the text.
+ */
+test('every word on the onboarding page survives the dark ground it now sits on', { skip }, async () => {
+  const s = await session();
+  await s.signIn();
+  for (const viewport of [PHONE, LAPTOP]) {
+    const page = await visit('/onboarding', viewport);
+    assert.deepEqual(page.errors, [], `at ${viewport.width}px: ${page.errors.join('; ')}`);
+
+    const r = await page.evaluate(`(() => {
+      const parse = (c) => {
+        const m = (c || '').match(/[0-9.]+/g);
+        if (!m) return null;
+        return { r: +m[0], g: +m[1], b: +m[2], a: m.length > 3 ? +m[3] : 1 };
+      };
+      // Composite a background chain down onto WHITE -- the brightest a
+      // photograph under the scrim can ever be.
+      const groundOf = (el) => {
+        const stack = [];
+        for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+          const bg = parse(getComputedStyle(n).backgroundColor);
+          if (bg && bg.a > 0) { stack.push(bg); if (bg.a === 1) break; }
+        }
+        let out = { r: 255, g: 255, b: 255 };
+        for (let i = stack.length - 1; i >= 0; i -= 1) {
+          const c = stack[i];
+          out = {
+            r: c.r * c.a + out.r * (1 - c.a),
+            g: c.g * c.a + out.g * (1 - c.a),
+            b: c.b * c.a + out.b * (1 - c.a),
+          };
+        }
+        return out;
+      };
+      const lum = (c) => {
+        const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+        return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+      };
+      const ratio = (a, b) => {
+        const [hi, lo] = lum(a) >= lum(b) ? [lum(a), lum(b)] : [lum(b), lum(a)];
+        return (hi + 0.05) / (lo + 0.05);
+      };
+
+      // THE WHOLE PAGE, NOT main. The first version of this scanned 'main *'
+      // and passed while the FOOTER sat unreadable on the photograph -- §31
+      // measured --l-dim at 2.86:1 over a bright loop and names the footer as
+      // one of the three places this product ships it. A contrast probe that
+      // stops at the content well is a probe that cannot see the chrome.
+      const out = [];
+      for (const el of document.querySelectorAll('body *')) {
+        const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+        if (!own) continue;
+        const box = el.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) continue;
+        const cs = getComputedStyle(el);
+        if (cs.visibility === 'hidden' || cs.opacity === '0') continue;
+        const fg = parse(cs.color);
+        if (!fg) { out.push({ text: el.textContent.trim().slice(0, 40), cls: el.className || el.tagName, ratio: 0, need: 4.5, unparsed: cs.color }); continue; }
+        const bg = groundOf(el);
+        const size = parseFloat(cs.fontSize);
+        const large = size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700);
+        out.push({
+          text: el.textContent.trim().slice(0, 40),
+          cls: el.className || el.tagName,
+          ratio: Math.round(ratio(fg, bg) * 100) / 100,
+          need: large ? 3 : 4.5,
+        });
+      }
+      // THE GROUND HAS TO BE VISIBLE, NOT MERELY PRESENT. .bg ships at
+      // opacity 0 and the landing lights whichever its place radio selects;
+      // this page lights its one layer with a class instead. Assert the
+      // computed opacity and the resolved image, because with the lighting
+      // rule removed the photograph is simply not there -- and every other
+      // assertion in this file still passes, since a page with no ground is a
+      // page with excellent contrast.
+      const layer = document.querySelector('.bgs .bg');
+      const lcs = layer ? getComputedStyle(layer) : null;
+
+      return {
+        isLanding: document.body.classList.contains('is-landing'),
+        ground: Boolean(document.querySelector('.bgs')),
+        scrim: Boolean(document.querySelector('.scrim')),
+        litOpacity: lcs ? Number(lcs.opacity) : null,
+        litImage: lcs ? lcs.backgroundImage.slice(0, 60) : null,
+        items: out,
+      };
+    })()`);
+
+    assert.ok(r.isLanding, `at ${viewport.width}px onboarding is not carrying the landing's palette`);
+    assert.ok(r.ground, `at ${viewport.width}px onboarding has no place photograph behind it`);
+    assert.ok(r.scrim, `at ${viewport.width}px onboarding has a photograph and no scrim over it`);
+    assert.ok(r.litOpacity > 0,
+      `at ${viewport.width}px the place layer is painted at opacity ${r.litOpacity} -- the ground is in the markup and invisible`);
+    assert.match(r.litImage ?? '', /url\(/,
+      `at ${viewport.width}px the place layer resolves no image: ${r.litImage}`);
+    assert.ok(r.items.length >= 4, `at ${viewport.width}px only ${r.items.length} text elements found -- the probe is not reading the page`);
+
+    const failed = r.items.filter((i) => i.ratio < i.need);
+    assert.deepEqual(failed, [],
+      `at ${viewport.width}px these fail against the brightest ground a photograph can make: `
+      + failed.map((f) => `"${f.text}" (${f.cls}) ${f.ratio}:1 needs ${f.need}:1`).join(' | '));
+  }
+});
+
+/**
+ * NOTHING IS PAINTED IN THE DIM TIER ON A PAGE THAT SITS ON A PHOTOGRAPH.
+ *
+ * §31 measured --l-dim (#8D8880) at 2.86:1 over the brightest place loop and
+ * named the three places this product ships it: .fine, .who and the footer.
+ * §30's answer was a local plate; §60K's answer for the nav was to take the
+ * hero's own colour plus a shadow. Neither reached the FOOTER, which is dim
+ * text directly on the picture on every page carrying that ground.
+ *
+ * WHY THIS IS A SEPARATE TEST FROM THE CONTRAST SWEEP ABOVE. The sweep walks
+ * the DOM for a background, and .bgs is a position:fixed sibling at z-index -2
+ * -- visually under the text, structurally not an ancestor. Simulating that
+ * composite means reimplementing stacked-gradient blending in a test, which was
+ * tried and produced four wrong answers in a row. The RULE is simpler than the
+ * arithmetic and is what §30 and §31 actually decided: on this ground, the dim
+ * tier does not appear without a plate under it.
+ */
+test('no page sitting on a photograph paints its words in the dim tier', { skip }, async () => {
+  const s = await session();
+  for (const [route, signedIn] of [['/', false], ['/onboarding', true]]) {
+    if (signedIn) await s.signIn(); else await s.signOut();
+    const page = await visit(route, LAPTOP);
+
+    const r = await page.evaluate(`(() => {
+      if (!document.querySelector('.bgs')) return { skip: true };
+      const dim = [];
+      for (const el of document.querySelectorAll('body *')) {
+        const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+        if (!own) continue;
+        const box = el.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) continue;
+        const cs = getComputedStyle(el);
+        if (cs.visibility === 'hidden' || cs.opacity === '0') continue;
+        if (cs.color !== 'rgb(141, 136, 128)') continue;
+
+        // A plate under it makes dim legitimate -- that is §30's whole device.
+        let plated = false;
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+          const bg = getComputedStyle(n).backgroundColor;
+          if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') { plated = true; break; }
+        }
+        if (!plated) dim.push({ cls: el.className || el.tagName, text: el.textContent.trim().slice(0, 32) });
+      }
+      return { skip: false, dim };
+    })()`);
+
+    if (r.skip) continue;
+    assert.deepEqual(r.dim, [],
+      `${route} paints unplated dim text on the photograph: `
+      + r.dim.map((d) => `"${d.text}" (${d.cls})`).join(' | '));
+  }
+});

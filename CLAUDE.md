@@ -8421,6 +8421,124 @@ ordering knowingly (option C, texture first) with the weakness stated.
   rather than screenshot when that happens; the pane does not need to be
   displayed for anything except a screenshot.
 
+---
+
+### 63. THE WORLD HOLDS UNTIL THE WORK STARTS -- ONBOARDING KEEPS THE LANDING'S GROUND (2026-09-05)
+
+**2123 / 2120 -> 2126 / 2123 pass / 0 fail / 3 skipped.** +3 tests. Test-first,
+four sabotages each watched red and restored from a copy, all seven
+`guards.yml` steps green.
+
+`/onboarding` now carries the landing's dark ground: the place photograph
+behind, the scrim over it, the panel on §30's plate. The cream begins at `/`,
+where the work is.
+
+**THE REASON, AND IT IS THE OWNER'S CALL RATHER THAN A TIDY-UP.** A person
+arriving here has just come from the dark world -- picked a place, watched the
+wipe (§62), signed up, typed six digits -- and then met a plain cream form.
+That is a hard cut at the exact moment they have committed. **Every account
+created through the email code flow lands here**: `verifyCode` redirects
+unconditionally. Google and login land here only when consent is not on file.
+
+#### A -- IT NARROWS §31'S RULE AND SAYS SO
+
+§31 put every page on cream except the landing. **That rule was argued about
+the WORKSPACE** -- the signed-in page is where somebody reads prices and makes
+choices, and text over a moving photograph competes with the work. Onboarding
+is a four-second gate, not a workspace. The narrowing is deliberate and is
+recorded here rather than left for somebody to discover as drift.
+
+**THE MECHANISM IS ALREADY THERE AND ONLY THE SWITCH DIFFERS.** `.bg` ships at
+`opacity: 0` and the landing lights whichever layer its CSS-only place radio
+selects; `singlePlaceGround()` emits one layer lit by a class instead. **No
+`<video>`**: `BG_SCRIPT` swaps a loop's source by reading those same radios, so
+a loop here would need a sixth inline script and a fifth CSP hash to buy
+nothing the still does not already give.
+
+**THE PLACE IS THE LANDING'S OWN DEFAULT, NOT THE ONE THEY CHOSE.** The
+landing's radios are named `lplace` and are never submitted; carrying the real
+choice means plumbing it through signup AND surviving the six-digit round trip,
+for a cosmetic continuity. Anybody who did not click a card was looking at the
+first one anyway.
+
+#### B -- THREE THINGS THE DARK GROUND BROKE, AND ONE WAS ALREADY BROKEN
+
+1. **The primary button was 2.21:1.** `.record` sets its label to `--paper` and
+   its own comment explains why -- oxide is mid-dark, so cream on it is 6.16:1.
+   That reasoning is a property of OXIDE. `is-landing` re-points `--accent` to
+   `--l-cathode` (bright) and does **not** re-point `--paper`, so cream on
+   orange came out at exactly the number §31 records for why the cathode can
+   never come to a light ground. It takes the ground's own near-black now.
+   **This is §60K's sign-in dialog lesson arriving at the next component.**
+2. **THE LANDING'S FOOTER HAS BEEN UNREADABLE ON THE PHOTOGRAPH ALL ALONG, AND
+   THAT IS NOT A REGRESSION FROM THIS WORK.** `.foot` is `var(--faint)`, which
+   `is-landing` re-points to `--l-dim` -- the colour §31 measured at **2.86:1**
+   over the brightest loop while naming the footer as one of exactly three
+   places this product ships it. §60K fixed the NAV that way and stopped there.
+   Putting a second page on this ground is what made it worth finding. Both
+   pages now take bone plus a shadow, the nav's own treatment, with SIZE
+   carrying the hierarchy -- §31's ruling, because size survives compositing
+   and colour does not.
+3. **The panel needed §30's plate.** `--frost` is transparent, which is right
+   on paper and wrong the moment a picture is behind it. `--frost-lit` is the
+   value §30 solved as the least tint that lets the dim tokens clear 4.5:1.
+   Without it the eyebrow was dim text on a sunlit beach and the panel read as
+   words floating rather than an object on the picture.
+
+#### C -- THE TEST WAS MEASURING THE WRONG GROUND, FOUR TIMES
+
+The contrast probe walks ancestors for a background. **`.bgs` is
+`position: fixed` at `z-index: -2` -- visually under the text, structurally a
+SIBLING of `.wrap`** -- so the walk sails past the photograph and lands on
+`body`'s opaque dark colour. It reported the footer at **5.63:1** for text
+genuinely sitting at about 2.5:1 on a beach.
+
+**SIMULATING THE COMPOSITE WAS THE WRONG ANSWER AND IS RECORDED SO NOBODY
+RETRIES IT.** Four attempts, four wrong numbers: compositing over white without
+the scrim; treating the scrim's own `rgba(0,0,0,0)` background-color as its
+weakest stop (which composited the ground away and reported every BONE word on
+the page failing at 1.28:1); then discovering `.scrim` is a linear gradient AND
+a radial one **stacked**, so no single stop is the worst case at all. That is
+reimplementing CSS blending inside a test.
+
+**WHAT REPLACED IT IS THE RULE ITSELF**, which §30 and §31 had already decided:
+*on a page sitting on a photograph, the dim tier does not appear without a
+plate under it.* One selector check, no arithmetic, and it caught the landing's
+footer immediately.
+
+#### D -- THE SABOTAGE THAT PASSED, AND WHY IT MATTERED
+
+Setting `.bg--lit` to `opacity: 0` makes the photograph **completely
+invisible** -- the entire point of the change -- and **all three new tests
+still passed.** A page with no ground has excellent contrast, carries every
+element the markup asserts, and looks like a plain dark page. The probe now
+reads the layer's computed opacity and resolved image. **A feature can be
+wholly dead while every assertion about it is true.**
+
+#### E -- Things that will bite
+
+- **`\d` INSIDE A TEMPLATE LITERAL IS NOT A DIGIT CLASS.** It is not a valid
+  escape, so it collapses to a bare `d` and the regex matches the LETTER. A
+  colour probe built on it returned null for every element and reported 0:1
+  across the page. Use `[0-9.]`, which the same file already does one test
+  above. Cousin of this file's long-standing backslash warnings, one layer in.
+- **A RULE ON THE ELEMENT BEATS INHERITANCE WHATEVER THE SPECIFICITY.**
+  `.is-landing .foot` did not reach `.fine`, because `.fine` sets its own
+  colour; two of six footer elements stayed dim through a fix that looked
+  complete. Name the children.
+- **`~` CANNOT REACH AN EARLIER SIBLING**, and §62 hit the same thing. Anything
+  a script APPENDS is after everything already in the markup.
+- **A LANDING-SCOPED RULE PUT ON THE PAPER SIDE OF `static.mjs` TRIPS §31's
+  CATHODE GUARD VIA ITS OWN COMMENT.** The guard skips lines beginning `*`,
+  `/*` or `//`, and this file's comment style continues with plain indented
+  text. The fix was to move the rule into the landing section where it belonged
+  anyway, not to loosen the guard.
+- **`/onboarding` IS HARD TO SEE LOCALLY**: it renders only for an account with
+  `consent == null`, and signing in normally lands you at `/`.
+  `build/preview-onboarding.mjs` renders it standalone with the stylesheet
+  inlined and the place photograph copied beside it; serve `build/` with the
+  `preview` launch config and open `/build/preview-onboarding.html`.
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT
