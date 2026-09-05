@@ -8682,6 +8682,130 @@ it replaces anything.
 - **A CONFIG CHANGE IS NOT A DEPLOY AND A DEPLOY IS NOT A BACKFILL.** Three
   separate steps, and stopping after any of them leaves somebody's video slow.
 
+---
+
+### 65. THE OUTFITS GO ON ANYBODY, AND STEP 2 STOPS BEING A WALL (2026-09-05)
+
+**2126 / 2123 -> 2133 / 2130 pass / 0 fail / 3 skipped.** +7 tests, none
+dropped. One commit, `4467db5`, test-first throughout, four sabotages each
+watched red and restored from a COPY. All seven `guards.yml` steps run verbatim
+and counted 7/7. **NOT PUSHED AND NOT DEPLOYED.**
+
+The owner's requirement, in his own words: the outfits *"should combine both
+genders ... it should resemble a basic outfit, like how men wear and women
+wear."*
+
+#### A -- THE MENU IS FIVE GARMENTS AND THE DRESS WAS THE ONLY GENDERED ONE
+
+| | For | |
+|---|---|---|
+| **T-shirt and jeans** *(default)* | warm / mild / indoor | NEW |
+| Checked shirt and jeans | mild / warm / indoor | worn OPEN over a tee, not tucked in |
+| Zip-up fleece | cool / mild / indoor | names what is worn below it |
+| Tracksuit | cool / mild | **wardrobe line untouched** |
+| Padded jacket | cold / cool | hood and scarf gone -- §65C |
+
+**Retired: `sommerkleid` and `strickjacke`**, with `RETIRED_OUTFIT_LABELS` in
+`catalog.mjs` -- the courtesy places got on 2026-09-04 and outfits never did, so
+a tape already on somebody's shelf would have captioned itself `sommerkleid`.
+
+**A 3-MEN'S / 2-WOMEN'S SPLIT WAS PROPOSED BY THE OWNER AND REFUSED IN
+CONVERSATION. Recorded so nobody re-argues it:** it only means anything if the
+labels are shown, and showing them puts a gender question in a four-choice
+flow; three-plus-two gives WOMEN the smaller section (two options against five);
+and two garments cannot dress a person for seven places, so covering the
+climate bands twice needs ~10 presets on a menu whose brief was *simpler*.
+
+**THE FREE-TEXT BOX IS THE WHOLE ANSWER TO WHAT A NARROW MENU COSTS, and it was
+folded inside a collapsed `<details>`.** Promoted, exactly as §43 promoted the
+own-place upload and for the reason §43 wrote down: a signpost to the back of
+the room is still the back of the room. Its placeholder is `a cotton summer
+dress` on purpose -- it read `a green anorak`, which since the padded jacket
+exists demonstrated the box without demonstrating the point of it.
+
+**`test/catalog.test.js` NOW FAILS IF ANY CARD NAMES A SINGLE-GENDER GARMENT.**
+The schema has banned man/woman/male/female since it was written -- but that
+checks WORDS, and `sommerkleid` described a sundress for a fortnight without
+naming a gender and passed every run. **The garment is the thing that excludes
+somebody, so the garment is what is pinned.**
+
+#### B -- THE OUTFIT WAS THE ONLY REQUIRED CHOICE WITH NO DEFAULT
+
+Place, resolution and frame have all been checked on load for months. The
+outfit radios were the one group with nothing selected, while
+`cleanText(..., 'outfit', { required: true })` refused a post without one --
+**so uploading a photo, picking a place and pressing Record without scrolling
+through step 2 earned a 400, after the upload was spent, over the one choice
+that changes neither the price nor the length of the tape.**
+
+`DEFAULT_OUTFIT_ID` is named in `catalog.mjs` and falls back to the first card
+if that preset ever leaves, because SOMETHING must be checked or this reverts.
+
+**TWO THINGS FELL OUT OF THE DEFAULT AND NEITHER WAS PREDICTED:**
+
+1. **IT WOULD HAVE KILLED THE TEXT BOX.** A radio group cannot be cleared
+   without JavaScript, so a browser now posts an outfit on EVERY order; with
+   `firstFilled(fields.outfit, fields.outfitText)` the card won every time and
+   `outfitText` could never win for anybody. **§49D's dead own-place card
+   exactly** -- and worse here, because after §65A this box is the only way to
+   order a dress. The text beats the card now, which is the OPPOSITE of step 3
+   and is so because step 3 has `pl-own` and step 2 has no escape hatch.
+   Caught by writing the test; it failed against the just-added default.
+2. **THE DEFAULT LANDED FOURTH OF FIVE.** The catalog sorts by id, so the card
+   already ticked sat in the second row after four the eye reads first. **Found
+   by looking at the rendered page — every assertion about the default passed
+   while it was buried there.** Cards and hoisted radios are reordered together:
+   the cards are labels, the radios are what a keyboard walks.
+
+#### C -- THE PADDED JACKET LOST ITS HOOD, AND THE REASON IS THE FACE
+
+It read *"a fur-trimmed hood ... zipped to the chin over a knitted scarf"* --
+a hood, a raised collar and a scarf, **the only things in the whole menu that
+came in front of the subject's face.** The uploaded photograph is the identity
+anchor and the entire product is that it looks like you. Two negatives now
+refuse the hood raised and the collar across the chin.
+
+#### D -- WHAT IS UNPROVEN, AND ONE PAID RENDER SETTLES IT
+
+**No woman's photograph has ever been rendered in a neutral outfit.** All 23
+paid jobs on this disk are the owner's face and only three outfits have ever
+been ordered. The evidence that this works is good but indirect: job
+`20260824-130457-a2e9ac` put a **bearded man in a white floral sundress**
+because the wardrobe line asked for one (§53E), which is the property the whole
+design rests on -- **clothing comes from the text, identity comes from the
+photograph, and the two do not fight.** §60H has a friend reporting a tape
+"looked like her".
+
+**The check is two renders on a friend's photo, ~$1.50** -- the new default and
+the tracksuit, read frame by frame the §53 way. If a neutral outfit ever
+masculinises, putting `sommerkleid` back is a one-file revert and the free-text
+box has covered it in the meantime.
+
+#### E -- Things that will bite
+
+- **THE BASH HEREDOC ATE `\b` AND THE GUARD PASSED VACUOUSLY ON ITS FIRST RUN.**
+  `\\b` written into a heredoc arrived as `\b`, which inside a JS template
+  literal is a BACKSPACE character, so the regex was `\x08dress\x08` and matched
+  nothing -- against a menu that still contained the dress. This file has warned
+  since §31 and it still caught me. **Use Write/Edit for anything with an
+  escape, and treat a first-run pass as a failure until proven otherwise.**
+- **DO NOT APPROXIMATE A GUARD WHEN CHECKING IT** (§42G). Hand-written
+  stand-ins for two `guards.yml` steps reported failures that do not exist --
+  the real secrets guard excludes `.env.example` and the test-photo README by
+  name, and the consent guard matches exact phrases. Run the guard's own lines.
+- **THE ORDER PAGE NEEDS A SESSION AND `/login` ASKS SUPABASE**, so it cannot be
+  opened locally the way `/` can. `build/preview-home.mjs` renders it against
+  the real catalog with the REAL generated stylesheet -- per-catalog `:checked`
+  rules included, which §60G's note says the older preview lacks -- and
+  `build/serve-preview.mjs` roots at the repo, so the URL is
+  `/build/preview-home.html` and not `/preview-home.html`.
+- **THE BROWSER PANE WOULD NOT PAINT** for this session, exactly as §62E
+  records. `javascript_tool` and `read_page` worked throughout. Measure rather
+  than screenshot when that happens.
+- **The three `.aside summary` rules are gone with the last disclosure on the
+  page.** A rule that matches nothing is how dead markup survives a review --
+  §30's reasoning when it took the 4:3 veil's markup and rule out together.
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT
