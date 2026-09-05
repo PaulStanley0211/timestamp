@@ -1116,6 +1116,50 @@ test('a real place photograph is served when it is there', async () => {
   }
 });
 
+/**
+ * The before/after pair on the landing page.
+ *
+ * TWO FIXED NAMES AND AN ALLOW-LIST, NOT A PATTERN. `placeImage` resolves its
+ * id by membership in the catalog precisely so no byte of the request is ever
+ * concatenated into a path; there are exactly two files here, so the same
+ * property comes for free from a two-entry map. Swapping which photograph the
+ * landing compares is replacing two files on disk -- no route change, and
+ * nothing new for a traversal attempt to aim at.
+ *
+ * PUBLIC, BECAUSE THE PAGE IS. The landing is what a signed-out stranger
+ * arrives at; a comparison whose halves 401 would be two broken images above
+ * the fold for every visitor who has not signed in -- which is all of them.
+ */
+test('the landing before/after pair is served, and to somebody who is not signed in', async () => {
+  const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
+  fs.mkdirSync(`${assets}/landing`, { recursive: true });
+  fs.writeFileSync(`${assets}/landing/photo.jpg`, Buffer.from('the source photograph'));
+  fs.writeFileSync(`${assets}/landing/tape.jpg`, Buffer.from('the graded frame'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), assetsRoot: assets });
+  const port = await app.listen();
+  try {
+    for (const [file, body] of [['photo.jpg', 'the source photograph'], ['tape.jpg', 'the graded frame']]) {
+      // No cookie on this fetch, deliberately -- that is the assertion.
+      const res = await fetch(`http://127.0.0.1:${port}/landing/${file}`);
+      assert.equal(res.status, 200, `/landing/${file} is not reachable signed out`);
+      assert.equal(res.headers.get('content-type'), 'image/jpeg');
+      assert.equal(await res.text(), body);
+    }
+
+    // Anything not in the map is a 404 before the filesystem is consulted.
+    for (const target of ['/landing/nope.jpg', '/landing/..%2f..%2fpackage.json', '/landing/photo.png']) {
+      const res = await fetch(`http://127.0.0.1:${port}${target}`);
+      assert.ok(res.status === 404 || res.status === 400,
+        `${target} answered ${res.status}, which is neither a refusal nor a miss`);
+    }
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(assets, { recursive: true, force: true });
+  }
+});
+
 test('a place LOOP is served, and only for an id the catalog knows', async () => {
   const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
   fs.mkdirSync(`${assets}/places`, { recursive: true });
@@ -1216,6 +1260,49 @@ test('the moving background is one element, and the page is finished without it'
       'the signed-in page still carries a background video');
     assert.ok(!/class="bgs"/.test(home), 'the signed-in page still carries the full-bleed ground');
     assert.ok(!/class="scrim"/.test(home), 'the signed-in page still carries the scrim');
+  });
+});
+
+/**
+ * THE ONE THING THIS PRODUCT CAN SHOW THAT A COMPETITOR CANNOT IS THE GRADE.
+ * Anyone can call a video model; the tape chain in `scripts/tapedeck/` is the
+ * half that is ours. The landing states it in prose -- "chroma bleed, grain,
+ * the head-switch band" -- and prose is the weakest way to make a claim about
+ * how something looks. The wipe is the same claim as a picture.
+ *
+ * WHY BOTH HALVES ARE IN THE MARKUP AND THE CONTROL IS NOT. Section 30's rule
+ * for the background loop applies here unchanged: every exit returns to the
+ * page that already worked. The clip is a CSS custom property with a static
+ * default, so a browser with no JavaScript -- or one that refused the script
+ * under the CSP -- gets a fixed split of two real photographs with a divider
+ * down the middle, which is a legitimate before-and-after rather than a dead
+ * control. The script's only job is to make that split draggable.
+ */
+test('the landing shows the grade as a before and after, and is finished without the script', async () => {
+  await withServer(async ({ base }) => {
+    const html = await (await get(base, '/')).text();
+
+    const figure = html.slice(html.indexOf('<figure class="wipe"'), html.indexOf('</figure>', html.indexOf('<figure class="wipe"')));
+    assert.ok(figure.length > 0, 'the landing carries no before/after figure at all');
+
+    // BOTH PHOTOGRAPHS SHIP IN THE MARKUP. If either were script-inserted the
+    // no-JS state would be one picture and an unexplained gap.
+    assert.match(figure, /src="\/landing\/photo\.jpg"/,
+      'the source photograph is not in the markup');
+    assert.match(figure, /src="\/landing\/tape\.jpg"/,
+      'the graded frame is not in the markup');
+
+    // Both are content, not decoration -- a reader who cannot see them still
+    // needs to be told what the comparison is between.
+    const alts = [...figure.matchAll(/alt="([^"]*)"/g)].map((m) => m[1]);
+    assert.equal(alts.length, 2, 'both halves must carry alt text');
+    for (const alt of alts) assert.ok(alt.trim().length > 0, 'an empty alt on a load-bearing image');
+
+    // THE CONTROL IS THE SCRIPT'S, AND ONLY THE SCRIPT'S. A range input in the
+    // markup would move its own thumb with no JavaScript while the picture
+    // behind it stayed put -- a control that visibly does nothing, which is
+    // section 49D's dead own-place card in a second place.
+    assert.ok(!/<input/.test(figure), 'the slider input must be created by the script, never shipped inert');
   });
 });
 
@@ -1943,8 +2030,17 @@ test('pages declare a content security policy and refuse to be sniffed', async (
 test('the only scripts a page may run are the ones it ships, named by hash', async () => {
   await withServer(async ({ base, root, app, accountA, cookieA }) => {
     const job = seedJob(app, root, { owner: accountA });
-    for (const target of ['/', `/j/${job.jobId}`]) {
-      const res = await get(base, target, cookieA);
+    // `/` SIGNED OUT IS A DIFFERENT PAGE, AND IT WAS NEVER CHECKED HERE.
+    // Every target below was fetched with a cookie, so `/` was always the
+    // signed-in app page -- and BG_SCRIPT, SIGNIN_SCRIPT and WIPE_SCRIPT are
+    // landing-only (§31 stopped emitting the background script on the signed-in
+    // page). Three of this product's five inline scripts were invisible to the
+    // one test whose whole subject is that a shipped script is named by hash.
+    // The browser smoke test catches a missing hash too, but it self-skips on a
+    // machine with no Chromium, so on that machine the refusal would have
+    // shipped silently.
+    for (const [target, cookie] of [['/', cookieA], ['/', null], [`/j/${job.jobId}`, cookieA]]) {
+      const res = await get(base, target, cookie);
       const csp = res.headers.get('content-security-policy') ?? '';
       assert.ok(!/script-src[^;]*'unsafe-inline'/.test(csp),
         `${target} admits every inline script, including an injected one`);

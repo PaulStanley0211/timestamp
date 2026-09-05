@@ -395,7 +395,7 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
     // quoted the 4:3 number for every shape while the ledger took the real one.
     //
     // The selector works because the radios are hoisted siblings of `.wrap` and
-    // the quality ones are emitted BEFORE the aspect ones (views.mjs), so `~`
+    // the quality ones are emitted BEFORE the aspect ones (views.mjs), so '~'
     // reaches from the first to the second and then to the wrap.
     for (const a of aspects) {
       if (a.available === false) continue;
@@ -2598,6 +2598,85 @@ input[type="file"]::file-selector-button {
    the signed-in page's #tape has been a 320px anchor beside a 640px flow column
    since §6a, measured at exactly 1:2, and it is the best layout in the product.
    This makes it the house ratio instead of a one-page accident. */
+
+/* THE BEFORE/AFTER WIPE.
+   One custom property drives everything: the clip on the top half, where the
+   divider sits, and nothing else. WIPE_SCRIPT sets it from a range input; the
+   inline style on the figure is the no-script value, so the default state is a
+   real 50/50 composite rather than an empty frame.
+
+   NO BORDER ANYWHERE IN HERE. The divider is a filled 2px element, not a rule
+   on a box, and the grip is a filled disc -- DESIGN.md permits exactly two
+   borders and neither of them is this. */
+.show { padding: 0 0 var(--s-9); }
+.show-t {
+  font-family: var(--osd); font-size: var(--d-3); text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--l-bone); margin: 0 0 var(--s-4); font-weight: 400;
+}
+  /* The no-script value, and it lives HERE rather than on a style attribute:
+     style-src self refuses an inline style attribute outright, and a hash
+     cannot rescue one -- that needs unsafe-hashes. Caught by the browser test,
+     invisible to every markup assertion. */
+.wipe { --wipe: 50%; }
+.wipe {
+  position: relative; margin: 0; aspect-ratio: 16 / 9; overflow: hidden;
+  border-radius: 2px; background: var(--l-ground);
+}
+.wipe img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.wipe-under { position: absolute; inset: 0; }
+/* The clipped half. 'clip-path' does not affect layout, which is why the
+   browser test reads the resolved clip rather than a bounding rect. */
+.wipe-clip {
+  position: absolute; inset: 0;
+  clip-path: polygon(0 0, var(--wipe) 0, var(--wipe) 100%, 0 100%);
+}
+.wipe-line {
+  position: absolute; top: 0; bottom: 0; left: var(--wipe);
+  width: 2px; margin-left: -1px; background: var(--l-bone);
+  box-shadow: 0 0 12px rgba(7, 10, 17, 0.55);
+}
+/* THE GRIP IS DRAWN ONLY WHERE IT CAN BE DRAGGED. WIPE_SCRIPT adds
+   'wipe--live'; with no script the figure is an honest static split, and a
+   round handle sitting on that split would be a control that looks draggable
+   and is not -- section 49D's dead own-place card, which passed every markup
+   test it had because presence was never the thing that was wrong. */
+.wipe-grip { display: none; }
+.wipe--live .wipe-grip {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 2.75rem; height: 2.75rem; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--l-bone); color: var(--l-ground);
+  box-shadow: 0 2px 18px rgba(7, 10, 17, 0.5);
+}
+.wipe-cap {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; justify-content: space-between;
+  padding: var(--s-3) var(--s-4);
+  font-family: var(--osd); font-size: var(--d-1); letter-spacing: 0.24em;
+  text-transform: uppercase; color: var(--on-image); pointer-events: none;
+  text-shadow: 0 1px 10px rgba(7, 10, 17, 0.85);
+}
+/* The control: a real range stretched over the picture, invisible because the
+   divider and grip above ARE its thumb as far as a viewer is concerned.
+   Pointer-down anywhere on the picture jumps it and begins a drag. */
+.wipe-range {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; opacity: 0; cursor: ew-resize;
+  -webkit-appearance: none; appearance: none; background: transparent;
+}
+.wipe-range::-webkit-slider-thumb { -webkit-appearance: none; width: 3rem; height: 100%; }
+.wipe-range::-moz-range-thumb { width: 3rem; height: 100%; border: 0; opacity: 0; }
+/* The ring has to be drawn on something visible, and the range itself is not.
+   §16's ruling: the indicator belongs on the control a person can actually see. */
+   The combinator is ':has()' and not '~' on purpose: WIPE_SCRIPT appends the
+   range LAST, so the divider it needs to reach is an EARLIER sibling and a
+   general-sibling selector would match nothing at all -- silently, which is how
+   a focus indicator goes missing for a year. */
+.wipe--live:has(.wipe-range:focus-visible) .wipe-grip {
+  outline: 3px solid var(--l-cathode); outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) { .wipe-grip { transition: none; } }
+
 .how {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);

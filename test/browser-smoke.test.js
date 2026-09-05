@@ -932,3 +932,96 @@ test('the signup page renders its real form on a phone', { skip }, async () => {
   assert.ok(probes.password, 'no visible password field');
   assert.ok(probes.submit, 'no visible submit control');
 });
+
+/**
+ * THE ONE ASSERTION IN THIS REPOSITORY THAT CAN SEE THE WIPE ACTUALLY MOVE.
+ *
+ * `clip-path` DOES NOT CHANGE LAYOUT. A clipped element's
+ * `getBoundingClientRect()` is its unclipped box, so every rect-reading probe
+ * returns the same numbers whether the wipe is at 5% or 95% -- section 60F's
+ * trap, where a layout test passed over an overflow that was plain on the
+ * screen. What moves is the resolved `clip-path`, so that is what is read,
+ * out of the real cascade in a real browser under the real CSP.
+ *
+ * WHICH MAKES THIS THE CSP CHANNEL TOO. The control is script-created; if the
+ * fifth hash were missing from `INLINE_SCRIPT_HASHES`, Chrome would refuse the
+ * script, the range input would never exist, and this goes red at the first
+ * assertion rather than shipping a landing page whose demonstration is frozen.
+ */
+test('the landing before/after wipe is draggable, and its two halves are aligned', { skip }, async () => {
+  const s = await session();
+  await s.signOut();
+  for (const viewport of [PHONE, LAPTOP]) {
+    const page = await visit('/', viewport);
+    assert.deepEqual(page.errors, [], `at ${viewport.width}px: ${page.errors.join('; ')}`);
+
+    const r = await page.evaluate(`(() => {
+      const fig = document.querySelector('figure.wipe');
+      if (!fig) return { missing: 'figure.wipe' };
+      const range = fig.querySelector('input[type="range"]');
+      if (!range) return { missing: 'the script-created range input' };
+      const clipped = fig.querySelector('.wipe-clip');
+      if (!clipped) return { missing: '.wipe-clip' };
+
+      const nums = () => (getComputedStyle(clipped).clipPath.match(/[0-9.]+/g) || []).map(Number);
+      const at = (v) => {
+        range.value = String(v);
+        range.dispatchEvent(new Event('input', { bubbles: true }));
+        return nums();
+      };
+
+      const imgs = [...fig.querySelectorAll('img')].map((i) => ({
+        w: i.naturalWidth, h: i.naturalHeight, src: i.getAttribute('src'),
+      }));
+
+      const box = fig.getBoundingClientRect();
+      const grip = fig.querySelector('.wipe-grip');
+      const gripShown = grip ? getComputedStyle(grip).display !== 'none' : false;
+      fig.classList.remove('wipe--live');
+      const gripWhenDead = grip ? getComputedStyle(grip).display !== 'none' : false;
+      fig.classList.add('wipe--live');
+
+      return { low: at(20), high: at(80), imgs, width: box.width, height: box.height, gripShown, gripWhenDead };
+    })()`);
+
+    assert.ok(!r.missing, `at ${viewport.width}px the wipe is missing ${r.missing}`);
+
+    // THE WIPE MOVES. Not "the custom property changed" -- the clip the browser
+    // actually paints with.
+    assert.ok(r.low.length > 0 && r.high.length > 0,
+      `at ${viewport.width}px the clipped layer resolves no clip-path at all`);
+    assert.notDeepEqual(r.low, r.high,
+      `at ${viewport.width}px the clip-path is identical at 20% and 80% -- the control moves and the picture does not`);
+
+    // DIRECTION, ELEMENT-WISE. Comparing maxima cannot discriminate here: the
+    // polygon carries a literal 100% for the bottom edge, so the largest number
+    // is 100 whatever the wipe is doing. Every coordinate that MOVES must move
+    // the same way -- rightwards -- and at least one must move.
+    assert.equal(r.low.length, r.high.length, 'the clip-path changed shape, not just position');
+    const moved = r.low.map((v, i) => r.high[i] - v).filter((d) => d !== 0);
+    assert.ok(moved.length > 0, `at ${viewport.width}px nothing in the clip moved`);
+    assert.ok(moved.every((d) => d > 0),
+      `at ${viewport.width}px the wipe runs backwards: deltas ${JSON.stringify(moved)}`);
+
+    // BOTH HALVES ARE THE SAME PICTURE, CROPPED IDENTICALLY. The shipped place
+    // loop drifts on a sine with a 1.7 phase offset on Y, so no frame of it is
+    // ever centre-cropped; a pair cut from one would misregister and the wipe
+    // would look like a fault rather than a grade. Same pixel dimensions is the
+    // cheap half of that guarantee and the half a test can hold.
+    assert.equal(r.imgs.length, 2, `at ${viewport.width}px expected two halves, found ${r.imgs.length}`);
+    assert.ok(r.imgs[0].w > 0 && r.imgs[1].w > 0,
+      `at ${viewport.width}px a half failed to load: ${JSON.stringify(r.imgs)}`);
+    assert.equal(r.imgs[0].w, r.imgs[1].w, `the two halves differ in width: ${JSON.stringify(r.imgs)}`);
+    assert.equal(r.imgs[0].h, r.imgs[1].h, `the two halves differ in height: ${JSON.stringify(r.imgs)}`);
+
+    assert.ok(r.width > 0 && r.height > 0, `at ${viewport.width}px the figure paints nothing`);
+
+    // THE GRIP IS DRAWN ONLY WHERE IT CAN BE DRAGGED. WIPE_SCRIPT adds
+    // `wipe--live`; without it the figure is a static split, and a round handle
+    // sitting on that split is a control that looks draggable and is not --
+    // §49D's dead own-place card, which passed every markup test it had.
+    assert.ok(r.gripShown, `at ${viewport.width}px the grip is missing from a live wipe`);
+    assert.ok(!r.gripWhenDead,
+      `at ${viewport.width}px the grip is still drawn with wipe--live removed -- a handle nobody can drag`);
+  }
+});

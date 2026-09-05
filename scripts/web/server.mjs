@@ -145,6 +145,14 @@ const STILL_FILE_RE = /^still-(\d+)\.(png|jpe?g|webp)$/i;
  *  and the extension is always exactly one of the two named here. */
 const PLACE_MEDIA_RE = /^([A-Za-z0-9-]{1,64})\.(jpg|mp4)$/;
 
+/** The landing page's before/after pair, as a lookup rather than a pattern.
+ *  Which place is being compared lives on disk, not here: swapping it -- for a
+ *  different place, or for a person and their tape -- is replacing two files. */
+const LANDING_IMAGES = Object.freeze({
+  'photo.jpg': 'photo.jpg',
+  'tape.jpg': 'tape.jpg',
+});
+
 /** Routes that never look at a session: two static files, an icon, a card image
  *  and the health check. Keeping them out of the auth path means a missing
  *  `scripts/auth/` still serves the stylesheet, and a load balancer still gets
@@ -2108,6 +2116,31 @@ export function createServer({
         maxAge: 86_400,
       })) {
         throw new HttpError(404, 'No such place image.', { code: 'NO_PLACE_IMAGE' });
+      }
+    },
+
+    /**
+     * The landing page's before/after pair.
+     *
+     * A TWO-ENTRY MAP RATHER THAN A PATTERN, for `placeImage`'s reason one step
+     * further: there are exactly two files, so the request name is looked up
+     * rather than validated, and nothing a caller sends can reach the
+     * filesystem even as a rejected candidate.
+     *
+     * A DAY, NOT A YEAR. These are fixed names rather than content-hashed ones,
+     * and a year on a fixed name is how a replaced file never arrives -- the
+     * brand assets were set to a year once and a corrected icon sat unfetched
+     * behind it, with no request ever made to reveal the mistake.
+     */
+    landingImage(req, res, { params }) {
+      const file = LANDING_IMAGES[String(params.file ?? '')];
+      if (!file) throw new HttpError(404, 'No such image.', { code: 'NO_LANDING_IMAGE' });
+      if (!sendFile(req, res, {
+        file: `${assetsRoot}/landing/${file}`,
+        contentType: 'image/jpeg',
+        maxAge: 86_400,
+      })) {
+        throw new HttpError(404, 'No such image.', { code: 'NO_LANDING_IMAGE' });
       }
     },
 

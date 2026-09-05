@@ -8279,6 +8279,148 @@ local / `origin/supabase-identity-slice` / the box all at `319d5a3`, health
 `{"ok":true,"degraded":[]}`, suite **2120 / 2117 pass / 0 fail / 3 skipped**,
 seven places, all seven `guards.yml` steps green.
 
+---
+
+### 62. THE LANDING SHOWS THE GRADE INSTEAD OF CLAIMING IT (2026-09-05)
+
+**2120 / 2117 -> 2123 / 2120 pass / 0 fail / 3 skipped.** +3 tests, all new,
+nothing dropped or weakened. Test-first throughout, four sabotages each watched
+going red and restored from a COPY, all seven `guards.yml` steps run verbatim
+and COUNTED 7/7. §61A Stage 1's first item, in the weaker of the two forms it
+can take -- see §62D.
+
+A `figure.wipe` between the hero and the `.how` block: two photographs stacked,
+the top one clipped by a custom property, a divider and a round grip on the
+seam. Drag it and the modern photograph becomes the tape.
+
+#### A -- IT CAME FROM 21st.dev AND NOT ONE LINE OF IT WAS INSTALLED
+
+The owner brought `image-comparison-slider-horizontal` from 21st.dev with that
+site's standard integration prompt, which opens *"the codebase should support
+shadcn project structure, Tailwind CSS, Typescript... if it doesn't, provide
+instructions on how to setup project via shadcn CLI"*.
+
+**FOLLOWING THAT WOULD HAVE BEEN THE MOST DESTRUCTIVE EDIT IN THIS
+REPOSITORY'S HISTORY.** Verified rather than asserted before answering:
+`dependencies: undefined`, no `devDependencies`, `build script: (none)`, no
+`tsconfig.json`, no `lib/utils`, no `components/`, no `node_modules`, and zero
+occurrences of React, JSX or Tailwind anywhere in `scripts/`. The `.tsx` file
+dropped into `/components/ui/` is dead bytes -- there is no bundler to find it
+and nothing imports from a components directory. Making it run means React, a
+JSX transform, Tailwind, TypeScript, a bundler and `lucide-react`, which fails
+the `dependencies` guard and means rewriting `views.mjs` and `static.mjs`,
+i.e. every page in the product.
+
+**WHAT WAS ACTUALLY PORTED IS FIFTEEN LINES OF IDEA:** a `clip-path` polygon
+driven by one number. The rest of that file is Tailwind class strings and
+React ceremony.
+
+**ONE DELIBERATE DEVIATION, AND IT IS AN ACCESSIBILITY FIX RATHER THAN A
+REDESIGN.** The original sets `role="slider"` and `aria-valuenow` on a plain
+`<div>` with no `tabindex` and no key handling -- it announces itself to a
+screen reader as a slider and then refuses the keyboard -- and attaches global
+touchmove listeners that compete with page scroll. A native
+`<input type="range">` stretched invisibly over the picture gives the identical
+gesture (pointer-down anywhere jumps the thumb and begins a drag) and gets
+keyboard, touch and the accessibility tree right. §16 spent a session putting
+focus indicators on nineteen controls; shipping the div would have walked that
+back.
+
+#### B -- TWO FINDINGS, AND THE SECOND IS A GUARD THAT HAD NEVER SEEN THE PAGE
+
+1. **`style-src 'self'` REFUSES A STYLE *ATTRIBUTE*, NOT ONLY AN INLINE
+   `<style>`.** The figure shipped `style="--wipe:50%"` as its no-script
+   default and Chrome blocked it outright -- and a hash cannot rescue one,
+   that needs `unsafe-hashes`. This file has warned since 2026-08-27 that
+   `style-src 'self'` drops an inline `<style>` wherever it appears; the
+   attribute form is the same trap and was not written down. The default lives
+   in the stylesheet now. **Invisible to every markup assertion; caught only
+   because a real browser was driving the real CSP.**
+2. **`the only scripts a page may run are the ones it ships, named by hash`
+   HAD NEVER CHECKED THE LANDING PAGE.** It fetched `/` **with a cookie**, so
+   `/` was always the signed-in app page -- and `BG_SCRIPT`, `SIGNIN_SCRIPT`
+   and now `WIPE_SCRIPT` are landing-only since §31 stopped emitting the
+   background script on the signed-in page. **Three of this product's five
+   inline scripts were invisible to the one test whose whole subject is that a
+   shipped script is named by hash.** Widened to fetch `/` signed out as well;
+   proved by leaving the missing-hash sabotage in place and watching it turn
+   red. The browser test catches a missing hash too, but it self-skips on a
+   machine with no Chromium, so on that machine the refusal would have shipped
+   silently.
+
+#### C -- THE PAIR IS BUILT, NOT CUT, AND THE REASON IS THE DRIFT
+
+The obvious asset is a frame of the shipped `<id>.mp4` against `<id>.jpg`.
+**It does not work: `place-loops.mjs` drifts the crop window on a full sine
+with a 1.7 phase offset on Y, so no frame of any loop is ever centre-cropped**
+and a pair cut from one misregisters -- which on a wipe reads as a fault
+rather than as a grade. **`scripts/tapedeck/wipe-pair.mjs`** mirrors that
+module's geometry exactly with the sine removed, so both halves come from one
+crop and the seam is invisible:
+
+```bash
+node scripts/tapedeck/wipe-pair.mjs new-york-times-square
+```
+
+206 kB for the pair at 1024x576, the same raster §13 holds every shape's short
+edge at. **It is deterministic** -- re-running it reproduces both files byte
+for byte, checked. It is untested, exactly as `place-loops.mjs` beside it is
+untested: both produce committed artefacts a person looks at. What IS pinned,
+in `browser-smoke.test.js`, is the property the wipe actually depends on --
+that the two halves are the same size.
+
+**THE RIGHT HALF IS `buildVideoFilter`, THE FUNCTION THE RENDERER CALLS**, on
+the same profile with `burnIn` empty. So the landing is not illustrating the
+product, it is running it. Measured across the pair: YAVG 61.8 -> 90.1,
+SATAVG 12.7 -> 9.0, chroma pushed warm.
+
+#### D -- WHAT IT SELLS, WHICH IS THE HALF NOBODY ELSE HAS AND NOT THE PROPOSITION
+
+**TWO PICTURES OF TIMES SQUARE WITH NOBODY IN THEM SAY "WE PUT A VHS FILTER ON
+PHOTOS", WHICH IS THE COMMODITY.** The product is *you, standing in that place,
+in 2003*, and the identity half is the part that cannot be copied. This ships
+the texture half because a place pair is already committed, licence-clean and
+faceless, while publishing a real face on a public repo and a public site is a
+consent decision rather than a design one -- and the friends test is running
+right now with people who can consent to their own faces.
+
+**THE SWAP IS TWO FILES.** Replace `assets/landing/photo.jpg` and `tape.jpg`;
+no markup, CSS, route or test knows what is in them. The owner chose this
+ordering knowingly (option C, texture first) with the weakness stated.
+
+#### E -- Things that will bite
+
+- **THE BACKTICK TRAP FIRED AGAIN**, in a new `static.mjs` comment, exactly as
+  this file has warned since 2026-08-21 and while its author knew about it.
+  `node --check` caught it in seconds, which is the entire argument for the
+  rule.
+- **A `~` SIBLING SELECTOR CANNOT REACH BACKWARDS.** `WIPE_SCRIPT` appends the
+  range LAST, so the divider it must reach for the focus ring is an EARLIER
+  sibling and `.wipe-range:focus-visible ~ .wipe-line` matches nothing --
+  silently, which is how a focus indicator goes missing for a year. `:has()`,
+  as §31 already uses for `.plan--current`.
+- **THE GRIP IS GATED ON `wipe--live` AND THAT IS NOT COSMETIC.** With no
+  script the figure is a static split; a round handle drawn on it is a control
+  that looks draggable and is not -- §49D's dead own-place card, which passed
+  every markup test it had. Found by reading the diff, not by a test, and then
+  given one.
+- **A `while read` LOOP SILENTLY SKIPS A FINAL LINE WITH NO TRAILING
+  NEWLINE.** The guard runner reported 6 of 7 green and would have read as a
+  clean pass without the count beside it. §49H's lesson, third instance.
+- **`clip-path` DOES NOT AFFECT LAYOUT**, so `getBoundingClientRect()` is
+  identical at 5% and 95% and every rect-reading probe is blind to this
+  feature. The browser test reads the resolved `clip-path` instead. Same
+  family as §60F, where a layout test passed over an overflow that was plain
+  on the screen.
+- **COMPARING MAXIMA CANNOT PROVE A DIRECTION HERE.** The polygon carries a
+  literal `100%` for its bottom edge, so the largest number is 100 whatever
+  the wipe is doing; the first version of that assertion failed against
+  correct code. It is element-wise now, which is also stronger.
+- **The browser pane would not paint for most of this session** while
+  `read_page`, `javascript_tool` and the tests all worked normally. Measure
+  rather than screenshot when that happens; the pane does not need to be
+  displayed for anything except a screenshot.
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT

@@ -159,6 +159,12 @@ export const ROUTES = Object.freeze([
   // is the designed state, and the CSS falls through to the gradient layer.
   { method: 'GET', pattern: '/places/:file', name: 'placeImage' },
 
+  // The landing page's before/after pair: one place photograph, and that same
+  // photograph through `buildVideoFilter`. Two fixed names resolved through a
+  // map in the handler, so -- as with `placeImage` -- no byte of the request
+  // is ever concatenated into a path.
+  { method: 'GET', pattern: '/landing/:file', name: 'landingImage' },
+
   { method: 'GET', pattern: '/j/:id', name: 'statusPage' },
   { method: 'GET', pattern: '/j/:id/select', name: 'selectPage' },
   { method: 'GET', pattern: '/j/:id/result', name: 'resultPage' },
@@ -191,7 +197,7 @@ export const ROUTES = Object.freeze([
  * queue's counts and whether ffmpeg is present, and no job ids.
  */
 export const PUBLIC_ROUTES = Object.freeze(new Set([
-  'stylesheet', 'font', 'favicon', 'placeImage',
+  'stylesheet', 'font', 'favicon', 'placeImage', 'landingImage',
   'iconSvg', 'icon180', 'icon192', 'icon512',
   'loginPage', 'login', 'signupPage', 'signup', 'logout',
   // Google. Whoever lands on `/auth/callback` is, by definition, not signed

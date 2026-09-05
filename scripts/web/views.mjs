@@ -550,8 +550,51 @@ const SIGNIN_SCRIPT = `
 }());
 `;
 
+/**
+ * The before/after wipe, and the whole of what scripting adds to it.
+ *
+ * THE CONTROL IS CREATED HERE RATHER THAN SHIPPED IN THE MARKUP, and that is
+ * the same ruling BG_SCRIPT's <video> carries: a range input in the HTML would
+ * move its own thumb with no JavaScript while the picture behind it stayed
+ * still -- a control that visibly does nothing, which is exactly section 49D's
+ * dead own-place card. With no script the figure is a fixed 50/50 composite of
+ * two real photographs with a divider down the middle: a legitimate
+ * before-and-after, just not a draggable one.
+ *
+ * WHY A NATIVE RANGE AND NOT A DRAG HANDLER ON THE FIGURE. A range gives the
+ * keyboard, touch, and the accessibility tree for free, and pointer-down
+ * anywhere along its track jumps the thumb there and begins a drag -- so the
+ * gesture is the one a hand-rolled mousedown/mousemove pair would have given,
+ * without competing with page scroll on a phone and without announcing itself
+ * to a screen reader as a slider that arrow keys then refuse to move. Section
+ * 16 spent a session putting focus indicators on nineteen controls; shipping a
+ * <div role="slider"> here would be walking that back.
+ */
+const WIPE_SCRIPT = `
+(function () {
+  var fig = document.querySelector('figure.wipe');
+  if (!fig) return;
+
+  var range = document.createElement('input');
+  range.type = 'range';
+  range.min = '0';
+  range.max = '100';
+  range.step = '0.1';
+  range.value = '50';
+  range.className = 'wipe-range';
+  range.setAttribute('aria-label', 'Wipe between the photograph and the tape');
+
+  range.addEventListener('input', function () {
+    fig.style.setProperty('--wipe', range.value + '%');
+  });
+
+  fig.appendChild(range);
+  fig.classList.add('wipe--live');
+}());
+`;
+
 export const INLINE_SCRIPT_HASHES = Object.freeze(
-  [HOME_SCRIPT, STATUS_SCRIPT, BG_SCRIPT, SIGNIN_SCRIPT]
+  [HOME_SCRIPT, STATUS_SCRIPT, BG_SCRIPT, SIGNIN_SCRIPT, WIPE_SCRIPT]
     .map((s) => crypto.createHash('sha256').update(s, 'utf8').digest('base64')),
 );
 
@@ -1024,6 +1067,37 @@ ${backgrounds}
   <div class="losds" aria-hidden="true">${osds}
   </div>
 
+  ${/* THE GRADE, SHOWN RATHER THAN CLAIMED.
+       The section below says "chroma bleed, grain, the head-switch band" and
+       prose is the weakest possible way to make a claim about how something
+       looks. Both halves are the SAME photograph -- assets/places/<id>.jpg --
+       and the right one is that file through `buildVideoFilter`, the function
+       the renderer itself calls. So this is not an illustration of the product,
+       it is the product's own output on a picture the visitor can see the
+       source of.
+
+       WHY IT SHOWS A PLACE AND NOT A PERSON, TODAY. The stronger version of
+       this is somebody's photograph beside their own tape -- that is the actual
+       proposition, and this one risks reading as "we apply a VHS filter", which
+       is the commodity. It is a place because a place pair is already committed,
+       licence-clean and faceless, and because publishing a real face here is a
+       consent decision rather than a design one. Swapping it is replacing
+       assets/landing/photo.jpg and tape.jpg; no markup or CSS knows the
+       difference.
+
+       THE CONTROL IS NOT HERE ON PURPOSE. See WIPE_SCRIPT. */''}
+  <section class="show">
+    <h2 class="show-t">The same photograph, twice.</h2>
+    <figure class="wipe">
+      <img class="wipe-under" src="/landing/tape.jpg" alt="Times Square at night as a 2003 camcorder tape: softened, grain over everything, colour bleeding off the neon." width="1024" height="576" decoding="async">
+      <div class="wipe-clip">
+        <img src="/landing/photo.jpg" alt="Times Square at night, photographed sharp and clean." width="1024" height="576" decoding="async">
+      </div>
+      <div class="wipe-line" aria-hidden="true"><span class="wipe-grip"><svg viewBox="0 0 24 16" width="24" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 4 8l5 5"></path><path d="M15 3l5 5-5 5"></path></svg></span></div>
+      <figcaption class="wipe-cap"><span>Photograph</span><span>Tape</span></figcaption>
+    </figure>
+  </section>
+
   <section class="how">
     ${/* THIS WAS THREE EQUAL COLUMNS AND IT WAS THE ONLY TEMPLATED THING ON THE
          PAGE. §33's design review named it: a three-column 1fr grid of
@@ -1145,7 +1219,8 @@ ${backgrounds}
   </dialog>
 
 <script>${BG_SCRIPT}</script>
-<script>${SIGNIN_SCRIPT}</script>`;
+<script>${SIGNIN_SCRIPT}</script>
+<script>${WIPE_SCRIPT}</script>`;
 
   return layout({
     title: 'Timestamp — one photo, fifteen seconds, 2003',
