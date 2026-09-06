@@ -154,12 +154,21 @@ const LANDING_IMAGES = Object.freeze({
   'tape.jpg': 'tape.jpg',
 });
 
+/** The web fonts, as a lookup. Which files exist is decided in assets/fonts/;
+ *  this is only the set of names the route will answer to. */
+const FONT_FILES = Object.freeze({
+  'anton.woff2': ['anton.woff2', 'font/woff2'],
+  'anton.ttf': ['anton.ttf', 'font/ttf'],
+  'inter-400.woff2': ['inter-400.woff2', 'font/woff2'],
+  'inter-600.woff2': ['inter-600.woff2', 'font/woff2'],
+});
+
 /** Routes that never look at a session: two static files, an icon, a card image
  *  and the health check. Keeping them out of the auth path means a missing
  *  `scripts/auth/` still serves the stylesheet, and a load balancer still gets
  *  an answer. */
 const NO_SESSION_ROUTES = new Set([
-  'stylesheet', 'font', 'favicon', 'placeImage', 'robots',
+  'stylesheet', 'font', 'fontFile', 'favicon', 'placeImage', 'robots',
   // STRIPE SENDS NO COOKIE, so resolving a session for it is work that can only
   // fail. Keeping it out of the session path also means a webhook is answered
   // while the sign-in half of the app is degraded -- which matters, because the
@@ -2052,6 +2061,21 @@ export function createServer({
     font(req, res) {
       const file = `${assetsRoot}/fonts/tape-osd.ttf`;
       if (!sendFile(req, res, { file, contentType: 'font/ttf', maxAge: 86_400 })) {
+        throw new HttpError(404, 'Not found.', { code: 'NO_FONT' });
+      }
+    },
+
+    /**
+     * The web fonts. A four-entry map rather than a pattern, for placeImage's
+     * reason: the request name is looked up, never validated, so nothing a
+     * caller sends reaches the filesystem even as a rejected candidate. A day,
+     * not a year, for the reason the brand assets give -- these are fixed names.
+     */
+    fontFile(req, res, { params }) {
+      const entry = FONT_FILES[String(params.file ?? '')];
+      if (!entry) throw new HttpError(404, 'Not found.', { code: 'NO_FONT' });
+      const [file, contentType] = entry;
+      if (!sendFile(req, res, { file: `${assetsRoot}/fonts/${file}`, contentType, maxAge: 86_400 })) {
         throw new HttpError(404, 'Not found.', { code: 'NO_FONT' });
       }
     },

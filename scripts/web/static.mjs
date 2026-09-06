@@ -478,6 +478,30 @@ export const BASE_CSS = `
   src: url('/tape-osd.ttf') format('truetype');
   font-display: swap;
 }
+/* THE WORLD'S TWO FACES, SELF-HOSTED, SUBSET TO LATIN. Fetched once from the
+   Google Fonts repository (SIL OFL 1.1, licences beside the files), instanced
+   and subset with fontTools, and served from assets/fonts/ under the same
+   font-src self as the tape's own face. No network font, ever: the CSP does
+   not change and a page that has been handed a photograph makes no third-party
+   request. Anton is the display face and is never set below 18px. */
+@font-face {
+  font-family: 'Anton';
+  src: url('/fonts/anton.woff2') format('woff2'), url('/fonts/anton.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-600.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
 
 :root {
   /* ONE WORLD, ONE SOURCE OF TRUTH. The names below are the old frost-and-amber
@@ -679,7 +703,8 @@ export const BASE_CSS = `
   --l-bone: #EDE7DC;     /* body prose                            16.09:1    */
   --l-dim: #8D8880;      /* labels                                 5.63:1    */
 
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --display: 'Anton', Impact, 'Arial Narrow', sans-serif;
   --osd: 'TapeOSD', ui-monospace, 'Courier New', monospace;
 }
 
@@ -2833,6 +2858,7 @@ export const CONTENT_TYPES = Object.freeze({
   '.webp': 'image/webp',
   '.mp4': 'video/mp4',
   '.ttf': 'font/ttf',
+  '.woff2': 'font/woff2',
   '.svg': 'image/svg+xml',
   // `image/x-icon` rather than the registered `image/vnd.microsoft.icon`: it is
   // what every browser has always sent and accepted for this file, and the

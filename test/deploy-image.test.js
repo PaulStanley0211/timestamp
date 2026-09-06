@@ -143,6 +143,12 @@ const MUST_BE_INCLUDED = [
   'presets/places/amalfi-afternoon.json',
   'assets/fonts/tape-osd.ttf',
   'assets/fonts/OFL.txt',
+  'assets/fonts/anton.woff2',
+  'assets/fonts/anton.ttf',
+  'assets/fonts/inter-400.woff2',
+  'assets/fonts/inter-600.woff2',
+  'assets/fonts/OFL-anton.txt',
+  'assets/fonts/OFL-inter.txt',
   'assets/places/amalfi-afternoon.jpg',
 ];
 

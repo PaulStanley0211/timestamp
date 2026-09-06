@@ -52,6 +52,9 @@ export const ROUTES = Object.freeze([
   { method: 'GET', pattern: '/', name: 'homePage' },
   { method: 'GET', pattern: '/styles.css', name: 'stylesheet' },
   { method: 'GET', pattern: '/tape-osd.ttf', name: 'font' },
+  // The world's two faces, by name from a four-entry map in the handler --
+  // the placeImage discipline: no byte of the request becomes a path.
+  { method: 'GET', pattern: '/fonts/:file', name: 'fontFile' },
   { method: 'GET', pattern: '/favicon.ico', name: 'favicon' },
   // The brand marks. Listed one per row rather than served from a `/brand/:file`
   // pattern on purpose: an explicit row cannot be talked into reading a path
@@ -197,7 +200,7 @@ export const ROUTES = Object.freeze([
  * queue's counts and whether ffmpeg is present, and no job ids.
  */
 export const PUBLIC_ROUTES = Object.freeze(new Set([
-  'stylesheet', 'font', 'favicon', 'placeImage', 'landingImage',
+  'stylesheet', 'font', 'fontFile', 'favicon', 'placeImage', 'landingImage',
   'iconSvg', 'icon180', 'icon192', 'icon512',
   'loginPage', 'login', 'signupPage', 'signup', 'logout',
   // Google. Whoever lands on `/auth/callback` is, by definition, not signed

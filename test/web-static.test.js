@@ -422,6 +422,41 @@ test('the type scale is the only place a size is decided', () => {
   assert.ok(/font-size: var\(--t-label\)/.test(rules), 'nothing uses the label step');
 });
 
+test('every face the sheet declares is a file under assets/fonts with its licence beside it, and no network font exists', () => {
+  // THE CSP IS font-src 'self' AND IT DOES NOT CHANGE. A face named in the
+  // sheet that is not on disk is a silent fallback to the system stack in
+  // every browser, with no error anywhere; a face fetched from a CDN is a
+  // third-party request on a page that has just been handed somebody's
+  // photograph. The licence sits beside each file because the OFL asks for it
+  // and because the VT323 file has shipped that way since 2026-08-20.
+  const { css } = createStylesheet({});
+  const faces = [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]);
+  const family = (face) => /font-family:\s*'([^']+)'/.exec(face)?.[1];
+  assert.deepEqual(faces.map(family).sort(), ['Anton', 'Inter', 'Inter', 'TapeOSD'],
+    'the sheet declares a different set of faces than the four this world ships');
+
+  const LICENCE = { Anton: 'OFL-anton.txt', Inter: 'OFL-inter.txt', TapeOSD: 'OFL.txt' };
+  const fontsDir = new URL('../assets/fonts/', import.meta.url);
+  for (const face of faces) {
+    const name = family(face);
+    const files = [...face.matchAll(/url\('\/(?:fonts\/)?([^']+)'\)/g)].map((m) => m[1]);
+    assert.ok(files.length > 0, `${name} names no file at all`);
+    for (const file of files) {
+      const on = new URL(file, fontsDir);
+      assert.ok(fs.existsSync(on) && fs.statSync(on).size > 0, `${name} names /${file}, which is not under assets/fonts/`);
+    }
+    assert.ok(fs.existsSync(new URL(LICENCE[name], fontsDir)), `${name} ships without ${LICENCE[name]} beside it`);
+  }
+
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (
+    e.isDirectory() ? walk(new URL(`${e.name}/`, dir)) : e.name.endsWith('.mjs') ? [new URL(e.name, dir)] : []
+  ));
+  const offenders = walk(new URL('../scripts/', import.meta.url))
+    .filter((f) => /fonts\.googleapis\.com|fonts\.gstatic\.com/.test(fs.readFileSync(f, 'utf8')))
+    .map((f) => f.pathname);
+  assert.deepEqual(offenders, [], 'a network font reached scripts/; font-src is self and the CSP does not change');
+});
+
 test('a legal page is a document, with a document outline', () => {
   // /privacy shipped SEVEN section headings written as <p class="eyebrow"> --
   // 12px uppercase labels -- so its outline was one h1 across thirteen

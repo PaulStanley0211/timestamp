@@ -1231,6 +1231,27 @@ test('the landing before/after pair is served, and to somebody who is not signed
   }
 });
 
+test('the four web fonts are served public, by name, with a day of cache, and nothing else under /fonts/ is', async () => {
+  await withServer(async ({ base }) => {
+    for (const [file, type] of [
+      ['anton.woff2', 'font/woff2'], ['anton.ttf', 'font/ttf'],
+      ['inter-400.woff2', 'font/woff2'], ['inter-600.woff2', 'font/woff2'],
+    ]) {
+      // No cookie, deliberately: a stylesheet that loads while signed out must
+      // be able to load its faces while signed out.
+      const res = await fetch(`${base}/fonts/${file}`);
+      assert.equal(res.status, 200, `/fonts/${file} answered ${res.status}`);
+      assert.equal(res.headers.get('content-type'), type);
+      assert.match(res.headers.get('cache-control') ?? '', /max-age=86400/, 'a font is revalidated daily, like the brand assets');
+      assert.ok((await res.arrayBuffer()).byteLength > 0);
+    }
+    for (const target of ['/fonts/nope.woff2', '/fonts/..%2f..%2fpackage.json', '/fonts/OFL-anton.txt', '/fonts/tape-osd.ttf']) {
+      const res = await fetch(`${base}${target}`);
+      assert.ok(res.status === 404 || res.status === 400, `${target} answered ${res.status}, which is neither a refusal nor a miss`);
+    }
+  });
+});
+
 test('a place LOOP is served, and only for an id the catalog knows', async () => {
   const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
   fs.mkdirSync(`${assets}/places`, { recursive: true });
