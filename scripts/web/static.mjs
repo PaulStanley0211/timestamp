@@ -1557,11 +1557,14 @@ input[type="file"]::file-selector-button {
   cursor: pointer;
 }
 
-/* The ring is ink on the dark surfaces, and the ink of the lime where the
-   thing focused is lime -- a lime ring on a chosen lime card is invisible, and
-   a chosen card is exactly where focus sits after a selection. */
+/* The ring is ink everywhere by default. A positive outline-offset draws the
+   ring OUTSIDE the border box, so on a lime BUTTON it lands on the dark
+   ground around it, not on the lime -- ink is the right ring there too. Only
+   a control genuinely sitting ON a lime panel (a chosen card, not a button
+   surrounded by dark) needs the ink-of-the-lime ring, or it would vanish
+   against the lime beneath it. */
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.lime :focus-visible, .record:focus-visible, .go:focus-visible { outline-color: var(--on-lime); }
+.lime :focus-visible { outline-color: var(--on-lime); }
 
 .field { margin: 0 0 var(--s-5); }
 .field label { display: block; font-size: var(--t-1); letter-spacing: 0; color: var(--ink); margin-bottom: var(--s-2); }
@@ -1790,9 +1793,9 @@ input[type="file"]::file-selector-button {
 .dl {
   display: inline-block; margin-top: 0.35rem;
   font-size: var(--t-label); letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--accent); text-decoration: none;
+  color: var(--ink); text-decoration: none;
 }
-.dl:hover { color: var(--accent-bright); }
+.dl:hover { color: var(--ink-soft); }
 
 /* THE CAPTION CAME OUT OF THE PICTURE AND ONTO THE PAGE, which is the other
    half of what the reference does. It used to sit inside the tile under a 90%
