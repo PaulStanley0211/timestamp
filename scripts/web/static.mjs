@@ -2300,7 +2300,7 @@ details[open] > summary .faq-glyph::before { content: '−'; }
 .foot-col li { margin: 0 0 var(--s-2); }
 .foot-col .quiet { text-decoration: none; color: var(--ink); font-size: var(--t-2); }
 .foot-col .quiet:hover { color: var(--lime); }
-.foot-mark { font-family: var(--display); text-transform: uppercase; font-size: var(--t-mark); line-height: 0.85; letter-spacing: 0; color: var(--lime); margin: 0 0 var(--s-5); white-space: nowrap; overflow: hidden; }
+.foot-mark { font-family: var(--display); text-transform: uppercase; font-size: var(--t-mark); line-height: 0.9; letter-spacing: 0; color: var(--lime); margin: 0 0 var(--s-5); white-space: nowrap; overflow: hidden; }
 @media (max-width: 30rem) { .foot-cols { grid-template-columns: 1fr; } }
 
 /* --- foot -------------------------------------------------------------- */
