@@ -7,7 +7,7 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-06) — READ §69 FIRST. THE VISUAL WORLD IS BEING REPLACED, THE SPEC IS APPROVED AND COMMITTED, AND NOTHING OF IT IS BUILT.
+## START HERE (2026-09-06, later) — READ §69 FIRST, THEN THE PLAN. THE VISUAL WORLD IS BEING REPLACED, THE SPEC AND THE PLAN ARE BOTH COMMITTED, AND NOTHING OF IT IS BUILT.
 
 **The owner chose a Dribbble reference (acid lime on near-black, Anton-style
 display type, outlined cards) for EVERY page on 2026-09-06, knowing it
@@ -16,13 +16,20 @@ question and on browser mockups, and is written up in
 **`docs/superpowers/specs/2026-09-06-lime-redesign-design.md`** (`64aaaa7`,
 tightened at `f8ac48c`). **Read that spec before touching any page**: its §8
 names every test that pins the OLD world and what happens to each, and its §10
-is the order of work. **The next step is the implementation plan
-(`superpowers:writing-plans`), then the code, one page at a time.** The three
+is the order of work. **THE IMPLEMENTATION PLAN EXISTS AND IS THE NEXT THING TO
+READ: `docs/superpowers/plans/2026-09-06-lime-redesign-first-deploy.md`** —
+spec §10 steps 1–6 as seven tasks and 64 steps, test-first, one commit per
+task, every guard sabotage-verified, and it STOPS three times for the owner
+(the font download, the landing rendered, the pricing page rendered). §69F is
+the record of writing it and the three things it found that the spec did not
+know. **The next step is executing it with
+`superpowers:subagent-driven-development`, one task at a time.** The three
 tapes for the landing exist and are checked (§69). **DO NOT `git pull` ON THE
 BOX until the landing and pricing are both done** — the tokens commit puts
 every page in the new world with its old layout, and the live site must never
-show two worlds. Everything below this block is the record of the site AS IT
-IS LIVE TODAY, and it stays true until that first deploy.
+show two worlds; the plan's Task 7 hands the deploy to the owner and runs none
+of it. Everything below this block is the record of the site AS IT IS LIVE
+TODAY, and it stays true until that first deploy.
 
 ## (the banner below is 2026-09-05, late, and describes the live site)
 
@@ -9145,10 +9152,11 @@ directory on the box outside git, served under `/showcase/` by allow-list.
 
 #### C — What the next session does, in order
 
-1. **`superpowers:writing-plans` against the spec.** The plan follows §10:
-   fonts and tokens (DESIGN.md rewritten in the same commit), shared
-   components, the showcase route, the landing, pricing, **first deploy**,
-   then the order form / status / result, then the rest, then a second deploy.
+1. ~~**`superpowers:writing-plans` against the spec.**~~ **DONE 2026-09-06,
+   later the same day — §69F.** The plan covers §10 steps 1–6 (fonts and
+   tokens with DESIGN.md rewritten, shared components, the showcase route,
+   the landing, pricing, the handoff for the **first deploy**); steps 7–10
+   are a second plan, written after the first deploy is real.
 2. **Test-first, one commit per step, every guard sabotage-verified**, exactly
    as every section above did it. Spec §8 lists by name which tests are
    rewritten, deleted and added; the palette's contrast floors are re-measured
@@ -9186,6 +9194,87 @@ directory on the box outside git, served under `/showcase/` by allow-list.
 Everything in §61E still stands: the realism check, the friends' feedback,
 the Hetzner firewall rule and disk backup, the mail records, GitHub
 two-factor, fal's usage page. Plus the metering of `a32b2a` ($1.50 estimated).
+
+#### F — The plan (2026-09-06, later): written, committed, not started
+
+**`docs/superpowers/plans/2026-09-06-lime-redesign-first-deploy.md`.** Spec
+§10 steps 1–6 as seven tasks (0 baseline, 1 fonts, 2 tokens + DESIGN.md +
+guards, 3 shared components, 4 showcase, 5 landing, 6 pricing, 7 push and the
+deploy handoff), 64 checkbox steps, each with the failing test written out,
+the code, the sabotage that proves the guard binds, the seven `guards.yml`
+steps run verbatim and counted, and one commit. It stops three times for the
+owner: before the font download (files and sizes named), after the landing is
+rendered (plus the six FAQ answers to read and the four sticker frames to
+pick), and after the pricing page is rendered. Task 7 pushes the branch and
+writes the deploy runbook as a message; **it pulls nothing on the box**.
+
+**The plan was written by reading the code, not the spec alone, and it found
+three things the spec did not know:**
+
+1. **Four test files the spec did not name pin the old world.** The
+   inventory grep over all 72 test files (the command and its output are in
+   the plan) found `web-api` and `web-brand` pinning the drawn Cormorant
+   wordmark, `web-auth` pinning the old pricing layout, and `deploy-image`
+   listing the font files the image must carry. The spec named only
+   `web-static` and `browser-smoke`. All four are in the tasks; §69D's guess
+   at `web-legal` and `auth-accounts` was wrong — they match only prose.
+2. **The burnt-in date stamp is `0xF6EAC8`, a warm cream, not cathode
+   orange.** `config/look/base.json` `osd.color`, drawn by
+   `scripts/tapedeck/burn-in.mjs`. The spec's guard "the date stamp stays
+   orange in the pipeline config" would have pinned a value that never
+   existed; the plan's guard pins the real one. The cathode orange was only
+   ever the CHROME's colour for the stamp's depiction, and it goes.
+3. **The spec's record-light floor `#E24B3B` fails on a card.** It clears
+   the ground at 4.56:1 and measures 4.15:1 on `--card #1F1F22`, and the
+   status page's phase rows become cards in step 7. The plan uses **`#E85545`**
+   (5.01:1 on the ground, 4.55:1 on the card), which the spec's own "any
+   move is re-measured and the table updated" allows; DESIGN.md records it.
+
+**Two design decisions the plan takes that the owner can overrule in the
+first minute:** the wordmark becomes live text in Anton with a red dot beside
+it (the drawn Cormorant SVG and its head-switch tear were the cream world's
+identity, and spec §3.1 says "set in Anton"); and the browser icon — the
+oxide `Ts` tile — is NOT regenerated, named in the new DESIGN.md as the last
+cream-world artefact still shipping, because a changed favicon reads as a
+different site and that is his call.
+
+**Every number in the plan was computed, not copied:** the WCAG ratios of all
+nine spec token pairs (the spec's table is right to two decimals), the ghost
+floor on this ground (`--ghost: 0.5` puts `--ink` at 4.83:1 over the ground
+and 4.70:1 over a card; 0.48 is the least that clears the card), and the
+Google Fonts file sizes named to the owner for the go (Anton-Regular.ttf
+170,812 bytes; `Inter[opsz,wght].ttf` 876,576 bytes; both OFL files). Python
+3.14 with fontTools 4.62 and brotli is on this machine, so the fonts are
+instanced and subset to Latin locally and only the subsets are committed.
+
+**Deferred to the second plan, on purpose and named:** the order form, status,
+result, shelf, account, the auth five and the dialog, onboarding (where
+`singlePlaceGround()` and the temporary `has-ground` class die), the legal
+pages and the error trio; the "lime on exactly one card per row" browser test,
+which belongs to the order form; retiring the `--lift` and `--ink-strong`
+alias names page by page; the favicon.
+
+**Things that will bite whoever executes it:**
+
+- **Spec step 1 lands as TWO commits** (fonts, then tokens). The font commit
+  is additive and changes no pixel; the split makes the tokens commit
+  reviewable. Nothing is pulled on the box between them.
+- **The `.bgs` ground moves INSIDE the landing's band in Task 5**, so the two
+  generated rules that reach it change from `~.bgs` to `~.wrap .bgs`. The
+  radios stay hoisted siblings of `.wrap`. Onboarding's ground is not
+  radio-driven and is unaffected until step 8.
+- **The dead-values test skips only lines that BEGIN with `*`, `/*` or
+  `//`**, and this codebase continues comments on plain indented lines. A
+  retired hex or the class `is-landing` spelled in a comment fails it; say it
+  in words.
+- **The landing prices nothing in dollars.** The FAQ's first answer points at
+  the pricing page instead of quoting a pack; a test refuses `$` followed by a
+  digit anywhere on the landing.
+- **The showcase producer runs ON THE BOX for the two tapes that live there**
+  (`docker compose run --rm -v /opt/timestamp/showcase:/showcase web node
+  scripts/tapedeck/showcase.mjs …`), so no face travels; only the hero and its
+  stickers are produced here and copied up. The compose bind mount is web
+  only, read-only, and a test pins that.
 
 ## Not in scope
 
