@@ -39,7 +39,7 @@ import fs from 'node:fs';
 import { createStylesheet } from '../scripts/web/static.mjs';
 import {
   creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, videosPage, errorPage,
-  privacyPage, termsPage, impressumPage, singlePlaceGround,
+  privacyPage, termsPage, impressumPage, singlePlaceGround, faq, siteFooter, balanceSentence,
 } from '../scripts/web/views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
@@ -331,26 +331,96 @@ test('no page sells this product as German -- only the two that state a legal fa
     `these pages tell a worldwide customer the product is German:\n${offenders.join('\n')}`);
 });
 
-test('no page the app can render wears a texture of its own', () => {
-  // DESIGN.md, "Texture belongs to the tape, and to nothing else": the interface
-  // carries NO grain, scanlines, noise or vignette, and every trace of texture
-  // on any page lives inside a tape frame.
-  //
-  // THIS TEST USED TO REQUIRE THE GAUZE ON EVERY PAGE, and that is why it is
-  // worth reading rather than skimming. The Struck palette named the anode mesh
-  // "fixed, over everything", so the mesh was made structural here -- while the
-  // rule four sections above it in the same file forbade scanlines on the
-  // interface. A 1px-on-4px repeating gradient across the viewport is
-  // scanlines. Both could not hold, the texture rule is the stronger one, and
-  // the mesh was deleted from the sheet on 2026-08-28 when the pages moved to
-  // paper. The assertion is not relaxed by that -- it is the same rule with the
-  // exception taken out, and it now covers the gauze as well as the grain.
-  for (const [name, html] of renderedPages()) {
-    assert.ok(!/class="[^"]*\bgauze\b/.test(html),
-      `${name} still renders the anode gauze, which is scanlines over the interface`);
-    assert.ok(!/class="[^"]*\bgrain\b/.test(html),
-      `${name} still renders the grain plate, which DESIGN.md forbids on the interface`);
+test('the speckle sits on lime panels only, the paper on fact cards only, and the ground carries neither', () => {
+  // DESIGN.md: the dark ground and every dark card stay flat. The two textures
+  // are SVG filters emitted once per page and applied from the sheet by id,
+  // so "where is a texture applied" is a question the sheet can answer.
+  const { css } = createStylesheet(FOCUS_MENU);
+  // Comments are stripped first: a rule's text otherwise begins with whatever
+  // comment preceded it, and the selector check below anchors on the start.
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = bare.match(/[^{}]+\{[^{}]*\}/g) ?? [];
+  const uses = rules.filter((r) => /url\(#/.test(r)).map((r) => r.replace(/\s+/g, ' ').trim());
+  assert.ok(uses.some((r) => /url\(#speckle\)/.test(r)), 'the speckle is not applied anywhere');
+  assert.ok(uses.some((r) => /url\(#paper\)/.test(r)), 'the paper is not applied anywhere');
+  for (const r of uses) {
+    assert.match(r, /^(\.lime::before|\.fact::before) \{/,
+      `a texture is applied off its one permitted surface: ${r.slice(0, 100)}`);
   }
+  assert.ok(uses.filter((r) => /url\(#speckle\)/.test(r)).every((r) => r.startsWith('.lime::before')), 'the speckle strayed');
+  assert.ok(uses.filter((r) => /url\(#paper\)/.test(r)).every((r) => r.startsWith('.fact::before')), 'the paper strayed');
+
+  for (const [name, html] of renderedPages()) {
+    assert.ok(!/class="[^"]*\bgauze\b/.test(html), `${name} still renders the anode gauze`);
+    assert.ok(!/class="[^"]*\bgrain\b/.test(html), `${name} still renders the grain plate`);
+    // The defs ride once per page, whether or not the page has a lime panel:
+    // a page that emits them twice has two ids and the second is ignored, a
+    // page that emits none has textureless lime the day it grows a panel.
+    assert.equal((html.match(/<filter id="speckle"/g) ?? []).length, 1, `${name} carries the speckle filter ${(html.match(/<filter id="speckle"/g) ?? []).length} times`);
+    assert.equal((html.match(/<filter id="paper"/g) ?? []).length, 1, `${name} carries the paper filter the wrong number of times`);
+  }
+});
+
+test('the FAQ is native details rows, no script, one row per question', () => {
+  const html = faq([{ q: 'Is it free?', a: 'Yes <to start>.' }, { q: 'Two', a: 'B' }]);
+  assert.equal((html.match(/<details class="faq-row">/g) ?? []).length, 2);
+  assert.equal((html.match(/<summary>/g) ?? []).length, 2);
+  assert.match(html, /Yes &lt;to start&gt;\./, 'answers are escaped like every other string');
+  assert.ok(!/<script/.test(html), 'the FAQ needs no script');
+  const { css } = createStylesheet({});
+  assert.match(css, /\.faq-row\s*\{[^}]*border:\s*1px solid var\(--line\)/, 'a row is outlined from the token');
+  assert.match(css, /details\[open\]\s*>\s*summary \.faq-glyph::before\s*\{[^}]*content/, 'the plus does not turn to a minus on open');
+});
+
+test('the footer is two link columns, the giant word once, and the legal links every page has always had', () => {
+  const out = siteFooter({ account: null });
+  const inn = siteFooter({ account: { email: 'a@b.com' } });
+  for (const href of ['/privacy', '/terms', '/impressum', '/pricing', '/#places', 'mailto:support@timestamptapes.com']) {
+    assert.match(out, new RegExp(`href="${href.replace(/[.#?]/g, '\\$&')}"`), `the footer lost ${href}`);
+  }
+  assert.match(out, /href="\/signup">Make a tape</, 'signed out, Make a tape leads to signup');
+  assert.match(inn, /href="\/">Make a tape</, 'signed in, Make a tape leads to the order form');
+  assert.doesNotMatch(out, /href="\/videos"/, 'a stranger is offered a page that turns them away');
+  assert.match(inn, /href="\/videos">My videos</, 'the shelf is not in the signed-in footer');
+  assert.equal((out.match(/class="foot-mark"/g) ?? []).length, 1, 'the giant word appears once');
+  assert.match(out, /class="foot-mark" aria-hidden="true">Timestamp\.</, 'the giant word is decoration and says so');
+  assert.equal((out.match(/<div class="foot-col">/g) ?? []).length, 2, 'two columns, Product and Legal');
+  assert.match(out, /Anton and Inter/, 'the fine print no longer credits the faces it ships');
+  const { css } = createStylesheet({});
+  assert.match(css, /\.foot-mark\s*\{[^}]*font-family:\s*var\(--display\)/, 'the giant word is not in the display face');
+  assert.match(css, /\.foot-mark\s*\{[^}]*color:\s*var\(--lime\)/, 'the giant word is not lime');
+  assert.match(css, /\.foot-mark\s*\{[^}]*font-size:\s*var\(--t-mark\)/, 'the giant word sets a size instead of naming one');
+});
+
+test('the footer promises the retention config/render.json enforces, on every page', () => {
+  // The old layout typed "7 days" and "30"; guards.yml checks the consent text
+  // against the config and nothing checked the footer. Same rule, same source.
+  const cfg = JSON.parse(fs.readFileSync(new URL('../config/render.json', import.meta.url), 'utf8')).retention;
+  for (const [name, html] of renderedPages()) {
+    if (!/<footer class="foot">/.test(html)) continue;
+    assert.match(html, new RegExp(`deleted after ${cfg.photoDays} days and the video after ${cfg.jobDays} days`),
+      `${name}'s footer promises a retention the purge does not enforce`);
+  }
+});
+
+test('the balance sentence is one function, and the account page speaks it', () => {
+  assert.equal(balanceSentence({ credits: 43, cheapest: { id: '480p', credits: 21 } }), '43 credits left. Enough for 2 more tapes at 480p.');
+  assert.equal(balanceSentence({ credits: 21, cheapest: { id: '480p', credits: 21 } }), '21 credits left. Enough for 1 more tape at 480p.');
+  assert.equal(balanceSentence({ credits: 5, cheapest: { id: '480p', credits: 21 } }), '5 credits left. Not enough for another tape at 480p.');
+  assert.equal(balanceSentence({ credits: 43 }), '43 credits left.');
+  assert.equal(balanceSentence({ credits: NaN }), '');
+});
+
+test('a panel and a card carry the outline, from the token', () => {
+  const { css } = createStylesheet({});
+  for (const sel of ['.panel', '.card']) {
+    const rule = new RegExp(sel.replace('.', '\\.') + '\\s*\\{([^}]*)\\}').exec(css);
+    assert.ok(rule, `no ${sel} rule`);
+    assert.match(rule[1], /border:\s*1px solid var\(--line\)/, `${sel} is not outlined`);
+    assert.match(rule[1], /border-radius:\s*var\(--r\)/, `${sel} does not take the card radius`);
+  }
+  assert.match(css, /\.lime\s*\{[^}]*background:\s*var\(--lime\)/, 'the lime panel is not lime');
+  assert.match(css, /\.lime\s*\{[^}]*color:\s*var\(--on-lime\)/, 'text on the lime panel does not take the on-lime ink');
 });
 
 test('no page promises the still-approval gate that direct mode deleted', () => {

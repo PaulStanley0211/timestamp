@@ -463,7 +463,14 @@ test('the same path signed in is the app, not the landing page', async () => {
     const cookie = await signIn(auth, 'a@example.com', 'a long enough password');
     const html = await (await fetch(`${base}/`, { headers: { cookie, accept: 'text/html' } })).text();
     assert.ok(html.includes('form="tape"'), 'the signed-in page lost the upload form');
-    assert.ok(!html.includes('Make a tape'), 'the landing call to action leaked into the app');
+    // "Make a tape" is no longer landing-specific text on its own: the shared
+    // footer (Task 3, 2026-09-06) carries a "Make a tape" link on every page,
+    // pointed at /signup when signed out and at / when signed in, precisely so
+    // a reader who scrolled to the bottom of the app is offered the door back
+    // to it rather than the one that would sign them out. The landing-specific
+    // marker is its hero CTA, `class="cta"`, which nothing else on the site
+    // renders.
+    assert.ok(!html.includes('class="cta"'), 'the landing hero call to action leaked into the app');
   });
 });
 

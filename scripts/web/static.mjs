@@ -623,6 +623,8 @@ export const BASE_CSS = `
   --t-8: clamp(40px, 6vw, 48px);        /* display, sub-hero                  */
   --t-hero: clamp(48px, 8vw, 96px);     /* the landing hero, ONCE per site    */
 
+  --t-mark: clamp(64px, 18vw, 240px);   /* the footer's giant word, once per site */
+
   /* THE DISPLAY LADDER IS SEPARATE, AND IT HAS TO BE. VT323 reads noticeably
      smaller than the system sans at the same pixel size -- it is a terminal
      face with a small x-height -- so putting both ladders on one set of tokens
@@ -1078,8 +1080,8 @@ body {
   background: var(--frost);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
-  border: 0;
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
   padding: var(--s-5);
   margin: 0 0 var(--s-6);
 }
@@ -2256,6 +2258,50 @@ input[type="file"]::file-selector-button {
      small outlined chip on the card plane rather than the accent. */
   background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 0.15rem 0.6rem;
 }
+
+/* --- the world's primitives (2026-09-06) --------------------------------- */
+
+.vh-svg { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* A LIME PANEL. The speckle is a white layer under multiply, so it darkens the
+   lime by a hair where the noise is dark and leaves it alone elsewhere: ink on
+   paper, not video noise. Children sit above the layer. */
+.lime { position: relative; overflow: hidden; background: var(--lime); color: var(--on-lime); border-radius: var(--r); }
+.lime > * { position: relative; z-index: 1; }
+.lime::before { content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: #FFFFFF; filter: url(#speckle); mix-blend-mode: multiply; opacity: 0.32; }
+
+/* AN OUTLINED CARD ON THE GROUND. Flat: no texture, ever. */
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); }
+
+/* THE FACT CARDS: crumpled paper, and only here. */
+.fact { position: relative; overflow: hidden; margin: 0; border-radius: var(--r); padding: var(--s-6) var(--s-5); min-height: 14rem; }
+.fact > * { position: relative; z-index: 1; }
+.fact::before { content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: #FFFFFF; filter: url(#paper); mix-blend-mode: multiply; opacity: 0.55; }
+.fact--lime { background: var(--lime); color: var(--on-lime); }
+.fact--white { background: #FFFFFF; color: var(--on-lime); }
+.fact blockquote { margin: 0; }
+.fact blockquote p { margin: 0; font-family: var(--display); text-transform: uppercase; font-size: var(--d-4); line-height: 0.92; letter-spacing: 0; }
+.fact figcaption { margin: var(--s-4) 0 0; font-size: var(--t-1); color: var(--on-lime-soft); }
+
+/* THE FAQ: native rows, outlined, the glyph switched by [open]. */
+.faq { max-width: 52rem; margin: 0 auto var(--s-8); }
+.faq-t { font-family: var(--display); text-transform: uppercase; font-size: var(--d-4); line-height: 0.92; letter-spacing: 0; font-weight: 400; margin: 0 0 var(--s-5); }
+.faq-row { border: 1px solid var(--line); border-radius: var(--r-sm); margin: 0 0 var(--s-3); padding: 0 var(--s-5); }
+.faq-row > summary { display: flex; justify-content: space-between; align-items: center; gap: var(--s-4); cursor: pointer; list-style: none; padding: var(--s-4) 0; font-weight: 600; }
+.faq-row > summary::-webkit-details-marker { display: none; }
+.faq-glyph::before { content: '+'; font-family: var(--display); font-size: var(--t-4); line-height: 1; color: var(--ink-soft); }
+details[open] > summary .faq-glyph::before { content: '−'; }
+.faq-row > p { margin: 0 0 var(--s-5); color: var(--ink-soft); max-width: 66ch; }
+
+/* THE FOOTER: two columns, the giant word, the fine print. */
+.foot-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-6); max-width: 32rem; margin: 0 0 var(--s-7); }
+.foot-h { font-size: var(--t-label); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 var(--s-3); }
+.foot-col ul { list-style: none; margin: 0; padding: 0; }
+.foot-col li { margin: 0 0 var(--s-2); }
+.foot-col .quiet { text-decoration: none; color: var(--ink); font-size: var(--t-2); }
+.foot-col .quiet:hover { color: var(--lime); }
+.foot-mark { font-family: var(--display); text-transform: uppercase; font-size: var(--t-mark); line-height: 0.85; letter-spacing: 0; color: var(--lime); margin: 0 0 var(--s-5); white-space: nowrap; overflow: hidden; }
+@media (max-width: 30rem) { .foot-cols { grid-template-columns: 1fr; } }
 
 /* --- foot -------------------------------------------------------------- */
 

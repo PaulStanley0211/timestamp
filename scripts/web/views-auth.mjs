@@ -40,7 +40,7 @@
  * manager that fills the wrong thing.
  */
 
-import { h, layout } from './views.mjs';
+import { h, layout, balanceSentence } from './views.mjs';
 
 function field({ id, name, label, type = 'text', value = '', autocomplete = 'off', required = true, hint = '' }) {
   return `<div class="field">
@@ -426,16 +426,7 @@ export function accountPage({ account, balance = null, csrf = '', error = null, 
    * an order, so a repriced tape moves this sentence by itself. With no price
    * to measure against the count stands alone rather than against a guess.
    */
-  const credits = balance ? Number(balance.credits) : NaN;
-  let creditLine = '';
-  if (Number.isFinite(credits)) {
-    const per = Number(cheapest?.credits);
-    const n = cheapest && Number.isFinite(per) && per > 0 ? Math.floor(credits / per) : null;
-    const tapes = n === null ? ''
-      : n === 0 ? ` Not enough for another tape at ${cheapest.id}.`
-        : ` Enough for ${n} more ${n === 1 ? 'tape' : 'tapes'} at ${cheapest.id}.`;
-    creditLine = `${credits} credits left.${tapes}`;
-  }
+  const creditLine = balanceSentence({ credits: balance ? Number(balance.credits) : NaN, cheapest });
 
   const body = `
 <main class="account">
