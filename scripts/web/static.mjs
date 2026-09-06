@@ -2783,9 +2783,14 @@ export function parseRange(header, size) {
  *   tape and its poster replay from cache after sign-out. A face is not worth
  *   a cache hit; the place photographs and the brand assets are nobody's and
  *   keep their `maxAge`.
+ * @param {boolean} [opts.publicCache] `private` is the default, because most
+ *   files served here are somebody's. The showcase is the one caller that
+ *   says otherwise: those tapes and stills are the owner's own, chosen to be
+ *   shown, and a shared cache (a CDN, a corporate proxy) is exactly where a
+ *   landing-page hero benefits from sitting.
  */
 export function sendFile(req, res, {
-  file, contentType, maxAge = 0, noStore = false, download = null, fsImpl = fs,
+  file, contentType, maxAge = 0, noStore = false, download = null, fsImpl = fs, publicCache = false,
 } = {}) {
   let stat;
   try {
@@ -2797,7 +2802,8 @@ export function sendFile(req, res, {
 
   const type = contentType ?? contentTypeFor(file);
   const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
-  const cacheControl = noStore ? 'no-store' : (maxAge > 0 ? `private, max-age=${maxAge}` : 'no-cache');
+  const cacheControl = noStore ? 'no-store'
+    : (maxAge > 0 ? `${publicCache ? 'public' : 'private'}, max-age=${maxAge}` : 'no-cache');
   const headers = {
     'Content-Type': type,
     'Accept-Ranges': 'bytes',

@@ -124,6 +124,26 @@ top to bottom; nothing here is optional.
    (36 filters + the font) and refuses to produce an image on a bad ffmpeg,
    so a successful build IS the preflight.
 
+5. **The showcase.** The landing plays three of the owner's tapes; they live in
+   `/opt/timestamp/showcase`, outside the repository, and are produced ON THE
+   BOX from the finished jobs so no face travels:
+
+   ```bash
+   install -d -m 755 /opt/timestamp/showcase
+   cd /opt/timestamp
+   # the 9:16 Times Square tape and the 4:3 space-centre tape are already on the volume
+   docker compose run --rm -v /opt/timestamp/showcase:/showcase web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-125257-3a448b --slot=tape-9x16 --out=/showcase
+   docker compose run --rm -v /opt/timestamp/showcase:/showcase web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-200239-931272 --slot=tape-4x3 --out=/showcase
+   ls -l /opt/timestamp/showcase
+   ```
+
+   The 16:9 hero (`20260905-221822-a32b2a`) was rendered on the development
+   machine, so `hero-16x9.mp4`, `hero-16x9.jpg` and the four `sticker-N.jpg`
+   are produced there and copied up with `scp` into the same directory. Then
+   `TIMESTAMP_SHOWCASE_DIR=/showcase` in `.env.web`, and `docker compose up -d`
+   (the files are checked at boot). A missing file is not an error: the page
+   falls back to a place photograph in that slot.
+
 ## 2. DNS (Cloudflare)
 
 - `A  timestamptapes.com      <server IPv4>` — **DNS only (grey cloud)**.
@@ -179,6 +199,10 @@ prerequisite.
    during a friends-only launch. **Do not skip this on the assumption that an
    unlinked site is unfindable** — the TLS certificate publishes the hostname
    to Certificate Transparency logs the moment Caddy issues it.
+9. `https://timestamptapes.com/showcase/hero-16x9.mp4` with a
+   `Range: bytes=0-99` header answers 206 and
+   `Cache-Control: public, max-age=86400`; the landing's hero plays muted;
+   `/showcase/anything-else` is 404.
 
 ### Going live on Stripe
 

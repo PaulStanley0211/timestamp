@@ -1236,6 +1236,52 @@ test('the four web fonts are served public, by name, with a day of cache, and no
   });
 });
 
+test('the showcase serves an allow-listed name public, with range support and a day of shared cache, and nothing else', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-showcase-'));
+  fs.copyFileSync(new URL('./fixtures/showcase/tiny.mp4', import.meta.url), path.join(dir, 'hero-16x9.mp4'));
+  fs.copyFileSync(new URL('./fixtures/showcase/tiny.jpg', import.meta.url), path.join(dir, 'hero-16x9.jpg'));
+  fs.writeFileSync(path.join(dir, 'secret.txt'), 'not on the list');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), showcaseDir: dir });
+  const port = await app.listen();
+  try {
+    const video = await fetch(`http://127.0.0.1:${port}/showcase/hero-16x9.mp4`, { headers: { range: 'bytes=0-99' } });
+    assert.equal(video.status, 206, 'a range request is what a <video> element sends');
+    assert.equal(video.headers.get('content-type'), 'video/mp4');
+    assert.match(video.headers.get('content-range') ?? '', /^bytes 0-99\//);
+    assert.equal(video.headers.get('cache-control'), 'public, max-age=86400', 'the showcase is nobody\'s face to hide and everybody\'s to cache');
+    assert.equal(video.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(video.headers.get('x-robots-tag'), 'noindex, nofollow');
+
+    const poster = await fetch(`http://127.0.0.1:${port}/showcase/hero-16x9.jpg`);
+    assert.equal(poster.status, 200);
+    assert.equal(poster.headers.get('content-type'), 'image/jpeg');
+
+    for (const target of ['/showcase/secret.txt', '/showcase/tape-9x16.mp4', '/showcase/..%2fsecret.txt', '/showcase/hero-16x9.MP4']) {
+      const res = await fetch(`http://127.0.0.1:${port}${target}`);
+      assert.ok(res.status === 404 || res.status === 400, `${target} answered ${res.status}: a name off the list, or on it but absent, is a miss`);
+    }
+
+    const s = app.showcase();
+    assert.deepEqual(s.hero, { video: '/showcase/hero-16x9.mp4', poster: '/showcase/hero-16x9.jpg', caption: s.hero.caption });
+    assert.equal(s.tall, null, 'a slot whose files are absent is null, never a broken url');
+    assert.equal(s.fourThree, null);
+    assert.deepEqual(s.stickers, []);
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('with no showcase directory every name is a 404 and every slot is null', async () => {
+  await withServer(async ({ base, app }) => {
+    const res = await fetch(`${base}/showcase/hero-16x9.mp4`);
+    assert.equal(res.status, 404);
+    assert.deepEqual(app.showcase(), { hero: null, tall: null, fourThree: null, stickers: [] });
+  });
+});
+
 test('a place LOOP is served, and only for an id the catalog knows', async () => {
   const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
   fs.mkdirSync(`${assets}/places`, { recursive: true });

@@ -154,6 +154,30 @@ const LANDING_IMAGES = Object.freeze({
   'tape.jpg': 'tape.jpg',
 });
 
+/**
+ * THE SHOWCASE: the owner's own tapes, served from a directory OUTSIDE the
+ * repository. Three tapes and four stills carry a real face; the repository
+ * is public and its history is permanent, so none of them is committed.
+ * TIMESTAMP_SHOWCASE_DIR names the directory; an allow-listed name under it
+ * is served through sendFile like a place photograph, and any other name --
+ * or any name whose file is absent -- is a 404. There is no listing.
+ *
+ * The captions live here, beside the names they describe: a file regenerated
+ * from a different tape is a caption to change in the same edit.
+ */
+export const SHOWCASE_FILES = Object.freeze({
+  'hero-16x9.mp4': 'video/mp4', 'hero-16x9.jpg': 'image/jpeg',
+  'tape-9x16.mp4': 'video/mp4', 'tape-9x16.jpg': 'image/jpeg',
+  'tape-4x3.mp4': 'video/mp4', 'tape-4x3.jpg': 'image/jpeg',
+  'sticker-1.jpg': 'image/jpeg', 'sticker-2.jpg': 'image/jpeg',
+  'sticker-3.jpg': 'image/jpeg', 'sticker-4.jpg': 'image/jpeg',
+});
+export const SHOWCASE_SLOTS = Object.freeze({
+  hero: { base: 'hero-16x9', caption: 'Times Square · 2003 · 16:9 · made from one photograph' },
+  tall: { base: 'tape-9x16', caption: 'Times Square · 2003 · 9:16' },
+  fourThree: { base: 'tape-4x3', caption: 'The space centre · 2003 · 4:3' },
+});
+
 /** The web fonts, as a lookup. Which files exist is decided in assets/fonts/;
  *  this is only the set of names the route will answer to. */
 const FONT_FILES = Object.freeze({
@@ -168,7 +192,7 @@ const FONT_FILES = Object.freeze({
  *  `scripts/auth/` still serves the stylesheet, and a load balancer still gets
  *  an answer. */
 const NO_SESSION_ROUTES = new Set([
-  'stylesheet', 'font', 'fontFile', 'favicon', 'placeImage', 'robots',
+  'stylesheet', 'font', 'fontFile', 'favicon', 'placeImage', 'showcaseFile', 'robots',
   // STRIPE SENDS NO COOKIE, so resolving a session for it is work that can only
   // fail. Keeping it out of the session path also means a webhook is answered
   // while the sign-in half of the app is degraded -- which matters, because the
@@ -897,6 +921,17 @@ export function createServer({
    */
   publicUrl = process.env.TIMESTAMP_PUBLIC_URL || null,
   assetsRoot = `${REPO_ROOT}/assets`,
+  /**
+   * Where the owner's own showcase tapes live -- OUTSIDE the repository,
+   * because a face is in them and the repository is public. Null is the
+   * state every test runs in and the state a fresh clone boots in: the
+   * landing falls back to a place photograph in each slot.
+   *
+   * Checked once, at construction, against the filesystem as it stood then --
+   * a file copied in after boot is invisible until the next restart, and a
+   * deploy already is one.
+   */
+  showcaseDir = process.env.TIMESTAMP_SHOWCASE_DIR || null,
   nowImpl = () => new Date(),
   logImpl = (line) => process.stderr.write(`${line}\n`),
   /**
@@ -919,6 +954,24 @@ export function createServer({
   }
 
   const auths = sessions ?? createSessions({ root, auth, trustProxy });
+
+  // Checked once, at construction. The runbook copies the files before
+  // `docker compose up`, and a restart is what a deploy already is.
+  const showcasePresent = new Set(showcaseDir
+    ? Object.keys(SHOWCASE_FILES).filter((name) => { try { return fs.statSync(path.join(showcaseDir, name)).isFile(); } catch { return false; } })
+    : []);
+  function showcaseFor() {
+    const url = (name) => (showcasePresent.has(name) ? `/showcase/${name}` : null);
+    const slot = ({ base, caption }) => (url(`${base}.mp4`) && url(`${base}.jpg`)
+      ? { video: url(`${base}.mp4`), poster: url(`${base}.jpg`), caption }
+      : null);
+    return {
+      hero: slot(SHOWCASE_SLOTS.hero),
+      tall: slot(SHOWCASE_SLOTS.tall),
+      fourThree: slot(SHOWCASE_SLOTS.fourThree),
+      stickers: [1, 2, 3, 4].map((n) => url(`sticker-${n}.jpg`)).filter(Boolean),
+    };
+  }
 
   /**
    * Whose request this is.
@@ -2167,6 +2220,24 @@ export function createServer({
         maxAge: 86_400,
       })) {
         throw new HttpError(404, 'No such image.', { code: 'NO_LANDING_IMAGE' });
+      }
+    },
+
+    /**
+     * The showcase: an allow-listed name, served from OUTSIDE the repository.
+     *
+     * `Object.hasOwn` rather than a bare lookup -- the same reason `fontFile`
+     * uses it -- so no byte of `params.file` ever becomes a path component,
+     * including via a prototype property name. Absent directory and absent
+     * file answer identically: a 404, because the fallback the page renders
+     * in either case is the same place photograph.
+     */
+    showcaseFile(req, res, { params }) {
+      const name = String(params.file ?? '');
+      const type = Object.hasOwn(SHOWCASE_FILES, name) ? SHOWCASE_FILES[name] : null;
+      if (!type || !showcaseDir) throw new HttpError(404, 'Not found.', { code: 'NO_SHOWCASE' });
+      if (!sendFile(req, res, { file: path.join(showcaseDir, name), contentType: type, maxAge: 86_400, publicCache: true })) {
+        throw new HttpError(404, 'Not found.', { code: 'NO_SHOWCASE' });
       }
     },
 
@@ -4564,6 +4635,9 @@ export function createServer({
     /** The menu the cards are rendered from, so a test can assert the page is
      *  built out of `presets/` rather than out of a second copy. */
     cards,
+    /** The showcase slots, resolved against the filesystem at construction --
+     *  see `showcaseFor` above. */
+    showcase: showcaseFor,
     get port() {
       const address = server.address();
       return address && typeof address === 'object' ? address.port : null;

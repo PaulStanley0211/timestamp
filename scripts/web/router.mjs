@@ -168,6 +168,11 @@ export const ROUTES = Object.freeze([
   // is ever concatenated into a path.
   { method: 'GET', pattern: '/landing/:file', name: 'landingImage' },
 
+  // The owner's own tapes, served from a directory OUTSIDE the repository, by
+  // allow-list -- see SHOWCASE_FILES in server.mjs. No byte of the request
+  // ever becomes a path component.
+  { method: 'GET', pattern: '/showcase/:file', name: 'showcaseFile' },
+
   { method: 'GET', pattern: '/j/:id', name: 'statusPage' },
   { method: 'GET', pattern: '/j/:id/select', name: 'selectPage' },
   { method: 'GET', pattern: '/j/:id/result', name: 'resultPage' },
@@ -200,7 +205,7 @@ export const ROUTES = Object.freeze([
  * queue's counts and whether ffmpeg is present, and no job ids.
  */
 export const PUBLIC_ROUTES = Object.freeze(new Set([
-  'stylesheet', 'font', 'fontFile', 'favicon', 'placeImage', 'landingImage',
+  'stylesheet', 'font', 'fontFile', 'favicon', 'placeImage', 'landingImage', 'showcaseFile',
   'iconSvg', 'icon180', 'icon192', 'icon512',
   'loginPage', 'login', 'signupPage', 'signup', 'logout',
   // Google. Whoever lands on `/auth/callback` is, by definition, not signed

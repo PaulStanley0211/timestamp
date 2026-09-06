@@ -156,3 +156,15 @@ test('the runbook exists and covers the five consoles and the restore', () => {
   assert.match(runbook, /backup-cli\.mjs --root=\/data --to=/, 'the cron backup line fell out of the runbook');
   assert.match(runbook, /[Rr]estore/, 'a backup nobody can restore is a ritual, not a backup');
 });
+
+test('the showcase directory is mounted read-only into web, and into nothing else', () => {
+  // The owner's face is on that disk. web serves it by allow-list; the worker
+  // and caddy have no business reading it, and neither may write it.
+  const compose = read('compose.yaml');
+  const service = (name) => new RegExp(`^  ${name}:$([\\s\\S]*?)(?=^  \\w|^volumes:)`, 'm').exec(compose)?.[1] ?? '';
+  assert.match(service('web'), /^\s*- \/opt\/timestamp\/showcase:\/showcase:ro$/m, 'web does not mount the showcase read-only');
+  assert.equal(/showcase/.test(service('worker')), false, 'the worker mounts the showcase');
+  assert.equal(/showcase/.test(service('caddy')), false, 'caddy mounts the showcase');
+  assert.match(read('.env.example'), /TIMESTAMP_SHOWCASE_DIR/, '.env.example does not document the variable');
+  assert.match(read('docs/deploy-runbook.md'), /showcase\.mjs/, 'the runbook does not say how the files are made');
+});
