@@ -2610,8 +2610,16 @@ body.page-landing { padding: 0 0 var(--s-8); }
    running page: the button at 179-321 and the counter starting at 325, twelve
    pixels apart vertically. Block-level with a max-content width keeps the pill
    hugging its label and puts the counter on its own line, where the section's
-   own text-align centres it. */
-.demo-cta { display: block; width: max-content; margin: 0 auto; }
+   own text-align centres it.
+
+   AND IT NEEDS ITS OWN SURFACE. The shared rule paints this pill's background
+   dark, which is right for a pill sitting ON the lime hero and wrong here,
+   where the page behind it is dark too -- the fill and the ground read as one
+   colour and the pill disappears, label and all. Lime means go, so this one
+   inverts: a lime surface with a dark label, and the hover lifts the surface
+   rather than recolouring the label to something that would fail against it. */
+.demo-cta { display: block; width: max-content; margin: 0 auto; background: var(--lime); color: var(--on-lime); }
+.demo-cta:hover { color: var(--on-lime); filter: brightness(1.06); }
 .flip { display: inline-flex; gap: 0.3em; font-family: var(--osd); font-size: var(--t-8); color: var(--ink); margin: var(--s-6) auto 0; letter-spacing: 0.04em; }
 .flip span { display: inline-block; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 0.1em 0.3em; min-width: 1.1em; line-height: 1.1; }
 .flip .gap { background: none; border: 0; min-width: 0.3em; padding: 0; }

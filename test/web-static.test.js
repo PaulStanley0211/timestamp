@@ -687,6 +687,18 @@ test('the landing is eight sections in order, the tape slot in the hero and the 
   assert.match(band, /<ul class="lrail">/, 'the rail is not inside the band');
   assert.match(band, /Baltic beach/, 'the rail lost its place names');
   assert.ok(!/class="(lmenu|strike|losds|losd|bloom|veils|plain|how-lead)"/.test(html), 'a piece of the old landing survives');
+  // The three "Make a tape" calls to action (nav pill, hero, demo) navigate to
+  // /signup; only Sign in opens the dialog. A data-signin here hands a
+  // first-time visitor a password box instead of the signup form, and kills
+  // ctrl-click too. The footer carries a fourth "Make a tape" link (to /signup
+  // as well, class="quiet") that never opened the dialog and is excluded here.
+  const signupLinks = (html.match(/<a\b[^>]*href="\/signup"[^>]*>Make a tape<\/a>/g) ?? [])
+    .filter((tag) => !/class="quiet"/.test(tag));
+  assert.equal(signupLinks.length, 3, 'expected three "Make a tape" calls to action to /signup (nav pill, hero, demo)');
+  for (const tag of signupLinks) {
+    assert.ok(!/\bdata-signin\b/.test(tag), `a /signup "Make a tape" link opens the sign-in dialog instead of navigating: ${tag}`);
+  }
+  assert.match(html, /<a href="\/login" data-signin>Sign in<\/a>/, 'the Sign in link should still open the dialog');
   for (const tag of html.match(/<video[^>]*>/g) ?? []) {
     assert.ok(!/\ssrc=/.test(tag) && !/\sautoplay/.test(tag), `a video loads before any check has run: ${tag}`);
     assert.ok(/\smuted/.test(tag) && /\splaysinline/.test(tag) && /\sloop/.test(tag), `a video without muted+playsinline+loop: ${tag}`);

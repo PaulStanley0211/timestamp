@@ -513,6 +513,41 @@ test('the hero tape plays muted once the page has loaded, when a showcase file i
   assert.equal(r.paused, false, 'the hero is not playing');
 });
 
+/**
+ * THE DEMO BAND'S CLOSING BUTTON, AND WHY A STYLESHEET TEST CANNOT SEE THE
+ * BUG. `.demo-cta` inherits `.navpill, .hero-cta`'s background of --on-lime,
+ * which is right for a pill sitting ON the lime hero and reads as no surface
+ * at all sitting on the page's own dark ground (--ground) -- the fill and the
+ * ground are close enough that the pill vanishes and the section reads as a
+ * bare lime word. `.demo-cta` must paint its own surface, and it must differ
+ * from the page behind it to prove the fix landed rather than merely existing
+ * as a declaration nothing resolves.
+ */
+test("the demo band's closing button has its own lime surface, not the page's ground", { skip }, async () => {
+  const s = await session();
+  await s.signOut();
+  const page = await visit('/', LAPTOP);
+  const r = await page.evaluate(`(() => {
+    const btn = document.querySelector('.demo-cta');
+    const probe = document.createElement('div');
+    probe.style.background = 'var(--lime)';
+    document.body.appendChild(probe);
+    const lime = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return {
+      found: Boolean(btn),
+      button: btn ? getComputedStyle(btn).backgroundColor : null,
+      ground: getComputedStyle(document.body).backgroundColor,
+      lime,
+    };
+  })()`);
+  assert.ok(r.found, 'no .demo-cta on the page');
+  assert.notEqual(r.button, r.ground,
+    `the demo band's button is ${r.button} on a ground of ${r.ground} -- it has no surface of its own`);
+  assert.equal(r.button, r.lime,
+    `the demo band's button should be a lime pill (${r.lime}), painted ${r.button}`);
+});
+
 /** The FAQ rows are native <details>: no script, and the keyboard works
  *  because the browser does it. That claim is only worth making in a browser. */
 test('a FAQ row opens on click and on Enter', { skip }, async () => {

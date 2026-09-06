@@ -1180,12 +1180,12 @@ export function landingPage({
       <a href="/pricing">Pricing</a>
       <a href="/login" data-signin>Sign in</a>
     </div>
-    <a class="navpill" href="/signup" data-signin>Make a tape</a>
+    <a class="navpill" href="/signup">Make a tape</a>
   </nav>
   <div class="hero-body">
     <h1 class="hero-line">One photograph. Fifteen seconds of 2003.</h1>
     <p class="hero-sub">Upload one photo of your face, choose a place and an outfit, and get back a tape that looks like it was found in a drawer.</p>
-    <a class="hero-cta" href="/signup" data-signin>Make a tape</a>
+    <a class="hero-cta" href="/signup">Make a tape</a>
     ${free}
   </div>
   <div class="ruler" aria-hidden="true"><span>REC</span>${ticks.map((t) => `<span>${t}</span>`).join('')}</div>
@@ -1270,7 +1270,7 @@ ${factCards({ frames, fps, shapes, photoDays, jobDays })}
     ${tapeSlot(showcase?.tall ?? null, 'tall', second)}
     ${tapeSlot(showcase?.fourThree ?? null, 'four', third)}
   </div>
-  <a class="hero-cta demo-cta" href="/signup" data-signin>Make a tape</a>
+  <a class="hero-cta demo-cta" href="/signup">Make a tape</a>
   <p class="flip" aria-label="14 08 2003"><span>1</span><span>4</span><span class="gap"></span><span>0</span><span>8</span><span class="gap"></span><span>2</span><span>0</span><span>0</span><span>3</span></p>
 </section>
 
