@@ -1083,7 +1083,10 @@ test('every place has an image URL and a gradient underneath it in one declarati
       const rule = new RegExp(`\\.thumb--pl-${p.id}\\{background-image:url\\('/places/${p.id}\\.jpg'\\), linear-gradient\\(`);
       assert.ok(rule.test(css), `no image+gradient rule for ${p.id}`);
       assert.ok(css.includes(`.bg--pl-${p.id}{background-image:`), `no background layer for ${p.id}`);
-      assert.ok(css.includes(`#pl-${p.id}:checked~.bgs .bg--pl-${p.id}{opacity:1;}`),
+      // Through .wrap since 2026-09-06: the landing's photograph is a BAND in
+      // the document rather than a layer fixed to the viewport, so the ground
+      // is inside .wrap on both pages that have one.
+      assert.ok(css.includes(`#pl-${p.id}:checked~.wrap .bgs .bg--pl-${p.id}{opacity:1;}`),
         `${p.id} does not cross-fade the background when selected`);
     }
     // The cost line switches on BOTH radios, with no script involved -- the
@@ -1361,7 +1364,7 @@ test('the moving background is one element, and the page is finished without it'
     const css = await (await fetch(`${base}/styles.css`)).text();
     assert.ok(/\.bgs\.is-showing\s+\.bgv\s*\{[^}]*opacity/.test(css),
       'the video should reveal on is-showing');
-    assert.ok(/:checked~\.bgs\.is-live~\.scrim\{opacity:/.test(css),
+    assert.ok(/:checked~\.wrap \.bgs\.is-live~\.scrim\{opacity:/.test(css),
       'the per-place scrim should hold on is-live, not blink with each swap');
     assert.ok(!/is-playing/.test(css), 'the old single-state class is still in the sheet');
 

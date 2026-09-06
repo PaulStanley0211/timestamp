@@ -74,7 +74,7 @@ import {
 } from '../render/job.mjs';
 import { purgeJobMedia } from '../render/purge.mjs';
 import { loadCatalog, RETIRED_OUTFIT_LABELS, RETIRED_PLACE_LABELS } from '../catalog/catalog.mjs';
-import { CONSENT_TEXT, recordConsent } from '../safety/consent.mjs';
+import { CONSENT_TEXT, RETENTION_DEFAULTS, recordConsent } from '../safety/consent.mjs';
 import { LIMITS } from '../intake/photo.mjs';
 import { runFfprobe } from '../ffmpeg/run.mjs';
 
@@ -1882,11 +1882,44 @@ export function createServer({
       if (offered.length === 0 || buyable.length === 0) return null;
       const cheapestTape = Math.min(...offered.map((r) => r.credits));
       const pack = buyable.reduce((a, b) => (a.priceUSD <= b.priceUSD ? a : b));
-      return { fromCredits: cheapestTape, packUSD: pack.priceUSD, packCredits: pack.credits };
+      // THE FREE GRANT IS THE PLAN'S OWN NUMBER, not a constant typed on the
+      // page. It has moved four times (16, 42, 21) and every account keeps the
+      // grant that was in force the day it was made, so a landing that states
+      // a different figure from the one a signup actually lands is the §36A
+      // defect in its cheapest form.
+      const freeCredits = (await auths.api()).PLANS?.free?.creditsPerPeriod ?? null;
+      // AND WHETHER THE SHAPE IS PART OF THE PRICE IS READ, NOT ASSUMED. It was
+      // false until 2026-09-05, when the supplier's pixel term went away; the
+      // FAQ says one thing or the other from this, so a supplier that bills by
+      // pixels again brings the sentence back without anybody remembering to.
+      const sameInEveryShape = offered.every((r) => new Set(Object.values(r.creditsByAspect ?? {})).size <= 1);
+      return {
+        fromCredits: cheapestTape,
+        packUSD: pack.priceUSD,
+        packCredits: pack.credits,
+        freeCredits,
+        sameInEveryShape,
+      };
     } catch (err) {
       logImpl(`[web] the landing price could not be derived: ${err?.message ?? err}`);
       return null;
     }
+  }
+
+  /** The product facts the public pages state, every one read from config or
+   *  a seam. Task 6's pricing page reads the same object. */
+  async function publicFacts() {
+    let qualities = [];
+    try { qualities = (await resolutionRows()).filter((r) => r.available).map((r) => r.id); } catch { qualities = []; }
+    return {
+      photoDays: cfg?.retention?.photoDays ?? RETENTION_DEFAULTS.photoDays,
+      jobDays: cfg?.retention?.jobDays ?? RETENTION_DEFAULTS.jobDays,
+      imageProcessor,
+      qualities,
+      shapes: aspectRows().filter((a) => a.available).map((a) => a.id),
+      frames: Math.round((cfg?.durationSeconds ?? 15) * (cfg?.fps ?? 25)),
+      fps: cfg?.fps ?? 25,
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -2089,6 +2122,10 @@ export function createServer({
           places: cards.places,
           pricing: await landingPricing(),
           csrf: token,
+          // Both public facts and neither an account read: which showcase files
+          // exist on this box, and what the config says the product is.
+          showcase: showcaseFor(),
+          facts: await publicFacts(),
         }), setCookie ? { 'Set-Cookie': setCookie } : {});
       }
       const [balance, resolutions, resolution] = await Promise.all([

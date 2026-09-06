@@ -661,7 +661,7 @@ test('no page emits an <hr>', () => {
 });
 
 // ---------------------------------------------------------------------------
-// the landing page carries the same moving ground as the signed-in one
+// the landing page: eight sections, the tape first, the place ground in the band
 // ---------------------------------------------------------------------------
 
 const PLACES_FIXTURE = [
@@ -669,27 +669,111 @@ const PLACES_FIXTURE = [
   { id: 'wohnzimmer-abend', label: 'Living room', timeOfDay: 'evening' },
 ];
 
-test('the landing plays the place full-bleed instead of framing it in a panel', () => {
+test('the landing is eight sections in order, the tape slot in the hero and the place ground in the band', () => {
   const html = landingPage({ places: PLACES_FIXTURE, account: null });
+  const order = ['<header class="lime hero">', 'class="manifesto', 'class="how2', 'class="band" id="places"', 'class="facts3"', 'class="demo', 'class="faq"', '<footer class="foot">'];
+  let at = -1;
+  for (const marker of order) {
+    const i = html.indexOf(marker, at + 1);
+    assert.ok(i > at, `${marker} is missing, or out of order`);
+    at = i;
+  }
+  // ONE loop video, inert, inside the band; the hero's tape is its own figure.
+  assert.equal((html.match(/<video class="bgv"/g) ?? []).length, 1, 'the band should carry one loop video');
+  const band = html.slice(html.indexOf('class="band"'), html.indexOf('class="facts3"'));
+  assert.match(band, /class="bgs"/, 'the place ground is not inside the band');
+  assert.match(band, /class="bg bg--pl-ostsee-strand"/, 'the still fallback layer is missing');
+  assert.match(band, /class="scrim"/, 'the band has a photograph and no scrim');
+  assert.match(band, /<ul class="lrail">/, 'the rail is not inside the band');
+  assert.match(band, /Baltic beach/, 'the rail lost its place names');
+  assert.ok(!/class="(lmenu|strike|losds|losd|bloom|veils|plain|how-lead)"/.test(html), 'a piece of the old landing survives');
+  for (const tag of html.match(/<video[^>]*>/g) ?? []) {
+    assert.ok(!/\ssrc=/.test(tag) && !/\sautoplay/.test(tag), `a video loads before any check has run: ${tag}`);
+    assert.ok(/\smuted/.test(tag) && /\splaysinline/.test(tag) && /\sloop/.test(tag), `a video without muted+playsinline+loop: ${tag}`);
+  }
+  assert.doesNotMatch(landingPage({ places: [], account: null }), /undefined/, 'an empty catalog leaks undefined into the page');
+});
 
-  // ONE VIDEO, AND INERT IN THE MARKUP, exactly as on the signed-in page. The
-  // checks that decide whether it should load at all live in the script.
-  assert.equal((html.match(/<video/g) ?? []).length, 1, 'the landing should carry one video');
-  const video = html.slice(html.indexOf('<video'), html.indexOf('>', html.indexOf('<video')) + 1);
-  assert.ok(!/\ssrc=/.test(video) && !/\sautoplay/.test(video),
-    'the landing video loads for everyone before any check has run');
-  assert.ok(/\smuted/.test(video) && /\splaysinline/.test(video) && /\sloop/.test(video),
-    'without muted+playsinline a mobile browser will not play it at all');
+test('the hero carries one action and the free-grant sentence, and the landing prices nothing in dollars', () => {
+  const pricing = { fromCredits: 21, packUSD: 12, packCredits: 92, freeCredits: 21, sameInEveryShape: true };
+  const html = landingPage({ places: PLACES_FIXTURE, account: null, pricing });
+  const hero = /<header class="lime hero">([\s\S]*?)<\/header>/.exec(html);
+  assert.ok(hero, 'no lime hero');
+  assert.equal((hero[1].match(/class="hero-cta"/g) ?? []).length, 1, 'the hero carries exactly one action');
+  assert.match(hero[1], /21 free credits with a new account\. One tape, no card\./, 'the free-grant line is missing or typed differently');
+  assert.match(hero[1], /Upload one photo of your face, choose a place and an outfit, and get back a tape that looks like it was found in a drawer\./);
+  assert.match(hero[1], /class="ruler"[\s\S]*>REC<[\s\S]*>00:15</, 'the counter ruler is missing or does not run to fifteen');
+  assert.match(hero[1], /<nav class="hero-nav"[\s\S]*href="#places">Places<[\s\S]*href="\/pricing">Pricing<[\s\S]*data-signin>Sign in<[\s\S]*class="navpill"/, 'the nav is not inside the hero, or lost a link');
+  assert.doesNotMatch(html, /\$\d/, 'a dollar price reached the landing; the pack prices live on the pricing page');
+  assert.doesNotMatch(landingPage({ places: PLACES_FIXTURE, account: null }), /free credits with a new account/, 'a grant sentence was invented with no seam behind it');
+});
 
-  // The full-bleed layers, keyed by the same pl- ids the stylesheet generates
-  // rules for, so the landing and the signed-in page share one set.
-  assert.ok(/class="bgs"/.test(html), 'the landing has no full-bleed ground');
-  assert.ok(/class="bg bg--pl-ostsee-strand"/.test(html), 'the still fallback layer is missing');
+test('the showcase fills the hero, the stickers and the demo when present, and each slot falls back to a place when absent', () => {
+  const showcase = {
+    hero: { video: '/showcase/hero-16x9.mp4', poster: '/showcase/hero-16x9.jpg', caption: 'Times Square · 2003 · 16:9 · made from one photograph' },
+    tall: { video: '/showcase/tape-9x16.mp4', poster: '/showcase/tape-9x16.jpg', caption: 'Times Square · 2003 · 9:16' },
+    fourThree: null,
+    stickers: ['/showcase/sticker-1.jpg', '/showcase/sticker-2.jpg'],
+  };
+  const full = landingPage({ places: PLACES_FIXTURE, account: null, showcase });
+  const heroTape = /<figure class="hero-tape">([\s\S]*?)<\/figure>/.exec(full);
+  assert.ok(heroTape, 'no hero tape figure');
+  assert.match(heroTape[1], /<video class="tape-media tape-media--hero" muted playsinline loop preload="none" poster="\/showcase\/hero-16x9\.jpg" data-src="\/showcase\/hero-16x9\.mp4">/);
+  assert.match(heroTape[1], /<figcaption class="tape-cap">Times Square · 2003 · 16:9 · made from one photograph<\/figcaption>/);
+  assert.equal((full.match(/class="sticker sticker--/g) ?? []).length, 2, 'one sticker per file present, and no more');
+  const demo = /<section class="demo inner">([\s\S]*?)<\/section>/.exec(full);
+  assert.ok(demo, 'no demo band');
+  assert.match(demo[1], /data-src="\/showcase\/tape-9x16\.mp4"/, 'the tall tape is missing from the demo');
+  assert.match(demo[1], /<img class="tape-media tape-media--four" src="\/places\/wohnzimmer-abend\.jpg"/, 'an absent 4:3 tape does not fall back to a place photograph');
 
-  // AND THE 4:3 PANEL IS GONE. It framed the very picture that is now behind
-  // the whole page; keeping both would show the same photograph twice at two
-  // sizes and two crops on one screen.
-  assert.ok(!/class="veils"/.test(html), 'the landing still frames the place in a 4:3 panel');
+  const none = landingPage({ places: PLACES_FIXTURE, account: null, showcase: null });
+  assert.ok(!/\/showcase\//.test(none), 'a page with no showcase names a showcase url');
+  assert.ok(!/data-src=/.test(none), 'a page with no showcase ships a video it cannot fill');
+  const fallback = /<figure class="hero-tape">([\s\S]*?)<\/figure>/.exec(none);
+  assert.match(fallback[1], /<img class="tape-media tape-media--hero" src="\/places\/ostsee-strand\.jpg"/, 'the hero slot does not fall back to the first place');
+  assert.match(fallback[1], /<figcaption class="tape-cap">Baltic beach<\/figcaption>/, 'the fallback is captioned with the place, never with the tape');
+  assert.doesNotMatch(none, /class="sticker /, 'a sticker was invented');
+});
+
+test('the landing asks six questions, states three facts as quotations, reads a date, and ends on the giant word once', () => {
+  const html = landingPage({
+    places: PLACES_FIXTURE, account: null,
+    pricing: { fromCredits: 21, packUSD: 12, packCredits: 92, freeCredits: 21, sameInEveryShape: true },
+    facts: { photoDays: 7, jobDays: 30, imageProcessor: null, qualities: ['480p', '720p'], shapes: ['4:3', '16:9', '9:16'], frames: 375, fps: 25 },
+  });
+  assert.equal((html.match(/<details class="faq-row">/g) ?? []).length, 6, 'six questions');
+  assert.match(html, /sent to fal\.ai, the AI provider that generates the tape, and to nobody else/);
+  assert.match(html, /deleted after 7 days and the finished tape after 30 days/);
+  assert.match(html, /4:3, 16:9 and 9:16 at 480p and 720p/);
+  assert.match(html, /a tape costs the same in every shape/);
+  assert.equal((html.match(/<figure class="fact /g) ?? []).length, 3, 'three fact cards');
+  assert.match(html, /<figure class="fact fact--lime"><blockquote><p>Exactly fifteen seconds\.<\/p><\/blockquote><figcaption>375 frames at 25 a second, PAL/);
+  assert.match(html, /<figure class="fact fact--white"><blockquote><p>Deleted after 7 days\.<\/p>/);
+  assert.match(html, /<p class="flip" aria-label="14 08 2003">/, 'the flip counter does not read the date the product is named for');
+  assert.equal((html.match(/class="foot-mark"/g) ?? []).length, 1, 'the giant word appears once');
+  assert.match(html, /run through a real tape chain/, 'the grade card lost the sentence the still-approval sweep anchors on');
+  assert.match(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), /You, somewhere in 2003, on a tape that looks found in a drawer\./, 'the manifesto sentence is broken by its stickers');
+  // With a classifier declared the FAQ names it, the way /privacy does.
+  const two = landingPage({ places: PLACES_FIXTURE, account: null, facts: { imageProcessor: 'Amazon Web Services (Rekognition), Frankfurt' } });
+  assert.match(two, /and to Amazon Web Services \(Rekognition\), Frankfurt, which checks it/);
+});
+
+test('the place rail snaps inside the band, over the photograph it lights', () => {
+  const html = landingPage({ places: PLACES_FIXTURE, account: null });
+  const css = createStylesheet({ places: PLACES_FIXTURE, outfits: [] }).css;
+  assert.ok(/<ul class="lrail">/.test(html), 'the place options are not a rail');
+  assert.ok(/<li>.*lopt--pl-ostsee-strand/s.test(html), 'the rail dropped its list items');
+  const rail = /\.lrail\s*\{([^}]*)\}/.exec(css);
+  assert.ok(rail, 'no .lrail rule');
+  assert.ok(/scroll-snap-type:\s*x mandatory/.test(rail[1]), 'the rail does not snap');
+  assert.ok(/overflow-x:\s*auto/.test(rail[1]), 'the rail does not scroll');
+  assert.ok(/\.lrail\s+li\s*\{[^}]*scroll-snap-align/.test(css), 'the items have no snap point');
+  // The generated rules reach a ground that now lives INSIDE the band.
+  assert.match(css, /#pl-ostsee-strand:checked~\.wrap \.bgs \.bg--pl-ostsee-strand\{opacity:1;\}/, 'the still-layer rule cannot reach a ground inside the band');
+  assert.match(css, /#pl-ostsee-strand:checked~\.wrap \.lopt--pl-ostsee-strand\{opacity:1;color:var\(--lime\);\}/, 'the chosen place is not lime');
+  assert.ok(!/\.lmenu\s*\{/.test(css), 'the plate rule survives its element');
+  assert.match(css, /\.band \.scrim\s*\{/, 'the band has no scrim rule of its own');
+  assert.doesNotMatch(css, /\.losd\b/, 'the OSD readout rule survives its element');
 });
 
 /**
@@ -711,26 +795,6 @@ test('the hero is set in the display face at the hero size', () => {
   assert.doesNotMatch(hero[1], /var\(--(osd|sans)\)/, 'the hero is still in a body or readout face');
 });
 
-test('the price sits with the claim, and the hero carries one action', () => {
-  const pricing = { fromCredits: 21, packUSD: 12, packCredits: 92 };
-  const html = landingPage({ places: PLACES_FIXTURE, account: null, pricing });
-
-  const strike = /<section class="strike">([\s\S]*?)<\/section>/.exec(html);
-  const plain = /<section class="plain">([\s\S]*?)<\/section>/.exec(html);
-  assert.ok(strike && plain, 'the hero and the closing plate are both required');
-
-  assert.match(strike[1], /class="cta"/, 'the hero lost its action');
-  assert.doesNotMatch(strike[1], /credits a tape/, 'the price is still under the button');
-  assert.match(plain[1], /From 21 credits a tape\. 92 credits is \$12, and tax is added at checkout\./,
-    'the price is not in the closing plate');
-  assert.match(plain[1], /href="\/pricing"/, 'the plate does not lead to the plans page');
-
-  // The Content sentence says what the motion has done since the vlog
-  // rewrite, not what the prompt it replaced asked for.
-  assert.match(html, /cuts six times in fifteen seconds/, 'the Content copy is stale');
-  assert.doesNotMatch(html, /goes nowhere in particular/, 'the Content copy still describes the single-take prompt');
-});
-
 test('no selection mark is pinned to the right of its card', () => {
   // THE OWNER ASKED FOR THE MARK ON THE LEFT, EVERYWHERE (2026-09-04). The
   // frame card drew its dot in the flow before the shape; the outfit and
@@ -743,29 +807,6 @@ test('no selection mark is pinned to the right of its card', () => {
     assert.ok(rule, `no rule for ${sel}`);
     assert.doesNotMatch(rule[1], /\bright:/, `${sel} is positioned from the right edge`);
   }
-});
-
-test('the landing list is a rail that snaps, and its menu is a plate', () => {
-  const html = landingPage({ places: PLACES_FIXTURE, account: null });
-  const css = createStylesheet({ places: PLACES_FIXTURE, outfits: [] }).css;
-
-  // The options are still a LIST in the markup -- they are a set of choices and
-  // a screen reader should meet them as one -- and a rail only in the styling.
-  assert.ok(/<ul class="lrail">/.test(html), 'the place options are not a rail');
-  assert.ok(/<li>.*lopt--pl-ostsee-strand/s.test(html), 'the rail dropped its list items');
-
-  const rail = /\.lrail\s*\{([^}]*)\}/.exec(css);
-  assert.ok(rail, 'no .lrail rule');
-  assert.ok(/scroll-snap-type:\s*x mandatory/.test(rail[1]), 'the rail does not snap');
-  assert.ok(/overflow-x:\s*auto/.test(rail[1]), 'the rail does not scroll');
-  assert.ok(/\.lrail\s+li\s*\{[^}]*scroll-snap-align/.test(css), 'the items have no snap point');
-
-  // The menu floats over a photograph, so it needs a ground of its own -- the
-  // same argument, and the same measured value, as the signed-in page's panels.
-  const menu = /\.lmenu\s*\{([^}]*)\}/.exec(css);
-  assert.ok(menu, 'no .lmenu rule');
-  assert.ok(/backdrop-filter:\s*blur/.test(menu[1]), 'the menu does not blur what is behind it');
-  assert.ok(/background:\s*rgba\(/.test(menu[1]), 'the menu has no plate, so dim text sits on a photograph');
 });
 
 

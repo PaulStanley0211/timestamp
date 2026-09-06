@@ -444,7 +444,7 @@ test('the landing page carries nothing that belongs to an account', async () => 
     const html = await res.text();
 
     // It is the landing page, not the app.
-    assert.ok(html.includes('ordinary'), 'the headline is missing');
+    assert.ok(html.includes('Fifteen seconds of 2003'), 'the headline is missing');
     assert.ok(html.includes('Make a tape'), 'the call to action is missing');
 
     // And it is ONLY the landing page.
@@ -468,9 +468,11 @@ test('the same path signed in is the app, not the landing page', async () => {
     // pointed at /signup when signed out and at / when signed in, precisely so
     // a reader who scrolled to the bottom of the app is offered the door back
     // to it rather than the one that would sign them out. The landing-specific
-    // marker is its hero CTA, `class="cta"`, which nothing else on the site
-    // renders.
-    assert.ok(!html.includes('class="cta"'), 'the landing hero call to action leaked into the app');
+    // marker is its lime hero panel, which nothing else on the site renders --
+    // and it is the marker rather than the hero's button because the button's
+    // class is now a prefix of the demo band's, so a substring check on it
+    // would pass whether it leaked or not.
+    assert.ok(!html.includes('class="lime hero"'), 'the landing hero leaked into the app');
   });
 });
 

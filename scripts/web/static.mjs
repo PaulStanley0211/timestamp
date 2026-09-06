@@ -333,7 +333,13 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
     out.push(
       `.thumb--${slug}{background-image:${layers};}`,
       `.bg--${slug}{background-image:${layers};}`,
-      `#${slug}:checked~.bgs .bg--${slug}{opacity:1;}`,
+      // THE GROUND IS INSIDE .wrap NOW, on both pages that have one. It used to
+      // be a sibling of the radios on the landing (a viewport-fixed layer in
+      // preBody); the landing's photograph is a BAND partway down the page as
+      // of 2026-09-06, and a band lives in the document. Reaching it through
+      // .wrap costs nothing on the signed-in page, whose ground is inside .wrap
+      // as well -- one selector for both, rather than one each.
+      `#${slug}:checked~.wrap .bgs .bg--${slug}{opacity:1;}`,
       // THE LIGHTER SCRIM IS GATED ON THE LOOP ACTUALLY PLAYING, and that is
       // the whole reason it is safe. "is-live" is set by the script only once a
       // video has genuinely reached its first frame, so a browser with no JavaScript,
@@ -342,13 +348,14 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       // -- which is the page exactly as it shipped. Nothing here can make the
       // no-video path worse, because nothing here applies to it.
       ...(scrimOpacity(LOOP_LUMA[place.id]?.yavg) === null ? [] : [
-        `#${slug}:checked~.bgs.is-live~.scrim{opacity:${scrimOpacity(LOOP_LUMA[place.id].yavg)};}`,
+        `#${slug}:checked~.wrap .bgs.is-live~.scrim{opacity:${scrimOpacity(LOOP_LUMA[place.id].yavg)};}`,
       ]),
-      // STRUCK, on the landing page: the same radio lights this place's date
-      // read-out and strikes its name forward out of the ghost rail. The veil
-      // rule that used to lead this group is gone with the panel it lit -- the
-      // place is the full-bleed ground now, and .bg--<slug> above lights it.
-      `#${slug}:checked~.wrap .losd--${slug}{opacity:1;}`,
+      // On the landing the same radio strikes this place's name forward out of
+      // the ghost rail. The date read-out that used to lead this group is gone
+      // with the element it lit: the OSD was pinned to the viewport over a
+      // full-bleed photograph, and the photograph is a band in the document now
+      // -- an overlay fixed to the corner of a page whose picture is a third of
+      // the way down is a readout for whatever happens to be behind it.
       `#${slug}:checked~.wrap .lopt--${slug}{opacity:1;color:var(--lime);}`,
       `#${slug}:checked~.wrap .lopt--${slug} .lidx{color:var(--lime);}`,
       `#${slug}:focus-visible~.wrap .lopt--${slug}{opacity:1;text-decoration:underline;text-underline-offset:6px;text-decoration-color:var(--lime);}`,
@@ -2187,8 +2194,8 @@ input[type="file"]::file-selector-button {
 
 /* --- pricing ----------------------------------------------------------- */
 
-/* EQUAL COLUMNS HERE ARE CORRECT, AND THAT IS A DELIBERATE EXCEPTION TO THE
-   ASYMMETRY RULE the .how block sets. A pricing table is a COMPARISON: the
+/* EQUAL COLUMNS HERE ARE CORRECT, AND THE OLD LANDING'S THREE-COLUMN BLOCK IS
+   WHY THAT HAD TO BE SAID. A pricing table is a COMPARISON: the
    reader is holding two purchasable things side by side and asking which, and
    parallel things shown at parallel size is what makes that possible. Forcing
    an uneven grid here would be the rule applied without judgment, which is its
@@ -2305,7 +2312,7 @@ details[open] > summary .faq-glyph::before { content: '−'; }
 
 /* --- foot -------------------------------------------------------------- */
 
-/* --- the landing page --------------------------------------------------- */
+/* --- the landing (2026-09-06): the lime poster, the tape first ------------ */
 
 /* THE PRIMARY BUTTON NEEDS NO RESTATEMENT HERE ANY MORE. It used to, because
    the landing had a ground of its own and the button's label had been solved
@@ -2324,7 +2331,14 @@ details[open] > summary .faq-glyph::before { content: '−'; }
    not switched off: a suppression rule is one tidy-up away from being undone,
    and a list of exceptions is a list somebody forgets to add to. */
 
-.page-landing .wrap { max-width: 76rem; position: relative; z-index: 6; }
+/* The page owns its own gutters: the hero is a panel with a margin, the band
+   runs edge to edge, and everything else sits in a 76rem column. No 100vw
+   anywhere -- a viewport unit includes the scrollbar and is how a full-bleed
+   band buys a horizontal scrollbar. */
+body.page-landing { padding: 0 0 var(--s-8); }
+.page-landing .wrap { max-width: none; }
+.page-landing .inner { max-width: 76rem; margin: 0 auto; padding: 0 1.15rem; }
+.page-landing .foot { max-width: 76rem; margin: var(--s-8) auto 0; padding: 0 1.15rem; }
 
 /* THE ANODE GAUZE IS DELETED, and it resolved a contradiction DESIGN.md had
    been carrying rather than merely retiring a texture.
@@ -2351,95 +2365,89 @@ details[open] > summary .faq-glyph::before { content: '−'; }
    focusing one can never scroll the document. */
 .lstate { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; margin: 0; pointer-events: none; }
 
-.page-landing .masthead { padding: 2.5rem 0 0; }
+/* ONBOARDING IS THE ONE PAGE LEFT WITH A PHOTOGRAPH BEHIND ITS WHOLE SELF, and
+   these three rules are what it kept when the landing's ground became a band.
 
-/* THE NAV IS THE ONE PIECE OF TEXT ON THIS PAGE THAT SITS ON NO PLATE. The
-   menu, the "how" and "plain" sections all sit on the 0.62 plate below, which
-   is what lets their labels clear 4.5:1 over the brightest loop; the two nav
-   links sit directly on the blurred picture under a half-strength scrim. In
-   the soft tier that measured about 2:1 over the brightest place -- the
-   owner's words on 2026-09-05: "I cannot see that plans and sign in exist or
-   not." So here they take the body ink and a soft dark shadow underneath for
-   the loops brighter still. Hover is restated because this rule has the same
-   specificity as the base hover rule and comes later in the sheet. */
-.page-landing .nav a, .page-landing .nav button {
-  color: var(--ink);
-  text-shadow: 0 1px 14px rgba(22, 22, 24, 0.7);
-}
-.page-landing .nav a:hover, .page-landing .nav button:hover { color: var(--lime); }
-
-/* THE FOOTER, FOR THE REASON THE NAV ABOVE WAS FIXED, AND MISSED BY IT. The
-   fine print is in the soft tier, which was measured at 2.86:1 over the
-   brightest place loop, and the footer is one of exactly three places this
-   product ships that tier. It had been sitting unreadable on the photograph;
-   putting a second page on this ground is what made it worth finding.
-
-   BODY INK, AND SIZE CARRIES THE HIERARCHY. Fine print set in the body colour
-   sounds too loud until you remember the ruling behind it: on a ground that
-   can move, rank is carried by SIZE, which survives being composited, and not
-   by colour, which does not. The footer stays small and stays quiet. */
-.page-landing .foot, .page-landing .foot .fine, .page-landing .foot .quiet,
+   The landing halves went with the full-bleed ground rather than with a taste
+   change: its footer, its nav and its prose now sit on the flat dark ground,
+   where the soft tier measures 7.67:1 and needs no lift at all. Onboarding
+   still puts dim text over a blurred place, so it still needs the body ink and
+   the shadow under it -- the measurement that put them here (2.86:1 over the
+   brightest loop) is a property of text on a picture, and that is exactly the
+   page that still has one. Size carries the hierarchy there, not colour,
+   because colour is what compositing takes away. */
 .has-ground .foot, .has-ground .foot .fine, .has-ground .foot .quiet {
   color: var(--ink);
   text-shadow: 0 1px 14px rgba(22, 22, 24, 0.7);
 }
-.page-landing .foot .quiet:hover, .has-ground .foot .quiet:hover { color: var(--lime); }
+.has-ground .foot .quiet:hover { color: var(--lime); }
 
-/* ONE COLUMN NOW, because the column it used to balance was the 4:3 veil and
-   the place is behind the whole page instead. The menu is capped rather than
-   full-width: a plate that reaches both edges of a wide screen stops reading as
-   something floating on a picture and starts reading as a header. */
-.strike { display: block; padding: 3.5rem 0 6rem; }
+/* The still is not blurred to the wash a form wants behind it: 26px is right
+   behind a form and wrong behind a picture whose whole argument is "this is
+   somewhere you recognise". The band below takes the same value, and the loop
+   when it plays is softer still -- see .bgv. */
+.has-ground .bg { filter: blur(10px) saturate(0.8); }
+/* When a loop is playing the generated per-place rules take this over with a
+   value derived from that loop's own measured luma. */
+.has-ground .scrim { opacity: 0.5; }
 
-/* THE MENU IS THE PAGE'S ONLY GROUND, and 0.62 is the least tint that lets the
-   soft tier clear 4.5:1 over the brightest place at the scrim that place
-   derives -- without one it lands at 2.86:1, a real failure on the hint and on
-   the rail's index numerals.
-
-   AND THE SECTIONS BELOW THE FOLD NEED IT JUST AS MUCH. The ground is fixed, so
-   scrolling past the hero does not leave the photograph behind -- it holds, and
-   every word of "how" and "plain" would otherwise sit directly on it. That is
-   the whole reason the scrim below can come down as far as it does. */
-.lmenu {
-  background: rgba(22, 22, 24, 0.62);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  border-radius: 3px;
-  padding: var(--s-5);
-  max-width: 46rem;
-}
-.page-landing .how > div,
-.page-landing .plain {
-  background: rgba(22, 22, 24, 0.62);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  border-radius: 3px;
-  padding: var(--s-5);
-}
-
-/* THE LANDING'S SUBJECT IS THE PLACE, so its still is not blurred to the wash
-   the signed-in page wants. 26px is right behind a form and wrong behind a page
-   whose whole argument is "this is somewhere you recognise". The loop, when it
-   plays, is softer still at 3px -- see .bgv. */
-.page-landing .bg, .has-ground .bg { filter: blur(10px) saturate(0.8); }
-
-/* And the scrim comes down to match, because the text that needed it is on a
-   plate now. When a loop is playing the generated per-place rules take this
-   over with a value derived from that loop's own measured luma. */
-.page-landing .scrim, .has-ground .scrim { opacity: 0.5; }
-@media (max-width: 60rem) { .strike { grid-template-columns: 1fr; gap: 2.5rem; padding: 2rem 0 3.5rem; } }
-
+/* THE HERO. A lime panel with room at the foot for the tape to break out of. */
+.hero { margin: var(--s-4) var(--s-4) 0; padding: 0 0 12rem; }
+.hero-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); flex-wrap: wrap; padding: var(--s-5) var(--s-6) 0; }
+.hero-nav .wordmark { color: var(--on-lime); }
+.hero-links { display: flex; gap: var(--s-5); }
+.hero-links a { font-size: var(--t-label); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--on-lime); text-decoration: none; }
+.hero-links a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.navpill, .hero-cta { display: inline-block; font-family: var(--display); text-transform: uppercase; letter-spacing: 0.02em; background: var(--on-lime); color: var(--lime); border-radius: var(--r-btn); text-decoration: none; }
+.navpill { font-size: var(--d-2); padding: 0.5rem 0.9rem; }
+.hero-cta { font-size: var(--d-2); padding: 0.8rem 1.6rem; }
+.navpill:hover, .hero-cta:hover { color: var(--lime-hover); }
+.hero-body { text-align: center; max-width: 48rem; margin: 0 auto; padding: var(--s-8) var(--s-5) var(--s-6); }
 /* THE HERO IN THE DISPLAY FACE. It is the largest heading in the product and
    the one place --t-hero is used; uppercase, untracked, set tight at 0.9 so
-   two lines read as one block, and held to twelve characters a line. */
-.hero-line {
-  font-family: var(--display);
-  font-size: var(--t-hero);
-  line-height: 0.9; letter-spacing: 0; text-transform: uppercase; font-weight: 400;
-  color: var(--ink); margin: 0 0 var(--s-5); max-inline-size: 12ch;
-  text-wrap: balance;
+   two lines read as one block, and held to twelve characters a line. The one
+   thing that moved on 2026-09-06 is its colour: the hero sits on lime now. */
+.hero-line { font-family: var(--display); font-size: var(--t-hero); line-height: 0.9; letter-spacing: 0; text-transform: uppercase; font-weight: 400; color: var(--on-lime); margin: 0 auto var(--s-5); max-inline-size: 12ch; text-wrap: balance; }
+.hero-sub { color: var(--on-lime-soft); font-size: var(--t-3); line-height: 1.5; max-width: 46ch; margin: 0 auto var(--s-5); }
+.hero-fine { font-size: var(--t-1); color: var(--on-lime-soft); margin: var(--s-3) 0 0; }
+/* THE COUNTER RULER: tick marks along the panel's foot, the readout in the
+   label role. A repeating gradient is a fill, not a border. */
+.ruler { display: flex; justify-content: space-between; align-items: flex-end; height: 1.75rem; margin-top: var(--s-6); padding: 0 var(--s-6); font-size: var(--t-label); font-weight: 600; letter-spacing: 0.08em; color: var(--on-lime-soft); background-image: repeating-linear-gradient(to right, var(--on-lime) 0 1px, transparent 1px 12px); background-size: 100% 8px; background-repeat: no-repeat; background-position: 0 100%; }
+.ruler span { background: var(--lime); padding: 0 3px; }
+/* THE TAPE BREAKS OUT OF THE PANEL onto the dark ground -- the reference's
+   move, and what makes the tape the largest thing on the first screen. */
+.hero-tape { position: relative; z-index: 2; width: 82%; max-width: 76rem; margin: -10rem auto 0; }
+.tape-media { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--card); border-radius: 8px; object-fit: cover; }
+.tape-media--tall { aspect-ratio: 9 / 16; }
+.tape-media--four { aspect-ratio: 4 / 3; }
+.tape-cap { font-size: var(--t-label); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); margin: var(--s-3) 0 0; }
+.hero-tape .tape-cap, .demo-tape .tape-cap { text-align: left; }
+@media (max-width: 48rem) {
+  .hero { margin: var(--s-3) var(--s-3) 0; padding-bottom: 5rem; }
+  .hero-nav { padding: var(--s-4) var(--s-4) 0; }
+  .hero-links { order: 3; width: 100%; }
+  .hero-body { padding: var(--s-7) var(--s-3) var(--s-5); }
+  .hero-tape { width: calc(100% - 2.3rem); margin-top: -3.5rem; }
 }
-.hero-sub { color: var(--ink); margin: 0 0 var(--s-6); max-width: 42ch; font-size: var(--t-3); line-height: 1.6; }
+
+/* THE MANIFESTO: the giant sentence, lime and ink alternating by phrase, the
+   stickers inline and tilted. */
+.manifesto { padding: var(--s-8) 1.15rem; text-align: center; }
+.manifesto-line { font-family: var(--display); text-transform: uppercase; font-size: var(--t-8); line-height: 1.05; letter-spacing: 0; margin: 0; color: var(--ink); text-wrap: balance; }
+.manifesto-line .lit { color: var(--lime); }
+.sticker { display: inline-block; height: 1em; width: auto; vertical-align: -0.15em; border-radius: 4px; margin: 0 0.1em; transform: rotate(-4deg); }
+.sticker--2 { transform: rotate(3deg); }
+.sticker--3 { transform: rotate(-2deg); }
+.sticker--4 { transform: rotate(5deg); }
+
+/* THE TWO CARDS. */
+.how2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-5); padding-bottom: var(--s-8); }
+.how-card { padding: var(--s-5); }
+.card-t { font-family: var(--display); text-transform: uppercase; font-size: var(--d-3); line-height: 0.92; letter-spacing: 0; font-weight: 400; margin: 0 0 var(--s-4); color: var(--ink); }
+.card-d { color: var(--ink-soft); margin: var(--s-4) 0 0; max-width: 46ch; }
+.own-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+.own-pair img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; }
+@media (max-width: 48rem) { .how2 { grid-template-columns: 1fr; } }
 
 /* the ghost stack: every place present at once, one struck */
 /* THE OPTIONS ARE STILL A LIST IN THE MARKUP AND A RAIL ONLY HERE. They are a
@@ -2493,54 +2501,21 @@ details[open] > summary .faq-glyph::before { content: '−'; }
    2.21:1; the body ink clears the floor. */
 .lopt .lidx { font-size: 0.5em; letter-spacing: 0.22em; color: var(--ink); margin-right: var(--s-3); vertical-align: 0.3em; }
 .lopt:hover { opacity: 0.82; }
-.strike-hint { font-size: var(--d-1); font-weight: 600; letter-spacing: 0.3em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 var(--s-6); }
 
-/* THE VEIL STACK IS GONE, RULES AND ALL. It framed the selected place in a 4:3
-   panel beside the text; the place is now behind the whole page, and keeping
-   both would have shown one photograph twice, at two sizes and two crops, on
-   one screen. Deleted rather than hidden -- a rule that matches nothing is how
-   dead markup survives a review, and this file has been caught by that before.
-
-   THE READ-OUT SURVIVED IT and is better placed for it: it is pinned to the
-   viewport now, over the picture, which is where a camcorder put its OSD. */
-.losds { position: fixed; right: 1.15rem; bottom: 1rem; width: 14rem; height: 1.4rem; z-index: 6; pointer-events: none; }
-.losd { position: absolute; right: 0; bottom: 0; opacity: 0; font-family: var(--osd); font-size: var(--d-1); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); text-shadow: none; transition: opacity 420ms linear; }
-
-/* the act */
-.hero-do { display: flex; gap: var(--s-6); align-items: baseline; flex-wrap: wrap; margin: 0; }
-/* The price sits WITH THE CLAIM in the closing plate (2026-09-04), quietly,
-   in the small size. It is a fact the visitor needs before deciding, not a
-   second thing competing with the button -- putting it in body size beside
-   the CTA would recreate the two-equal-things problem that deleting the second
-   CTA solved. It takes the on-image tier for the reason .how-d does: this is
-   text over the place photograph, and the soft tier measures 2.86:1 there. */
-.plain .plain-price {
-  margin: var(--s-4) 0 0;
-  font-size: var(--t-1);
-  letter-spacing: 0.02em;
-  line-height: 1.6;
-  color: var(--on-image-soft);
-  max-width: 62ch;
-}
-.plain-price .linky { margin-left: var(--s-2); color: var(--ink); }
-.page-landing .cta {
-  display: inline-block; text-decoration: none;
-  font-family: var(--display); font-size: var(--d-4); letter-spacing: 0; text-transform: uppercase;
-  color: var(--lime); text-shadow: none;
-  background: none; border: 0; padding: 0; border-radius: 0;
-}
-.page-landing .cta:hover { color: var(--lime-hover); text-shadow: none; }
-.page-landing .cta--quiet { font-size: var(--d-1); letter-spacing: 0.24em; color: var(--ink-soft); text-shadow: none; }
-.page-landing .cta--quiet:hover { color: var(--ink); text-shadow: none; }
-
-/* the claim, deeper in the plane. three columns, no lines between them. */
-/* THE ASYMMETRY RULE, AND THIS IS THE RULE'S HOME. A content grid in this
-   product is never equal-column: a 'repeat(3, 1fr)' is the shape that reads as
-   machine-made whatever is inside it, and §33 caught this exact block wearing
-   it. 2fr/1fr, the lead on the left. The ratio is not invented here either --
-   the signed-in page's #tape has been a 320px anchor beside a 640px flow column
-   since §6a, measured at exactly 1:2, and it is the best layout in the product.
-   This makes it the house ratio instead of a one-page accident. */
+/* THE BAND: the place photograph across the whole width, the rail over it.
+   The ground and the scrim are positioned inside the band rather than fixed
+   to the viewport, which is the only change to a mechanism that is otherwise
+   the 2026-08-27 landing's: the same hoisted radios, the same generated
+   layers, the same script swapping the loop, the same per-place scrim. */
+.band { position: relative; overflow: hidden; padding: var(--s-8) 0; color: var(--on-image); }
+.band .bgs { position: absolute; inset: 0; z-index: 0; }
+.band .bg { position: absolute; inset: -6%; filter: blur(10px) saturate(0.8); }
+.band .scrim { position: absolute; inset: 0; z-index: 1; opacity: 0.5; }
+.band-in { position: relative; z-index: 2; }
+.band-t { font-family: var(--display); text-transform: uppercase; font-size: var(--d-4); line-height: 0.92; letter-spacing: 0; font-weight: 400; margin: 0 0 var(--s-5); color: var(--on-image); text-shadow: 0 1px 14px rgba(22, 22, 24, 0.7); }
+.band .lopt { color: var(--on-image); text-shadow: 0 1px 14px rgba(22, 22, 24, 0.7); }
+.band .lopt .lidx { color: var(--on-image); }
+.band-hint { font-size: var(--t-1); color: var(--on-image-soft); margin: var(--s-3) 0 0; text-shadow: 0 1px 10px rgba(22, 22, 24, 0.85); }
 
 /* THE BEFORE/AFTER WIPE.
    One custom property drives everything: the clip on the top half, where the
@@ -2551,11 +2526,6 @@ details[open] > summary .faq-glyph::before { content: '−'; }
    NO BORDER ANYWHERE IN HERE. The divider is a filled 2px element, not a rule
    on a box, and the grip is a filled disc -- an outline round either would be
    a line drawn between two halves of one picture. */
-.show { padding: 0 0 var(--s-9); }
-.show-t {
-  font-family: var(--display); font-size: var(--d-3); text-transform: uppercase;
-  letter-spacing: 0; line-height: 0.92; color: var(--ink); margin: 0 0 var(--s-4); font-weight: 400;
-}
   /* The no-script value, and it lives HERE rather than on a style attribute:
      style-src self refuses an inline style attribute outright, and a hash
      cannot rescue one -- that needs unsafe-hashes. Caught by the browser test,
@@ -2622,47 +2592,49 @@ details[open] > summary .faq-glyph::before { content: '−'; }
 }
 @media (prefers-reduced-motion: reduce) { .wipe-grip { transition: none; } }
 
-.how {
-  display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-  gap: var(--s-8);
-  align-items: start;
-  padding: 0 0 var(--s-8);
+/* THE FACTS: three cards; Task 3 owns .fact. */
+.facts3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-5); padding: var(--s-8) 0; }
+@media (max-width: 48rem) { .facts3 { grid-template-columns: 1fr; } }
+
+/* THE DEMO: the two other shapes standing on the ground, the button, and the
+   flip counter in the tape's own readout face -- one of the three places it
+   is allowed in the chrome. Static digits; nothing animates. */
+.demo { text-align: center; padding: 0 1.15rem var(--s-8); }
+.demo-t { font-family: var(--display); text-transform: uppercase; font-size: var(--t-8); line-height: 0.92; letter-spacing: 0; font-weight: 400; margin: 0 0 var(--s-6); color: var(--ink); }
+.demo-tapes { display: grid; grid-template-columns: minmax(0, 9fr) minmax(0, 16fr); gap: var(--s-5); align-items: end; max-width: 56rem; margin: 0 auto var(--s-6); text-align: left; }
+.demo-tape { margin: 0; }
+/* BLOCK, OR THE AUTO MARGINS ARE A DECLARATION THAT DOES NOTHING. The shared
+   button rule makes this inline-block, and auto side margins on an inline box
+   centres nothing -- so the button and the counter below it stayed on ONE
+   line, the button hard against the counter's first digit. Measured on the
+   running page: the button at 179-321 and the counter starting at 325, twelve
+   pixels apart vertically. Block-level with a max-content width keeps the pill
+   hugging its label and puts the counter on its own line, where the section's
+   own text-align centres it. */
+.demo-cta { display: block; width: max-content; margin: 0 auto; }
+.flip { display: inline-flex; gap: 0.3em; font-family: var(--osd); font-size: var(--t-8); color: var(--ink); margin: var(--s-6) auto 0; letter-spacing: 0.04em; }
+.flip span { display: inline-block; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 0.1em 0.3em; min-width: 1.1em; line-height: 1.1; }
+.flip .gap { background: none; border: 0; min-width: 0.3em; padding: 0; }
+/* THE COUNTER IS TEN FIXED BOXES IN A ROW THAT CANNOT WRAP, so its width is
+   arithmetic rather than taste: eight digits at 1.1em plus eleven gaps of
+   0.3em is 12.1em, whatever the em happens to be. At the display size that is
+   484px, and the smallest width this product tests at is 320. Measured on the
+   running page before this rule existed: 182px of horizontal scroll, and it
+   was the ONLY thing on the landing escaping its clip. Wrapping was the other
+   way out and is worse -- a date broken across two lines reads as damage --
+   so the em comes down instead.
+
+   AND IT COMES DOWN TWO STEPS RATHER THAN ONE, which is the measurement worth
+   keeping. One step lands the row at 283px inside 283px of column: it fits,
+   and it fits with nothing to spare, so the moment the readout face is not
+   the one paint uses -- the swap before a self-hosted font arrives, or a
+   machine that refuses it -- the digits widen and the page scrolls sideways
+   again. A margin of zero is not a margin. Two steps leaves about a fifth of
+   the column free, which is enough to absorb the fallback metrics. */
+@media (max-width: 48rem) {
+  .demo-tapes { grid-template-columns: 1fr; }
+  .flip { font-size: var(--t-3); }
 }
-@media (max-width: 60rem) { .how { grid-template-columns: 1fr; gap: var(--s-7); padding-bottom: 3.5rem; } }
-/* WIDTH IS NOT WEIGHT, and the first attempt at this proved it. The lead was
-   given the 2fr column and kept its old type sizes, so it measured 768x234
-   beside a 384x410 pair -- the SUBORDINATE column was 176px taller and read as
-   the more important one. A wide column holding small type is not emphasis, it
-   is a half-empty column.
-   The hierarchy is carried by SIZE: 48px against 18px on the headings, 23px
-   against 16px on the prose. That is a step the eye cannot mistake, and it is
-   the same reasoning §31 used when it moved hierarchy inside a ghosted card
-   from colour to size. */
-.how-lead .how-t { font-size: var(--t-8); line-height: 1.05; }
-.how-lead .how-d { font-size: var(--t-4); line-height: 1.5; max-width: 26ch; }
-/* The two subordinate facts stack rather than sitting side by side, so the
-   page never shows two things of equal weight on one line. */
-.how-rest { display: grid; gap: var(--s-7); }
-.how-t { font-family: var(--display); font-size: var(--d-3); text-transform: uppercase; letter-spacing: 0; line-height: 0.92; color: var(--ink); margin: 0 0 var(--s-3); font-weight: 400; }
-.how-t--sm { font-size: var(--d-2); letter-spacing: 0.14em; }
-/* THIS TEXT SITS OVER THE PLACE PHOTOGRAPH, so it takes the on-image tier and
-   not the page's soft tier. The background layer is position: fixed, so the
-   ground is the picture at every scroll position and not only in the hero, and
-   the soft tier measures 2.86:1 there -- which is the whole reason the
-   on-image tier exists. */
-.how-d { font-size: var(--t-2); line-height: 1.62; color: var(--on-image-soft); margin: 0; max-width: 34ch; }
-
-.plain { padding: 0 0 5rem; }
-.plain p { margin: 0; font-size: var(--t-3); line-height: 1.68; color: var(--on-image-soft); max-width: 62ch; }
-
-/* THE FOOT IS ON EVERY PAGE, SO IT NAMES NO GROUND. It used to reach straight
-   for one page's own label colour and a literal, which is a single page's
-   palette hard-coded into shared chrome. '--faint' is the soft tier wherever
-   it lands, so this rule is one rule everywhere; the pages that put it on a
-   photograph lift it to body ink above. */
-.page-landing .foot { margin-top: 0; }
-.page-landing .fine { font-size: var(--t-label); }
 
 .foot { margin-top: var(--s-8); padding-top: 0; border-top: 0; color: var(--faint); font-size: var(--t-1); }
 .foot p { margin: 0 0 0.4rem; }

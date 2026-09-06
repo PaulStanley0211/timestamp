@@ -364,9 +364,20 @@ async function session() {
     fetchImpl: async () => { throw new Error('the browser smoke never talks to Supabase'); },
   });
 
+  // A SHOWCASE THAT EXISTS, because the hero tape is the one thing on the
+  // landing that only a real browser can prove: the markup ships a poster and
+  // a data-src and nothing else, and whether a frame ever decodes is a
+  // question about a script, a codec and an autoplay policy. Two tiny fixture
+  // files outside the repository, mounted the way the box mounts the real
+  // ones; every other test in the suite still runs with no showcase at all.
+  const showcase = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-showcase-'));
+  fs.copyFileSync(new URL('./fixtures/showcase/tiny.mp4', import.meta.url), path.join(showcase, 'hero-16x9.mp4'));
+  fs.copyFileSync(new URL('./fixtures/showcase/tiny.jpg', import.meta.url), path.join(showcase, 'hero-16x9.jpg'));
+
   const app = createServer({
     root, cfg: CFG, queue: fakeQueue(), port: 0, auth, supabase,
     provider: 'fixture',
+    showcaseDir: showcase,
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
     logImpl: () => {},
   });
@@ -384,7 +395,7 @@ async function session() {
   const { child, profile, cdp } = await launchBrowser();
 
   shared = {
-    base, root, app, cdp, child, profile,
+    base, root, app, cdp, child, profile, showcase,
     account, queued, finished,
     async signIn() {
       await cdp.send('Network.setCookie', { name: SESSION_COOKIE, value: cookieValue, url: base });
@@ -403,7 +414,7 @@ test.after(async () => {
   // The browser holds its profile open on Windows for a beat after kill;
   // force:true rm with a retry beats an EBUSY teardown failure.
   await shared.app.close();
-  for (const dir of [shared.root, shared.profile]) {
+  for (const dir of [shared.root, shared.profile, shared.showcase]) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* temp dir */ }
   }
 });
@@ -460,16 +471,65 @@ const LAPTOP = { width: 1440, height: 900, mobile: false };
 // the smoke
 // ---------------------------------------------------------------------------
 
-test('the landing page fits a phone and a laptop with nothing off screen', { skip }, async () => {
+/**
+ * ALL SIX WIDTHS, not two. The landing gained a full-bleed band, a panel with
+ * a margin, a tape that hangs off that panel and a rail that bleeds past its
+ * column -- four separate ways to buy a horizontal scrollbar, and the two the
+ * old version checked were the two least likely to catch any of them. These
+ * are the six DESIGN.md names and the six §6c measured against.
+ */
+test('the landing fits every one of the six widths with nothing off screen', { skip }, async () => {
   const s = await session();
   await s.signOut();
-  for (const viewport of [PHONE, LAPTOP]) {
-    const page = await visit('/', viewport);
-    assert.deepEqual(page.errors, [], `at ${viewport.width}px: ${page.errors.join('; ')}`);
-    assert.ok(page.layout.overflowX <= 0,
-      `the page scrolls sideways by ${page.layout.overflowX}px at ${viewport.width}px -- §33's guillotined rail, back again`);
+  for (const width of [320, 375, 414, 768, 1024, 1440]) {
+    const page = await visit('/', { width, height: 900, mobile: width < 768 });
+    assert.deepEqual(page.errors, [], `at ${width}px: ${page.errors.join('; ')}`);
+    assert.ok(page.layout.overflowX <= 0, `the landing scrolls sideways by ${page.layout.overflowX}px at ${width}px`);
     assert.ok(page.layout.title.length > 0);
   }
+});
+
+/**
+ * THE TAPE IS THE PAGE'S WHOLE ARGUMENT, and whether it plays is not a
+ * question any markup assertion can answer. The hero ships a poster and a
+ * data-src and no src at all; a frame appears only if the script ran, the CSP
+ * allowed it, the browser decoded h264 and the autoplay policy accepted a
+ * muted video. Every one of those is a real browser's property.
+ */
+test('the hero tape plays muted once the page has loaded, when a showcase file is present', { skip }, async () => {
+  const s = await session();
+  await s.signOut();
+  const page = await visit('/', LAPTOP, { settleMs: 1500 });
+  assert.deepEqual(page.errors, [], page.errors.join('; '));
+  const r = await page.evaluate(`(() => {
+    const v = document.querySelector('video.tape-media--hero');
+    if (!v) return { missing: true };
+    return { muted: v.muted, loop: v.loop, src: v.currentSrc, paused: v.paused, ready: v.readyState };
+  })()`);
+  assert.ok(!r.missing, 'no hero video: the shared session mounts a showcase, so a fallback image here is a defect');
+  assert.ok(r.muted && r.loop, 'the hero must be muted and looping');
+  assert.match(r.src, /\/showcase\/hero-16x9\.mp4$/, `the hero is playing ${r.src}`);
+  assert.ok(r.ready >= 2, `the hero never decoded a frame (readyState ${r.ready})`);
+  assert.equal(r.paused, false, 'the hero is not playing');
+});
+
+/** The FAQ rows are native <details>: no script, and the keyboard works
+ *  because the browser does it. That claim is only worth making in a browser. */
+test('a FAQ row opens on click and on Enter', { skip }, async () => {
+  const s = await session();
+  await s.signOut();
+  const page = await visit('/', LAPTOP);
+  const clicks = await page.evaluate(`(() => {
+    const d = document.querySelector('details.faq-row');
+    const sum = d.querySelector('summary');
+    const before = d.open; sum.click(); const afterClick = d.open; sum.click();
+    return { before, afterClick, closedAgain: !d.open };
+  })()`);
+  assert.deepEqual(clicks, { before: false, afterClick: true, closedAgain: true });
+  await page.evaluate(`document.querySelector('details.faq-row summary').focus()`);
+  await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
+  await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  assert.equal(await page.evaluate(`document.querySelector('details.faq-row').open`), true, 'Enter on a focused summary does not open the row');
 });
 
 test("the sign-in dialog's typed text, caret and foot links take the dialog's own ink", { skip }, async () => {

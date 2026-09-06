@@ -434,46 +434,56 @@ const STATUS_SCRIPT = `
  * that 404s, a play() the browser refuses -- each leaves the still layer
  * underneath exactly as it is today. The video is never a requirement, and
  * nothing above this line has to know it exists.
+ *
+ * AND THE SHOWCASE TAPES RIDE THE SAME THREE GATES, because they are the same
+ * decision. A finished tape playing in the hero is a moving picture on a page
+ * a stranger did not ask for one on, and it is several megabytes rather than
+ * one -- so reduced motion, save-data and a codec the browser will not decode
+ * each stop it for exactly the reasons they stop the loop. Their poster is in
+ * the markup and their source is only here, so every one of those exits leaves
+ * a still frame of the tape standing rather than an empty box. That is why the
+ * gates moved ahead of the `.bgv` lookup: the hero plays on a page that has no
+ * loop element at all, and checking the loop first would have made the tape
+ * depend on a background that is not its business.
  */
 const BG_SCRIPT = `
 (function () {
-  var video = document.querySelector('.bgv');
-  if (!video || !video.canPlayType || !video.canPlayType('video/mp4')) return;
+  var probe = document.createElement('video');
+  if (!probe.canPlayType || !probe.canPlayType('video/mp4')) return;
 
-  // A full-bleed moving picture is the largest animation this page could make,
-  // so it is the first thing a request for reduced motion should cost.
+  // A moving picture is the largest animation this page could make, so it is
+  // the first thing a request for reduced motion should cost.
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
   if (reduce && reduce.matches) return;
 
-  // And on a metered connection a decorative 155kB is not worth spending.
+  // And on a metered connection a decorative megabyte is not worth spending.
   var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
   if (conn && conn.saveData) return;
 
+  // THE SHOWCASE TAPES. The poster is in the markup and the source is only
+  // here, so no script, reduced motion, save-data, an unplayable codec or a
+  // missing file each leave the poster standing.
+  var tapes = document.querySelectorAll('video[data-src]');
+  for (var t = 0; t < tapes.length; t += 1) {
+    (function (v) {
+      v.src = v.getAttribute('data-src');
+      var p = v.play();
+      if (p && p.catch) p.catch(function () { /* autoplay refused; the poster stands */ });
+    }(tapes[t]));
+  }
+
+  var video = document.querySelector('.bgv');
+  if (!video) return;
   var bgs = video.parentNode;
   var current = null;
 
-  // TWO STATES, NOT ONE, AND THE DIFFERENCE IS A VISIBLE BUG.
-  //
-  // "is-live" means video works on this page. It decides the per-place scrim
-  // and the plate under the panels, and once it is true it STAYS true across
-  // every subsequent choice -- because those two are properties of the page's
-  // ground, not of which clip happens to be decoding this second.
-  //
-  // "is-showing" means this particular clip has a frame to paint, and it comes
-  // off for the moment between choosing a place and its loop decoding. The
-  // video fades out over the still it was cut from, which is the same
-  // photograph, so the swap reads as a cross-fade.
-  //
-  // Driving both from one class is what the first version did, and picking a
-  // place threw the scrim back to full strength and changed every panel's
-  // corner radius for as long as the next file took to load -- the whole
-  // chrome flinching once per click.
+  // "is-live" means video works on this page and decides the per-place scrim;
+  // "is-showing" means this clip has a frame to paint. Two classes, because
+  // driving both from one made the scrim flinch on every click.
   function show(id) {
     if (id === current) return;
     current = id;
     bgs.classList.remove('is-showing');
-    // The own-place card carries an empty value: there is no loop for a place
-    // nobody has described yet, so the ground comes back.
     if (!id) { video.removeAttribute('src'); video.load(); return; }
     video.src = '/places/' + encodeURIComponent(id) + '.mp4';
     var started = video.play();
@@ -489,15 +499,10 @@ const BG_SCRIPT = `
     bgs.classList.remove('is-live');
   });
 
-  // TWO NAMES, ONE MECHANIC. The signed-in page posts its choice as "place";
-  // the landing names its radios "lplace" precisely so a landing choice can
-  // never be submitted as a real order. Both drive the same background.
   var SELECTOR = 'input[name="place"]:checked, input[name="lplace"]:checked';
-
   document.addEventListener('change', function (e) {
     if (e.target && (e.target.name === 'place' || e.target.name === 'lplace')) show(e.target.value);
   });
-
   var checked = document.querySelector(SELECTOR);
   if (checked) show(checked.value);
 }());
@@ -1107,103 +1112,113 @@ export function singlePlaceGround(placeId) {
 <div class="scrim" aria-hidden="true"></div>`;
 }
 
-export function landingPage({ places = [], account = null, pricing = null, csrf = '' } = {}) {
-  const first = places[0]?.id ?? null;
+// inWords() is Task 3's, beside factCards(); only the capitaliser is new here.
+const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
-  // Hoisted so `#id:checked ~ .wrap` can reach the stack and the veils. Fixed
-  // rather than absolute, for the same reason as the signed-in page: an input
-  // at document offset -1 makes every click scroll the page to the top.
+/**
+ * The landing (2026-09-06): the eight slots of the reference, filled with this
+ * product's own content. The nav sits inside the lime hero, so layout() is
+ * told not to draw the masthead. Every number on the page arrives in `pricing`
+ * or `facts`; nothing is typed here except the sentence the product is about.
+ *
+ * THE SHOWCASE IS OPTIONAL AND THE PAGE IS COMPLETE WITHOUT IT. Each tape slot
+ * takes a place photograph captioned with that place's own name when its file
+ * is absent -- never the tape's caption, which would then be untrue -- and the
+ * manifesto renders without stickers. That is the state every test runs in.
+ */
+export function landingPage({
+  places = [], account = null, pricing = null, csrf = '',
+  showcase = null, facts = {},
+} = {}) {
+  const first = places[0] ?? null;
+  const second = places[1] ?? first;
+  const third = places[2] ?? second;
+  const { photoDays = RETENTION_DEFAULTS.photoDays, jobDays = RETENTION_DEFAULTS.jobDays, imageProcessor = null,
+    qualities = [], shapes = [], frames = 375, fps = 25 } = facts;
+
+  // The hoisted radios stay siblings of .wrap so the generated rules can
+  // reach both the rail and the ground; the ground itself lives in the band.
   const hooks = places.map((p) => (
-    `<input class="lstate" type="radio" name="lplace" id="${h(placeSlug(p.id))}" value="${h(p.id)}"${p.id === first ? ' checked' : ''}>`
+    `<input class="lstate" type="radio" name="lplace" id="${h(placeSlug(p.id))}" value="${h(p.id)}"${p.id === first?.id ? ' checked' : ''}>`
   )).join('\n');
 
-  // THE BLOOM WENT ON 2026-09-06 with the world it lit: a radial glow tinted
-  // with a retired accent, laid over the whole viewport, is a texture on the
-  // ground, and this world's ground and cards are flat.
   // THE SAME GROUND AS THE SIGNED-IN PAGE, AND DELIBERATELY THE SAME IDS. The
-  // stylesheet generates one set of `#pl-<id>:checked ~ ...` rules from the
-  // catalog; because the landing's radios carry those same ids, every one of
-  // them -- the still layer, the cross-fade, the per-place scrim -- reaches
+  // stylesheet generates one set of `#pl-<id>:checked ~ .wrap ...` rules from
+  // the catalog; because the landing's radios carry those same ids, every one
+  // of them -- the still layer, the cross-fade, the per-place scrim -- reaches
   // this page for nothing. Only the radios' NAME differs (lplace, so a landing
   // choice cannot be posted as a real order), and the script matches on both.
-  const backgrounds = places
-    .map((p) => `<div class="bg bg--${h(placeSlug(p.id))}"></div>`)
-    .join('\n');
-
-  const preBody = `${hooks}
-<div class="bgs" aria-hidden="true">
-${backgrounds}
-<video class="bgv" muted playsinline loop preload="none"></video>
-</div>
-<div class="scrim" aria-hidden="true"></div>`;
-
-  const stack = places.map((p, i) => `
+  const layers = places.map((p) => `<div class="bg bg--${h(placeSlug(p.id))}"></div>`).join('\n');
+  const rail = places.map((p, i) => `
       <li><label class="lopt lopt--${h(placeSlug(p.id))}" for="${h(placeSlug(p.id))}"><span class="lidx">${String(i + 1).padStart(2, '0')}</span>${h(p.label)}</label></li>`).join('');
 
-  const osds = places.map((p) => `
-      <span class="losd losd--${h(placeSlug(p.id))}" aria-hidden="true">${h(p.timeOfDay || '')}</span>`).join('');
+  // A tape slot: the showcase file when present, a place photograph when not.
+  const tapeSlot = (slot, kind, place) => {
+    const figure = kind === 'hero' ? 'hero-tape' : 'demo-tape';
+    if (slot) {
+      return `<figure class="${figure}"><video class="tape-media tape-media--${kind}" muted playsinline loop preload="none" poster="${h(slot.poster)}" data-src="${h(slot.video)}"></video><figcaption class="tape-cap">${h(slot.caption)}</figcaption></figure>`;
+    }
+    if (!place) return '';
+    return `<figure class="${figure}"><img class="tape-media tape-media--${kind}" src="/places/${h(place.id)}.jpg" alt="${h(place.label)}" loading="lazy" decoding="async"><figcaption class="tape-cap">${h(place.label)}</figcaption></figure>`;
+  };
+  const sticker = (i) => (showcase?.stickers?.[i]
+    ? `<img class="sticker sticker--${i + 1}" src="${h(showcase.stickers[i])}" alt="" loading="lazy" decoding="async">`
+    : '');
+
+  const seconds = Math.round(frames / fps);
+  const ticks = [1, 2, 3, 4, 5].map((k) => `00:${String(Math.round((k * seconds) / 5)).padStart(2, '0')}`);
+  const free = pricing?.freeCredits
+    ? `<p class="hero-fine">${h(`${pricing.freeCredits} free credits with a new account. One tape, no card.`)}</p>`
+    : '';
 
   const body = `
-<main class="landing">
-
-  <section class="strike">
-    <div class="lmenu">
-      ${/* THE HERO IN THE SANS FACE (2026-09-04), which is the design
-           prototype's default; its readout variant is what shipped before and
-           is one rule and one line away. One sentence, no lit fragment, and
-           the proposition beneath it in one more. */''}
-      <h1 class="hero-line">One photograph. Fifteen seconds of 2003.</h1>
-      <p class="hero-sub">You, somewhere ordinary, in a decade that looks warmer than now.</p>
-
-      <ul class="lrail">${stack}
-      </ul>
-      <p class="strike-hint">Strike one</p>
-
-      ${/* ONE CALL TO ACTION, AND THE SECOND ONE WAS A DUPLICATE RATHER THAN A
-           CHOICE. "I have an account" pointed at /login, and the signed-out
-           masthead six lines up in nav() already carries a "Sign in" link to
-           the same place -- so the hero was asking the visitor to choose
-           between doing the thing and doing a thing the chrome already offers.
-           Two calls to action of near-equal weight is the clearest slop tell
-           there is: it reads as a page that could not decide what it wanted,
-           and it halves the emphasis on the one that matters. Nothing is lost
-           by deleting it, which is why it goes rather than getting quieter. */''}
-      <p class="hero-do">
-        <a class="cta" href="/signup">Make a tape &rarr;</a>
-      </p>
+<header class="lime hero">
+  <nav class="hero-nav" aria-label="Primary">
+    ${wordmark()}
+    <div class="hero-links">
+      <a href="#places">Places</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/login" data-signin>Sign in</a>
     </div>
-  </section>
-
-  ${/* THE READ-OUT MOVED OUT OF THE PANEL AND ONTO THE PICTURE, which is where
-       a camcorder actually put it. It used to sit in the corner of the 4:3 veil
-       that framed the place; that veil is gone, because the place is now behind
-       the whole page and showing the same photograph twice at two sizes and two
-       crops is one picture too many. Kept inside .wrap so the generated
-       "#pl-x:checked ~ .wrap .losd--x" rules still reach it. */''}
-  <div class="losds" aria-hidden="true">${osds}
+    <a class="navpill" href="/signup" data-signin>Make a tape</a>
+  </nav>
+  <div class="hero-body">
+    <h1 class="hero-line">One photograph. Fifteen seconds of 2003.</h1>
+    <p class="hero-sub">Upload one photo of your face, choose a place and an outfit, and get back a tape that looks like it was found in a drawer.</p>
+    <a class="hero-cta" href="/signup" data-signin>Make a tape</a>
+    ${free}
   </div>
+  <div class="ruler" aria-hidden="true"><span>REC</span>${ticks.map((t) => `<span>${t}</span>`).join('')}</div>
+</header>
+${tapeSlot(showcase?.hero ?? null, 'hero', first)}
 
-  ${/* THE GRADE, SHOWN RATHER THAN CLAIMED.
-       The section below says "chroma bleed, grain, the head-switch band" and
-       prose is the weakest possible way to make a claim about how something
-       looks. Both halves are the SAME photograph -- assets/places/<id>.jpg --
-       and the right one is that file through `buildVideoFilter`, the function
-       the renderer itself calls. So this is not an illustration of the product,
-       it is the product's own output on a picture the visitor can see the
-       source of.
+<section class="manifesto inner">
+  <p class="manifesto-line"><span class="lit">You,</span> somewhere ${sticker(0)} <span class="lit">in 2003,</span> on a tape ${sticker(1)} that looks <span class="lit">found</span> ${sticker(2)} in a drawer. ${sticker(3)}</p>
+</section>
 
-       WHY IT SHOWS A PLACE AND NOT A PERSON, TODAY. The stronger version of
-       this is somebody's photograph beside their own tape -- that is the actual
-       proposition, and this one risks reading as "we apply a VHS filter", which
-       is the commodity. It is a place because a place pair is already committed,
-       licence-clean and faceless, and because publishing a real face here is a
-       consent decision rather than a design one. Swapping it is replacing
-       assets/landing/photo.jpg and tape.jpg; no markup or CSS knows the
-       difference.
+<section class="how2 inner">
+  <article class="card how-card">
+    <h2 class="card-t">The grade</h2>
+    ${/* THE GRADE, SHOWN RATHER THAN CLAIMED.
+         The paragraph below says "grain, the date stamp, the matte", and prose
+         is the weakest possible way to make a claim about how something looks.
+         Both halves are the SAME photograph -- assets/places/<id>.jpg -- and
+         the right one is that file through buildVideoFilter, the function the
+         renderer itself calls. So this is not an illustration of the product,
+         it is the product's own output on a picture the visitor can see the
+         source of.
 
-       THE CONTROL IS NOT HERE ON PURPOSE. See WIPE_SCRIPT. */''}
-  <section class="show">
-    <h2 class="show-t">The same photograph, twice.</h2>
+         WHY IT SHOWS A PLACE AND NOT A PERSON, TODAY. The stronger version of
+         this is somebody's photograph beside their own tape -- that is the
+         actual proposition, and this one risks reading as "we apply a VHS
+         filter", which is the commodity. It is a place because a place pair is
+         already committed, licence-clean and faceless, and because publishing
+         a real face here is a consent decision rather than a design one. The
+         hero above is where a real tape answers that, from outside the repo.
+         Swapping this pair is replacing assets/landing/photo.jpg and tape.jpg;
+         no markup or CSS knows the difference.
+
+         THE CONTROL IS NOT HERE ON PURPOSE. See WIPE_SCRIPT. */''}
     <figure class="wipe">
       <img class="wipe-under" src="/landing/tape.jpg" alt="Times Square at night as a 2003 camcorder tape: softened, grain over everything, colour bleeding off the neon." width="1024" height="576" decoding="async">
       <div class="wipe-clip">
@@ -1212,70 +1227,56 @@ ${backgrounds}
       <div class="wipe-line" aria-hidden="true"><span class="wipe-grip"><svg viewBox="0 0 24 16" width="24" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 4 8l5 5"></path><path d="M15 3l5 5-5 5"></path></svg></span></div>
       <figcaption class="wipe-cap"><span>Photograph</span><span>Tape</span></figcaption>
     </figure>
-  </section>
-
-  <section class="how">
-    ${/* THIS WAS THREE EQUAL COLUMNS AND IT WAS THE ONLY TEMPLATED THING ON THE
-         PAGE. §33's design review named it: a three-column 1fr grid of
-         number + heading + one line is the canonical AI-generated landing
-         layout, and it was "the only section on that page that reads
-         templated". The COPY was never the problem -- "chroma bleed, grain, the
-         head-switch band, transport jitter, the date burnt into the corner" is
-         the most specific writing on the site. So the words are untouched and
-         the shape is gone.
-
-         TEXTURE LEADS because it is the only one of the three that is ours.
-         Content is what any generator does; consent is what any careful company
-         does; the tape chain is the product. Giving all three the same weight
-         said they were equally interesting, which is exactly the flatness that
-         reads as machine-made.
-
-         AND THE NUMBERS ARE GONE, which matters more than it looks. 01/02/03
-         promised a SEQUENCE, and these are not steps -- they are three facts
-         about one thing. Numbering them was the page pretending to be a
-         process, and a false sequence is its own small dishonesty. */''}
-    <div class="how-lead">
-      <h2 class="how-t">Texture</h2>
-      <p class="how-d">Chroma bleed, grain, the head-switch band, transport jitter, the
-      date burnt into the corner. All of it deterministic, none of it asked of a model.</p>
-    </div>
-    <div class="how-rest">
-      <div>
-        <h3 class="how-t how-t--sm">Content</h3>
-        <p class="how-d">A plausible person, a plausible place, an outfit, and motion that
-        cuts six times in fifteen seconds, the way a home recording does. Your photograph
-        is the only authority on the face.</p>
-      </div>
-      <div>
-        <h3 class="how-t how-t--sm">Consent</h3>
-        <p class="how-d">Location and camera data stripped the moment your photograph
-        arrives. The photograph is deleted after seven days, the tape after thirty.</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="plain">
     ${/* The sentence that used to close this paragraph promised "You approve a
-         still before any video is made, so a likeness you do not recognise costs
-         you nothing." It was true of the still path and false from the day the
-         web app went direct (server.mjs sets direct: true for a paid provider,
-         and the still-count control is gone) -- a refund-shaped promise on the
-         page that sells, which the product had stopped honouring. Deleted
-         rather than reworded: whether a customer gets anything back for a
-         likeness they do not recognise is a REFUND POLICY, and inventing one in
-         marketing copy is how the first claim got here. test/web-static.test.js
-         sweeps every page for it coming back. */''}
-    <p>It is not a filter. The picture is generated, then run through a real tape chain
-    in ffmpeg &mdash; the grain goes on before the upscale, the date stamp degrades with
-    the image, and the frame is matted the way a camcorder frame actually sat.</p>
-    ${/* THE PRICE SITS WITH THE CLAIM (2026-09-04, from the design prototype)
-         rather than under the button: the hero carries one action, and this
-         plate carries the two facts a visitor needs before deciding. One
-         honest line, and it says tax is added at checkout (§46B). */''}
-    ${pricing ? `<p class="plain-price">From ${h(String(pricing.fromCredits))} credits a tape. ${h(String(pricing.packCredits))} credits is $${h(String(pricing.packUSD))}, and tax is added at checkout. <a class="linky" href="/pricing">What a tape costs</a></p>` : ''}
-  </section>
+         still before any video is made, so a likeness you do not recognise
+         costs you nothing." It was true of the still path and false from the
+         day the web app went direct (server.mjs sets direct: true for a paid
+         provider, and the still-count control is gone) -- a refund-shaped
+         promise on the page that sells, which the product had stopped
+         honouring. Deleted rather than reworded: whether a customer gets
+         anything back for a likeness they do not recognise is a REFUND POLICY,
+         and inventing one in marketing copy is how the first claim got here.
+         test/web-static.test.js sweeps every page for it coming back. */''}
+    <p class="card-d">It is not a filter. The picture is generated, then run through a real tape chain in ffmpeg: the grain goes on before the upscale, the date stamp degrades with the image, and the frame is matted the way a camcorder frame actually sat. Drag the line.</p>
+  </article>
+  <article class="card how-card">
+    <h2 class="card-t">Your own place</h2>
+    <div class="own-pair">${second ? `<img src="/places/${h(second.id)}.jpg" alt="${h(second.label)}" loading="lazy" decoding="async">` : ''}<img src="/landing/tape.jpg" alt="A place, as a tape frame." loading="lazy" decoding="async"></div>
+    <p class="card-d">${places.length ? `${capital(inWords(places.length))} places are on the menu, and yours can be the next: ` : 'Your own place can be the one: '}upload a photograph of your garden, your kitchen or the street you grew up on, and the tape is set there.</p>
+  </article>
+</section>
 
-</main>
+<section class="band" id="places">
+  <div class="bgs" aria-hidden="true">
+${layers}
+<video class="bgv" muted playsinline loop preload="none"></video>
+  </div>
+  <div class="scrim" aria-hidden="true"></div>
+  <div class="inner band-in">
+    <h2 class="band-t">${h(places.length ? `${capital(inWords(places.length))} places, or your own.` : 'Your own place.')}</h2>
+    <ul class="lrail">${rail}
+    </ul>
+    <p class="band-hint">Pick one and the picture behind it changes. On the order form you can upload your own instead.</p>
+  </div>
+</section>
+
+<div class="inner">
+${factCards({ frames, fps, shapes, photoDays, jobDays })}
+</div>
+
+<section class="demo inner">
+  <h2 class="demo-t">Any shape. Any place.</h2>
+  <div class="demo-tapes">
+    ${tapeSlot(showcase?.tall ?? null, 'tall', second)}
+    ${tapeSlot(showcase?.fourThree ?? null, 'four', third)}
+  </div>
+  <a class="hero-cta demo-cta" href="/signup" data-signin>Make a tape</a>
+  <p class="flip" aria-label="14 08 2003"><span>1</span><span>4</span><span class="gap"></span><span>0</span><span>8</span><span class="gap"></span><span>2</span><span>0</span><span>0</span><span>3</span></p>
+</section>
+
+<div class="inner">
+${faq(faqItems({ freeCredits: pricing?.freeCredits ?? null, photoDays, jobDays, imageProcessor, qualities, shapes, sameInEveryShape: pricing?.sameInEveryShape ?? true }))}
+</div>
 
   ${/* SIGNING IN HAPPENS HERE, NOT ON ANOTHER PAGE. A returning visitor was
        being sent away from the only page that sells to type a password on a
@@ -1339,12 +1340,13 @@ ${backgrounds}
 <script>${WIPE_SCRIPT}</script>`;
 
   return layout({
-    title: 'Timestamp — one photo, fifteen seconds, 2003',
+    title: 'Timestamp — one photograph, fifteen seconds of 2003',
     body,
-    preBody,
+    preBody: hooks,
     bodyClass: 'page-landing',
     account,
-    chrome: true,
+    chrome: false,
+    masthead: false,
   });
 }
 
