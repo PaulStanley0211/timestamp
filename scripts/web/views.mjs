@@ -56,25 +56,16 @@
  */
 
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 
 import { STEPS } from '../render/job.mjs';
 
 /**
- * The wordmark, read once at module load rather than on every render.
+ * THE WORDMARK IS NOT INLINED HERE ANY MORE EITHER (2026-09-06). It was a drawn
+ * Cormorant Garamond with a head-switch tear through it, read from a drawn SVG
+ * under `assets/brand/` at this point, because neither the face nor the tear
+ * could be expressed as live text. This world sets the word in the display
+ * face, which ships, so the mark is the word.
  *
- * It lives in `assets/brand/` and not in this file because the same paths are
- * rasterised into the favicon and the social card -- one source, or the tab
- * icon and the header drift apart the first time either is touched. Read
- * eagerly and deliberately unguarded: a missing wordmark is a broken build, and
- * a build that boots and serves a header with a hole in it is worse than one
- * that refuses to start.
- */
-const WORDMARK_SVG = fs
-  .readFileSync(new URL('../../assets/brand/wordmark-inline.svg', import.meta.url), 'utf8')
-  .trim();
-
-/**
  * THE MONOGRAM IS NOT INLINED HERE ANY MORE. Until 2026-08-28 the masthead drew
  * `Ts` beside the word, and `assets/brand/monogram-inline.svg` was read in at
  * this point. Paul removed it on sight: two marks saying the same thing, and
@@ -690,33 +681,23 @@ export function stampDate(jobId) {
   return m ? `${m[3]}.${m[2]}.${m[1]}` : '';
 }
 
-/** The wordmark: the product's own typeface, with the dot a camcorder blinks
- *  while it is recording. Not an illustration, and not an icon pack. */
+/** The wordmark: the word, with the dot a camcorder blinks while it is
+ *  recording. Not an illustration, and not an icon pack. */
 function wordmark() {
-  // INLINE, NOT AN <img>. The letterforms are `currentColor`, so the mark
-  // takes the ground it is placed on without a second file per theme -- and
-  // the record light keeps blinking, which it could not do inside an <img>
-  // that the CSP would also have to allow.
+  // LIVE TEXT IN THE DISPLAY FACE, so the accessible name is the word itself
+  // and no hidden span has to be kept in step with a picture.
   //
-  // The drawn letters carry no text, so the accessible name is the `<span>`:
-  // `aria-label` on the link would work too, but a visually-hidden span
-  // survives a stylesheet that fails to load, which is when a person most
-  // needs to know what they are looking at.
+  // THE RECORD LIGHT IS THE ONE THING BESIDE IT WEARING RED, and it is a
+  // <span> the stylesheet animates by class rather than anything that carries
+  // its own style: style-src self drops an inline style attribute and an
+  // inline <style> block alike, wherever either appears, silently and totally.
   //
   // ONE MARK, NOT TWO. A monogram drawing `Ts` used to sit ahead of the word
   // inside this same anchor. It went on 2026-08-28: it spelled the first two
   // letters of the word standing next to it, so the lockup said the same thing
-  // twice, and at 30px against the drawn wordmark it read as the plainer of the
-  // two. The word can carry the masthead alone; the mark still carries the
+  // twice. The word carries the masthead alone; the mark still carries the
   // browser tab, where there is no room for a word.
-  //
-  // DO NOT REINSTATE IT WITHOUT READING THE STYLESHEET. Its old rules are gone
-  // with it, and they were not decoration: `.wordmark`'s gap and negative
-  // margin existed to cancel the padding baked into the monogram's tile, and it
-  // was held back to 60% opacity (45% over a photograph) so that a 30px mark
-  // would not out-shout the 3.2px record light, which is the one thing in this
-  // chrome allowed to wear the accent. See DESIGN.md.
-  return `<a class="wordmark" href="/">${WORDMARK_SVG}<span class="vh">Timestamp</span></a>`;
+  return `<a class="wordmark" href="/">Timestamp<span class="rec" aria-hidden="true"></span></a>`;
 }
 
 /**
@@ -845,7 +826,7 @@ export function layout({
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="${bodyClass === 'is-landing' ? 'dark' : 'light'}">
+<meta name="color-scheme" content="dark">
 <title>${h(title)}</title>
 <link rel="stylesheet" href="/styles.css">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
@@ -997,9 +978,9 @@ function stepHead(n, name, subtitle) {
  * WHY THIS EXISTS SEPARATELY FROM `landingPage`'s OWN preBody. The landing
  * builds eight background layers and lights whichever the CSS-only radio
  * selects; onboarding has no radios and no menu, so it needs the layer lit by
- * a class instead. Everything else -- the scrim, the bloom, the blur, the
- * drift -- is the landing's, unchanged, because the point is that the world
- * does not visibly end when somebody signs up.
+ * a class instead. Everything else -- the scrim, the blur, the drift -- is the
+ * landing's, unchanged, because the point is that the world does not visibly
+ * end when somebody signs up.
  *
  * NO <video>. `BG_SCRIPT` swaps the loop's source by reading those same radios,
  * so a loop here would need either the radios or a sixth inline script and a
@@ -1012,8 +993,7 @@ export function singlePlaceGround(placeId) {
   return `<div class="bgs" aria-hidden="true">
 <div class="bg bg--lit bg--${h(placeSlug(placeId))}"></div>
 </div>
-<div class="scrim" aria-hidden="true"></div>
-<div class="bloom" aria-hidden="true"></div>`;
+<div class="scrim" aria-hidden="true"></div>`;
 }
 
 export function landingPage({ places = [], account = null, pricing = null, csrf = '' } = {}) {
@@ -1026,9 +1006,9 @@ export function landingPage({ places = [], account = null, pricing = null, csrf 
     `<input class="lstate" type="radio" name="lplace" id="${h(placeSlug(p.id))}" value="${h(p.id)}"${p.id === first ? ' checked' : ''}>`
   )).join('\n');
 
-  // The gauze belongs to `layout` now -- every page gets it, which is what
-  // DESIGN.md means by "runs past every edge". The bloom stays: it is this
-  // page's own light, not the world's mesh.
+  // THE BLOOM WENT ON 2026-09-06 with the world it lit: a radial glow tinted
+  // with a retired accent, laid over the whole viewport, is a texture on the
+  // ground, and this world's ground and cards are flat.
   // THE SAME GROUND AS THE SIGNED-IN PAGE, AND DELIBERATELY THE SAME IDS. The
   // stylesheet generates one set of `#pl-<id>:checked ~ ...` rules from the
   // catalog; because the landing's radios carry those same ids, every one of
@@ -1044,8 +1024,7 @@ export function landingPage({ places = [], account = null, pricing = null, csrf 
 ${backgrounds}
 <video class="bgv" muted playsinline loop preload="none"></video>
 </div>
-<div class="scrim" aria-hidden="true"></div>
-<div class="bloom" aria-hidden="true"></div>`;
+<div class="scrim" aria-hidden="true"></div>`;
 
   const stack = places.map((p, i) => `
       <li><label class="lopt lopt--${h(placeSlug(p.id))}" for="${h(placeSlug(p.id))}"><span class="lidx">${String(i + 1).padStart(2, '0')}</span>${h(p.label)}</label></li>`).join('');
@@ -1252,7 +1231,7 @@ ${backgrounds}
     title: 'Timestamp — one photo, fifteen seconds, 2003',
     body,
     preBody,
-    bodyClass: 'is-landing',
+    bodyClass: 'page-landing',
     account,
     chrome: true,
   });

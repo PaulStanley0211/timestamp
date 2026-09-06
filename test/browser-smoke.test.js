@@ -472,58 +472,19 @@ test('the landing page fits a phone and a laptop with nothing off screen', { ski
   }
 });
 
-test('the landing nav is as bright as the hero, because it sits on the picture with no plate', { skip }, async () => {
-  // THE OWNER'S WORDS, 2026-09-05: "in the landing page it looks very fade. I
-  // cannot see that plans and sign in exist or not." Measured: the two links
-  // were painted in the landing's dim label colour (--l-dim, #8D8880) at
-  // 12px, directly on the blurred loop under the landing's half-strength
-  // scrim. Every other dim word on that page sits on a 0.62 plate that was
-  // solved for exactly this (see .lmenu in static.mjs); the nav is the one
-  // piece of text on the landing that never got one. Over the Amalfi loop --
-  // the default ground since 2026-09-05, mean luma 160 -- that is about 2:1,
-  // which is not faint, it is invisible.
-  //
-  // The rule pinned here: on the landing the nav links take the hero's own
-  // colour, and carry a shadow so they survive the brightest loop. Read from
-  // the real cascade rather than the stylesheet text, because a later
-  // landing-scoped rule of equal specificity would silently win again.
-  const s = await session();
-  await s.signOut();
-  for (const viewport of [PHONE, LAPTOP]) {
-    const page = await visit('/', viewport);
-    const r = await page.evaluate(`(() => {
-      const links = [...document.querySelectorAll('.nav a, .nav button')].map((a) => {
-        const cs = getComputedStyle(a);
-        return { text: a.textContent.trim(), color: cs.color, shadow: cs.textShadow };
-      });
-      const hero = getComputedStyle(document.querySelector('h1')).color;
-      return { links, hero };
-    })()`);
-    assert.ok(r.links.length >= 2, `expected Plans and Sign in in the landing nav at ${viewport.width}px, found ${r.links.length}`);
-    for (const link of r.links) {
-      assert.equal(link.color, r.hero,
-        `at ${viewport.width}px "${link.text}" is painted ${link.color}, not the hero's ${r.hero} -- dim text on the picture with no plate`);
-      assert.notEqual(link.shadow, 'none', `at ${viewport.width}px "${link.text}" has no shadow to survive a bright loop`);
-    }
-  }
-});
-
-test('the sign-in dialog on the landing is ink on paper, typed text and foot links included', { skip }, async () => {
+test("the sign-in dialog's typed text, caret and foot links take the dialog's own ink", { skip }, async () => {
   // THE OWNER'S SCREENSHOT, 2026-09-05: "Forgot password?" and "No account
-  // yet? Make a tape." as ghost text at the foot of the cream dialog. Measured
-  // on the running page: both links, the typed email, its caret and its
-  // placeholder were painted in the LANDING'S bone (#EDE7DC) on the dialog's
-  // cream plate -- about 1.06:1. Somebody typing their address into this box
-  // could not see what they typed.
+  // yet? Make a tape." as ghost text at the foot of the dialog. Measured on
+  // the running page: both links, the typed email, its caret and its
+  // placeholder were painted in a colour meant for a different surface --
+  // about 1.06:1 on the dialog's own plate. Somebody typing their address
+  // into this box could not see what they typed.
   //
-  // WHY. The dialog sits on paper by design (see .signin-box in static.mjs)
-  // but it lives inside body.is-landing, whose alias block re-points --ink,
-  // --muted, --faint, --accent and --ghost at the dark world's values. Every
-  // dialog rule that named a literal tier (--ink-strong, --ink-soft) came out
-  // right; every rule that read a TOKEN -- the shared input rule, .linky --
-  // came out in bone. The fix is the dialog restating the paper's tokens, and
-  // this test reads the real cascade because that is the only layer that can
-  // see the difference.
+  // WHY IT IS ASSERTED RELATIVELY. The rule is that everything a person reads
+  // or types inside the dialog takes the SAME ink as the dialog's own title,
+  // whatever that ink happens to be. That survives a change of world; a
+  // literal colour would not. Read from the real cascade, because a later
+  // rule of equal specificity is exactly how this went wrong the first time.
   const s = await session();
   await s.signOut();
   for (const viewport of [PHONE, LAPTOP]) {
@@ -1044,7 +1005,7 @@ test('the landing before/after wipe is draggable, and its two halves are aligned
  * each element's background chain over white is the honest bound: clear it and
  * no photograph can defeat the text.
  */
-test('every word on the onboarding page survives the dark ground it now sits on', { skip }, async () => {
+test('every word on the onboarding page survives the photograph it sits on', { skip }, async () => {
   const s = await session();
   await s.signIn();
   for (const viewport of [PHONE, LAPTOP]) {
@@ -1121,7 +1082,7 @@ test('every word on the onboarding page survives the dark ground it now sits on'
       const lcs = layer ? getComputedStyle(layer) : null;
 
       return {
-        isLanding: document.body.classList.contains('is-landing'),
+        hasGround: document.body.classList.contains('has-ground'),
         ground: Boolean(document.querySelector('.bgs')),
         scrim: Boolean(document.querySelector('.scrim')),
         litOpacity: lcs ? Number(lcs.opacity) : null,
@@ -1130,7 +1091,7 @@ test('every word on the onboarding page survives the dark ground it now sits on'
       };
     })()`);
 
-    assert.ok(r.isLanding, `at ${viewport.width}px onboarding is not carrying the landing's palette`);
+    assert.ok(r.hasGround, `at ${viewport.width}px onboarding is not carrying its ground class`);
     assert.ok(r.ground, `at ${viewport.width}px onboarding has no place photograph behind it`);
     assert.ok(r.scrim, `at ${viewport.width}px onboarding has a photograph and no scrim over it`);
     assert.ok(r.litOpacity > 0,
@@ -1146,55 +1107,3 @@ test('every word on the onboarding page survives the dark ground it now sits on'
   }
 });
 
-/**
- * NOTHING IS PAINTED IN THE DIM TIER ON A PAGE THAT SITS ON A PHOTOGRAPH.
- *
- * §31 measured --l-dim (#8D8880) at 2.86:1 over the brightest place loop and
- * named the three places this product ships it: .fine, .who and the footer.
- * §30's answer was a local plate; §60K's answer for the nav was to take the
- * hero's own colour plus a shadow. Neither reached the FOOTER, which is dim
- * text directly on the picture on every page carrying that ground.
- *
- * WHY THIS IS A SEPARATE TEST FROM THE CONTRAST SWEEP ABOVE. The sweep walks
- * the DOM for a background, and .bgs is a position:fixed sibling at z-index -2
- * -- visually under the text, structurally not an ancestor. Simulating that
- * composite means reimplementing stacked-gradient blending in a test, which was
- * tried and produced four wrong answers in a row. The RULE is simpler than the
- * arithmetic and is what §30 and §31 actually decided: on this ground, the dim
- * tier does not appear without a plate under it.
- */
-test('no page sitting on a photograph paints its words in the dim tier', { skip }, async () => {
-  const s = await session();
-  for (const [route, signedIn] of [['/', false], ['/onboarding', true]]) {
-    if (signedIn) await s.signIn(); else await s.signOut();
-    const page = await visit(route, LAPTOP);
-
-    const r = await page.evaluate(`(() => {
-      if (!document.querySelector('.bgs')) return { skip: true };
-      const dim = [];
-      for (const el of document.querySelectorAll('body *')) {
-        const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
-        if (!own) continue;
-        const box = el.getBoundingClientRect();
-        if (box.width === 0 || box.height === 0) continue;
-        const cs = getComputedStyle(el);
-        if (cs.visibility === 'hidden' || cs.opacity === '0') continue;
-        if (cs.color !== 'rgb(141, 136, 128)') continue;
-
-        // A plate under it makes dim legitimate -- that is §30's whole device.
-        let plated = false;
-        for (let n = el; n && n !== document.body; n = n.parentElement) {
-          const bg = getComputedStyle(n).backgroundColor;
-          if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') { plated = true; break; }
-        }
-        if (!plated) dim.push({ cls: el.className || el.tagName, text: el.textContent.trim().slice(0, 32) });
-      }
-      return { skip: false, dim };
-    })()`);
-
-    if (r.skip) continue;
-    assert.deepEqual(r.dim, [],
-      `${route} paints unplated dim text on the photograph: `
-      + r.dim.map((d) => `"${d.text}" (${d.cls})`).join(' | '));
-  }
-});

@@ -114,13 +114,12 @@ test('the page actually points at the icon, or serving it changes nothing', asyn
   });
 });
 
-test('the wordmark carries an accessible name, since it is now a picture', async () => {
+test('the wordmark reads as the word, because it is the word', async () => {
   await withServer(async ({ base }) => {
     const html = await (await fetch(`${base}/`, { headers: { accept: 'text/html' } })).text();
-    // It used to be the literal text "TIMESTAMP", which needed no help. Drawn
-    // letterforms are invisible to a screen reader unless something says so.
-    assert.match(html, /class="wordmark"/, 'the wordmark link is gone');
-    assert.match(html, /aria-label="Timestamp"|<span class="vh">Timestamp<\/span>/,
-      'the wordmark is a picture with no accessible name');
+    // It was drawn letterforms for a fortnight and needed a hidden name beside
+    // it. This world sets the word in the display face, so the anchor's own
+    // text is the accessible name and there is nothing to keep in step.
+    assert.match(html, /class="wordmark"[^>]*>Timestamp/, 'the wordmark does not read as the word');
   });
 });

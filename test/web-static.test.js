@@ -623,25 +623,22 @@ test('the landing plays the place full-bleed instead of framing it in a panel', 
 });
 
 /**
- * THE LANDING FROM THE DESIGN PROTOTYPE (2026-09-04): the hero in the sans
- * face at the hero size with the proposition in one sentence beneath it, the
- * rail kept, one call to action, and the price sitting with the claim in the
- * closing plate rather than under the button.
+ * THE LANDING'S HERO. The rail is kept, one call to action, and the price sits
+ * with the claim in the closing plate rather than under the button. The face
+ * moved to the display face on 2026-09-06: this world sets every heading in
+ * Anton, uppercase, and the hero is the largest of them.
  */
-test('the hero is set in the sans face at the hero size, with the proposition beneath it', () => {
+test('the hero is set in the display face at the hero size', () => {
   const html = landingPage({ places: PLACES_FIXTURE, account: null });
   const css = createStylesheet({ places: PLACES_FIXTURE, outfits: [] }).css;
-
   assert.match(html, /<h1 class="hero-line">One photograph\. Fifteen seconds of 2003\.<\/h1>/,
-    'the hero is one sentence in one face -- no lit fragment');
-  assert.match(html, /<p class="hero-sub">You, somewhere ordinary, in a decade that looks warmer than now\.<\/p>/,
-    'the proposition line is missing');
-
+    'the hero is one sentence in one face');
   const hero = /\.hero-line\s*\{([^}]*)\}/.exec(css);
   assert.ok(hero, 'no .hero-line rule');
-  assert.match(hero[1], /font-family:\s*var\(--sans\)/, 'the hero is not in the sans face');
+  assert.match(hero[1], /font-family:\s*var\(--display\)/, 'the hero is not in the display face');
   assert.match(hero[1], /font-size:\s*var\(--t-hero\)/, 'the hero is not at the hero size');
-  assert.doesNotMatch(hero[1], /var\(--osd\)/, 'the hero is still the readout face');
+  assert.match(hero[1], /text-transform:\s*uppercase/, 'display is always uppercase');
+  assert.doesNotMatch(hero[1], /var\(--(osd|sans)\)/, 'the hero is still in a body or readout face');
 });
 
 test('the price sits with the claim, and the hero carries one action', () => {
@@ -727,90 +724,86 @@ function tokenValue(css, name) {
   return m[1];
 }
 
-test('every colour the identity ships clears its floor on the ground it sits on', () => {
-  // DESIGN.md: "Measured, not asserted." The table in that file is the OUTPUT of
-  // this calculation, so the two cannot drift: change a token and this recomputes
-  // the ratio from the value that actually ships.
-  //
-  // WHY THE FLOORS DIFFER. 4.5:1 is the AA bar for body text. `--lift` is a
-  // SURFACE and not text, so it is checked as a non-text contrast against the
-  // ground it sits on -- it only has to be distinguishable, not readable.
+test('every colour the world ships clears its floor on the surface it sits on', () => {
+  // DESIGN.md's table is the OUTPUT of this calculation, recomputed from the
+  // values that actually ship, so the two cannot drift. Text is held to the
+  // 4.5:1 body floor on BOTH dark surfaces, because a card is where most of
+  // the working pages set their words; the lime pair is held to the floor on
+  // lime and on its hover value, because a button is text on lime and a
+  // hovered button is still a button.
   const { css } = createStylesheet(FOCUS_MENU);
-  const paper = tokenValue(css, '--paper');
-  const lift = tokenValue(css, '--lift');
-
-  for (const name of ['--ink-strong', '--ink-soft', '--oxide', '--oxide-deep']) {
+  const ground = tokenValue(css, '--ground');
+  const card = tokenValue(css, '--card');
+  const lime = tokenValue(css, '--lime');
+  const limeHover = tokenValue(css, '--lime-hover');
+  const check = (name, value, surfaceName, surface) => {
+    const got = contrastOf(value, surface);
+    assert.ok(got >= 4.5, `${name} (${value}) measures ${got.toFixed(2)}:1 on ${surfaceName} (${surface}), under the 4.5:1 floor`);
+  };
+  for (const name of ['--ink', '--ink-soft', '--lime', '--rec']) {
     const value = tokenValue(css, name);
-    for (const [groundName, ground] of [['--paper', paper], ['--lift', lift]]) {
-      const got = contrastOf(value, ground);
-      assert.ok(got >= 4.5,
-        `${name} (${value}) measures ${got.toFixed(2)}:1 on ${groundName} (${ground}), `
-        + 'which is under the 4.5:1 floor for body text');
-    }
+    check(name, value, '--ground', ground);
+    check(name, value, '--card', card);
   }
-
-  // The one pairing a filled control depends on: the label sits ON the accent.
-  const onAccent = contrastOf(paper, tokenValue(css, '--oxide'));
-  assert.ok(onAccent >= 4.5,
-    `--paper on --oxide measures ${onAccent.toFixed(2)}:1; the record button's label is unreadable`);
+  for (const name of ['--on-lime', '--on-lime-soft']) {
+    const value = tokenValue(css, name);
+    check(name, value, '--lime', lime);
+    check(name, value, '--lime-hover', limeHover);
+  }
+  // A card is a surface, not text: it only has to be tellable from the ground.
+  assert.ok(contrastOf(card, ground) >= 1.08, `--card (${card}) is indistinguishable from --ground (${ground})`);
 });
 
-test('a ghost sits at its ground’s floor, and --ink is what has to survive it', () => {
-  // THE ONE NUMBER THE MOVE TO PAPER BROKE. DESIGN.md fixed ghosts at .5 and
-  // recorded 4.55:1 -- measured with bone on #070A11. On cream, --ink at .5 is
-  // 3.11:1, a real AA failure on every unlit option in the product, and one that
-  // fails silently because a ghost is SUPPOSED to look faint.
-  //
-  // This asserts the property rather than the number: whatever `--ghost` is set
-  // to, --ink composited at that opacity over its own ground must still clear
-  // the floor. Lowering the token to make something look better fails here.
+test('a ghost sits at the floor on the ground and on a card, and there is one ground', () => {
+  // The rule is unchanged from the paper world: whatever --ghost is set to,
+  // --ink composited at that opacity over the surface it sits on clears 4.5:1.
+  // What changed is that there is ONE ground now -- body.is-landing and its
+  // second --ghost are gone -- and two surfaces the ghost can sit on.
   const { css } = createStylesheet(FOCUS_MENU);
-  const grounds = [
-    ['--paper', /:root\s*\{[\s\S]*?--ghost:\s*([\d.]+)/, '--ink-strong', '--paper'],
-    ['the landing', /body\.is-landing\s*\{[\s\S]*?--ghost:\s*([\d.]+)/, '--l-bone', '--l-ground'],
-  ];
-
-  for (const [label, re, inkToken, groundToken] of grounds) {
-    const m = re.exec(css);
-    assert.ok(m, `${label} does not name a --ghost value`);
-    const alpha = Number(m[1]);
-    const ink = tokenValue(css, inkToken);
-    const ground = tokenValue(css, groundToken);
-
-    const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const m = /:root\s*\{[\s\S]*?--ghost:\s*([\d.]+)/.exec(css);
+  assert.ok(m, 'the sheet names no --ghost value');
+  const alpha = Number(m[1]);
+  const ink = tokenValue(css, '--ink');
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  for (const [name, surface] of [['--ground', tokenValue(css, '--ground')], ['--card', tokenValue(css, '--card')]]) {
     const mixed = '#' + rgb(ink)
-      .map((c, i) => Math.round(c * alpha + rgb(ground)[i] * (1 - alpha)).toString(16).padStart(2, '0'))
+      .map((c, i) => Math.round(c * alpha + rgb(surface)[i] * (1 - alpha)).toString(16).padStart(2, '0'))
       .join('');
-    const got = contrastOf(mixed, ground);
-
-    assert.ok(got >= 4.5,
-      `on ${label} a ghost at opacity ${alpha} puts ${inkToken} at ${got.toFixed(2)}:1 over `
-      + `${groundToken}, under the 4.5:1 floor. DESIGN.md: a ghost sits at the floor and no lower.`);
+    const got = contrastOf(mixed, surface);
+    assert.ok(got >= 4.5, `a ghost at ${alpha} puts --ink at ${got.toFixed(2)}:1 over ${name}, under the floor`);
   }
+  assert.ok(!/body\.is-landing/.test(css), 'a second ground is back in the sheet; this world has one');
 });
 
-test('the cathode orange has left the chrome and kept the date stamp', () => {
-  // DESIGN.md: "#FF8A1E measures 1.95-2.21:1 on every candidate light ground and
-  // fails at every size. It is not deleted, it is relocated." So it may appear in
-  // the landing's own world and nowhere else -- and crucially not in the
-  // GENERATED per-catalog rules, which bake colours in at build time where no
-  // token can re-point them.
+test('no value of a superseded world is left in the sheet, and the tape keeps its own stamp colour', () => {
+  // Two worlds were retired on 2026-09-06 -- Struck's ink-blue and cathode
+  // orange, and the paper page's cream and oxide. A retired value that
+  // survives in one rule is a page that half-changed, and the generated
+  // per-catalog rules bake colours in at build time where no token can
+  // re-point them, so the whole sheet is scanned, generated rules included.
+  // Comment lines are skipped; the house style continues a comment on plain
+  // indented lines, so a retired value belongs in a comment only in words.
   const { css } = createStylesheet(FOCUS_MENU);
-
-  // Everything before the landing's section is the paper world.
-  const landingAt = css.indexOf('the landing page: STRUCK');
-  assert.ok(landingAt > 0, 'the landing section marker is gone from the sheet');
-  const paperSide = css.slice(0, landingAt);
-
-  // NO `g` FLAG. A global regex carries `lastIndex` between `.test()` calls, so
-  // it would match every other offending line and silently pass on the rest.
-  const cathode = /#FF8A1E|rgba\(\s*255\s*,\s*138\s*,\s*30\b|#FFB25C|rgba\(\s*255\s*,\s*178\s*,\s*92\b/i;
-  const offenders = paperSide.split('\n')
+  const dead = new RegExp([
+    '--l-(ground|lift|cathode|hot|bone|dim)', 'var\\(--(paper|oxide|oxide-deep)\\)', 'is-landing',
+    '#FF8A1E', '#FFB25C', 'rgba\\(\\s*255\\s*,\\s*138\\s*,\\s*30\\b', 'rgba\\(\\s*255\\s*,\\s*178\\s*,\\s*92\\b',
+    '#A8342A', '#8E2A22', 'rgba\\(\\s*168\\s*,\\s*52\\s*,\\s*42\\b', '#D98B7A',
+    '#F2EDE4', '#2A211B', '#7A6A5E', 'rgba\\(\\s*42\\s*,\\s*33\\s*,\\s*27\\b',
+    '#070A11', '#0C111B', 'rgba\\(\\s*7\\s*,\\s*10\\s*,\\s*17\\b', 'rgba\\(\\s*12\\s*,\\s*17\\s*,\\s*27\\b',
+    '#8D8880', '#EDE7DC', '#C8C2B8', '#B9B3A9', '#4E463C', '#17120A',
+  ].join('|'), 'i');
+  const offenders = css.split('\n')
     .map((l, i) => [i + 1, l])
-    .filter(([, l]) => cathode.test(l) && !/^\s*(\*|\/\*|\/\/)/.test(l) && !/--l-(cathode|hot):/.test(l));
-
+    .filter(([, l]) => dead.test(l) && !/^\s*(\*|\/\*|\/\/)/.test(l));
   assert.deepEqual(offenders.map(([n, l]) => `${n}: ${l.trim()}`), [],
-    'the cathode orange is still painting something on the paper pages');
+    'a superseded world is still painting something');
+
+  // The date stamp inside the tape is ffmpeg's and keeps the colour the look
+  // was calibrated with; the interface neither imitates nor changes it.
+  const look = JSON.parse(fs.readFileSync(new URL('../config/look/base.json', import.meta.url), 'utf8'));
+  const osd = JSON.stringify(look).match(/"color":"(0x[0-9A-Fa-f]{6})"/);
+  assert.ok(osd, 'the look config no longer names a stamp colour');
+  assert.equal(osd[1].toUpperCase(), '0XF6EAC8', 'the burnt-in date stamp changed colour; the interface work must not touch the tape');
 });
 
 /** The `.nav .who` block, from its selector to its closing brace. */
@@ -1240,20 +1233,17 @@ test('the free grant opens the page as a sentence, not as a third card with no b
   assert.ok(!/>FREE</.test(html), 'and no card prices it at FREE');
 });
 
-test('a pack states its price in the readout face with the credit count directly beneath it', () => {
+test('a pack states its price in the display face with the credit count directly beneath it', () => {
   const html = pricingPage(LADDER);
   const { css } = createStylesheet({});
-
   assert.match(html, /<p class="price">\$12<\/p>\s*<p class="pack-credits">92 credits<\/p>/,
     'the price and its credit count are adjacent, price first');
   assert.match(html, /<p class="price">\$19<\/p>\s*<p class="pack-credits">138 credits<\/p>/);
-  assert.match(css, /\.pack \.price\s*\{[^}]*font-family:\s*var\(--osd\)/, 'the price is set in the readout face');
+  assert.match(css, /\.pack \.price\s*\{[^}]*font-family:\s*var\(--display\)/, 'the figure is not in the display face');
   assert.match(css, /\.pack \.price\s*\{[^}]*font-size:\s*var\(--t-8\)/, 'at the top of the type scale');
-  assert.match(css, /\.pack \.pack-credits\s*\{[^}]*font-family:\s*var\(--osd\)/,
-    'the count is a readout too, so the two read as one figure');
-
-  // TAX SITS BESIDE EACH BUTTON, where the decision is made, not only in the
-  // intro; a buyer reading one card should not have to scroll up for it.
+  const credits = /\.pack \.pack-credits\s*\{([^}]*)\}/.exec(css);
+  assert.ok(credits, 'no .pack .pack-credits rule');
+  assert.doesNotMatch(credits[1], /var\(--(osd|display)\)/, 'the count is the label role beneath the figure, not a second figure');
   const cards = html.split('<section class="pack').slice(1);
   for (const card of cards) assert.match(card, /Tax is added at checkout\./, 'each pack says tax is added');
 });
@@ -1524,7 +1514,10 @@ test('the account page sections carry readout labels, and the deletion sits in a
   assert.match(html, /<div class="account-danger">\s*<form method="post" action="\/account\/delete">/,
     'the deletion form is not in its own column');
   assert.match(css, /\.account-danger\s*\{[^}]*max-width:\s*22rem/, 'the column is not narrow');
-  assert.match(css, /\.subhead--osd\s*\{[^}]*font-family:\s*var\(--osd\)/, 'the label is not in the readout face');
+  const label = /\.subhead--osd\s*\{([^}]*)\}/.exec(css);
+  assert.ok(label, 'no .subhead--osd rule');
+  assert.doesNotMatch(label[1], /var\(--osd\)/, 'the readout face belongs to the tape; a section label is the Inter label role');
+  assert.match(label[1], /font-weight:\s*600/, 'the label role is Inter 600');
 });
 
 test('nothing in the soft tier is also ghosted', () => {
@@ -1547,7 +1540,7 @@ test('nothing in the soft tier is also ghosted', () => {
   const rules = css.match(/[^{}]+\{[^{}]*\}/g) || [];
   const offenders = rules
     .filter((r) => /opacity:\s*var\(--ghost\)/.test(r))
-    .filter((r) => /color:\s*var\((--faint|--ink-soft|--l-dim)\)/.test(r))
+    .filter((r) => /color:\s*var\((--faint|--ink-soft|--on-lime-soft)\)/.test(r))
     .map((r) => r.replace(/\s+/g, ' ').trim().slice(0, 120));
 
   assert.deepEqual(offenders, [],
@@ -1795,22 +1788,22 @@ test('the photo preview does not borrow a class that positions itself elsewhere'
 });
 
 /**
- * ONBOARDING CARRIES THE LANDING'S WORLD, ASSERTED WITHOUT A BROWSER.
+ * ONBOARDING CARRIES ITS GROUND, ASSERTED WITHOUT A BROWSER.
  *
  * The load-bearing check is in browser-smoke.test.js, which measures every word
  * on the page against the brightest ground a photograph can make -- that is the
  * one that catches dark-on-dark. This is the cheap half: that the page asks for
- * the dark world at all, and that it still renders honestly when it is given no
+ * a ground at all, and that it still renders honestly when it is given no
  * ground (the degraded path, where the place catalog is empty).
  */
-test('the onboarding page takes the landing world when it is given a ground, and not when it is not', () => {
+test('the onboarding page carries a ground when it is given one, and a plain page when it is not', () => {
   const withGround = onboardingPage({
     account: { email: 'a@b.com', consent: null },
     consentText: 'I confirm.',
     csrf: 't',
     ground: singlePlaceGround('amalfi-afternoon'),
   });
-  assert.match(withGround, /class="[^"]*is-landing/, 'onboarding does not ask for the landing palette');
+  assert.match(withGround, /class="[^"]*has-ground/, 'onboarding does not ask for a ground');
   assert.match(withGround, /class="bgs"/, 'onboarding carries no place photograph');
   assert.match(withGround, /class="scrim"/, 'onboarding has a photograph and no scrim over it');
   assert.match(withGround, /bg--lit/, 'the single background layer is never lit, so the ground is invisible');
@@ -1822,12 +1815,12 @@ test('the onboarding page takes the landing world when it is given a ground, and
   assert.ok(!/<video/.test(withGround), 'onboarding ships a video it has no script to drive');
 
   // THE DEGRADED PATH IS STILL A PAGE. An empty catalog means no ground, and
-  // the page must then be the cream one rather than the dark palette over
-  // nothing -- which would be bone text on a bone-less background.
+  // the page must then be the plain page rather than the rules that tint text
+  // for a photograph, applied over no photograph at all.
   const noGround = onboardingPage({
     account: { email: 'a@b.com', consent: null }, consentText: 'I confirm.', csrf: 't',
   });
-  assert.ok(!/is-landing/.test(noGround), 'with no ground the page still claims the dark palette');
+  assert.ok(!/has-ground/.test(noGround), 'with no ground the page still claims one');
   assert.ok(!/class="bgs"/.test(noGround), 'with no ground the page still emits empty background layers');
   assert.match(noGround, /Agree and continue/, 'the consent form is gone from the degraded page');
 });

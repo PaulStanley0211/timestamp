@@ -985,38 +985,19 @@ test('the shelf is empty until there is something on it, and then it is not', as
   });
 });
 
-test('the wordmark is the drawn mark, named, and carries no style of its own', async () => {
+test('the wordmark is live text in the display face, with the record light beside it', async () => {
   await withServer(async ({ base, cookieA }) => {
     const html = await (await get(base, '/', cookieA)).text();
-    assert.ok(html.includes('class="wordmark"'));
-
-    // THE OLD RULE HERE WAS THE OPPOSITE, AND IT WAS DELIBERATELY REVERSED
-    // (2026-08-27). This asserted `!wordmark.includes('<svg')` -- "the wordmark
-    // itself must be lettering, not a drawn logo" -- which was the right rule
-    // while the mark was the word TIMESTAMP set in the tape's own OSD face.
-    // The identity now uses Cormorant Garamond Italic with a head-switch tear
-    // through it, and neither the face nor the tear can be expressed as live
-    // text: the face is not shipped, and the tear is a clipped displacement.
-    // See DESIGN.md, "The brand identity". The rule below is what replaces it.
     const from = html.indexOf('class="wordmark"');
+    assert.ok(from > -1, 'the wordmark link is gone');
     const wordmark = html.slice(from, html.indexOf('</a>', from));
-    assert.ok(wordmark.includes('<svg'), 'sliced the wrong element, or the mark is gone');
-
-    // A PICTURE HAS NO TEXT, so something must say what it is. It used to be
-    // the literal word; a screen reader now finds nothing without this.
-    assert.ok(/<span class="vh">Timestamp<\/span>/.test(wordmark)
-      || /aria-label="Timestamp"/.test(wordmark),
-      'the wordmark is a picture with no accessible name');
-
-    // AND THE ONE THAT FAILS SILENTLY IN PRODUCTION AND NOWHERE ELSE. This
-    // server sends `style-src 'self'`, which blocks an inline <style> wherever
-    // it appears -- inside an inlined SVG included. A generated mark that
-    // carries its own <style> renders fine in every test that reads the markup
-    // and loses its animation in every real browser, with no error anywhere.
-    // The record light is animated from the stylesheet by its class instead.
-    assert.ok(!wordmark.includes('<style'),
-      'the inlined mark carries a <style> the CSP will silently drop');
+    // LIVE TEXT, NOT A PICTURE (2026-09-06). The drawn Cormorant mark belonged
+    // to the paper world. This world sets the word in Anton, so the accessible
+    // name is the word itself and nothing is inlined that the CSP could drop.
+    assert.ok(!wordmark.includes('<svg'), 'the wordmark is still the drawn mark');
+    assert.match(wordmark, />Timestamp</, 'the wordmark does not read as the word');
     assert.ok(wordmark.includes('class="rec"'), 'the record light lost the class the stylesheet animates');
+    assert.ok(!wordmark.includes('<style'), 'the mark carries a <style> the CSP will silently drop');
   });
 });
 
@@ -1041,12 +1022,10 @@ test('the masthead draws the word alone -- no monogram beside it', async () => {
 
     assert.ok(!lockup.includes('class="mg"'), 'the monogram is back in the lockup');
     assert.ok(!/id="ts-mg-/.test(html), 'the monogram is inlined somewhere on the page');
-    assert.ok(lockup.includes('id="ts-wm-'), 'the wordmark itself went missing with it');
+    assert.ok(lockup.includes('>Timestamp<'), 'the wordmark itself went missing with it');
 
-    // ONE LINK, ONE NAME. The drawn letters carry no text, so the accessible
-    // name is the visually-hidden span -- which must survive the mark going.
-    assert.ok(/<span class="vh">Timestamp<\/span>/.test(lockup),
-      'the lockup lost the only thing that gives it an accessible name');
+    // ONE LINK, ONE NAME. The word is live text now, so the anchor's own text
+    // is the accessible name and no hidden span stands in for it.
 
     // Ids stay unique. With one mark a collision is no longer possible between
     // marks, but the assertion costs nothing and the page may inline more SVG.
@@ -1065,8 +1044,13 @@ test('the masthead draws the word alone -- no monogram beside it', async () => {
     assert.ok(wordmarkRule, 'no rule lays out the wordmark at all');
     assert.ok(!/margin-left/.test(wordmarkRule[1]),
       'the monogram tile\'s negative margin outlived the tile');
-    assert.ok(!/\bgap\b/.test(wordmarkRule[1]),
-      'the lockup still spaces two children and there is only one');
+    // THE `gap` ASSERTION THAT SAT HERE IS GONE (2026-09-06) AND ITS PREMISE
+    // IS WHY. It read "the lockup still spaces two children and there is only
+    // one" -- true while the anchor held a single drawn mark. The word is live
+    // text now with the record light beside it, so the lockup has two children
+    // again and the gap between them is specified rather than left over. What
+    // that assertion actually guarded -- spacing surviving the box it was
+    // cancelling -- is the margin-left check above, which still binds.
   });
 });
 

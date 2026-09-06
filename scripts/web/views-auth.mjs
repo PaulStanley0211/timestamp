@@ -354,18 +354,17 @@ export function resetCompletePage({ email = '', error = null, csrf = '' } = {}) 
  * the WORKSPACE: the signed-in page is where somebody reads prices and makes
  * choices, and text over a moving photograph competes with the work. This page
  * is not a workspace. It is a four-second gate, and the person arriving at it
- * has just come from the dark world -- they picked a place, watched the wipe,
- * signed up, typed six digits -- so dropping them onto a plain cream form is a
- * hard cut at the exact moment they have committed. The world holds until the
- * work starts; the cream begins at `/`, where the work is.
+ * has just come from the landing -- they picked a place, watched the wipe,
+ * signed up, typed six digits -- so dropping them onto a plain page is a hard
+ * cut at the exact moment they have committed. The photograph holds until the
+ * work starts.
  *
- * WHAT THAT COSTS, AND IT COST IT ONCE ALREADY. `body.is-landing` re-points
- * nine palette aliases and --ghost, so every rule here that names a TOKEN
- * follows the ground and every rule that names a literal tier does not. That is
- * exactly how the sign-in dialog broke on 2026-09-05 -- typed text at 1.06:1,
- * invisible, with 2119 tests green over it. The panel is restated for the dark
- * ground in `static.mjs`, and `browser-smoke.test.js` measures every word on
- * this page against the brightest ground a photograph can make.
+ * WHAT THAT COSTS. Text on a photograph is not text on the ground, and forgetting
+ * that is how the sign-in dialog broke on 2026-09-05 -- typed text at 1.06:1,
+ * invisible, with 2119 tests green over it. `has-ground` is what the few rules
+ * that care about a picture behind the words key on, and
+ * `browser-smoke.test.js` measures every word on this page against the
+ * brightest ground a photograph can make.
  */
 export function onboardingPage({ account = null, consentText = '', csrf = '', error = null, ground = '' } = {}) {
   const body = `
@@ -396,7 +395,7 @@ export function onboardingPage({ account = null, consentText = '', csrf = '', er
     title: 'Timestamp - onboarding',
     body,
     preBody: ground,
-    bodyClass: ground ? 'is-landing page-onboarding' : 'page-onboarding',
+    bodyClass: ground ? 'has-ground page-onboarding' : 'page-onboarding',
     wrapClass: 'wrap--narrow',
     account,
   });
