@@ -9308,6 +9308,21 @@ seven `guards.yml` steps run verbatim and counted before every commit.
 | `dfafd8d` `a5e3f03` | The final review's fixes: the font route refuses a prototype key, the landing reads the one shape fact, the runbook step runs as the image's user; the stylesheet's notes describe the world it ships |
 | `bb85e93` `ec2eee7` | Two runbook corrections found ON THE BOX during the deploy (§70C) |
 
+**The suite, task by task:** 2127 → 2129 (fonts) → 2127 (tokens; two
+browser tests deleted) → 2132 (components) → 2138 (showcase) → 2143
+(landing; three deleted, five added, one fix) → 2144 (pricing) → 2145
+(footer) → 2146 (final wave) → 2147 (runbook guard); 0 fail throughout, 3
+skipped (the two money guards and the Linux-only backup-mode assertion).
+
+**The reviews:** Tasks 1 and 4 clean; Tasks 2, 3, 5 and 6 one fix round
+each; the final whole-branch review one wave of two commits. **Six of the
+eight Important findings were PLAN-MANDATED** — the brief's own verbatim
+CSS or markup (a dark focus ring drawn on the dark ground, a dark button on
+the dark ground, a typed heading, a typed line-height, `data-signin` on the
+signup links, a chip the rule calls a flag). A plan's literal text is
+reviewed exactly like any other code, and the spec, not the plan, settles
+the conflict.
+
 #### B — Two corrections this work made to the spec, and two test deletions
 
 1. **`--rec` is `#E85545`, not the spec's floor `#E24B3B`.** The floor
@@ -9399,6 +9414,40 @@ owner says otherwise.
 - **The classifier refuses some remote state changes and allows others**: it
   blocked `git pull && docker compose build` in one call and allowed each on
   its own. Split remote commands.
+
+#### G — How the run went, for whoever executes the second plan
+
+- **The dispatch shape that worked:** `scripts/task-brief PLAN N` for the
+  brief, the plan's Global Constraints and its "Working rules" section
+  extracted once into the workspace as two files every dispatch names, a
+  report file per task, and the house rules (parse check, Write/Edit only,
+  sabotage from a copy, guards counted, `git commit -F`) restated in every
+  prompt. Opus for the tokens, the landing, the pricing page and the final
+  review; Sonnet for the rest and for every fix round and re-review.
+- **`SendMessage` is not available here**, so a fix round is a fresh
+  implementer handed the brief, the report file and the findings verbatim —
+  the report file is the memory. It worked every time.
+- **The stop materials pattern:** the implementer commits, then renders the
+  page from the dev server and writes `build/landing-375.png` /
+  `build/landing-1440.png` (`build/shot.mjs`, `build/shot-pricing.mjs` —
+  CDP screenshots, gitignored), the rendered copy to `build/*.md`
+  (`build/faq-extract.mjs`), and reports the server PID; the controller
+  reviews the task FIRST, then shows the owner with `SendUserFile`. The owner
+  answered every stop in one line.
+- **`preview_start` with `{ url: "http://localhost:3000/" }`** opens the
+  pane at a server already running; `{ name: "web" }` would try to start a
+  second one on the same port.
+- **Locally, `.env` names `TIMESTAMP_SHOWCASE_DIR=build/showcase`** and that
+  directory holds the hero and stickers 1 and 4 (never committed). The web
+  process lists it ONCE at boot, so a file added later needs a restart, and a
+  server started before the line was in `.env` shows the fallbacks.
+- **`node --test`'s spec reporter marks a failure `✖`, not `not ok`.** A
+  `grep "not ok"` over a redirected log finds nothing while `fail 1` sits in
+  the summary; grep for `✖`.
+- **Two `Edit`s to the same file in one response are fine; a `Bash` that
+  `cd`s elsewhere then runs `rm -rf .superpowers/...` removes nothing and
+  prints its own success line.** Run cleanup from the repo root and `ls` the
+  result.
 
 ## Not in scope
 
