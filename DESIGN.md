@@ -58,11 +58,29 @@ from the values in `static.mjs`, so this table is an output.
 were measured against a pure white picture under the caption scrim and the
 picture did not change when the ground did.
 
-**The aliases.** Several hundred rules read `--accent`, `--muted`, `--faint`,
-`--alarm`, `--frost`, `--frost-lit`, `--lift`, `--ink-strong`, `--hairline`;
-they are re-pointed once at `:root` and never rewritten back. The names of the
-two retired worlds (`--paper`, `--oxide`, `--l-*`, `body.is-landing`) do not
-exist, and a test fails if any of their values reappears in the sheet.
+**The aliases.** `--accent`, `--accent-bright`, `--accent-deep`, `--faint`,
+`--alarm` and `--ghost-hover` are re-pointed once at `:root` and never
+rewritten back; several hundred rules and the generated per-catalog block read
+them. Seven names were retired on 2026-09-07 — `--lift`, `--ink-strong`,
+`--frost`, `--frost-lit`, `--muted`, `--hairline`, `--hairline-firm` — because
+each resolved to one token every rule could name directly, and a name that
+maps to one value is a second place to decide a colour. A test fails if any of
+the seven reappears. The names of the two retired worlds (`--paper`, `--oxide`,
+`--l-*`, `body.is-landing`) do not exist, and a test fails if any of their
+values reappears in the sheet.
+
+## Surfaces
+
+Two planes and one line. The ground is the page. An outlined card — `--card`,
+`1px solid var(--line)`, radius `--r` for a panel and `--r-sm` for a card
+inside one — is a thing on it: a step of the order form, a phase of a render, a
+shelf tile, a cassette label, a banner, a sign-in panel, the error page. A
+field inside a card recesses to the ground; a field on the ground lifts to the
+card. A dropzone is the same outline dashed. The order form's weight arc from
+2026-08-22 survives in this vocabulary: the photo (step 1) and the tape (step
+4) are filled cards, the two menus between them are outlines with nothing
+behind them, so the page reads heavy, light, light, heavy. There is no frost,
+no blur and no plate: nothing sits behind a card but the ground.
 
 ## Ghosts and the floor
 

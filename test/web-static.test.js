@@ -411,16 +411,107 @@ test('the balance sentence is one function, and the account page speaks it', () 
   assert.equal(balanceSentence({ credits: NaN }), '');
 });
 
-test('a panel and a card carry the outline, from the token', () => {
+test('a panel and a card carry the outline, from the token, and a panel sits on the card plane', () => {
   const { css } = createStylesheet({});
   for (const sel of ['.panel', '.card']) {
-    const rule = new RegExp(sel.replace('.', '\\.') + '\\s*\\{([^}]*)\\}').exec(css);
+    const rule = new RegExp('\\n' + sel.replace('.', '\\.') + '\\s*\\{([^}]*)\\}').exec(css);
     assert.ok(rule, `no ${sel} rule`);
     assert.match(rule[1], /border:\s*1px solid var\(--line\)/, `${sel} is not outlined`);
     assert.match(rule[1], /border-radius:\s*var\(--r\)/, `${sel} does not take the card radius`);
+    assert.match(rule[1], /background:\s*var\(--card\)/, `${sel} does not sit on the card plane`);
   }
+  // A frosted plate blurs whatever is behind it. Nothing is behind it any more:
+  // the photograph left the signed-in page on 2026-08-28 and onboarding loses
+  // its own in this plan, so a backdrop-filter is a GPU cost that paints nothing.
+  assert.ok(!/backdrop-filter/.test(css), 'a frosted plate survives with nothing behind it to frost');
+  // THE WEIGHT ARC, IN THIS WORLD'S VOCABULARY. The photo (step 1) and the tape
+  // (step 4) are filled cards; the two menus between them are the same outline
+  // with nothing behind it. Heavy, light, light, heavy -- §6a's arc, carried by
+  // the fill rather than by a frost tier that no longer exists.
+  const choice = /\n\.panel--choice\s*\{([^}]*)\}/.exec(css);
+  assert.ok(choice, 'no .panel--choice rule');
+  assert.match(choice[1], /background:\s*transparent/, 'a menu panel is not an open outline on the ground');
+  assert.ok(!/border:\s*0/.test(choice[1]), 'a menu panel still takes its outline away');
+  assert.ok(!/border-radius:\s*0/.test(choice[1]), 'a menu panel still squares its corners');
+  const anchor = /\n\.panel--anchor\s*\{([^}]*)\}/.exec(css);
+  if (anchor) assert.ok(!/background/.test(anchor[1]), 'the anchor names a plane of its own; it is a card like the commit');
+  const commit = /\n\.panel--commit\s*\{([^}]*)\}/.exec(css);
+  assert.ok(commit, 'no .panel--commit rule');
+  assert.ok(!/background/.test(commit[1]), 'the commit names a plane of its own; it is the card');
   assert.match(css, /\.lime\s*\{[^}]*background:\s*var\(--lime\)/, 'the lime panel is not lime');
   assert.match(css, /\.lime\s*\{[^}]*color:\s*var\(--on-lime\)/, 'text on the lime panel does not take the on-lime ink');
+});
+
+test('the seven paper-world alias names are gone from the sheet, and nothing reads them', () => {
+  // `--lift` and `--ink-strong` were named in CLAUDE.md §70E as debt: legacy
+  // names from the paper page that still described what they pointed at. The
+  // other five were the same shape -- an alias that resolves to a token every
+  // rule could name directly -- and once .panel stopped reading --frost there
+  // was nothing left that any of them said. A name that maps to one value is
+  // a second place to decide a colour, which is how the sign-in dialog was
+  // painted for the wrong ground on 2026-09-05.
+  const { css } = createStylesheet(FOCUS_MENU);
+  for (const name of ['--lift', '--ink-strong', '--frost', '--frost-lit', '--muted', '--hairline', '--hairline-firm']) {
+    // The lookahead keeps --frost from matching --frost-lit and --hairline from
+    // matching --hairline-firm, so each name is asserted on its own.
+    const re = new RegExp(`${name}(?![\\w-])`);
+    assert.ok(!re.test(css), `${name} is still in the sheet -- defined or read`);
+  }
+  // The aliases that stay, because generated rules and tests name them and
+  // they carry no paper-world meaning: --accent, --faint, --alarm, --ghost-hover.
+  for (const name of ['--accent', '--faint', '--alarm', '--ghost-hover']) {
+    assert.ok(new RegExp(`${name}:`).test(css), `${name} was retired by accident`);
+  }
+});
+
+test('a field sits on the ground inside a card, outlined from the token; a banner and a refused button are cards too', () => {
+  const { css } = createStylesheet({});
+  const input = /input\[type="text"\], input\[type="email"\], input\[type="password"\], select\s*\{([^}]*)\}/.exec(css);
+  assert.ok(input, 'no shared input rule');
+  assert.match(input[1], /background:\s*var\(--ground\)/, 'a field inside a card does not recess to the ground');
+  assert.match(input[1], /border:\s*1px solid var\(--line\)/, 'a field is not outlined from the token');
+  const notice = /\n\.notice\s*\{([^}]*)\}/.exec(css);
+  assert.ok(notice, 'no .notice rule');
+  assert.match(notice[1], /background:\s*var\(--card\)/, 'the notice is not a card');
+  assert.match(notice[1], /border:\s*1px solid var\(--line\)/, 'the notice is a fill with no outline');
+  assert.match(notice[1], /color:\s*var\(--ink\)/, 'the notice is written in the soft tier on a card');
+  const disabled = /\.record:disabled\s*\{([^}]*)\}/.exec(css);
+  assert.ok(disabled, 'no .record:disabled rule');
+  assert.match(disabled[1], /background:\s*var\(--card\)/, 'a refused Record is not the card plane');
+  assert.match(disabled[1], /border:\s*1px solid var\(--line\)/, 'a refused Record on a card is invisible without its outline');
+  assert.match(disabled[1], /color:\s*var\(--ink-soft\)/, 'a refused Record does not read as refused');
+  assert.ok(!/var\(--(lime|accent)\)/.test(disabled[1]), 'a refused button is lime -- lime means go');
+  const label = /\n\.label\s*\{([^}]*)\}/.exec(css);
+  assert.ok(label, 'no .label rule');
+  assert.match(label[1], /background:\s*var\(--card\)/, 'the cassette label is not on the card plane');
+});
+
+test('a shelf tile carries the card outline', () => {
+  const { css } = createStylesheet({});
+  const frame = /\.tape \.frame\s*\{([^}]*)\}/.exec(css);
+  assert.ok(frame, 'no .tape .frame rule');
+  assert.match(frame[1], /background:\s*var\(--card\)/, 'an unfinished tile has no plate');
+  assert.match(frame[1], /border:\s*1px solid var\(--line\)/, 'a tile is not outlined -- spec §2.4 names shelf tiles');
+  assert.match(frame[1], /border-radius:\s*var\(--r-sm\)/, 'a tile does not take the small radius');
+});
+
+test('the display face is never tracked or set loose, on any page heading', () => {
+  // Anton wants 0.9-0.95 leading and no tracking (DESIGN.md, Type). Four
+  // per-page .headline rules still carried the SANS-era values -- line-height
+  // 1.1 and letter-spacing -0.02em -- from before the display face changed, so
+  // every interior heading sat loose and squeezed in a face that is neither.
+  // The one legitimate exception names the body face in the same rule (an
+  // email address is data, Task 4) and is skipped by that.
+  const { css } = createStylesheet({});
+  const rules = [...css.matchAll(/([^{}]*\.headline[^{}]*)\{([^}]*)\}/g)];
+  assert.ok(rules.length >= 5, `expected the base rule and the per-page sizes, found ${rules.length}`);
+  for (const [, sel, body] of rules) {
+    if (/font-family:\s*var\(--sans\)/.test(body)) continue;
+    const ls = /letter-spacing:\s*([^;]+);/.exec(body);
+    if (ls) assert.equal(ls[1].trim(), '0', `"${sel.trim()}" tracks the display face: ${ls[1].trim()}`);
+    const lh = /line-height:\s*([0-9.]+)\s*;/.exec(body);
+    if (lh) assert.ok(Number(lh[1]) <= 0.95, `"${sel.trim()}" sets the display face loose at ${lh[1]}`);
+  }
 });
 
 test('no page promises the still-approval gate that direct mode deleted', () => {

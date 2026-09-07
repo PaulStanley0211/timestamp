@@ -540,25 +540,19 @@ export const BASE_CSS = `
   --on-image-soft: #CFC7BC;
   --on-image-accent: var(--lime);
 
-  /* THE ALIASES THE RULES READ, RE-POINTED ONCE. Several hundred rules name
-     these; none of them had to be rewritten to change world, and none may be
-     rewritten back. --lift and --ink-strong are legacy names from the paper
-     page that still describe what they point at (the nearer plane is the
-     card; strong ink is ink) and are retired page by page as each page is
-     rebuilt. The paper and oxide names are GONE, not aliased: a rule that
-     says paper on a dark ground is a rule that has not been read. */
+  /* THE ALIASES THAT STAY. Several hundred rules and the generated per-catalog
+     block read --accent and --faint, and --alarm names the one decision that
+     there is no alarm red; they are re-pointed here once and never rewritten.
+     Seven other names were retired on 2026-09-07 -- lift, ink-strong, frost,
+     frost-lit, muted, hairline, hairline-firm -- because each resolved to one
+     token every rule could name directly, and a name that maps to one value
+     is a second place to decide a colour. A test fails if any of them
+     reappears. The paper and oxide names are GONE, not aliased. */
   --accent: var(--lime);
   --accent-bright: var(--lime-hover);
   --accent-deep: var(--lime);
-  --muted: var(--ink);
   --faint: var(--ink-soft);
   --alarm: var(--ink);          /* there is no alarm red: weight and words */
-  --frost: var(--card);
-  --frost-lit: var(--card);
-  --lift: var(--card);
-  --ink-strong: var(--ink);
-  --hairline: var(--line);
-  --hairline-firm: var(--line);
 
   /* SHAPE. Cards and fields 10-12px, buttons 6-8px (DESIGN.md). */
   --r: 12px;
@@ -888,7 +882,7 @@ body {
    address put the only way out of the account outside the frame. Everything
    else in the row is a control and holds its size (flex: none above). */
 .nav .who {
-  color: var(--muted); text-transform: none; letter-spacing: 0; font-size: var(--t-1);
+  color: var(--ink); text-transform: none; letter-spacing: 0; font-size: var(--t-1);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -906,12 +900,12 @@ body {
   text-transform: none;
   letter-spacing: 0;
   font-size: var(--t-1);
-  color: var(--muted);
+  color: var(--ink);
 }
 .ring { width: 20px; height: 20px; flex: none; overflow: visible; }
 .ring-track {
   fill: none;
-  stroke: var(--hairline-firm);
+  stroke: var(--line);
   stroke-width: 2.5;
 }
 .ring-fill {
@@ -968,7 +962,7 @@ body {
    body copy, so the legal pages -- the one place somebody actually reads several
    hundred words in a row -- were the worst offender. A cap only ever narrows,
    so this is safe on the pages where .sub already sits in a column. */
-.sub { color: var(--muted); margin: 0 0 0.75rem; max-width: 66ch; }
+.sub { color: var(--ink); margin: 0 0 0.75rem; max-width: 66ch; }
 
 /* THE LEGAL PAGES ARE THE ONLY LONG-FORM DOCUMENTS IN THIS PRODUCT, AND THEY
    WERE STRUCTURED LIKE A MARKETING PANEL. Their section headings were
@@ -992,7 +986,7 @@ body {
   margin: var(--s-7) 0 var(--s-3);
 }
 .hint { color: var(--faint); font-size: var(--t-1); margin: 0 0 0.7rem; }
-.lede { color: var(--muted); margin: 0 0 2rem; }
+.lede { color: var(--ink); margin: 0 0 2rem; }
 
 .stamp {
   font-family: var(--osd);
@@ -1030,8 +1024,9 @@ body {
 }
 
 .notice {
-  background: var(--lift);
-  color: var(--faint);
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
   padding: 0.75rem 0.95rem;
   margin: 0 0 1.5rem;
   font-size: var(--t-1);
@@ -1063,32 +1058,27 @@ body {
    44rem of the wrap. */
 .app-head .lede { max-width: 66ch; margin: 0; }
 
-/* --- frosted cards ----------------------------------------------------- */
+/* --- the step cards ---------------------------------------------------- */
 
-/* THE WEIGHT ARC, AND WHY THERE IS ONE.
-   Every panel used to be the same object: same frost, same 1px hairline, same
-   20px radius, same 1.5rem padding, same width. Five slabs down the page with
-   nothing to say which mattered. Now a panel's treatment states its job:
+/* WHAT EACH MODIFIER IS FOR. Every panel used to be the same object -- same
+   surface, same 1px line, same radius, same padding, same width -- five slabs
+   down the page with nothing to say which mattered. Each one states its job:
 
      --anchor   step 01, the photograph. The identity anchor; nothing on the
-                page works without it. Firmest border, brightest surface, and
-                on a wide screen it is a NARROWER column that stays in view
-                while the choices scroll past it.
-     --choice   steps 02 and 03. Menus of options. Deliberately the lightest
-                things on the page -- no border box at all, just a hairline
-                above -- so they read as a continuous flow of choosing rather
-                than as two more cards competing with the anchor.
-     --commit   step 04. Where credits are actually spent. Firm again, because
-                the last panel before money leaves should not look like the
-                two browsing panels above it.
+                page works without it. On a wide screen it is a NARROWER
+                column that stays in view while the choices scroll past it,
+                which is the #tape grid's doing rather than a surface of its
+                own: it is a card like the commit.
+     --choice   steps 02 and 03. Menus of options, and the light half of the
+                arc -- the same outline with nothing behind it, so they read
+                as a continuous flow of choosing rather than as two more
+                filled cards competing with the anchor. See below.
+     --commit   step 04. Where credits are actually spent. A filled card
+                again, with more room, because the last panel before money
+                leaves should not look like the two browsing panels above it.
      --archive  outside the form, and the full width of the wrap, so the
                 boundary between "making one" and "the ones you made" is a
-                change of shape and not just more vertical space.
-
-   The choice panels keep a faint background rather than none: the place
-   backdrop fades in behind this page, and body text sitting straight on a
-   backlit gradient is a contrast bug waiting for the first bright place
-   photograph to land in assets/places/. */
+                change of shape and not just more vertical space. */
 /* SEPARATION IS margin-bottom ONLY, never margin-top. Below 64rem the panels
    are block siblings and their margins COLLAPSE; at 64rem they become grid
    items and grid margins do not collapse. With margins on both sides the same
@@ -1096,65 +1086,28 @@ body {
    and 35.2 / 53.6 at the archive -- a rhythm change nobody chose. One
    direction makes the two cases arithmetically identical. */
 .panel {
-  background: var(--frost);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r);
   padding: var(--s-5);
   margin: 0 0 var(--s-6);
 }
 
-/* THE PLATE IS GONE BECAUSE THE PHOTOGRAPH BEHIND IT IS.
-   It existed for one condition: a place loop playing full-bleed behind this
-   page, with body text over it. Measured then, the soft tier over the
-   brightest place landed at 2.86:1 -- a real AA failure -- and 0.62 of the
-   ground was the least plate that cleared 4.5:1.
- *
- * The signed-in page has no photograph behind it: its ground is flat, so there
- * is no composite left to solve against and every token measures what the
- * table in ':root' says it measures. Deleted rather than left dormant: it
- * keyed off '.bgs.is-live', which this page no longer emits, so it was a rule
- * that could never fire again and would have read to the next person as a
- * plate that was still in play. */
+/* THE WEIGHT ARC, IN THIS WORLD'S VOCABULARY (2026-09-07). The 2026-08-22
+   arc -- anchor firm, the two choices lightest, commit firm -- was carried by
+   a frost tier, and the lime tokens collapsed every frost value to one plane,
+   so the four steps read as four identical boxes (CLAUDE.md §70E). The arc is
+   the FILL now: the photo and the tape are cards, the two menus between them
+   are the same outline with nothing behind it. Heavy, light, light, heavy.
+   Both kinds keep the 1px, so the four step numerals sit on one line. */
+.panel--choice { background: transparent; }
 
-.panel--anchor {
-  /* DEPTH, NOT A BOX. The plane sits nearer here; there is no line around it. */
-  background: var(--frost-lit);
-}
-
-/* THE OPEN PANEL, AND WHY ITS BORDER IS TRANSPARENT RATHER THAN ZERO. The
-   boxed panels put their content at 1px + 24px = 25px from the panel edge;
-   this one used border:0 with no horizontal padding and put its content at 0. So
-   the four step numerals -- the element whose whole job is to read as one
-   sequence -- sat at 71.4 / 46.4 / 46.4 / 71.4px, an in/out/out/in pattern,
-   under a comment claiming the gutter lined them up. Keeping the 1px as
-   TRANSPARENT rather than removing it makes both box models identical to the
-   pixel while leaving this panel visually open. */
-.panel--choice {
-  /* Was a 34% near-black wash, there to keep body text off a backlit place
-     photograph. On paper there is no photograph and no backlight; the choice
-     panels are the lightest things on the page, which is what the comment above
-     always said they were for, and now nothing has to be washed to achieve it. */
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  padding: var(--s-5) var(--s-5) var(--s-2);
-  margin: 0 0 var(--s-6);
-}
-
-/* THE COMMIT IS NOT THE ANCHOR. These two were byte-identical -- same frost
-   tier, same border -- so the documented four-tier weight arc actually emitted
-   three, and the panel holding six decisions and the money looked exactly like
-   the one holding a single file input. The difference is density, which is the
-   honest axis: this panel earns more room because it contains more. */
+/* The commit earns more room because it holds six decisions and the money.
+   The archive break is carried HERE, on the bottom edge, for the reason every
+   other separation is: a margin-top on the archive collapsed to 48px between
+   block siblings and summed to 80px between grid items. Measured both ways. */
 .panel--commit {
-  background: var(--frost-lit);
   padding: var(--s-6) var(--s-5);
-  /* The archive break is carried HERE, on the bottom edge, for the same reason
-     every other separation is: a margin-top on the archive collapsed to 48px
-     between block siblings and summed to 80px between grid items, which is the
-     breakpoint rhythm shift this pass exists to remove. Measured both ways. */
   margin-bottom: var(--s-7);
 }
 
@@ -1309,7 +1262,7 @@ body {
    to answer step 3, sitting above a text field that answers it equally well.
    Same recess, same behaviour, a third of the height -- so it reads as a
    sibling of the field below it rather than as a competing hero. */
-.drop--slim { min-height: 5.5rem; gap: var(--s-2); background: var(--lift); }
+.drop--slim { min-height: 5.5rem; gap: var(--s-2); background: var(--card); }
 .drop--slim .plus { font-size: var(--t-2); }
 /* IT LIFTS INSTEAD OF RECESSING, AND THE RULE ABOVE SAYS WHY IT MUST. Step 3
    is a choice panel, which already sits on the ground -- so a well cut into it
@@ -1334,7 +1287,7 @@ body {
 .picked .pickthumb {
   width: 4.5rem; height: 4.5rem;
   object-fit: cover; border-radius: var(--r-sm);
-  background: var(--lift);
+  background: var(--ground);
 }
 .picked .pickname {
   flex: 1 1 auto; min-width: 0;
@@ -1444,7 +1397,7 @@ body {
  * A place card carries its name and date on the image, over a scrim solved for
  * FULL opacity. Ghosting the whole card multiplies that scrim as well: measured
  * against the worst ground the gradient can produce, the name lands at 4.36:1
- * and the date at 3.32:1 even at the .63 floor -- so the unlit half of the menu
+ * and the date at 3.32:1 even at the floor -- so the unlit half of the menu
  * would be the half nobody can read, on the control where reading the label IS
  * the choice.
  *
@@ -1502,7 +1455,7 @@ body {
 .placecard .badge::before { content: "● Selected"; }
 
 .dots { display: flex; gap: 0.35rem; justify-content: center; margin: 0.2rem 0 0; }
-.dot { width: 5px; height: 5px; border-radius: 50%; background: var(--hairline-firm); }
+.dot { width: 5px; height: 5px; border-radius: 50%; background: var(--line); }
 
 /* THE OWN-PLACE BLOCK LEADS STEP 3 (2026-08-30), and it is shown by the same
    rule it has always been shown by -- the pl-own radio is simply checked when
@@ -1552,8 +1505,8 @@ body {
 
 input[type="text"], input[type="email"], input[type="password"], select {
   width: 100%;
-  background: var(--lift);
-  border: 1px solid var(--hairline-firm);
+  background: var(--ground);
+  border: 1px solid var(--line);
   border-radius: var(--r-sm);
   color: var(--ink);
   font: inherit;
@@ -1566,10 +1519,10 @@ input[type="text"], input[type="email"], input[type="password"], select {
 input::placeholder { color: var(--ink-soft); }
 select { width: auto; min-width: 6rem; }
 
-input[type="file"] { color: var(--muted); font-size: var(--t-1); }
+input[type="file"] { color: var(--ink); font-size: var(--t-1); }
 input[type="file"]::file-selector-button {
   background: var(--card);
-  border: 1px solid var(--hairline-firm);
+  border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--ink);
   font: inherit; font-size: var(--t-1);
@@ -1732,7 +1685,12 @@ input[type="file"]::file-selector-button {
   text-align: center; text-decoration: none;
 }
 .record:hover { background: var(--accent-bright); }
-.record:disabled { background: var(--lift); color: var(--faint); cursor: not-allowed; }
+.record:disabled {
+  background: var(--card);
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  cursor: not-allowed;
+}
 
 .reason { text-align: center; color: var(--faint); font-size: var(--t-1); margin: var(--s-3) 0 0; }
 
@@ -1776,12 +1734,15 @@ input[type="file"]::file-selector-button {
   overflow: hidden;
   position: relative;
   /* AN UNFINISHED TAPE HAS NO POSTER, AND THE TILE MUST STILL BE SOMETHING.
-     On the dark ground this was a 50% near-black wash, so a rendering job read
-     as a dark plate with its status on it. Dropping the wash with the rest of
-     the near-black left a 151px hole in the shelf with a status pill floating
-     in the middle of nothing. --lift is the plate: pale, present, and covered
-     completely by the poster the moment there is one. */
-  background: var(--lift);
+     Once it was a 50% near-black wash, so a rendering job read as a dark plate
+     with its status on it; dropping the wash with the rest of the near-black
+     left a 151px hole in the shelf with a status pill floating in the middle
+     of nothing. The plate is the card plane now, outlined like every other
+     card in this world, and the poster covers it completely the moment there
+     is one. */
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
 }
 .tape img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
@@ -1861,7 +1822,7 @@ input[type="file"]::file-selector-button {
    is still to come, in words, with the record light on the one being filmed.
    The counter above keeps the "2 of 3" a bar used to imply. */
 .status { max-width: 44rem; }
-.status .headline { font-size: var(--t-6); line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; }
+.status .headline { font-size: var(--t-6); text-wrap: balance; }
 .counter { font-weight: 600; color: var(--faint); letter-spacing: 0.12em; text-transform: uppercase; font-size: var(--d-1); margin: var(--s-6) 0 var(--s-3); }
 .phases { list-style: none; padding: 0; margin: 0 0 var(--s-6); display: grid; gap: var(--s-4); }
 .phase { display: grid; grid-template-columns: 5rem minmax(0, 1fr) auto; column-gap: var(--s-4); align-items: baseline; }
@@ -1924,16 +1885,16 @@ input[type="file"]::file-selector-button {
 .step-mark { grid-area: mark; width: 6px; height: 6px; margin-top: 0.6rem; border-radius: 50%; background: var(--line); }
 .step-name { grid-area: name; font-size: var(--t-2); }
 .step-note { grid-area: note; font-size: var(--t-1); color: var(--faint); }
-.step-done { color: var(--muted); }
+.step-done { color: var(--ink); }
 .step-done .step-mark { background: var(--accent-deep); }
 .step-skipped .step-mark { box-shadow: inset 0 0 0 1px var(--accent-deep); background: transparent; }
 .step-failed .step-mark { background: var(--alarm); }
 .step-current { color: var(--ink); }
 .step-current .step-mark { background: var(--accent); }
-.step-current .step-note { color: var(--muted); }
+.step-current .step-note { color: var(--ink); }
 
 /* The order, as a definition list: where, wearing, frame. */
-.inputs { display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: var(--s-1) var(--s-4); margin: 0 0 var(--s-6); color: var(--muted); }
+.inputs { display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: var(--s-1) var(--s-4); margin: 0 0 var(--s-6); color: var(--ink); }
 .inputs dt { font-size: var(--t-label); text-transform: uppercase; letter-spacing: 0.22em; color: var(--faint); line-height: 1.6; }
 .inputs dd { margin: 0; overflow-wrap: anywhere; }
 
@@ -1951,8 +1912,8 @@ input[type="file"]::file-selector-button {
      exists to forbid, and which the border sweep could not see because both
      named tokens. It is the world's own grammar instead: every option present
      as an unlit ghost, one struck forward. A ghost sits at the floor and no
-     lower; on this ground the floor is .63, and '--ghost' is where the ground
-     names it. */
+     lower; on this ground the ghost sits at the floor, and '--ghost' is where
+     the ground names it. */
   opacity: var(--ghost);
   transition: opacity 160ms linear;
 }
@@ -2000,7 +1961,7 @@ input[type="file"]::file-selector-button {
   grid-template-columns: 1fr auto;
   align-items: baseline;
   column-gap: 1rem;
-  background: var(--lift);
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   padding: 0.75rem 0.9rem 0.8rem;
@@ -2038,7 +1999,7 @@ input[type="file"]::file-selector-button {
 .result-grid { display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: var(--s-7); align-items: start; margin: 0 0 var(--s-8); }
 @media (max-width: 48rem) { .result-grid { grid-template-columns: 1fr; gap: var(--s-6); } }
 .result-words { padding-top: var(--s-2); }
-.result-words .headline { font-size: var(--t-6); line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; max-inline-size: 18ch; }
+.result-words .headline { font-size: var(--t-6); text-wrap: balance; max-inline-size: 18ch; }
 .result-words .sub { max-width: 44ch; }
 /* A label in the readout face, for a section whose content is a readout --
    "The file", "Earlier tapes". The same size and tracking as the status
@@ -2059,7 +2020,7 @@ input[type="file"]::file-selector-button {
 /* The shelf is the page: label, heading at page-title size, two sentences,
    tiles on the paper. The tiles keep the prototype's grid rather than the
    home strip's, because here they are the content and not an aside. */
-.videos .headline { font-size: var(--t-7); line-height: 1.1; letter-spacing: -0.02em; max-inline-size: 18ch; margin: 0 0 var(--s-3); }
+.videos .headline { font-size: var(--t-7); max-inline-size: 18ch; margin: 0 0 var(--s-3); }
 .videos .sub { margin: 0 0 var(--s-2); }
 .videos > .hint { margin: 0 0 var(--s-7); }
 .videos .shelf { grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--s-6) var(--s-5); }
@@ -2068,7 +2029,7 @@ input[type="file"]::file-selector-button {
    anywhere), the sections under readout labels, the one-way door in a narrow
    column so the field and the button read as one control. */
 .account { max-width: 44rem; }
-.account .headline { font-size: var(--t-6); line-height: 1.1; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.account .headline { font-size: var(--t-6); overflow-wrap: anywhere; }
 .subhead--osd { font-weight: 600; font-size: var(--d-1); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin: var(--s-7) 0 var(--s-2); }
 .account-danger { max-width: 22rem; }
 .account-danger .record { margin-top: var(--s-4); }
@@ -2091,7 +2052,7 @@ input[type="file"]::file-selector-button {
   background: none; border: 0; color: var(--faint);
   font: inherit; font-size: var(--t-1); padding: 0; cursor: pointer;
   text-decoration: underline; text-underline-offset: 3px;
-  text-decoration-color: var(--hairline-firm);
+  text-decoration-color: var(--line);
 }
 .quiet:hover { color: var(--ink); }
 
@@ -2118,7 +2079,7 @@ input[type="file"]::file-selector-button {
   width: 1.5rem;
   height: 1.5rem;
 }
-.consent-text span { display: block; color: var(--muted); font-size: var(--t-1); }
+.consent-text span { display: block; color: var(--ink); font-size: var(--t-1); }
 .consent-text span + span { margin-top: 0.5rem; }
 /* The immediate-supply acknowledgement, which sits between the plan and its Buy
    button rather than at the end of a long form the way the consent gate does.
@@ -2167,7 +2128,7 @@ input[type="file"]::file-selector-button {
   border: 0; background: transparent; cursor: pointer;
   font-size: var(--t-4); color: var(--ink-soft);
 }
-.signin-x:hover { color: var(--ink-strong); }
+.signin-x:hover { color: var(--ink); }
 .signin-t { font-family: var(--display); font-size: var(--d-4); text-transform: uppercase; letter-spacing: 0; line-height: 0.92; color: var(--ink); margin: 0 0 var(--s-2); font-weight: 400; }
 .signin-sub { color: var(--ink-soft); font-size: var(--t-1); margin: 0 0 var(--s-6); }
 /* One door per row, full width, in the order the reference sets: the provider
