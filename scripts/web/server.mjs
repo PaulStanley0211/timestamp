@@ -1892,7 +1892,7 @@ export function createServer({
    */
   async function landingPricing() {
     try {
-      const [rows, packs] = await Promise.all([resolutionRows(), packRows()]);
+      const [rows, packs, facts] = await Promise.all([resolutionRows(), packRows(), publicFacts()]);
       const offered = (rows ?? []).filter((r) => r.available && Number.isFinite(r.credits));
       const buyable = (packs ?? []).filter((p) => p.buyable && Number.isFinite(p.priceUSD));
       if (offered.length === 0 || buyable.length === 0) return null;
@@ -1904,17 +1904,19 @@ export function createServer({
       // a different figure from the one a signup actually lands is the §36A
       // defect in its cheapest form.
       const freeCredits = (await auths.api()).PLANS?.free?.creditsPerPeriod ?? null;
-      // AND WHETHER THE SHAPE IS PART OF THE PRICE IS READ, NOT ASSUMED. It was
-      // false until 2026-09-05, when the supplier's pixel term went away; the
-      // FAQ says one thing or the other from this, so a supplier that bills by
-      // pixels again brings the sentence back without anybody remembering to.
-      const sameInEveryShape = offered.every((r) => new Set(Object.values(r.creditsByAspect ?? {})).size <= 1);
+      // WHETHER THE SHAPE IS PART OF THE PRICE COMES FROM `publicFacts()`, and
+      // is not recomputed here. It forked from the pricing page's own copy on
+      // 2026-09-06 -- this expression counted every value in a row's
+      // `creditsByAspect`, unfiltered, while the pricing page filtered out
+      // non-finite and zero quotes first, so a row that ever carries one could
+      // make the two public pages state opposite answers to the same FAQ
+      // question. See `publicFacts()`'s own comment for the filter.
       return {
         fromCredits: cheapestTape,
         packUSD: pack.priceUSD,
         packCredits: pack.credits,
         freeCredits,
-        sameInEveryShape,
+        sameInEveryShape: facts.sameInEveryShape,
       };
     } catch (err) {
       logImpl(`[web] the landing price could not be derived: ${err?.message ?? err}`);
@@ -1926,7 +1928,11 @@ export function createServer({
    *  a seam. Task 6's pricing page reads the same object. */
   async function publicFacts() {
     let qualities = [];
-    try { qualities = (await resolutionRows()).filter((r) => r.available).map((r) => r.id); } catch { qualities = []; }
+    let offered = [];
+    try {
+      offered = (await resolutionRows()).filter((r) => r.available);
+      qualities = offered.map((r) => r.id);
+    } catch { qualities = []; offered = []; }
     return {
       photoDays: cfg?.retention?.photoDays ?? RETENTION_DEFAULTS.photoDays,
       jobDays: cfg?.retention?.jobDays ?? RETENTION_DEFAULTS.jobDays,
@@ -1942,6 +1948,18 @@ export function createServer({
       // supplier does not always return it.
       deliveryShortEdge: Math.min(cfg?.delivery?.width ?? 1080, cfg?.delivery?.height ?? 1920),
       lufs: TARGET_LUFS,
+      // WHETHER THE SHAPE IS PART OF THE PRICE, computed ONCE so `/` and
+      // `/pricing` cannot state different answers to the same FAQ question --
+      // they forked on 2026-09-06 (the pricing page filtered non-finite and
+      // zero quotes out of a row's `creditsByAspect`, `landingPricing()` did
+      // not). Filtered exactly as `tapeCounts` in views-auth.mjs filters the
+      // same field: a shape the pricing refuses has no usable quote, and
+      // counting it as a second price would report a surcharge nobody is
+      // charged. `landingPricing()` reads this field rather than keeping its
+      // own copy; so does the pricing route, through `facts`.
+      sameInEveryShape: offered.every((r) => new Set(
+        Object.values(r.creditsByAspect ?? {}).filter((c) => Number.isFinite(c) && c > 0),
+      ).size <= 1),
     };
   }
 

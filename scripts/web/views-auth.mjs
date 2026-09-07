@@ -563,7 +563,15 @@ export function pricingPage({
   // at all still cannot contradict the thing that does the deleting.
   const { photoDays = RETENTION_DEFAULTS.photoDays, jobDays = retentionDays ?? RETENTION_DEFAULTS.jobDays,
     imageProcessor = null, qualities = offered.map((r) => r.id), shapes = [],
-    frames = 375, fps = 25, lufs = null, deliveryShortEdge = null } = facts;
+    frames = 375, fps = 25, lufs = null, deliveryShortEdge = null,
+    // WHETHER THE SHAPE IS PART OF THE PRICE -- read from `publicFacts()`,
+    // never recomputed here. It forked on 2026-09-06: this page filtered
+    // non-finite and zero quotes out of a row's `creditsByAspect` before
+    // comparing them, and `landingPricing()` did not, so a row that ever
+    // carries one could make `/` and `/pricing` state opposite answers to the
+    // same FAQ question. `sameInEveryShape` is now computed once, with the
+    // filter, in `publicFacts()`, and both pages read it from there.
+    sameInEveryShape = true } = facts;
 
   /**
    * What one pool of credits buys, per size that is actually on sale.
@@ -765,7 +773,7 @@ export function pricingPage({
   const delivered = deliveryShortEdge ? `${deliveryShortEdge} lines; edge to edge in the wide shapes, matted in 4:3` : 'edge to edge in the wide shapes, matted in 4:3';
   const compareQ = offered.length >= 2 ? `
   <section class="compare">
-    <h2 class="compare-t">480p against 720p</h2>
+    <h2 class="compare-t">${h(offered[0].id)} against ${h(offered[1].id)}</h2>
     <div class="compare-scroll"><table class="compare-q">
       <thead><tr><th scope="row" class="blank"></th>${offered.slice(0, 2).map((r, i) => (i === 1 ? `<th scope="col" class="lit">${h(r.id)}</th>` : `<th scope="col">${h(r.id)}</th>`)).join('')}</tr></thead>
       <tbody>
@@ -788,15 +796,6 @@ export function pricingPage({
       <tr><th scope="row">Disclosure</th><td>Marked AI-generated in the file, in machine-readable metadata.</td></tr>
     </tbody></table></div>
   </section>`;
-
-  // WHETHER THE SHAPE IS PART OF THE PRICE IS READ, NOT ASSUMED -- it was true
-  // until 2026-09-05, when the supplier's pixel term went away. Non-finite and
-  // zero quotes are filtered out first, exactly as `tapeCounts` filters them:
-  // a shape the pricing refuses has no quote, and counting its absence as a
-  // second price would report a surcharge nobody is charged.
-  const sameInEveryShape = offered.every((r) => new Set(
-    Object.values(r.creditsByAspect ?? {}).filter((c) => Number.isFinite(c) && c > 0),
-  ).size <= 1);
 
   // THE LISTED PRICE IS BEFORE TAX, AND THE PAGE HAS TO SAY SO (2026-08-31).
   // Measured in the Stripe dashboard rather than assumed: a $12 pack shows a

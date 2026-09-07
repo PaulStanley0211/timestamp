@@ -1704,6 +1704,64 @@ test('the quoted price matches the charge for every shape, not just 4:3', async 
 });
 
 /**
+ * `/` AND `/pricing` MUST AGREE ON WHETHER THE SHAPE IS PART OF THE PRICE.
+ *
+ * Both public pages answer the same FAQ question ("Which shapes and
+ * qualities?") from the same underlying rows, and until now each page did the
+ * arithmetic itself: the landing's `landingPricing()` counted every value in a
+ * row's `creditsByAspect`, and the pricing page's own local computation
+ * filtered out non-finite and zero quotes first. A row that ever carries one
+ * -- a shape the pricing refuses, or an older seam -- is exactly where those
+ * two answers can diverge, on a money question.
+ *
+ * The real `aspects` config prices every shape the same today (2026-09-05),
+ * so nothing in `config/credits.json` alone can produce a non-finite or zero
+ * quote; `creditCost` is overridden directly to force one, on one aspect of
+ * one resolution only, so the OTHER resolution's row is untouched and still
+ * proves the filter rather than a coincidence.
+ */
+test('the landing and the pricing page agree on whether the shape is part of the price', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const auth = fakeAuth();
+  const realCreditCost = auth.creditCost.bind(auth);
+  // A forced ZERO, not a throw: `resolutions()` in session-middleware.mjs
+  // catches UNKNOWN_ASPECT/RESOLUTION_UNAVAILABLE and simply omits the key,
+  // which a Set-of-values comparison never sees either way. What the two
+  // computations disagree about is a quote that IS present and is zero (or
+  // non-finite) -- so the fixture must return a real value, not throw one.
+  auth.creditCost = (opts = {}) => {
+    if (opts.resolution === '480p' && opts.aspect === '9:16') return 0;
+    return realCreditCost(opts);
+  };
+  const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth });
+  const port = await app.listen();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const landing = await (await get(base, '/', null)).text();
+    const pricing = await (await get(base, '/pricing', null)).text();
+
+    const shapeSentence = (html) => {
+      const m = /Which shapes and qualities\?[\s\S]*?<p>([^<]*)<\/p>/.exec(html);
+      assert.ok(m, 'no "Which shapes and qualities?" answer on the page');
+      return m[1];
+    };
+    const landingSentence = shapeSentence(landing);
+    const pricingSentence = shapeSentence(pricing);
+    assert.equal(landingSentence, pricingSentence,
+      `the landing and /pricing disagree on the shape sentence:\n  /        : ${landingSentence}\n  /pricing : ${pricingSentence}`);
+
+    // Pin the actual answer too, so this cannot pass by both pages agreeing on
+    // the WRONG one: the forced zero must be filtered out before the compare,
+    // exactly as the real config's finite, equal quotes would read today.
+    assert.match(landingSentence, /a tape costs the same in every shape/,
+      'the filter did not survive the forced zero quote');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
  * `stillCount` MULTIPLIED BILLED PROVIDER CALLS AND CONTRIBUTED NOTHING TO THE
  * PRICE -- and then the choice left the page altogether, 2026-08-29.
  *

@@ -1376,6 +1376,12 @@ test('the pricing page is three cards -- Free with a sign-up action, Starter, an
 test('the comparison has exactly two quality columns, its numbers come from the seam, and the recommended column is lit', () => {
   const facts = { frames: 375, fps: 25, shapes: ['4:3', '16:9', '9:16'], lufs: -27, deliveryShortEdge: 1080, photoDays: 7, jobDays: 30, qualities: ['480p', '720p'] };
   const html = pricingPage({ ...LADDER, facts });
+  // THE HEADING NAMES THE TWO COLUMNS IT HEADS -- derived from the rows this
+  // page was actually handed, never typed, so a fixture whose ids moved would
+  // move the heading with them rather than leaving it stating a pair nobody
+  // offered.
+  assert.match(html, new RegExp(`<h2 class="compare-t">${LADDER.resolutions[0].id} against ${LADDER.resolutions[1].id}</h2>`),
+    'the comparison heading must name the two columns it heads, not a typed pair');
   const q = /<table class="compare-q">([\s\S]*?)<\/table>/.exec(html);
   assert.ok(q, 'no quality comparison table');
   assert.equal((q[1].match(/<th scope="col"/g) ?? []).length, 2, 'exactly two quality columns');
