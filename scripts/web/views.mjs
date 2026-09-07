@@ -1092,30 +1092,6 @@ function stepHead(n, name, subtitle) {
  * Omitted, the line is not rendered -- so a caller that cannot price (a test
  * fake, a degraded config) shows no price rather than a wrong one.
  */
-/**
- * The landing's ground, for ONE place and with no radios behind it.
- *
- * WHY THIS EXISTS SEPARATELY FROM `landingPage`'s OWN preBody. The landing
- * builds eight background layers and lights whichever the CSS-only radio
- * selects; onboarding has no radios and no menu, so it needs the layer lit by
- * a class instead. Everything else -- the scrim, the blur, the drift -- is the
- * landing's, unchanged, because the point is that the world does not visibly
- * end when somebody signs up.
- *
- * NO <video>. `BG_SCRIPT` swaps the loop's source by reading those same radios,
- * so a loop here would need either the radios or a sixth inline script and a
- * fifth CSP hash. The still is already the layer the landing falls back to
- * whenever JavaScript, reduced motion, saveData or the codec says no, and it
- * carries the whole effect on its own.
- */
-export function singlePlaceGround(placeId) {
-  if (!placeId) return '';
-  return `<div class="bgs" aria-hidden="true">
-<div class="bg bg--lit bg--${h(placeSlug(placeId))}"></div>
-</div>
-<div class="scrim" aria-hidden="true"></div>`;
-}
-
 // inWords() is Task 3's, beside factCards(); only the capitaliser is new here.
 const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 

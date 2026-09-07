@@ -36,10 +36,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { createStylesheet } from '../scripts/web/static.mjs';
+import { createStylesheet, SCRIM_INK } from '../scripts/web/static.mjs';
 import {
   creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, videosPage, errorPage,
-  privacyPage, termsPage, impressumPage, singlePlaceGround, faq, siteFooter, balanceSentence,
+  privacyPage, termsPage, impressumPage, faq, siteFooter, balanceSentence,
 } from '../scripts/web/views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
@@ -2171,41 +2171,68 @@ test('the photo preview does not borrow a class that positions itself elsewhere'
 });
 
 /**
- * ONBOARDING CARRIES ITS GROUND, ASSERTED WITHOUT A BROWSER.
+ * ONBOARDING HAS NO GROUND (2026-09-07), AND THIS IS THE CHEAP HALF OF PROVING
+ * IT -- THE LOAD-BEARING CHECK IS IN browser-smoke.test.js, WHICH MEASURES
+ * EVERY WORD AGAINST THE FLAT GROUND WITH A REAL LAYOUT ENGINE.
  *
- * The load-bearing check is in browser-smoke.test.js, which measures every word
- * on the page against the brightest ground a photograph can make -- that is the
- * one that catches dark-on-dark. This is the cheap half: that the page asks for
- * a ground at all, and that it still renders honestly when it is given no
- * ground (the degraded path, where the place catalog is empty).
+ * The first test is what is left of the old ground check, now that there is no
+ * ground: proof the photograph, the scrim and the lit layer are gone from the
+ * markup, and that the helper which used to build them is gone from the module
+ * rather than left dormant. The second ties the band's scrim solver to the ink
+ * the band actually paints, and refuses the soft label tier anywhere inside
+ * `.band` -- the successor to the plate rule this world no longer has.
  */
-test('the onboarding page carries a ground when it is given one, and a plain page when it is not', () => {
-  const withGround = onboardingPage({
-    account: { email: 'a@b.com', consent: null },
-    consentText: 'I confirm.',
-    csrf: 't',
-    ground: singlePlaceGround('amalfi-afternoon'),
-  });
-  assert.match(withGround, /class="[^"]*has-ground/, 'onboarding does not ask for a ground');
-  assert.match(withGround, /class="bgs"/, 'onboarding carries no place photograph');
-  assert.match(withGround, /class="scrim"/, 'onboarding has a photograph and no scrim over it');
-  assert.match(withGround, /bg--lit/, 'the single background layer is never lit, so the ground is invisible');
-  assert.match(withGround, /bg--pl-amalfi-afternoon/, 'the ground does not name the place it was given');
+test('the onboarding page is a card on the ground, with no photograph behind it', async () => {
+  // §63 put a place photograph behind this page so the cream did not begin
+  // until the work started. There is no cream now: the ground is every page's
+  // ground (spec §6), and a photograph behind a four-second consent form is
+  // the one photograph left behind text that is not the landing's band. The
+  // band keeps the mechanism -- .bgs, .bg, .scrim, the generated layers -- and
+  // this page keeps none of it.
+  const html = onboardingPage({ account: { email: 'a@b.com', consent: null }, consentText: 'I confirm.', csrf: 't' });
+  assert.ok(!/has-ground/.test(html), 'onboarding still claims a ground');
+  assert.ok(!/class="bgs"/.test(html), 'onboarding still emits background layers');
+  assert.ok(!/class="scrim"/.test(html), 'onboarding still emits a scrim');
+  assert.ok(!/bg--lit/.test(html), 'onboarding still lights a layer');
+  assert.ok(!/<video/.test(html), 'onboarding ships a video it has no script to drive');
+  assert.match(html, /<section class="panel">/, 'the consent card is gone');
+  assert.match(html, /Agree and continue/, 'the consent form is gone');
+  assert.match(html, /class="wrap wrap--narrow"/, 'the narrow column is gone');
+  // The helper is deleted, not left dormant: a function that emits a ground
+  // nobody renders is the next person's "why is this here".
+  const views = await import('../scripts/web/views.mjs');
+  assert.equal(views.singlePlaceGround, undefined, 'singlePlaceGround is still exported -- delete it');
+  const { css } = createStylesheet(FOCUS_MENU);
+  assert.ok(!/has-ground/.test(css), 'the sheet still carries rules for a ground no page has');
+  assert.ok(!/\.bg--lit/.test(css), 'the sheet still lights a layer by class; the band lights by radio');
+  assert.match(css, /\.band \.bgs\s*\{/, "the band's ground is what the shared layers are still for, and it is gone");
+});
 
-  // NO <video>. BG_SCRIPT swaps a loop's source by reading the landing's place
-  // radios, which do not exist here; a loop would need a sixth inline script
-  // and a fifth CSP hash to earn nothing the still does not already give.
-  assert.ok(!/<video/.test(withGround), 'onboarding ships a video it has no script to drive');
-
-  // THE DEGRADED PATH IS STILL A PAGE. An empty catalog means no ground, and
-  // the page must then be the plain page rather than the rules that tint text
-  // for a photograph, applied over no photograph at all.
-  const noGround = onboardingPage({
-    account: { email: 'a@b.com', consent: null }, consentText: 'I confirm.', csrf: 't',
-  });
-  assert.ok(!/has-ground/.test(noGround), 'with no ground the page still claims one');
-  assert.ok(!/class="bgs"/.test(noGround), 'with no ground the page still emits empty background layers');
-  assert.match(noGround, /Agree and continue/, 'the consent form is gone from the degraded page');
+test("the band's scrim is solved for the ink the band paints, and no dim tier sits over its photograph", () => {
+  // THE SOLVER PROTECTED A COLOUR NOBODY PAINTS. scrimOpacity() finds, per
+  // place, the least scrim that lets the body text clear 8:1 over that
+  // place's loop -- and it solved for the cream world's bone, a value the
+  // dead-values test forbids in the sheet and that survived only because it
+  // was written as bytes in JS. The only text over a scrim is the band's, in
+  // --on-image. Tying the constant to the token means the two cannot drift.
+  const { css } = createStylesheet(FOCUS_MENU);
+  const onImage = /--on-image:\s*#([0-9A-Fa-f]{6})/.exec(css);
+  assert.ok(onImage, 'no --on-image literal in the sheet');
+  const bytes = [0, 2, 4].map((i) => parseInt(onImage[1].slice(i, i + 2), 16));
+  assert.deepEqual(SCRIM_INK, bytes, 'the scrim solver protects a colour the band does not paint');
+  // THE SUCCESSOR TO §63C's PLATE RULE. That rule said: on a page sitting on a
+  // photograph, the dim tier does not appear without a plate under it. The
+  // plate went with the cream; the band has no plate; so the rule becomes: in
+  // the band, every colour is an on-image tier. The soft tier is deliberately
+  // outside the scrim solve (it would drag every place above 0.59), which is
+  // exactly why it may not be painted there.
+  const bandRules = [...css.matchAll(/\n(\.band[^{}]*)\{([^}]*)\}/g)];
+  assert.ok(bandRules.length >= 4, `the band has ${bandRules.length} rules -- the probe is not reading it`);
+  for (const [, sel, body] of bandRules) {
+    const color = /(^|;|\s)color:\s*([^;]+);/.exec(body);
+    if (!color) continue;
+    assert.match(color[2], /^var\(--on-image(-soft|-accent)?\)$/, `"${sel.trim()}" paints ${color[2].trim()} over the photograph -- the dim tier has no plate here`);
+  }
 });
 
 test('an outfit is always checked on load, even if the named default leaves the menu', () => {

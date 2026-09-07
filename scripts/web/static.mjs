@@ -194,20 +194,24 @@ function contrast(a, b) {
  * living room is a black rectangle; set it for the living room and the beach
  * fights the text.
  *
- * SOLVED AGAINST THE TEXT RATHER THAN BY EYE. The bone body colour must clear
- * 8:1 over the composite of scrim-on-loop, so each place gets the least scrim
- * that buys that and no more.
+ * SOLVED AGAINST THE TEXT RATHER THAN BY EYE, AND AGAINST THE INK THE BAND
+ * ACTUALLY PAINTS. `--on-image`, the colour the landing's band puts over its
+ * photograph, must clear 8:1 over the composite of scrim-on-loop, so each
+ * place gets the least scrim that buys that and no more. Until 2026-09-07 this
+ * solved for the cream world's bone (CLAUDE.md §70E) -- a colour nothing paints
+ * any more, once onboarding's own photograph went. A test ties this constant
+ * to the `--on-image` token so the two cannot drift apart again.
  *
  * WHAT THIS DELIBERATELY DOES NOT GUARANTEE, said out loud because it is the
  * limitation somebody will otherwise discover as a bug: it is derived from MEAN
  * luma, so a dark loop with a bright window in it can still strand text locally.
  * The floor exists for that, and the soft label tier is NOT in this
  * calculation -- at 4.5:1 it would drag every place back above 0.59
- * and undo the whole thing. They earn their contrast from the panel plate they
- * sit on instead, which is what `.panel` is now for.
+ * and undo the whole thing. It is not painted over the photograph at all; a
+ * test refuses any rule inside `.band` that names it.
  */
 const SCRIM_FLOOR = 0.30;
-const SCRIM_BONE = [0xED, 0xE7, 0xDC];
+export const SCRIM_INK = [0xFA, 0xF7, 0xF2];
 const SCRIM_COLOR = [11, 10, 9];
 const SCRIM_TARGET = 8;
 
@@ -216,7 +220,7 @@ export function scrimOpacity(yavg) {
   for (let step = Math.round(SCRIM_FLOOR * 100); step <= 100; step += 1) {
     const s = step / 100;
     const over = SCRIM_COLOR.map((c) => yavg * (1 - s) + c * s);
-    if (contrast(SCRIM_BONE, over) >= SCRIM_TARGET) return s;
+    if (contrast(SCRIM_INK, over) >= SCRIM_TARGET) return s;
   }
   return 1;
 }
@@ -725,12 +729,6 @@ body {
   transition: opacity 1200ms ease;
 }
 .bgs.is-showing .bgv { opacity: 1; }
-
-/* ONE LAYER, LIT BY A CLASS INSTEAD OF BY A RADIO. The landing lights whichever
-   background its CSS-only place radio selects; onboarding carries the same
-   ground with no menu behind it, so the single layer says so itself. Same blur,
-   same drift, same scrim over it -- only the switch differs. */
-.bg--lit { opacity: 1; }
 
 /* The scrim. Heavy, and heavier at the top where the wordmark sits. */
 .scrim {
@@ -2373,32 +2371,6 @@ body.page-landing { padding: 0 0 var(--s-8); }
 /* the hoisted landing state, same technique as the signed-in page: fixed, so
    focusing one can never scroll the document. */
 .lstate { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; margin: 0; pointer-events: none; }
-
-/* ONBOARDING IS THE ONE PAGE LEFT WITH A PHOTOGRAPH BEHIND ITS WHOLE SELF, and
-   these three rules are what it kept when the landing's ground became a band.
-
-   The landing halves went with the full-bleed ground rather than with a taste
-   change: its footer, its nav and its prose now sit on the flat dark ground,
-   where the soft tier measures 7.67:1 and needs no lift at all. Onboarding
-   still puts dim text over a blurred place, so it still needs the body ink and
-   the shadow under it -- the measurement that put them here (2.86:1 over the
-   brightest loop) is a property of text on a picture, and that is exactly the
-   page that still has one. Size carries the hierarchy there, not colour,
-   because colour is what compositing takes away. */
-.has-ground .foot, .has-ground .foot .fine, .has-ground .foot .quiet {
-  color: var(--ink);
-  text-shadow: 0 1px 14px rgba(22, 22, 24, 0.7);
-}
-.has-ground .foot .quiet:hover { color: var(--lime); }
-
-/* The still is not blurred to the wash a form wants behind it: 26px is right
-   behind a form and wrong behind a picture whose whole argument is "this is
-   somewhere you recognise". The band below takes the same value, and the loop
-   when it plays is softer still -- see .bgv. */
-.has-ground .bg { filter: blur(10px) saturate(0.8); }
-/* When a loop is playing the generated per-place rules take this over with a
-   value derived from that loop's own measured luma. */
-.has-ground .scrim { opacity: 0.5; }
 
 /* THE HERO. A lime panel with room at the foot for the tape to break out of. */
 .hero { margin: var(--s-4) var(--s-4) 0; padding: 0 0 12rem; }

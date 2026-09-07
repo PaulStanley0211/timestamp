@@ -348,26 +348,17 @@ export function resetCompletePage({ email = '', error = null, csrf = '' } = {}) 
  * be asking a person to agree to a photo they have not even uploaded yet.
  */
 /**
- * ONBOARDING KEEPS THE LANDING'S WORLD, AND THAT IS A DELIBERATE NARROWING OF
- * §31's RULE RATHER THAN A DRIFT FROM IT.
+ * ONBOARDING IS A CARD ON THE GROUND (2026-09-07), like every other page.
  *
- * §31 put every page on cream except the landing. That rule was argued about
- * the WORKSPACE: the signed-in page is where somebody reads prices and makes
- * choices, and text over a moving photograph competes with the work. This page
- * is not a workspace. It is a four-second gate, and the person arriving at it
- * has just come from the landing -- they picked a place, watched the wipe,
- * signed up, typed six digits -- so dropping them onto a plain page is a hard
- * cut at the exact moment they have committed. The photograph holds until the
- * work starts.
- *
- * WHAT THAT COSTS. Text on a photograph is not text on the ground, and forgetting
- * that is how the sign-in dialog broke on 2026-09-05 -- typed text at 1.06:1,
- * invisible, with 2119 tests green over it. `has-ground` is what the few rules
- * that care about a picture behind the words key on, and
- * `browser-smoke.test.js` measures every word on this page against the
- * brightest ground a photograph can make.
+ * From 2026-09-05 to 2026-09-07 it carried the landing's place photograph
+ * behind it (§63), so the cream world did not begin until the work started.
+ * There is no cream now: spec §6 makes the dark ground every page's ground,
+ * and a photograph behind a four-second consent form was the one photograph
+ * left behind text that was not the landing's band. The band keeps the
+ * mechanism; this page keeps the form. The browser sweep still measures every
+ * word here against the ground it sits on.
  */
-export function onboardingPage({ account = null, consentText = '', csrf = '', error = null, ground = '' } = {}) {
+export function onboardingPage({ account = null, consentText = '', csrf = '', error = null } = {}) {
   const body = `
 <main>
   <section class="panel">
@@ -395,8 +386,7 @@ export function onboardingPage({ account = null, consentText = '', csrf = '', er
   return layout({
     title: 'Timestamp - onboarding',
     body,
-    preBody: ground,
-    bodyClass: ground ? 'has-ground page-onboarding' : 'page-onboarding',
+    bodyClass: 'page-onboarding',
     wrapClass: 'wrap--narrow',
     account,
   });

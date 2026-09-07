@@ -60,6 +60,12 @@ from the values in `static.mjs`, so this table is an output.
 were measured against a pure white picture under the caption scrim and the
 picture did not change when the ground did.
 
+The landing's band is the only photograph left behind text (onboarding lost
+its ground on 2026-09-07), and its per-place scrim is solved so `--on-image`
+clears 8:1 over that place's loop; the constant the solver protects is tied to
+the token by a test, and a second test refuses any dim-tier colour inside
+`.band`, because the soft tier is outside the solve on purpose.
+
 **The aliases.** `--accent`, `--accent-bright`, `--accent-deep`, `--faint`,
 `--alarm` and `--ghost-hover` are re-pointed once at `:root` and never
 rewritten back; several hundred rules and the generated per-catalog block read

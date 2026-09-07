@@ -1199,24 +1199,19 @@ test('the landing before/after wipe is draggable, and its two halves are aligned
 });
 
 /**
- * ONBOARDING CARRIES THE LANDING'S WORLD, AND THIS IS THE TEST THAT CATCHES THE
- * WAY THAT GOES WRONG.
+ * ONBOARDING HAS NO GROUND (2026-09-07), AND THIS IS THE FLAT-GROUND VERSION OF
+ * THE TEST THAT USED TO CATCH A PHOTOGRAPH GOING DARK-ON-DARK.
  *
- * `body.is-landing` re-points nine palette aliases and --ghost. A rule naming a
- * TOKEN follows; a rule naming a literal tier (--ink-strong, --ink-soft) does
- * not, and comes out dark ink on a dark ground -- invisible, while every markup
- * assertion in the suite still passes. That is not hypothetical: it is exactly
- * what happened to the sign-in dialog on 2026-09-05, where the address a person
- * typed measured 1.06:1 and 2119 tests were green over it.
- *
- * THE GROUND IS A PHOTOGRAPH, SO THE COMPARISON IS AGAINST THE WORST CASE IT
- * CAN BE. §31 solved the on-image tiers against a pure WHITE photograph under
- * the scrim for this reason -- the actual pixels vary per place and per frame,
- * and a test that measured one of them would pass or fail by luck. Compositing
- * each element's background chain over white is the honest bound: clear it and
- * no photograph can defeat the text.
+ * §63 put the landing's photograph behind this page so the cream world did not
+ * begin until the work started; there is no cream now (spec §6), so the page
+ * sits on the flat ground like every other page and this file's job narrows to
+ * the ordinary contrast sweep -- the same probe run everywhere else in this
+ * file, and the same arithmetic the palette test already runs on the tokens.
+ * The three negative assertions below are what is left of the ground check:
+ * proof the photograph, the scrim and the ground class are actually gone, not
+ * merely unused.
  */
-test('every word on the onboarding page survives the photograph it sits on', { skip }, async () => {
+test('every word on the onboarding page clears the floor on the flat ground, and no photograph is behind it', { skip }, async () => {
   const s = await session();
   await s.signIn();
   for (const viewport of [PHONE, LAPTOP]) {
@@ -1282,33 +1277,17 @@ test('every word on the onboarding page survives the photograph it sits on', { s
           need: large ? 3 : 4.5,
         });
       }
-      // THE GROUND HAS TO BE VISIBLE, NOT MERELY PRESENT. .bg ships at
-      // opacity 0 and the landing lights whichever its place radio selects;
-      // this page lights its one layer with a class instead. Assert the
-      // computed opacity and the resolved image, because with the lighting
-      // rule removed the photograph is simply not there -- and every other
-      // assertion in this file still passes, since a page with no ground is a
-      // page with excellent contrast.
-      const layer = document.querySelector('.bgs .bg');
-      const lcs = layer ? getComputedStyle(layer) : null;
-
       return {
         hasGround: document.body.classList.contains('has-ground'),
         ground: Boolean(document.querySelector('.bgs')),
         scrim: Boolean(document.querySelector('.scrim')),
-        litOpacity: lcs ? Number(lcs.opacity) : null,
-        litImage: lcs ? lcs.backgroundImage.slice(0, 60) : null,
         items: out,
       };
     })()`);
 
-    assert.ok(r.hasGround, `at ${viewport.width}px onboarding is not carrying its ground class`);
-    assert.ok(r.ground, `at ${viewport.width}px onboarding has no place photograph behind it`);
-    assert.ok(r.scrim, `at ${viewport.width}px onboarding has a photograph and no scrim over it`);
-    assert.ok(r.litOpacity > 0,
-      `at ${viewport.width}px the place layer is painted at opacity ${r.litOpacity} -- the ground is in the markup and invisible`);
-    assert.match(r.litImage ?? '', /url\(/,
-      `at ${viewport.width}px the place layer resolves no image: ${r.litImage}`);
+    assert.ok(!r.hasGround, `at ${viewport.width}px onboarding still carries the ground class`);
+    assert.ok(!r.ground, `at ${viewport.width}px a photograph is back behind the onboarding page`);
+    assert.ok(!r.scrim, `at ${viewport.width}px a scrim is back on the onboarding page`);
     assert.ok(r.items.length >= 4, `at ${viewport.width}px only ${r.items.length} text elements found -- the probe is not reading the page`);
 
     const failed = r.items.filter((i) => i.ratio < i.need);
