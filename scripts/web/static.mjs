@@ -630,7 +630,21 @@ export const BASE_CSS = `
   --t-8: clamp(40px, 6vw, 48px);        /* display, sub-hero                  */
   --t-hero: clamp(48px, 8vw, 96px);     /* the landing hero, ONCE per site    */
 
-  --t-mark: clamp(64px, 18vw, 240px);   /* the footer's giant word, once per site */
+  /* SIZED OFF ITS OWN COLUMN, NOT THE VIEWPORT. 18vw read the landing's wide
+     column correctly and clipped on every page whose content sits narrower
+     than the glass -- the giant word cut mid-glyph on the pricing page, whose
+     column tops out well short of the viewport at a laptop width. .foot is a
+     query container (see its rule below) and cqw is 1% of THAT column, so
+     the word can never outgrow the box that clips it.
+
+     60px, not 64px: measured against the actual glyphs -- the narrowest
+     column this site renders (the 320px width, on every page) is under 284px
+     wide, and TIMESTAMP. at 64px alone is already wider than that. 60px is
+     the largest floor that still leaves room. 21cqw was picked by rendering
+     the word at every width on both the landing and the pricing page and
+     reading its painted range back; the ceiling still lands the landing's
+     widest column on exactly 240px, unchanged. */
+  --t-mark: clamp(60px, 21cqw, 240px);  /* the footer's giant word, once per site */
 
   /* THE DISPLAY LADDER IS SEPARATE, AND IT HAS TO BE. VT323 reads noticeably
      smaller than the system sans at the same pixel size -- it is a terminal
@@ -2628,7 +2642,9 @@ body.page-landing { padding: 0 0 var(--s-8); }
   .flip { font-size: var(--t-3); }
 }
 
-.foot { margin-top: var(--s-8); padding-top: 0; border-top: 0; color: var(--faint); font-size: var(--t-1); }
+/* A QUERY CONTAINER FOR ITS OWN WIDTH, so the giant word below can size off
+   the column it actually sits in instead of the viewport -- see --t-mark. */
+.foot { container-type: inline-size; margin-top: var(--s-8); padding-top: 0; border-top: 0; color: var(--faint); font-size: var(--t-1); }
 .foot p { margin: 0 0 0.4rem; }
 .fine { color: var(--faint); }
 

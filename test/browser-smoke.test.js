@@ -1242,3 +1242,53 @@ test('every word on the onboarding page survives the photograph it sits on', { s
   }
 });
 
+test("the footer's giant word fits its own column, on every page and at every width", { skip }, async () => {
+  // THE OWNER'S REVIEW OF /pricing (2026-09-06, later): --t-mark sized itself
+  // off the VIEWPORT (18vw), so it read the wide landing correctly and
+  // clipped on every page with a narrower column -- "TIMESTAMP." cut to
+  // "TIMESTA" mid-glyph on /pricing at 1440px, because that page's content
+  // sits in a 44rem column while the viewport kept growing underneath the
+  // vw-based size. Sized off its own column now, so it cannot outgrow it.
+  //
+  // MEASURED AGAINST THE WORD'S OWN BOX, NOT THE VIEWPORT OR AN ANCESTOR.
+  // `.foot-mark` sets `overflow: hidden` and `white-space: nowrap` -- that box
+  // IS the thing that was doing the clipping, and a Range over its contents
+  // returns the glyphs' real paint rect, the same technique the archive-label
+  // and Recommended-flag tests above use. Comparing against `.foot`'s own
+  // rect would count its padding as room for the word; comparing against the
+  // element's own box is the honest, stricter reference.
+  const s = await session();
+  await s.signOut();
+  for (const pathname of ['/', '/pricing']) {
+    for (const width of [320, 375, 414, 768, 1024, 1440]) {
+      const page = await visit(pathname, { width, height: 900, mobile: width < 768 });
+      assert.deepEqual(page.errors, [], `${pathname} at ${width}px: ${page.errors.join('; ')}`);
+      const r = await page.evaluate(`(() => {
+        const mark = document.querySelector('.foot-mark');
+        if (!mark) return { found: false };
+        const range = document.createRange();
+        range.selectNodeContents(mark);
+        const word = range.getBoundingClientRect();
+        const box = mark.getBoundingClientRect();
+        return {
+          found: true,
+          wordLeft: word.left, wordRight: word.right, wordWidth: word.width,
+          boxLeft: box.left, boxRight: box.right, boxWidth: box.width,
+          fontSize: parseFloat(getComputedStyle(mark).fontSize),
+        };
+      })()`);
+      assert.ok(r.found, `${pathname} at ${width}px: no .foot-mark on the page`);
+      assert.ok(r.wordWidth > 0, `${pathname} at ${width}px: the giant word paints at zero width`);
+      assert.ok(r.wordRight <= r.boxRight + 1,
+        `${pathname} at ${width}px: the word's glyphs (right edge ${r.wordRight.toFixed(1)}px, font-size `
+        + `${r.fontSize}px) run past its own box (right edge ${r.boxRight.toFixed(1)}px) -- it is being clipped`);
+      assert.ok(r.wordLeft >= r.boxLeft - 1,
+        `${pathname} at ${width}px: the word's glyphs (left edge ${r.wordLeft.toFixed(1)}px) start before its own box (left edge ${r.boxLeft.toFixed(1)}px)`);
+      if (pathname === '/' && width === 1440) {
+        assert.ok(Math.abs(r.fontSize - 240) <= 4,
+          `the landing at 1440px used to render the giant word at 240px; it is now ${r.fontSize}px`);
+      }
+    }
+  }
+});
+

@@ -88,7 +88,10 @@ beside each file, under `font-src 'self'`. No network font is ever loaded.
   That is the only uppercase body text.
 - **The scale is unchanged from 2026-08-31:** a minor third on 16px,
   `--t-label` 12px through `--t-8`, `--t-hero clamp(48px, 8vw, 96px)` once per
-  site, `--t-mark` for the footer's giant word. The display ladder `--d-1`
+  site, `--t-mark` for the footer's giant word -- sized off its own column
+  (`.foot` is a query container) rather than the viewport, since 2026-09-06
+  (later), so it fills whatever width the page gives that column instead of
+  clipping on a narrower one. The display ladder `--d-1`
   15px … `--d-4` fluid 32px keeps its steps; `--d-3` and `--d-4` are Anton,
   `--d-1` and `--d-2` are label-role sizes and the smallest Anton. Checked
   against the hero mockup: 92px in a 900px frame is 8vw, which the hero clamp
