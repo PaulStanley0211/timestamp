@@ -144,14 +144,14 @@ top to bottom; nothing here is optional.
    # collision -- and the declared one is read-only, which is exactly what the
    # producer must not write through. A different target cannot collide, and
    # the service's own read-only mount stays as it is.
-   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-125257-3a448b --slot=tape-9x16 --out=/out
-   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-200239-931272 --slot=tape-4x3 --out=/out
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/out/jobs/20260905-125257-3a448b --slot=tape-9x16 --out=/out
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/out/jobs/20260905-200239-931272 --slot=tape-4x3 --out=/out
    # Stickers 2 and 3: one frame each, from the two tapes that live here and
    # must not leave. They are OPTIONAL -- with no `sticker-N.jpg` the manifesto
    # sentence renders as plain type -- and `--at=` is the second to lift, so
    # re-run either line with a different value to change the frame.
-   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-200239-931272 --slot=tape-4x3 --out=/out --sticker=2 --at=3.0
-   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-125257-3a448b --slot=tape-9x16 --out=/out --sticker=3 --at=7.0
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/out/jobs/20260905-200239-931272 --slot=tape-4x3 --out=/out --sticker=2 --at=3.0
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/out/jobs/20260905-125257-3a448b --slot=tape-9x16 --out=/out --sticker=3 --at=7.0
    ls -l /opt/timestamp/showcase
    ```
 
