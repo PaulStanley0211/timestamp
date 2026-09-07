@@ -134,13 +134,19 @@ costume: the thing that reports health was not measuring health.
    the three `.env` files, and the disk backup is the only thing that carries
    them. His own trigger was "the day before real money moves"; a card was
    charged on 2026-09-04.
-3. **Check the Hetzner firewall rule exists** (port 22 restricted). Cannot be
-   verified from the box — port 22 answers from his own address whether the
-   rule is there or not.
+3. ~~**Check the Hetzner firewall rule exists**~~ **DONE AND PROVED
+   2026-09-08 — §75. And this item's own claim that it "cannot be verified
+   from the box" was true and was not the end of it: tethering the laptop to
+   a phone gives an address that is NOT on the whitelist, and the test is
+   then decisive in both directions.**
 4. **Read fal's usage page** for the six 2026-09-02 refusals. The only owner
    item with a code consequence: `420bf2b` hands credits back on a 4xx on the
    basis that refusals are not billed. If they ARE, revert it.
-5. **GitHub two-factor and branch protection.**
+5. ~~**GitHub two-factor and branch protection.**~~ **BOTH DONE 2026-09-08 —
+   §75.** 2FA by authenticator app; classic protection on `main` (a PR, 0
+   approvals, all five status checks) and on `supabase-identity-slice` (no PR
+   requirement — it is the deploy branch — just the force-push and deletion
+   blocks). Read back from the API rather than from the settings page.
 
 **AGENT-BUILDABLE: exactly one item, and it is gated on his taste, not on
 code** — put a real finished tape on the landing page, large and muted. The
@@ -10365,6 +10371,141 @@ person anywhere in `scripts/compose/prompt.mjs`.
 - **A PHOTO A CUSTOMER NAMES IS NOT A PHOTO YOU HAVE SEEN.** The whole of §74A
   happened because a file was copied on the owner's say-so and never opened.
   The technical gates all passed; the content was a watch.
+
+### 75. THE BOX'S FRONT DOOR IS SHUT, AND A RULE THAT LOOKED ON WAS OFF TWICE (2026-09-08)
+
+**No code changed and nothing was deployed.** Two console items closed — §57D
+item 3 and item 5, open since 2026-09-03 — plus the answer to a twenty-point
+security checklist a friend gave the owner. The suite, the box and the branch
+are exactly what §74 left.
+
+#### A — THE CHECKLIST, AND WHY TWO THIRDS OF IT DOES NOT APPLY
+
+The owner was handed a 20-item pre-launch list (hide API keys, enable RLS, test
+IDOR, scan git secrets, lock admin routes, test user isolation, rate limit APIs,
+log storage buckets, validate inputs, block unauthenticated routes, test SQL
+injection, remove sensitive logs, block field tampering, restrict file uploads,
+server-side logic, trim API responses, secret auth sessions, scan dependencies,
+test record access, attack your own app).
+
+**IT IS A SUPABASE-CRUD LIST, WHICH IS THE COMMONEST SHAPE OF APP AND IS NOT
+THIS ONE.** Verified rather than recalled: **zero SQL anywhere** in `scripts/`
+(no queries, no ORM, no `node:sqlite`); **Supabase is called at `/auth/v1`
+only** — no `rest/v1`, no RPC, so no application data is in Postgres at all and
+RLS protects nothing that exists; **no admin routes**; **`dependencies`
+undefined**, no `node_modules`, no lockfile, so `npm audit` has nothing to say.
+Six items are inapplicable, eleven were already closed and independently
+audited (§51, §58, §59), three were open.
+
+**The three were the firewall, GitHub 2FA and branch protection — all closed
+below. The genuinely open one is not on the list at all**, and it is §74A:
+nothing checks what an uploaded photograph is OF. The detector and the
+classifier are built and switched off behind one AWS signature.
+
+#### B — CREATED IS NOT ATTACHED, AND FROM OUTSIDE THE TWO ARE IDENTICAL
+
+The firewall was created with the right five rules — TCP 22 from the owner's
+address only, ICMP, TCP 80, TCP 443, UDP 443 from anywhere, outbound left
+empty — **and applied to nothing.** In the Hetzner console those are two
+separate steps.
+
+**EVERY PROBE FROM THIS MACHINE READS THE SAME EITHER WAY**, because this
+machine is the whitelisted address. Health green, 22/80/443 all open: exactly
+what a correct firewall looks like, and exactly what no firewall looks like.
+
+An attempt to tell them apart remotely by the drop-versus-refuse signature
+**was inconclusive and is recorded so nobody repeats it**: a Hetzner firewall
+DROPS (long silence) while an unfiltered host REFUSES (an RST at the RTT,
+~40ms here). Closed ports instead failed uniformly at ~2.2s through two
+independent stacks (a .NET `TcpClient` reporting `ConnectionRefused`, and
+`curl` reporting exit 7), which matches neither. Something local normalises the
+failure. **The first probe's own "REFUSED" label was mine, not the server's** —
+the same mistake this file records in other forms, one layer up.
+
+**WHAT SETTLED IT COSTS FIVE MINUTES: TETHER THE LAPTOP TO A PHONE.** Mobile
+data is an address that is not on the whitelist, and the question collapses to
+open-or-not-open, which needs no interpretation.
+
+```
+                       port 22                    80 / 443
+mobile, not attached   OPEN 171ms                 open      <- the finding
+mobile, attached       no reply, full 15,000ms    open      <- dropped
+home, whitelisted      OPEN 60ms                  open      <- no typo
+```
+
+**BOTH DIRECTIONS ARE THE PROOF AND THE SECOND ONE IS THE HALF PEOPLE SKIP.**
+From mobile alone you learn that strangers are refused; only the home leg tells
+you that YOU are not, and a mistyped `/32` fails exactly the same way a correct
+one does until the day you need SSH. The drop signature also appeared cleanly at
+last — 15s of silence against the 2.2s refusals — which is what retroactively
+confirms the firewall genuinely was doing nothing before.
+
+**THE ADDRESS IS DYNAMIC AND THIS RULE WILL BREAK.** When the ISP re-assigns
+it, SSH from the owner's machine hangs and never answers — indistinguishable
+from a dead server. Read the new address (`curl https://api.ipify.org`) and edit
+the one rule. **The Hetzner browser console (`>_` on the server page) is
+out-of-band and does not traverse the firewall**, so a lockout is never
+permanent; that is what makes the rule safe to apply at all.
+
+#### C — A REQUIRED-CHECKS RULE WITH AN EMPTY LIST ENFORCES NOTHING
+
+Two-factor is on by authenticator app. **It cannot be read from here and the
+null must not be read as a no** — §58E's trap, met again: this checkout's `gh`
+token carries `gist`, `read:org`, `repo`, `workflow` and not `user`, so
+`two_factor_authentication` comes back `null`, which is UNKNOWN. The owner
+confirmed it on the settings page.
+
+Classic branch protection, deliberately different on the two branches, and
+**read back from the API rather than from the page that was just filled in**:
+
+| | `main` | `supabase-identity-slice` |
+|---|---|---|
+| require a pull request | yes, **0 approvals** | **no, on purpose** |
+| required status checks | all five | none |
+| force push / deletion | blocked | blocked |
+| signed commits, linear history, lock branch | off | off |
+| `enforce_admins` | false | false |
+
+**THE DEPLOY BRANCH MUST NOT REQUIRE A PULL REQUEST.** `/opt/timestamp` pulls
+`supabase-identity-slice` by name and every deploy this project has ever done is
+a direct push from the owner's machine; requiring a PR there stops deploys dead.
+What that rule is for is the force-push and deletion blocks a protection rule
+gives by default — and deleting that branch breaks the deploy outright.
+`enforce_admins` is false on both so the sole developer keeps a way in.
+
+**0 APPROVALS IS EXPRESSED BY UNTICKING THE BOX, NOT BY A ZERO IN THE
+DROPDOWN**, which starts at 1. GitHub forbids approving your own pull request,
+so a solo repo that requires one can never merge through the normal path.
+
+**AND THE STATUS-CHECK RULE PASSED THROUGH A STATE THAT LOOKS ENABLED AND
+ENFORCES NOTHING**: `required_status_checks` present with `contexts: []`. A pull
+request satisfies all zero of the required checks. The cause is mundane —
+GitHub's search box only suggests checks it has SEEN recently, and the last run
+here was PR #1 on 2026-09-02, so the five names have to be pasted in full.
+**This is the vacuous-guard shape §35 and §42G already record, wearing a
+settings page.**
+
+The five were then confirmed **byte-identical to the names CI actually
+produces**, read off commit `251acab`'s check runs rather than off the workflow
+YAML: `guards`, `node 22|24 on ubuntu-latest`, `node 22|24 on windows-latest`. A
+misspelt context does not fail loudly — the pull request waits forever for a
+check that never arrives.
+
+#### D — Things that will bite
+
+- **A PROBE FROM A WHITELISTED ADDRESS CANNOT SEE A WHITELIST.** Any check of an
+  allow-list has to run from outside it. Tethering is the cheap way and it needs
+  no third party.
+- **`two_factor_authentication: null` IS UNKNOWN, NOT OFF** (§58E). Do not add
+  the `user` scope to the token for a check the owner can do by looking.
+- **A CONTROL CAN BE ON AND EMPTY.** Read a rule back through the API; the page
+  that was just filled in is not evidence.
+- **THE BASH HEREDOC BROKE ON THIS VERY SECTION**, exactly as §74F and §31 warn,
+  and the Write tool wrote it instead. The rule is unchanged and it is cheap.
+- **The python `\n` trap held** (§56D): `CLAUDE.md` is 10,382 CRLF lines and
+  zero bare LF, so this edit was made with `newline=''` and `\r\n` anchors.
+
+---
 
 ## Not in scope
 
