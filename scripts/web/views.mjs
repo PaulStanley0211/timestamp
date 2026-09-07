@@ -2310,7 +2310,7 @@ export function privacyPage({
 }) {
   const body = `
 <main>
-  <section class="panel">
+  <section class="legal">
   <p class="eyebrow">Privacy</p>
   <h1 class="headline">Your photo, and what happens to it</h1>
 
@@ -2378,7 +2378,7 @@ export function privacyPage({
 export function termsPage({ entity = null, account = null }) {
   const body = `
 <main>
-  <section class="panel">
+  <section class="legal">
   <p class="eyebrow">Terms</p>
   <h1 class="headline">The deal, in plain words</h1>
 
@@ -2438,7 +2438,7 @@ export function termsPage({ entity = null, account = null }) {
 export function impressumPage({ entity = null, account = null }) {
   const body = `
 <main>
-  <section class="panel">
+  <section class="legal">
   <p class="eyebrow">Legal notice (Impressum)</p>
   <h1 class="headline">Information required under &sect; 5 DDG</h1>
   ${operatorBlock(entity, { heading: 'Operator' })}

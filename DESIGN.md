@@ -90,6 +90,10 @@ card. A dropzone is the same outline dashed. The order form's weight arc from
 behind them, so the page reads heavy, light, light, heavy. There is no frost,
 no blur and no plate: nothing sits behind a card but the ground.
 
+The three legal pages are documents on the ground at 66ch, not cards, because
+a policy is read and not framed; the error pages are one card each, because
+a sentence and a button are what a card is for.
+
 ## Ghosts and the floor
 
 A ghost is an unlit PHOTOGRAPH, a deferred option and a phase still to come,

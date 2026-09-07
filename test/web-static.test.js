@@ -766,6 +766,34 @@ test('a legal page is a document, with a document outline', () => {
   }
 });
 
+test('the legal pages are documents on the ground, not cards, and the error page is still a card', () => {
+  const legal = {
+    privacy: privacyPage({ entity: null, retention: { photoDays: 7, jobDays: 30 } }),
+    terms: termsPage({ entity: null }),
+    impressum: impressumPage({ entity: null }),
+  };
+  for (const [name, html] of Object.entries(legal)) {
+    assert.match(html, /<main>\s*<section class="legal">/, `${name} does not open as a document section`);
+    assert.ok(!/class="panel"/.test(html), `${name} is boxed in a card -- a document is read, not framed`);
+    assert.match(html, /<h1 class="headline">/, `${name} lost its heading`);
+    assert.match(html, /<h2 class="eyebrow legal-h">/, `${name} lost its section headings`);
+  }
+  for (const [name, html] of Object.entries({
+    error: errorPage({ status: 404, title: 'Not found' }),
+    'auth-unavailable': authUnavailablePage(),
+    'identity-unavailable': identityUnavailablePage(),
+  })) {
+    assert.match(html, /<section class="panel">/, `${name}: a short message belongs on a card`);
+  }
+  assert.match(errorPage({ status: 404, title: 'Not found' }), /<a class="go" href="\/">Start again<\/a>/, 'the error page lost its way home');
+  const { css } = createStylesheet({});
+  const doc = /\n\.legal\s*\{([^}]*)\}/.exec(css);
+  assert.ok(doc, 'no .legal rule');
+  assert.match(doc[1], /max-width:\s*66ch/, 'a legal document is not at reading measure');
+  assert.ok(!/border|background/.test(doc[1]), 'a legal document draws a card around itself');
+  assert.match(css, /\.page-legal \.headline\s*\{[^}]*font-size:\s*var\(--t-7\)/, 'the document title is not at the page-title size');
+});
+
 test('the gauze is gone from the stylesheet, not merely unreferenced', () => {
   // The same argument as the grain plate below: markup nobody emits today is
   // one `preBody` away from being emitted tomorrow, and a rule that still

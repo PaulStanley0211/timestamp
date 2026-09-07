@@ -987,6 +987,15 @@ body {
   color: var(--ink);
   margin: var(--s-7) 0 var(--s-3);
 }
+
+/* THE LEGAL PAGES ARE DOCUMENTS, NOT CARDS (2026-09-07, spec §6: "Dark ground,
+   Anton heading, Inter body at reading measure, no lime panel"). Several
+   hundred words read top to bottom have no edges to box; they sit on the
+   ground at the 66ch measure .sub already imposes on their paragraphs, under
+   a title at the page size. The error trio -- one sentence and a button -- is
+   exactly what a card is for and keeps .panel. */
+.legal { max-width: 66ch; }
+.page-legal .headline { font-size: var(--t-7); text-wrap: balance; }
 .hint { color: var(--faint); font-size: var(--t-1); margin: 0 0 0.7rem; }
 .lede { color: var(--ink); margin: 0 0 2rem; }
 
