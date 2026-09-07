@@ -154,9 +154,9 @@ const PLACE_HUES = Object.freeze({
  * Mean luma of each place loop, written by `scripts/tapedeck/place-loops.mjs`.
  *
  * READ ONCE, AND MISSING IS A SUPPORTED STATE. On a fresh clone with no loops
- * cut there is no manifest, every place falls back to the full-strength scrim,
- * and the page is exactly what it was before the loops existed -- the same
- * property `assets/places/` already had for the photographs.
+ * cut there is no manifest, and every place falls back to the scrim solved for
+ * a white photograph -- the heavy answer, and the one §31 gives text on any
+ * picture nobody has measured.
  */
 const LOOP_LUMA = (() => {
   try {
@@ -184,6 +184,67 @@ function contrast(a, b) {
 }
 
 /**
+ * The scrim's paint, as constants, so the sheet and the solver read one source.
+ *
+ * THE SOLVER USED TO SOLVE FOR A FLAT ALPHA THE PAINT NEVER DELIVERED. The
+ * scrim is a linear gradient stacked on a radial one, both in this colour, and
+ * the layer's own opacity multiplies the pair -- so the alpha that lands at a
+ * point is the layer opacity times the gradients' covering power there, which
+ * is at most about 0.87 (at the horizontal centre, 34% down, where the linear
+ * stop is weakest and the radial one has not yet climbed). Measured on real
+ * pixels on 2026-09-07 (DESIGN.md, Text on a photograph) after a solve that
+ * said 8:1 read 4.5:1 or less in a browser. `scrimCover` is that covering
+ * power; `SCRIM_COVER_MIN` is its minimum over the box, and it is what the
+ * solver divides by. Sampled on a grid rather than solved in closed form: the
+ * combined alpha is smooth and the grid is fine enough that the sampled
+ * minimum is within a thousandth of the true one, which the test recomputes.
+ *
+ * The linear gradient runs top to bottom (180deg); the radial one is an
+ * ellipse of 120% x 70% centred at the top middle, its inner stop at the
+ * centre and its outer stop at the ellipse's edge, clamped beyond it.
+ */
+export const SCRIM_PAINT = Object.freeze({
+  color: Object.freeze([11, 10, 9]),
+  linear: Object.freeze([[0, 0.92], [0.34, 0.74], [1, 0.86]]),
+  radial: Object.freeze({ size: Object.freeze([1.2, 0.7]), at: Object.freeze([0.5, 0]), inner: 0.20, outer: 0.80 }),
+});
+
+/** The `background:` value the sheet paints, built from SCRIM_PAINT. */
+export function scrimBackground() {
+  const rgba = (a) => `rgba(${SCRIM_PAINT.color.join(',')},${a.toFixed(2)})`;
+  const stops = SCRIM_PAINT.linear.map(([p, a]) => `${rgba(a)} ${Math.round(p * 100)}%`).join(', ');
+  const { size, at, inner, outer } = SCRIM_PAINT.radial;
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  return `linear-gradient(180deg, ${stops}),\n    radial-gradient(${pct(size[0])} ${pct(size[1])} at ${pct(at[0])} ${pct(at[1])}, ${rgba(inner)} 0%, ${rgba(outer)} 100%)`;
+}
+
+/**
+ * The covering power of the two gradients at a point of the box, both axes
+ * as fractions of the box, before the layer's opacity multiplies it.
+ */
+export function scrimCover(x, y) {
+  const stops = SCRIM_PAINT.linear;
+  let a1 = stops[stops.length - 1][1];
+  for (let i = 1; i < stops.length; i += 1) {
+    const [p0, v0] = stops[i - 1];
+    const [p1, v1] = stops[i];
+    if (y <= p1) { a1 = v0 + (v1 - v0) * ((y - p0) / (p1 - p0)); break; }
+  }
+  const { size, at, inner, outer } = SCRIM_PAINT.radial;
+  const t = Math.min(1, Math.sqrt(((x - at[0]) / size[0]) ** 2 + ((y - at[1]) / size[1]) ** 2));
+  const a2 = inner + (outer - inner) * t;
+  return 1 - (1 - a1) * (1 - a2);
+}
+
+export const SCRIM_COVER_MIN = (() => {
+  let min = 1;
+  for (let i = 0; i <= 200; i += 1) {
+    for (let j = 0; j <= 200; j += 1) min = Math.min(min, scrimCover(i / 200, j / 200));
+  }
+  return min;
+})();
+
+/**
  * How much scrim a place needs, derived from what its loop actually measures.
  *
  * THE SCRIM WAS ONE VALUE FOR EVERY PLACE AND THAT IS WHY THE LOCATION NEVER
@@ -196,31 +257,55 @@ function contrast(a, b) {
  *
  * SOLVED AGAINST THE TEXT RATHER THAN BY EYE, AND AGAINST THE INK THE BAND
  * ACTUALLY PAINTS. `--on-image`, the colour the landing's band puts over its
- * photograph, must clear 8:1 over the composite of scrim-on-loop, so each
- * place gets the least scrim that buys that and no more. Until 2026-09-07 this
- * solved for the cream world's bone (CLAUDE.md §70E) -- a colour nothing paints
- * any more, once onboarding's own photograph went. A test ties this constant
- * to the `--on-image` token so the two cannot drift apart again.
+ * photograph, must clear 8:1 over the composite of scrim-on-loop on the MEAN
+ * and 4.5:1 on the loop's HIGHLIGHT, so each place gets the least scrim that
+ * buys both and no more. Until 2026-09-07 this solved for the cream world's
+ * bone (CLAUDE.md §70E) -- a colour nothing paints any more, once onboarding's
+ * own photograph went. A test ties this constant to the `--on-image` token so
+ * the two cannot drift apart again.
  *
- * WHAT THIS DELIBERATELY DOES NOT GUARANTEE, said out loud because it is the
- * limitation somebody will otherwise discover as a bug: it is derived from MEAN
- * luma, so a dark loop with a bright window in it can still strand text locally.
- * The floor exists for that, and the soft label tier is NOT in this
- * calculation -- at 4.5:1 it would drag every place back above 0.59
- * and undo the whole thing. It is not painted over the photograph at all; a
- * test refuses any rule inside `.band` that names it.
+ * THROUGH THE PAINT, NOT THE LAYER. The number returned is the layer's
+ * opacity; what lands on the picture is that times SCRIM_COVER_MIN, because
+ * the scrim is two gradients and the layer opacity multiplies their covering
+ * power (see SCRIM_PAINT). Until 2026-09-07 the solve was for a flat alpha the
+ * paint never delivered, and a browser read words solved for 8:1 at 4.5:1 and
+ * under.
+ *
+ * THE HIGHLIGHT IS WHY THE MEAN IS NOT ENOUGH. A mean cannot see a neon sign:
+ * solved on it alone, the three night places sat at the floor while their
+ * blurred highlights measured 216-238 -- the same as every other loop's --
+ * and the band's hint read 1.57:1 over Tokyo, the chosen option 2.19:1 over
+ * Times Square. `yhigh` is the brightest blurred pixel any frame shows
+ * (`place-loops.mjs`), and 4.5:1 on it is the floor for the brightest thing a
+ * stroke can sit beside. For every shipped loop it is the binding term; a
+ * loop that carries no highlight is solved as though its highlight were white,
+ * which is the heavy answer and the safe one.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT MODEL: the text-shadow every word in the
+ * band carries. It darkens the pixels beside each stroke and no ratio computed
+ * here can see it, so it is margin, not budget. The browser sweep in
+ * test/browser-smoke.test.js is what reads the composite as painted.
  */
 const SCRIM_FLOOR = 0.30;
-export const SCRIM_INK = [0xFA, 0xF7, 0xF2];
-const SCRIM_COLOR = [11, 10, 9];
-const SCRIM_TARGET = 8;
+export const SCRIM_INK = [0xFA, 0xF7, 0xF2];        /* --on-image: every word in the band  */
+export const SCRIM_ACCENT_INK = [0xD9, 0xFF, 0x00]; /* --lime: the chosen option, a shade darker */
+const SCRIM_TARGET = 8;            /* --on-image on the loop's mean            */
+const SCRIM_HIGHLIGHT_TARGET = 4.5; /* --on-image on the loop's highlight       */
+const SCRIM_UNMEASURED_HIGHLIGHT = 255;
 
-export function scrimOpacity(yavg) {
+export function scrimOpacity(loop) {
+  const yavg = loop?.yavg;
   if (!Number.isFinite(yavg)) return null;
+  const yhigh = Number.isFinite(loop.yhigh) ? loop.yhigh : SCRIM_UNMEASURED_HIGHLIGHT;
+  const over = (y, a) => SCRIM_PAINT.color.map((c) => y * (1 - a) + c * a);
+  // Both inks the band paints: --on-image on every word, lime on the chosen
+  // one. Lime is the darker of the two, so it is the one that binds.
+  const clears = (ink, a) => contrast(ink, over(yavg, a)) >= SCRIM_TARGET
+    && contrast(ink, over(yhigh, a)) >= SCRIM_HIGHLIGHT_TARGET;
   for (let step = Math.round(SCRIM_FLOOR * 100); step <= 100; step += 1) {
     const s = step / 100;
-    const over = SCRIM_COLOR.map((c) => yavg * (1 - s) + c * s);
-    if (contrast(SCRIM_INK, over) >= SCRIM_TARGET) return s;
+    const landed = s * SCRIM_COVER_MIN;
+    if (clears(SCRIM_INK, landed) && clears(SCRIM_ACCENT_INK, landed)) return s;
   }
   return 1;
 }
@@ -343,25 +428,30 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       // .wrap costs nothing on the signed-in page, whose ground is inside .wrap
       // as well -- one selector for both, rather than one each.
       `#${slug}:checked~.wrap .bgs .bg--${slug}{opacity:1;}`,
-      // THE LIGHTER SCRIM IS GATED ON THE LOOP ACTUALLY PLAYING, and that is
-      // the whole reason it is safe. "is-live" is set by the script only once a
-      // video has genuinely reached its first frame, so a browser with no JavaScript,
-      // a reader who asked for reduced motion, a metered connection or a
-      // missing file all keep the full-strength scrim over the blurred still
-      // -- which is the page exactly as it shipped. Nothing here can make the
-      // no-video path worse, because nothing here applies to it.
-      ...(scrimOpacity(LOOP_LUMA[place.id]?.yavg) === null ? [] : [
-        `#${slug}:checked~.wrap .bgs.is-live~.scrim{opacity:${scrimOpacity(LOOP_LUMA[place.id].yavg)};}`,
+      // THE SCRIM KEYS ON THE RADIO ALONE (2026-09-07). It used to hold on
+      // `.bgs.is-live`, so a visitor with no loop -- no JavaScript, reduced
+      // motion, a metered connection, a missing file -- kept the band's typed
+      // default over the blurred still. The solve now covers both grounds: the
+      // still under each loop is DARKER than the loop on the mean (the tape
+      // grade lifts the black floor; measured, stills 17-146 against loops
+      // 49-160) and is blurred three times as hard, so the loop's number
+      // over-covers it. And a rule that never keys on `is-showing` cannot
+      // flinch on a click, which is the property the two-class split was
+      // protecting; keying on nothing but the radio keeps it for free.
+      ...(scrimOpacity(LOOP_LUMA[place.id]) === null ? [] : [
+        `#${slug}:checked~.wrap .scrim{opacity:${scrimOpacity(LOOP_LUMA[place.id])};}`,
       ]),
-      // On the landing the same radio strikes this place's name forward out of
-      // the ghost rail. The date read-out that used to lead this group is gone
-      // with the element it lit: the OSD was pinned to the viewport over a
-      // full-bleed photograph, and the photograph is a band in the document now
-      // -- an overlay fixed to the corner of a page whose picture is a third of
-      // the way down is a readout for whatever happens to be behind it.
-      `#${slug}:checked~.wrap .lopt--${slug}{opacity:1;color:var(--lime);}`,
+      // On the landing the same radio turns this place's name lime. There is
+      // no ghost to lift it out of any more (the rail paints at full opacity
+      // over the photograph, see .lopt), so the rule says only the colour. The
+      // date read-out that used to lead this group is gone with the element it
+      // lit: the OSD was pinned to the viewport over a full-bleed photograph,
+      // and the photograph is a band in the document now -- an overlay fixed
+      // to the corner of a page whose picture is a third of the way down is a
+      // readout for whatever happens to be behind it.
+      `#${slug}:checked~.wrap .lopt--${slug}{color:var(--lime);}`,
       `#${slug}:checked~.wrap .lopt--${slug} .lidx{color:var(--lime);}`,
-      `#${slug}:focus-visible~.wrap .lopt--${slug}{opacity:1;text-decoration:underline;text-underline-offset:6px;text-decoration-color:var(--lime);}`,
+      `#${slug}:focus-visible~.wrap .lopt--${slug}{text-decoration:underline;text-underline-offset:6px;text-decoration-color:var(--lime);}`,
       focusRing(slug, 'placecard'),
       // CHOSEN LIGHTS THE PHOTOGRAPH AND RINGS THE CARD. The ghost lives on
       // '.thumb' rather than on the card (see the rule for why -- the caption
@@ -736,9 +826,10 @@ body {
   /* Matched to the video's own fade, so the ground and the picture over it
      arrive together instead of the scrim snapping off first. */
   transition: opacity 1200ms ease;
+  /* Painted from SCRIM_PAINT, the constants the solver models, so the stops
+     cannot have two homes again. */
   background:
-    linear-gradient(180deg, rgba(11,10,9,0.92) 0%, rgba(11,10,9,0.74) 34%, rgba(11,10,9,0.86) 100%),
-    radial-gradient(120% 70% at 50% 0%, rgba(11,10,9,0.20) 0%, rgba(11,10,9,0.80) 100%);
+    ${scrimBackground()};
 }
 
 /* The radios live at the top of <body> so that ":checked ~ .bgs" and
@@ -2517,19 +2608,22 @@ body.page-landing { padding: 0 0 var(--s-8); }
   display: block; cursor: pointer;
   font-family: var(--display); font-size: var(--d-3); line-height: 1;
   text-transform: uppercase; letter-spacing: 0;
-  color: var(--ink); opacity: var(--ghost); padding: var(--s-1) 0;
+  color: var(--ink); padding: var(--s-1) 0;
 }
-/* GHOSTS SIT AT THE FLOOR AND NO LOWER. A far dimmer unlit state measures
-   about 1.4:1 and is a control nobody can read; at the floor a ghost still
-   clears 4.5:1 and the unlit/struck distinction is carried by colour rather
-   than by illegibility. The ghost test recomputes it. See DESIGN.md. */
-/* THE INDEX TAKES THE OPTION'S OWN COLOUR. The rail's options are ghosted, and
-   a colour step inside a ghosted control gets multiplied by the ghost while a
-   size step does not -- so the index is distinguished at 0.5em and takes the
-   same ink as the word beside it. The soft tier under this ghost measures
-   2.21:1; the body ink clears the floor. */
+/* NOT A GHOST, SINCE 2026-09-07. The rail's unchosen options sat at --ghost,
+   a floor solved for --ink over the FLAT ground (DESIGN.md, Ghosts) and applied
+   over a photograph, where the same 0.5 measured 2.1-4.4:1 beside the strokes.
+   The precedent is §63B's footer: on the band's picture a word is full
+   opacity plus its shadow, and the unchosen/chosen distinction is carried by
+   colour -- --on-image against lime -- which is what DESIGN.md already says of
+   a text option card. Hover is an underline for the same reason: an opacity
+   step is exactly the thing that cannot be afforded over a picture. */
+/* THE INDEX TAKES THE OPTION'S OWN COLOUR and is distinguished by size, at
+   0.5em: the soft tier is not painted over the photograph at all (it sits
+   outside the scrim solve), and size is the step that survives whatever the
+   picture behind it does. */
 .lopt .lidx { font-size: 0.5em; letter-spacing: 0.22em; color: var(--ink); margin-right: var(--s-3); vertical-align: 0.3em; }
-.lopt:hover { opacity: 0.82; }
+.lopt:hover { text-decoration: underline; text-underline-offset: 6px; }
 
 /* THE BAND: the place photograph across the whole width, the rail over it.
    The ground and the scrim are positioned inside the band rather than fixed
@@ -2539,12 +2633,21 @@ body.page-landing { padding: 0 0 var(--s-8); }
 .band { position: relative; overflow: hidden; padding: var(--s-8) 0; color: var(--on-image); }
 .band .bgs { position: absolute; inset: 0; z-index: 0; }
 .band .bg { position: absolute; inset: -6%; filter: blur(10px) saturate(0.8); }
-.band .scrim { position: absolute; inset: 0; z-index: 1; opacity: 0.5; }
+/* The opacity here is the scrim for a place with NO measurement -- solved as
+   though its loop were a white photograph, mean and highlight both, which is
+   §31's rule for text on a picture nobody has measured. Every shipped place
+   overrides it with its own solve, keyed on its radio. It used to be a typed
+   0.5, which for the brightest place sat under that place's own number. */
+.band .scrim { position: absolute; inset: 0; z-index: 1; opacity: ${scrimOpacity({ yavg: 255, yhigh: 255 })}; }
 .band-in { position: relative; z-index: 2; }
 .band-t { font-family: var(--display); text-transform: uppercase; font-size: var(--d-4); line-height: 0.92; letter-spacing: 0; font-weight: 400; margin: 0 0 var(--s-5); color: var(--on-image); text-shadow: 0 1px 14px rgba(22, 22, 24, 0.7); }
 .band .lopt { color: var(--on-image); text-shadow: 0 1px 14px rgba(22, 22, 24, 0.7); }
 .band .lopt .lidx { color: var(--on-image); }
-.band-hint { font-size: var(--t-1); color: var(--on-image-soft); margin: var(--s-3) 0 0; text-shadow: 0 1px 10px rgba(22, 22, 24, 0.85); }
+/* THE HINT IS THE INK THE SCRIM IS SOLVED FOR, demoted by size. It painted
+   --on-image-soft, a tier outside the solve, and the pixels said what that
+   costs: 1.57:1 over the Tokyo neon (2026-09-07). Over a photograph hierarchy
+   is size, which survives whatever the picture does; a tier does not. */
+.band-hint { font-size: var(--t-1); color: var(--on-image); margin: var(--s-3) 0 0; text-shadow: 0 1px 10px rgba(22, 22, 24, 0.85); }
 
 /* THE BEFORE/AFTER WIPE.
    One custom property drives everything: the clip on the top half, where the

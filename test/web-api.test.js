@@ -1365,18 +1365,26 @@ test('the moving background is one element, and the page is finished without it'
     assert.ok(/class="bg bg--pl-amalfi-afternoon"/.test(bgs), 'the still fallback layer is gone');
 
     // TWO STATES, AND COLLAPSING THEM INTO ONE IS A REGRESSION WITH A LOOK.
-    // The ground -- the per-place scrim and the plate under the panels -- keys
-    // off "is-live", which stays true once video has worked here. Only the
-    // video's own opacity keys off "is-showing", which drops for the moment
-    // between choosing a place and its loop decoding. Drive both from one
-    // class and every click throws the scrim back to full strength and changes
-    // each panel's corner radius until the next file loads. Measured in a
-    // browser before this split existed; it flinched once per click.
+    // Only the video's own opacity keys off "is-showing", which drops for the
+    // moment between choosing a place and its loop decoding. The scrim used to
+    // key off "is-live", which stays true once video has worked here; driving
+    // it from "is-showing" instead threw it back to full strength on every
+    // click until the next file loaded. Measured in a browser before the split
+    // existed; it flinched once per click.
+    // SINCE 2026-09-07 THE SCRIM KEYS ON THE RADIO ALONE, and that keeps the
+    // property for free: a rule that never mentions "is-showing" cannot
+    // flinch. What moved is the no-video visitor, who used to get a typed
+    // default and now gets the same solve -- the still under a loop is darker
+    // than the loop on the mean and blurred harder, so the solve covers it.
     const css = await (await fetch(`${base}/styles.css`)).text();
     assert.ok(/\.bgs\.is-showing\s+\.bgv\s*\{[^}]*opacity/.test(css),
       'the video should reveal on is-showing');
-    assert.ok(/:checked~\.wrap \.bgs\.is-live~\.scrim\{opacity:/.test(css),
-      'the per-place scrim should hold on is-live, not blink with each swap');
+    assert.ok(/:checked~\.wrap \.scrim\{opacity:/.test(css),
+      'the per-place scrim should key on the radio');
+    assert.ok(!/is-showing[^{]*\.scrim/.test(css),
+      'the per-place scrim keys on is-showing and will blink with each swap');
+    assert.ok(!/is-live[^{]*\.scrim/.test(css),
+      'the per-place scrim still waits for the loop; the no-video visitor is left on the default');
     assert.ok(!/is-playing/.test(css), 'the old single-state class is still in the sheet');
 
     // THE PLATE UNDER THE PANELS WAS THE THIRD THING is-live HELD, and its

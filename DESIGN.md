@@ -61,34 +61,51 @@ were measured against a pure white picture under the caption scrim and the
 picture did not change when the ground did.
 
 The landing's band is the only photograph left behind text (onboarding lost
-its ground on 2026-09-07), and its per-place scrim is solved so `--on-image`
-clears 8:1 over that place's loop; the constant the solver protects is tied to
-the token by a test, and a second test refuses the PAGE's dim tier —
-`--ink-soft` and `--faint`, measured against a flat ground — anywhere inside
-`.band`. The band's own `--on-image-soft` is allowed there and is what the
-hint paints; it sits outside the solve on purpose, because solving for it
-would drag every place back above 0.59 and undo the per-place scrim.
+its ground on 2026-09-07). Every word in it is `--on-image`, or lime when it
+is chosen — the hint included, demoted by size rather than by tier — and
+nothing in it is a ghost: the rail's options paint at full opacity plus their
+shadow, the §63B footer's treatment, because the ghost floor is solved on the
+flat ground and the same 0.5 measured 2.1–4.4:1 beside the strokes over a
+picture. A test refuses any other tier inside `.band`, and the solver's inks
+are tied to `--on-image` and `--lime` by another.
 
-**Which way the scrim moved when it was re-solved, because it moved the way
-nobody expected.** The solver used to protect the cream world's bone; on
-2026-09-07 it was re-pointed at `--on-image`, the colour the band actually
-paints. `#FAF7F2` is *brighter* than the value it replaced, so it reaches 8:1
-against a **lighter** scrim, not a heavier one: `amalfi-afternoon` went 0.62 →
-0.56, `space-centre` 0.53 → 0.46, `kuechentisch-fruehstueck` 0.37 → 0.30, and
-the other four were already at the 0.30 floor. Modelled the way the solver
-models it — mean loop luma, flat scrim alpha — `--on-image-soft`'s worst cases
-fall from about 5.9 to 5.11 / 5.17 / 5.34 and none drops below 4.5:1.
+**The scrim is solved per place, through the paint, on two numbers
+(2026-09-07, evening).** The scrim is a linear gradient stacked on a radial
+one, multiplied by the layer's opacity, so what lands on the picture is the
+layer opacity times the gradients' covering power — at least 0.868 of it, at
+the horizontal centre a third of the way down, where the linear stop is
+weakest. The stops are constants in `static.mjs`; the sheet paints from them
+and the solver divides by their minimum. And the solve holds two numbers from
+`assets/places/loops.json`: 8:1 for both inks on the loop's **mean** luma, and
+4.5:1 on its **highlight** — the brightest pixel any frame shows after a 2px
+blur — because a mean cannot see a neon sign: solved on the mean alone, the
+three night places sat at the 0.30 floor and the hint measured 1.57:1 over
+Tokyo. The highlight is what binds. Every loop's is 216–238, so the layers
+run from 0.60 (the living room) to 0.69 (Amalfi) and land 0.52–0.60 on the
+picture; a loop with no measurement is solved as a white photograph (0.87).
+The rule keys on the place's radio alone, so a visitor with no loop gets the
+same solve: the still under each loop is darker than the loop on the mean
+(the tape grade lifts the black floor) and blurred three times as hard.
 
-**That model is a model, and the painted page is not obliged to match it.**
-Measured on real pixels (a screenshot of the band with its own text hidden,
-2026-09-07): the scrim is two partially transparent gradients multiplied by a
-layer opacity, so the alpha that lands is always *less* than the solved
-number; the rail's options are ghosts at `--ghost`, a floor solved on the flat
-ground and not over a picture; and a `text-shadow` does work no ratio can see.
-Words in the band measure 2.1–4.9:1 against the brightest pixel behind them.
-Nothing here is a defect to fix blind — it is the reason a composite-ratio
-test over this band has never held, and the reason the guards above are
-written as rules about which token may appear rather than as arithmetic.
+**Which way the scrim moved, since it moved twice in one day.** The morning
+re-solve for `--on-image` LOWERED it — a brighter ink reaches 8:1 at a lighter
+scrim: Amalfi 0.62 → 0.56, the night places on the 0.30 floor. The evening
+measurement RAISED it, and by more, for two reasons stacked: the paint had
+been covering about 0.87 of what the solver assumed, and the highlights the
+mean hid need about 0.55 on the picture. The night places are the visible
+change — Tokyo went 0.30 → 0.64.
+
+**Measured, not modelled.** `test/browser-smoke.test.js` renders the band
+twice per place — every word in sentinel magenta with no shadow, to find the
+strokes; then in transparent ink with the shadow painted, to read what sits
+beside them — and holds the lightest pixel touching a stroke to 4.5:1 (3:1 for
+the title, which is over 24px at every width), at 375 and 1440, with the loop
+playing and with the still under a reduced-motion request. 254 runs of text;
+the worst is 5.43:1, the chosen lime option over Times Square on a phone. The
+shadow is deliberately inside the measurement and deliberately outside the
+solve: it is margin the browser can see and the solver cannot. Earlier the
+same day a probe that hid the text — shadow and all — read 2.1–4.9:1 and was
+not shipped, for the right reason: it measured a page nobody paints.
 
 **The aliases.** `--accent`, `--accent-bright`, `--accent-deep`, `--faint`,
 `--alarm` and `--ghost-hover` are re-pointed once at `:root` and never

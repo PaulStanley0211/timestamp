@@ -35,6 +35,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -1554,5 +1555,334 @@ test("the wordmark's record light is painted and does not blink, in a real casca
         `${pathname} at ${vp.width}px: the dot sits at opacity ${r.opacity}, a leftover of the pulse`);
     }
   }
+});
+
+// ---------------------------------------------------------------------------
+// reading pixels
+// ---------------------------------------------------------------------------
+
+/**
+ * A PNG decoder over node:zlib, because a screenshot is the only witness to
+ * what the compositor painted.
+ *
+ * CLAUDE.md §63C records four attempts to SIMULATE the band's composite --
+ * two stacked gradients multiplied by a layer opacity over a blurred, moving
+ * photograph -- and four wrong numbers. The alternative to modelling the
+ * paint is reading it: Page.captureScreenshot hands back a PNG, and a PNG is
+ * a chunk walk, one inflate and five scanline filters. Chrome writes 8-bit
+ * RGBA, non-interlaced; anything else is refused by name rather than decoded
+ * wrongly. No npm dependency, which is the house rule this file already keeps
+ * by driving the browser over a bare WebSocket.
+ */
+function decodePng(buf) {
+  assert.equal(buf.toString('latin1', 1, 4), 'PNG', 'the screenshot is not a PNG');
+  let pos = 8;
+  let width = 0; let height = 0; let depth = 0; let type = 0; let interlace = 0;
+  const idat = [];
+  while (pos + 8 <= buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const kind = buf.toString('latin1', pos + 4, pos + 8);
+    const data = buf.subarray(pos + 8, pos + 8 + len);
+    if (kind === 'IHDR') {
+      width = data.readUInt32BE(0); height = data.readUInt32BE(4);
+      depth = data[8]; type = data[9]; interlace = data[12];
+    } else if (kind === 'IDAT') {
+      idat.push(data);
+    } else if (kind === 'IEND') {
+      break;
+    }
+    pos += 12 + len;
+  }
+  assert.equal(depth, 8, `PNG bit depth ${depth}: this decoder reads 8-bit only`);
+  assert.ok(type === 6 || type === 2, `PNG colour type ${type}: this decoder reads RGB and RGBA only`);
+  assert.equal(interlace, 0, 'an interlaced PNG is not what Chrome writes');
+  const bpp = type === 6 ? 4 : 3;
+  const stride = width * bpp;
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  assert.equal(raw.length, height * (stride + 1), 'the inflated PNG is not the size its header promises');
+  const px = Buffer.alloc(height * stride);
+  let prev = Buffer.alloc(stride);
+  for (let y = 0; y < height; y += 1) {
+    const filter = raw[y * (stride + 1)];
+    const line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    const cur = px.subarray(y * stride, (y + 1) * stride);
+    for (let i = 0; i < stride; i += 1) {
+      const a = i >= bpp ? cur[i - bpp] : 0;
+      const b = prev[i];
+      const c = i >= bpp ? prev[i - bpp] : 0;
+      let v = line[i];
+      if (filter === 1) v += a;
+      else if (filter === 2) v += b;
+      else if (filter === 3) v += (a + b) >> 1;
+      else if (filter === 4) {
+        const p = a + b - c;
+        const pa = Math.abs(p - a); const pb = Math.abs(p - b); const pc = Math.abs(p - c);
+        v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);
+      } else if (filter !== 0) {
+        throw new Error(`PNG scanline filter ${filter} at row ${y}`);
+      }
+      cur[i] = v & 0xFF;
+    }
+    prev = cur;
+  }
+  return {
+    width,
+    height,
+    at(x, y) { const o = y * stride + x * bpp; return [px[o], px[o + 1], px[o + 2]]; },
+  };
+}
+
+/** WCAG relative luminance and contrast, on [r,g,b] triples. */
+function luminance([r, g, b]) {
+  const f = (c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+function contrastOf(a, b) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * The worst contrast a run of text meets, read off two renders of the same
+ * pixels: `mask` has the glyphs in a sentinel magenta with no shadow, `ground`
+ * has them in transparent ink with the shadow still painted. A pixel is
+ * ground-touching-a-stroke when it is not a glyph pixel and one of its eight
+ * neighbours is; the lightest of those, with the word's colour folded through
+ * its ancestors' opacity, is the ratio WCAG 1.4.3 asks about -- and it is what
+ * a halo does its work on, which is why the halo has to be in the picture.
+ */
+function worstContrast({ mask, ground, rect, color, opacity }) {
+  const x0 = Math.max(0, Math.floor(rect.left) - 2);
+  const y0 = Math.max(0, Math.floor(rect.top) - 2);
+  const x1 = Math.min(mask.width - 1, Math.ceil(rect.right) + 2);
+  const y1 = Math.min(mask.height - 1, Math.ceil(rect.bottom) + 2);
+  const glyph = (x, y) => {
+    if (x < 0 || y < 0 || x >= mask.width || y >= mask.height) return false;
+    const [r, g, b] = mask.at(x, y);
+    return r > 128 && b > 128 && g < 80;
+  };
+  let glyphs = 0; let worst = Infinity; let where = null;
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) {
+      if (glyph(x, y)) { glyphs += 1; continue; }
+      let touching = false;
+      for (let dy = -1; dy <= 1 && !touching; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if ((dx || dy) && glyph(x + dx, y + dy)) { touching = true; break; }
+        }
+      }
+      if (!touching) continue;
+      const under = ground.at(x, y);
+      const ink = color.map((c, i) => c * opacity + under[i] * (1 - opacity));
+      const ratio = contrastOf(ink, under);
+      if (ratio < worst) { worst = ratio; where = { x, y, under }; }
+    }
+  }
+  return { glyphs, worst, where };
+}
+
+/**
+ * Every word in the landing band, against the pixels painted behind it.
+ *
+ * THE SCRIM IS NOT WHAT THE SOLVER SAYS IT IS, AND A RATIO CANNOT SEE A HALO.
+ * Measured on 2026-09-07 (DESIGN.md, Text on a photograph): the band's scrim
+ * is two gradients multiplied by a layer opacity, so the alpha that lands is
+ * always less than the solved number; the rail's options were ghosts at a
+ * floor solved on the flat ground; and every word carries a text-shadow that
+ * a screenshot with the text hidden cannot see. So this test hides nothing.
+ * It renders the band twice per place -- once with every word in sentinel
+ * magenta and no shadow, to learn where the strokes are; once with every word
+ * in transparent ink and its shadow intact, to learn what the eye meets
+ * beside them -- and holds the lightest pixel touching a stroke to the floor.
+ *
+ * BOTH STATES A VISITOR CAN GET. With reduced motion asked for, BG_SCRIPT
+ * leaves the blurred still under the scrim; otherwise the loop plays. The two
+ * grounds differ in blur and in mean luma, and the guards on both are the
+ * same words at the same floor.
+ *
+ * COVERAGE. All seven places, each chosen in turn and centred in the rail, so
+ * every option is measured chosen and -- as a neighbour of the next -- unchosen,
+ * at both widths, in both states. A word inside the rail's fade (the mask that
+ * dissolves its right edge, §33) or scrolled past its left edge is not painted
+ * and is not measured. The loop is one frame per capture; its drift returns to
+ * its origin and its grain is fresh each frame, so a single frame is the
+ * ground within a few levels, and a floor with any margin at all absorbs that.
+ *
+ * TIMESTAMP_BAND_EVIDENCE=<file> writes every measured run of text as JSON --
+ * the whole distribution, not the failures -- which is what sizing a floor
+ * needs. The 2026-09-07 decision was taken off that file.
+ */
+test('every word in the landing band clears the floor against the pixels painted behind it, halo included', { skip }, async () => {
+  const s = await session();
+  await s.signOut();
+  const { cdp } = s;
+
+  const run = async (expression) => {
+    const { result, exceptionDetails } = await cdp.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+    assert.equal(exceptionDetails, undefined, `probe threw: ${exceptionDetails?.text} ${exceptionDetails?.exception?.description ?? ''}`);
+    return result.value;
+  };
+  // Painting the band with an extra rule, through the CSSOM of the page's own
+  // sheet: style-src 'self' refuses an inline <style> element outright and a
+  // hash cannot rescue one, but insertRule is not an inline style. Two frames
+  // are awaited so the compositor has painted before the capture is asked for.
+  const capture = async (rule) => {
+    const idx = await run(`(async () => {
+      const sh = [...document.styleSheets].find((x) => x.href && x.href.endsWith('/styles.css'));
+      const i = sh.insertRule(${JSON.stringify(rule)}, sh.cssRules.length);
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return i;
+    })()`);
+    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+    await run(`(() => {
+      const sh = [...document.styleSheets].find((x) => x.href && x.href.endsWith('/styles.css'));
+      sh.deleteRule(${idx});
+    })()`);
+    return decodePng(Buffer.from(data, 'base64'));
+  };
+  const SENTINEL = '.band-in, .band-in * { color: #FF00FF !important; text-shadow: none !important; opacity: 1 !important; text-decoration: none !important; }';
+  const KNOCKOUT = '.band-in, .band-in * { color: transparent !important; }';
+
+  const measured = [];
+  try {
+    for (const viewport of [PHONE, LAPTOP]) {
+      for (const state of ['still', 'live']) {
+        await cdp.send('Emulation.setEmulatedMedia', {
+          features: [{ name: 'prefers-reduced-motion', value: state === 'still' ? 'reduce' : 'no-preference' }],
+        });
+        const page = await visit('/', viewport);
+        assert.deepEqual(page.errors, [], `at ${viewport.width}px (${state}): ${page.errors.join('; ')}`);
+
+        const places = await run(`(() => {
+          const sh = [...document.styleSheets].find((x) => x.href && x.href.endsWith('/styles.css'));
+          sh.insertRule('.band .bg, .band .bgv, .band .scrim, .band .lopt, .band .lopt * { transition: none !important; }', sh.cssRules.length);
+          return [...document.querySelectorAll('input[name="lplace"]')].map((i) => i.id);
+        })()`);
+        assert.ok(places.length >= 2, `the landing offers ${places.length} places -- the probe is not reading the rail`);
+
+        for (const slug of places) {
+          const ready = await run(`(async () => {
+            document.querySelector('.lopt--${slug}').click();
+            const bgs = document.querySelector('.band .bgs');
+            const v = bgs.querySelector('.bgv');
+            if (${JSON.stringify(state)} === 'still') {
+              await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+              return { live: bgs.classList.contains('is-live'), src: v.getAttribute('src') };
+            }
+            const until = Date.now() + 10000;
+            while (Date.now() < until) {
+              if (bgs.classList.contains('is-showing') && v.readyState >= 2 && (v.currentSrc || '').indexOf('/places/') >= 0) {
+                v.pause();
+                await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+                return { live: true, src: v.currentSrc };
+              }
+              await new Promise((r) => setTimeout(r, 50));
+            }
+            return { live: false, src: v.currentSrc, timedOut: true };
+          })()`);
+          if (state === 'still') {
+            assert.ok(!ready.live && !ready.src, `at ${viewport.width}px with reduced motion the loop still started (${ready.src})`);
+          } else {
+            assert.ok(ready.live, `at ${viewport.width}px the loop for ${slug} never reached a frame (${ready.src})`);
+            assert.ok(ready.src.includes(encodeURIComponent(slug.replace(/^pl-/, ''))), `the loop playing is ${ready.src}, not ${slug}'s`);
+          }
+
+          const g = await run(`(() => {
+            const band = document.querySelector('.band');
+            window.scrollTo(0, band.getBoundingClientRect().top + window.scrollY);
+            const rail = band.querySelector('.lrail');
+            const li = band.querySelector('.lopt--${slug}').closest('li');
+            rail.scrollLeft = li.offsetLeft + li.offsetWidth / 2 - rail.clientWidth / 2;
+            const b = band.getBoundingClientRect();
+            const rr = rail.getBoundingClientRect();
+            const fade = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--s-6')) || 32;
+            const parse = (c) => { const m = (c || '').match(/[0-9.]+/g); return m ? [+m[0], +m[1], +m[2]] : null; };
+            const opacityOf = (el) => { let o = 1; for (let n = el; n && n !== band.parentElement; n = n.parentElement) o *= parseFloat(getComputedStyle(n).opacity); return o; };
+            const words = [];
+            for (const el of band.querySelectorAll('.band-in, .band-in *')) {
+              const nodes = [...el.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim());
+              if (!nodes.length) continue;
+              const cs = getComputedStyle(el);
+              if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+              const rects = [];
+              for (const n of nodes) {
+                const r = document.createRange(); r.selectNodeContents(n);
+                for (const q of r.getClientRects()) {
+                  if (q.width > 0 && q.height > 0) rects.push({ left: q.left - b.left, top: q.top - b.top, right: q.right - b.left, bottom: q.bottom - b.top });
+                }
+              }
+              words.push({
+                text: nodes.map((n) => n.textContent.trim()).join(' ').slice(0, 40),
+                cls: el.className || el.tagName,
+                rects, color: parse(cs.color), opacity: opacityOf(el),
+                size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight) || 400,
+                inRail: Boolean(el.closest('.lrail')),
+              });
+            }
+            return {
+              band: { left: b.left, top: b.top, width: b.width, height: b.height, fits: b.top >= -0.5 && b.bottom <= innerHeight + 0.5 },
+              rail: { left: rr.left - b.left, fadeAt: rr.right - fade - b.left },
+              words,
+            };
+          })()`);
+          assert.ok(g.band.fits, `at ${viewport.width}px the band (${g.band.height}px tall at y=${g.band.top}) does not fit the viewport, so a viewport capture cannot hold it`);
+
+          const mask = await capture(SENTINEL);
+          const ground = await capture(KNOCKOUT);
+          const ox = Math.round(g.band.left); const oy = Math.round(g.band.top);
+          for (const w of g.words) {
+            assert.ok(w.color, `"${w.text}" (${w.cls}) has an unparseable colour`);
+            // 4.5:1 for every word. The title alone takes WCAG's large-text
+            // line, and only because it IS large at every width -- asserted,
+            // so the allowance cannot outlive the size. The rail's options are
+            // 26px on a laptop and 22px on a phone; a floor that changed with
+            // the viewport would let the laptop ship what the phone refuses.
+            const title = w.cls === 'band-t';
+            if (title) assert.ok(w.size >= 24, `the band's title is ${w.size}px, under the 24px that makes 3:1 a legitimate floor for it`);
+            for (const r of w.rects) {
+              // Inside the rail only the painted, unfaded run counts: a word
+              // scrolled past the left edge is not on screen, and the last
+              // place's tail sits under the fade by construction (its padding
+              // is narrower than the mask), so the rect is clipped to the
+              // region the mask leaves alone rather than the word dropped.
+              const left = w.inRail ? Math.max(r.left, g.rail.left) : r.left;
+              const right = w.inRail ? Math.min(r.right, g.rail.fadeAt) : r.right;
+              if (right - left < 8) continue;
+              const rect = { left: left + ox, top: r.top + oy, right: right + ox, bottom: r.bottom + oy };
+              const { glyphs, worst, where } = worstContrast({ mask, ground, rect, color: w.color, opacity: w.opacity });
+              assert.ok(glyphs > 0, `at ${viewport.width}px (${state}, ${slug}): the sentinel render painted no glyph for "${w.text}" (${w.cls}) -- the probe is blind`);
+              measured.push({
+                width: viewport.width, state, place: slug.replace(/^pl-/, ''),
+                text: w.text, cls: w.cls, ratio: Math.round(worst * 100) / 100, need: title ? 3 : 4.5,
+                size: w.size, opacity: w.opacity, under: where?.under,
+              });
+            }
+          }
+        }
+      }
+    }
+  } finally {
+    await cdp.send('Emulation.setEmulatedMedia', { features: [] });
+  }
+
+  // The whole measurement, for whoever has to re-decide a floor: every run of
+  // text, not only the ones that failed.
+  if (process.env.TIMESTAMP_BAND_EVIDENCE) {
+    fs.writeFileSync(process.env.TIMESTAMP_BAND_EVIDENCE, `${JSON.stringify(measured, null, 1)}\n`);
+  }
+
+  assert.ok(measured.length >= 100, `only ${measured.length} runs of text were measured across both widths, both states and every place -- the probe is not reading the band`);
+  for (const viewport of [PHONE, LAPTOP]) {
+    for (const state of ['still', 'live']) {
+      const own = measured.filter((m) => m.width === viewport.width && m.state === state && m.cls.includes(`lopt--pl-${m.place}`));
+      assert.ok(own.length >= 7, `at ${viewport.width}px (${state}) only ${own.length} of the places had their own option measured`);
+    }
+  }
+
+  const failed = measured.filter((m) => m.ratio < m.need).sort((a, b) => (a.ratio / a.need) - (b.ratio / b.need));
+  const line = (m) => `at ${m.width}px, ${m.state}, ${m.place}: "${m.text}" (${m.cls}, ${m.size}px, opacity ${m.opacity}) ${m.ratio}:1 needs ${m.need}:1, lightest pixel touching it rgb(${m.under?.join(',')})`;
+  assert.deepEqual(failed, [],
+    `${failed.length} of ${measured.length} runs of text in the band fail against the pixels painted behind them; the worst first:\n`
+    + failed.slice(0, 12).map(line).join('\n'));
 });
 

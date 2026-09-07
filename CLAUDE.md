@@ -19,6 +19,16 @@ pre-deploy header with exactly one hash replaced.** Local and
 not on the box): rebase over this commit, review, suite, guards, then **the
 owner looks at the landing band at 375 and 1440 before it deploys** — §72F.
 
+**THE SCRIM CHIP IS REBASED ONTO THIS COMMIT AND IS §73.** One commit on
+`claude/optimistic-aryabhata-c6b7c7`, fast-forwardable, NOT pushed, NOT on
+the box. Every word in the band is measured on real pixels and clears 4.5:1
+(254 runs, worst 5.43:1); the scrim is solved for the paint it ships and for
+each loop's HIGHLIGHT as well as its mean, which puts the three night places
+at about double their scrim (Tokyo 0.30 → 0.64). The band rendered at 375 and
+1440 for every place is in the worktree's `build/band-*.png`; §73C has the
+table and the levers if the location has stopped reading. Suite on the
+rebased tree **2174 / 2171 / 0 / 3**, guards 7/7.
+
 **Deployed 2026-09-07 at `150de78`, from this machine at the owner's go, and
 verified from outside the same minute — §71.** The
 second plan, `docs/superpowers/plans/2026-09-07-lime-redesign-second-deploy.md`
@@ -9803,6 +9813,159 @@ conflict in each), independent review, suite, guards, **and the owner looks
 at the landing band rendered at 375 and 1440 before it deploys**, because
 its scrim values moved and the memory file records that he has not seen
 them. The owner's own list (§61E) is unchanged.
+
+---
+
+### 73. THE BAND'S WORDS MEASURED ON PIXELS, AND THE SCRIM SOLVED FOR THE PAINT IT SHIPS (2026-09-07, evening)
+
+**One commit on `claude/optimistic-aryabhata-c6b7c7`, rebased onto §72's
+docs commit, test-first, nine sabotages each watched red and restored from a
+copy. NOT PUSHED AND NOT DEPLOYED -- the owner deploys, and this one changes
+how the band looks (§73C), so he should see it first.** §71's final-review
+wave had measured the landing band's words against the pixels behind them,
+found them at 2.1–4.9:1, and declined to ship a guard that was red on shipped
+design. This is the design change that guard was waiting for, and the guard.
+
+#### A -- What the pixels said, before anything moved
+
+254 runs of text in the band, both widths, the loop playing and the still
+under a reduced-motion request, every place chosen in turn: **110 failed.**
+The worst were the rail's index numerals at 1.5:1 (ghosts at 0.5 over a
+picture), the hint at 1.57:1 over the Tokyo neon in `--on-image-soft`, and
+the TITLE at 2.3:1 over Times Square on a phone -- full opacity, full ink,
+still under the 3:1 a large heading is allowed. Three causes, exactly as the
+brief named them, and a fourth the brief did not contain.
+
+#### B -- The three named causes, closed
+
+1. **The solver models the paint** (`SCRIM_PAINT`, `scrimCover`,
+   `SCRIM_COVER_MIN` in `static.mjs`). The scrim is a linear gradient stacked
+   on a radial one, and the layer opacity multiplies their combined covering
+   power, which is **0.868 at its weakest** (horizontal centre, 34% down,
+   derived by hand in the test as well as sampled by the code). The stops are
+   constants; the sheet's `background:` is built from them; the solver divides
+   by their minimum. A solved 0.56 had been landing 0.49.
+2. **The rail is not a ghost.** `--ghost` is solved for `--ink` over the FLAT
+   ground; over the picture the same 0.5 measured 2.1–4.4:1. The options paint
+   at full opacity plus their shadow (§63B's footer), hover is an underline,
+   and chosen-versus-unchosen is lime against `--on-image` -- what DESIGN.md
+   already said of a text option card.
+3. **The hint is `--on-image`, demoted by size.** Its tier sat outside the
+   solve by design; the band guard now refuses every tier but the two the
+   solver protects, and `SCRIM_ACCENT_INK` ties the solve to `--lime` as well,
+   because the chosen option is lime and lime is the darker ink.
+
+#### C -- THE FOURTH CAUSE: A MEAN CANNOT SEE A NEON SIGN
+
+With the three fixed on paper, two experiments were run against the real
+pixels (temporary rule injection, since removed). **Denser halos at today's
+scrims: 16 of 254 still fail**, all on the night places. **Today's halos at a
+0.62 layer everywhere: 0 fail.** The night places sat at the 0.30 floor
+because their MEAN luma is low (49–92), while their blurred **highlights are
+216–238 -- the same as every other loop's.** The floor "exists for that", the
+solver's own comment said, and it was a third of what that needed.
+
+So `assets/places/loops.json` carries a second number, **`yhigh`: the
+brightest luma any frame shows after a 2px blur**, and the solve holds two
+targets through the paint: 8:1 on the mean, 4.5:1 on the highlight. The
+highlight binds for every shipped loop. `place-loops.mjs --measure` measures
+the loops ON DISK and rewrites the manifest without cutting anything (the
+means came back identical to the digit); the cutter itself now writes both.
+`test/place-loops.test.js` runs the command against a copy of one loop.
+
+| place | was (§71's re-solve) | now (layer) | lands on the picture |
+|---|---|---|---|
+| Amalfi | 0.56 | **0.69** | 0.60 |
+| space centre | 0.46 | 0.66 | 0.57 |
+| Times Square | 0.30 | 0.65 | 0.56 |
+| Tokyo | 0.30 | 0.64 | 0.56 |
+| kitchen | 0.30 | 0.62 | 0.54 |
+| garden | 0.30 | 0.61 | 0.53 |
+| living room | 0.30 | 0.60 | 0.52 |
+| (unmeasured) | typed 0.5 | 0.87 | white-photograph solve |
+
+**THE NIGHT PLACES ARE THE VISIBLE CHANGE AND THE OWNER HAS NOT SEEN IT.**
+§30's whole argument was that one heavy scrim stops the location reading; this
+puts the night places at roughly double their §71 value. It is the honest
+consequence of "every word clears 4.5:1" on photographs whose brightest pixels
+are as bright as the beach's, and the alternative the brief named -- a plate
+behind the rail -- is a surface DESIGN.md's world says it has none of, and a
+bigger change to the approved look than a heavier scrim. Screenshots of the
+band are in `build/band-*.png` in the worktree for him; if the location has
+stopped reading he has three levers, in order of cost: a smaller blur in the
+highlight measurement (heavier), a denser halo (lighter scrim, cheaper look),
+a plate.
+
+#### D -- The browser sweep
+
+`test/browser-smoke.test.js`, "every word in the landing band clears the
+floor against the pixels painted behind it, halo included". A PNG decoder over
+`node:zlib` (chunk walk, one inflate, five filters; RGB/RGBA 8-bit only,
+anything else refused by name). Per place: one capture with every word in
+sentinel magenta and no shadow, to learn where the strokes are; one with every
+word in transparent ink and its shadow painted, to read what sits beside them.
+The ground for a word is **the lightest pixel touching a stroke** -- an
+8-neighbour of a glyph pixel that is not one -- with the word's colour folded
+through its ancestors' opacity. WCAG 1.4.3 measures against a halo where one
+is painted, which is why the halo has to be in the picture: the earlier probe
+hid the text, shadow and all, and read a page nobody paints. Both widths, both
+states (reduced motion emulated over CDP for the still), all seven places
+chosen in turn and centred in the rail, the rect clipped to the region the
+rail's fade leaves alone. 4.5:1 for every word; 3:1 for the title, and only
+because it is asserted over 24px. `TIMESTAMP_BAND_EVIDENCE=<file>` writes the
+whole distribution. **Green at 254 runs, worst 5.43:1; 18–29 s.**
+
+#### E -- Decisions taken here, so nobody re-argues them
+
+- **The scrim keys on the radio alone; the `is-live` gate is gone.** The still
+  under each loop is DARKER than the loop on the mean (measured: stills 17–146,
+  loops 49–160 -- the tape grade lifts the black floor) and blurred three times
+  as hard, so the loop's solve covers it; and a rule that never names
+  `is-showing` cannot flinch, which is the property the two-class split was
+  protecting. The web-api pin was rewritten to say that.
+- **Both inks.** `--on-image` and `--lime`; lime binds by about 0.04 of layer.
+- **4.5:1 for the rail at every width**, though WCAG would allow 3:1 at the
+  laptop's 26px: a floor that changed with the viewport would let the laptop
+  ship what the phone refuses, and the brief asked for 4.5. The data clears it.
+- **The unmeasured fallback is the white-photograph solve**, §31's rule, not a
+  typed number. It used to be 0.5, under Amalfi's own value.
+
+#### F -- Things that will bite
+
+- **A CAPTURE WITH `clip` HAS TWO COORDINATE STORIES.** Avoided rather than
+  resolved: the band is scrolled to the top of the viewport and the whole
+  viewport captured, then cropped in node; the test asserts the band fits. The
+  screenshot script for the owner hit the wrong story first and returned a
+  flat rectangle of ground; it captures the viewport and crops with ffmpeg.
+- **`style-src 'self'` REFUSES AN INLINE `<style>` BUT NOT `insertRule`.**
+  The probe's rules go into the page's own sheet through the CSSOM and are
+  deleted after each capture. Two animation frames are awaited before a capture.
+- **A `gblur` IN A MEASUREMENT RUNS SINGLE-THREADED** (`-filter_threads 1`),
+  for the reason this file gives about the head-switch band: a statistic that
+  differed by core count is a manifest nobody could regenerate.
+- **IMPORTING `place-loops.mjs` USED TO CUT SEVEN LOOPS.** `main()` ran at
+  module load. It is behind the direct-invocation guard now, so a test can
+  import `measureLuma`; the first red run of the loops test rendered into
+  `build/place-loops/` before that guard existed.
+- **THE LAST OPTION'S TAIL IS UNDER THE RAIL'S FADE BY CONSTRUCTION** -- its
+  padding (24px) is narrower than the mask (32px). The sweep clips a rect to
+  the unfaded region rather than dropping the word; a coverage assertion caught
+  the first version dropping it.
+- **A DESIGN EXPERIMENT NEEDS A WAY IN.** A temporary env-gated rule injection
+  answered the halo-versus-scrim question in two runs; it was removed before the
+  commit because a guard that accepts arbitrary CSS from the environment is a
+  guard with a side door. Reproduce by editing `static.mjs` locally.
+- **THREE SESSIONS, ONE BRANCH, ONE EVENING.** This section was written as
+  §71, then §72, and is §73 by its third rebase; two of the three tips landed
+  while this session's suite was running. Check the tip before numbering a
+  section, and expect the CLAUDE.md conflict to be the START HERE block plus
+  the appended section, resolved by taking upstream and re-applying both.
+
+#### G -- What is left
+
+The owner: look at the night places (§73C), then fast-forward
+`supabase-identity-slice` onto `claude/optimistic-aryabhata-c6b7c7` and
+deploy. Everything in §72's list, §55G and §54I is unchanged.
 
 ## Not in scope
 

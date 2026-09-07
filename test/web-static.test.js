@@ -36,7 +36,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { createStylesheet, SCRIM_INK } from '../scripts/web/static.mjs';
+import {
+  createStylesheet, SCRIM_INK, SCRIM_ACCENT_INK, SCRIM_PAINT, scrimBackground, scrimCover, SCRIM_COVER_MIN, scrimOpacity,
+} from '../scripts/web/static.mjs';
 import {
   creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, videosPage, errorPage,
   privacyPage, termsPage, impressumPage, faq, siteFooter, balanceSentence,
@@ -1076,7 +1078,9 @@ test('the place rail snaps inside the band, over the photograph it lights', () =
   assert.ok(/\.lrail\s+li\s*\{[^}]*scroll-snap-align/.test(css), 'the items have no snap point');
   // The generated rules reach a ground that now lives INSIDE the band.
   assert.match(css, /#pl-ostsee-strand:checked~\.wrap \.bgs \.bg--pl-ostsee-strand\{opacity:1;\}/, 'the still-layer rule cannot reach a ground inside the band');
-  assert.match(css, /#pl-ostsee-strand:checked~\.wrap \.lopt--pl-ostsee-strand\{opacity:1;color:var\(--lime\);\}/, 'the chosen place is not lime');
+  // No `opacity:1` in the chosen rule since 2026-09-07: there is no ghost to
+  // lift the chosen option out of, so the rule says only what it means.
+  assert.match(css, /#pl-ostsee-strand:checked~\.wrap \.lopt--pl-ostsee-strand\{color:var\(--lime\);\}/, 'the chosen place is not lime');
   assert.ok(!/\.lmenu\s*\{/.test(css), 'the plate rule survives its element');
   assert.match(css, /\.band \.scrim\s*\{/, 'the band has no scrim rule of its own');
   assert.doesNotMatch(css, /\.losd\b/, 'the OSD readout rule survives its element');
@@ -2347,23 +2351,164 @@ test("the band's scrim is solved for the ink the band paints, and no dim tier si
   assert.ok(onImage, 'no --on-image literal in the sheet');
   const bytes = [0, 2, 4].map((i) => parseInt(onImage[1].slice(i, i + 2), 16));
   assert.deepEqual(SCRIM_INK, bytes, 'the scrim solver protects a colour the band does not paint');
+  // And the chosen option is lime -- a slightly darker ink than --on-image --
+  // so the solve holds for it as well; the two together are exactly the set
+  // the sweep below allows inside the band.
+  const lime = /--lime:\s*#([0-9A-Fa-f]{6})/.exec(css);
+  assert.ok(lime, 'no --lime literal in the sheet');
+  assert.deepEqual(SCRIM_ACCENT_INK, [0, 2, 4].map((i) => parseInt(lime[1].slice(i, i + 2), 16)), 'the scrim solver protects an accent the band does not paint');
+  assert.match(css, /--on-image-accent:\s*var\(--lime\)/, 'struck-on-an-image is no longer lime, so the solver protects the wrong accent');
   // THE SUCCESSOR TO §63C's PLATE RULE. That rule said: on a page sitting on a
   // photograph, the dim tier does not appear without a plate under it. The
   // plate went with the cream; the band has no plate; so the rule becomes: in
-  // the band, every colour is an on-image tier.
-  // WHICH DIM TIER THIS REFUSES, since the band has two. `--ink-soft` and
-  // `--faint` are the PAGE's, measured against a flat ground and meaningless
-  // over a picture; those are refused. `--on-image-soft` is the band's own and
-  // is what the hint paints -- allowed, and deliberately outside the scrim
-  // solve, which targets `--on-image` alone (at 4.5:1 the soft tier would drag
-  // every place above 0.59 and undo the per-place scrim entirely).
+  // the band, every word is the ink the solver protects -- `--on-image`, or
+  // lime when it is chosen. `--ink-soft` and `--faint` are the PAGE's tiers,
+  // measured against a flat ground and meaningless over a picture; and
+  // `--on-image-soft` is refused too since 2026-09-07: it sat outside the solve
+  // ("solving for it would drag every place above 0.59") and the pixels said
+  // what that costs -- the hint measured 1.57:1 over the Tokyo neon. A tier the
+  // solver does not cover is the hole, not an allowance.
   const bandRules = [...css.matchAll(/\n(\.band[^{}]*)\{([^}]*)\}/g)];
   assert.ok(bandRules.length >= 4, `the band has ${bandRules.length} rules -- the probe is not reading it`);
   for (const [, sel, body] of bandRules) {
     const color = /(^|;|\s)color:\s*([^;]+);/.exec(body);
     if (!color) continue;
-    assert.match(color[2], /^var\(--on-image(-soft|-accent)?\)$/, `"${sel.trim()}" paints ${color[2].trim()} over the photograph -- the dim tier has no plate here`);
+    assert.match(color[2], /^var\(--on-image(-accent)?\)$/, `"${sel.trim()}" paints ${color[2].trim()} over the photograph -- only the ink the scrim is solved for goes there`);
   }
+});
+
+/** WCAG contrast on two [r,g,b] triples, unrounded, so a solve that lands
+ *  exactly on its target is not pushed under it by rounding to a hex. */
+function ratioOf(a, b) {
+  const lum = ([r, g, b2]) => {
+    const f = (c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b2);
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+test("the band's scrim is painted from the stops the solver models, and the paint covers less than the layer says", () => {
+  // THE SOLVER USED TO SOLVE FOR A FLAT ALPHA THE PAINT NEVER DELIVERED.
+  // Measured 2026-09-07 (DESIGN.md, Text on a photograph): the scrim is a
+  // linear gradient whose weakest stop is 0.74 stacked on a radial one whose
+  // weakest is 0.20, and the layer's own opacity multiplies both -- so the
+  // alpha that lands is the layer opacity times the gradients' covering
+  // power, never the layer opacity itself. The stops now live in one place,
+  // the sheet is built from them, and the solver reads the same constants.
+  const { css } = createStylesheet(FOCUS_MENU);
+  const scrim = /\n\.scrim\s*\{([^}]*)\}/.exec(css);
+  assert.ok(scrim, 'no .scrim rule in the sheet');
+  const painted = /background:\s*([^;]+);/.exec(scrim[1]);
+  assert.ok(painted, 'the scrim paints no background');
+  const squash = (s) => s.replace(/\s+/g, ' ').trim();
+  assert.equal(squash(painted[1]), squash(scrimBackground()),
+    'the scrim the sheet paints is not the one the solver models -- the stops have two homes again');
+
+  // The covering power at the two named weakest stops, derived by hand from
+  // the constants rather than read off the function: at the top centre the
+  // linear stop is 0.92 and the radial 0.20, so 1 - 0.08 x 0.80; at 34% down
+  // the linear stop is 0.74 and the radial has climbed to 0.20 + 0.60 x
+  // (0.34 / 0.70), so 1 - 0.26 x (1 - 0.4914).
+  assert.deepEqual(SCRIM_PAINT.color, [11, 10, 9], 'the scrim colour moved');
+  assert.ok(Math.abs(scrimCover(0.5, 0) - 0.936) < 0.002, `cover at the top centre is ${scrimCover(0.5, 0)}, not 0.936`);
+  assert.ok(Math.abs(scrimCover(0.5, 0.34) - 0.8678) < 0.002, `cover at the weakest linear stop is ${scrimCover(0.5, 0.34)}, not 0.868`);
+  // The minimum the solver protects is the minimum of that function, and it is
+  // genuinely under 1: a model that said the paint covers what the layer says
+  // would be the flat solve back under another name.
+  let min = 1;
+  for (let i = 0; i <= 100; i += 1) for (let j = 0; j <= 100; j += 1) min = Math.min(min, scrimCover(i / 100, j / 100));
+  assert.ok(Math.abs(SCRIM_COVER_MIN - min) < 0.005, `SCRIM_COVER_MIN is ${SCRIM_COVER_MIN}; the sampled minimum of scrimCover is ${min}`);
+  assert.ok(SCRIM_COVER_MIN < 0.9 && SCRIM_COVER_MIN > 0.8, `SCRIM_COVER_MIN is ${SCRIM_COVER_MIN}; the gradients as shipped cover about 0.87 at their weakest`);
+
+  // A PLACE WITH NO MEASUREMENT GETS THE WHITE-PHOTOGRAPH ANSWER. §31's rule
+  // for text on a photograph is to solve against a pure white picture; the
+  // band's own default used to be a typed 0.5, which for the brightest place
+  // sat UNDER its solved value. Now it is the solve for a loop that is white
+  // on the mean and white at its highlight.
+  const band = /\n\.band \.scrim\s*\{([^}]*)\}/.exec(css);
+  assert.ok(band, 'the band has no scrim rule of its own');
+  const fallback = /opacity:\s*([0-9.]+)/.exec(band[1]);
+  assert.ok(fallback, 'the band scrim names no fallback opacity');
+  assert.equal(Number(fallback[1]), scrimOpacity({ yavg: 255, yhigh: 255 }), 'the unmeasured fallback is a typed number, not the white-photograph solve');
+});
+
+test('every measured loop clears the floor through the paint: --on-image at 8:1 on the mean and 4.5:1 on the highlight', () => {
+  // THE MEAN CANNOT SEE A NEON SIGN. Solved on mean luma alone, the three night
+  // places sat at the 0.30 floor while their blurred highlights measured
+  // 216-238 -- the same as every other loop's -- and a real browser read the
+  // hint at 1.57:1 over Tokyo and the chosen option at 2.19:1 over Times
+  // Square (2026-09-07). So the manifest carries a highlight beside the mean,
+  // and the solve holds both: 8:1 on the mean, which is the reading the place
+  // gets on the whole, and 4.5:1 on the highlight, which is the floor for the
+  // brightest thing a stroke can sit beside. Both through the modelled cover,
+  // so the number in the sheet is the number the paint delivers.
+  const manifest = JSON.parse(fs.readFileSync(new URL('../assets/places/loops.json', import.meta.url), 'utf8'));
+  const ids = Object.keys(manifest.loops);
+  assert.ok(ids.length >= 5, `loops.json describes ${ids.length} loop(s) -- the shipped manifest is not being read`);
+  const { css } = createStylesheet({ places: ids.map((id) => ({ id, label: id, timeOfDay: '' })), outfits: [] });
+
+  const blend = (y, a) => SCRIM_PAINT.color.map((c) => y * (1 - a) + c * a);
+  for (const id of ids) {
+    const loop = manifest.loops[id];
+    assert.ok(Number.isFinite(loop.yavg), `${id} carries no mean luma`);
+    assert.ok(Number.isFinite(loop.yhigh), `${id} carries no highlight luma -- regenerate the manifest with node scripts/tapedeck/place-loops.mjs --measure`);
+    assert.ok(loop.yhigh >= loop.yavg && loop.yhigh <= 255, `${id}'s highlight ${loop.yhigh} is not a luma above its mean ${loop.yavg}`);
+
+    const o = scrimOpacity(loop);
+    assert.ok(o >= 0.3 && o <= 1, `${id} solved to ${o}`);
+    const eff = o * SCRIM_COVER_MIN;
+    for (const [name, ink] of [['--on-image', SCRIM_INK], ['lime', SCRIM_ACCENT_INK]]) {
+      const onMean = ratioOf(ink, blend(loop.yavg, eff));
+      const onHigh = ratioOf(ink, blend(loop.yhigh, eff));
+      assert.ok(onMean >= 8, `${id}: the layer at ${o} lands ${eff.toFixed(3)} through the paint and ${name} reads ${onMean.toFixed(2)}:1 on the mean, under 8:1`);
+      assert.ok(onHigh >= 4.5, `${id}: the layer at ${o} lands ${eff.toFixed(3)} through the paint and ${name} reads ${onHigh.toFixed(2)}:1 on the highlight, under 4.5:1`);
+    }
+
+    // THE RULE KEYS ON THE RADIO ALONE. It used to hold on `.bgs.is-live`, so a
+    // visitor with no loop -- no JavaScript, reduced motion, a metered
+    // connection -- got the typed default instead. The still under each loop
+    // is darker than the loop on the mean (measured 2026-09-07: the tape grade
+    // lifts the black floor) and blurred three times as hard, so the loop's
+    // solve covers it; and a rule that never keys on `is-showing` cannot
+    // flinch on a click, which is the property the split protected.
+    assert.match(css, new RegExp(`#pl-${id}:checked~\\.wrap \\.scrim\\{opacity:${String(o).replace('.', '\\.')};\\}`),
+      `${id}'s scrim rule is not keyed on the radio alone at the solved ${o}`);
+    assert.doesNotMatch(css, new RegExp(`#pl-${id}:checked~\\.wrap \\.bgs\\.is-(live|showing)~\\.scrim`),
+      `${id}'s scrim still waits for the loop; the no-video visitor is left on the default`);
+  }
+});
+
+test('nothing in the band is a ghost: the rail paints at full opacity and hierarchy is carried by colour and size', () => {
+  // THE GHOST FLOOR WAS SOLVED ON THE FLAT GROUND AND APPLIED OVER A
+  // PHOTOGRAPH. DESIGN.md's floor (0.5) is the least opacity at which --ink
+  // clears 4.5:1 over --ground; the rail sits on a picture, where the same 0.5
+  // measured 2.1-4.4:1 (2026-09-07). §63B's precedent for words on the band's
+  // photograph is full opacity plus the shadow, with hierarchy by size and --
+  // here -- by colour: the chosen option is lime, the rest are --on-image.
+  // DESIGN.md already says a text option is not a ghost; this is the rail
+  // catching up with the option cards.
+  const { css } = createStylesheet(FOCUS_MENU);
+  const lopt = /\n\.lopt\s*\{([^}]*)\}/.exec(css);
+  assert.ok(lopt, 'no .lopt rule');
+  assert.doesNotMatch(lopt[1], /opacity:/, 'the rail option is still a ghost');
+  const hover = /\n\.lopt:hover\s*\{([^}]*)\}/.exec(css);
+  if (hover) assert.doesNotMatch(hover[1], /opacity:/, 'hovering an option dims it -- opacity is not the hover cue over a picture');
+  // No rule that dresses a word in the band may dim it. The ground's own
+  // layers (.bg, .bgv, .scrim) are the exception by construction: they ARE
+  // the opacity mechanism.
+  for (const [, sel, body] of css.matchAll(/\n((?:\.band|\.lopt|#pl-[^{}]*\.lopt)[^{}]*)\{([^}]*)\}/g)) {
+    if (/\.bg\b|\.bgv|\.scrim|\.bgs/.test(sel)) continue;
+    const op = /opacity:\s*([^;]+);/.exec(body);
+    if (op) assert.equal(op[1].trim(), '1', `"${sel.trim()}" sets opacity ${op[1].trim()} on a word over the photograph`);
+  }
+  // The hint is the ink the solver protects, demoted by size, not by tier.
+  const hint = /\n\.band-hint\s*\{([^}]*)\}/.exec(css);
+  assert.ok(hint, 'no .band-hint rule');
+  assert.match(hint[1], /color:\s*var\(--on-image\);/, 'the hint is not in --on-image');
+  assert.match(hint[1], /font-size:\s*var\(--t-1\)/, 'the hint lost the size that carries its hierarchy');
+  // The chosen option is told apart by colour, never by being the only one lit.
+  assert.match(css, /#pl-ostsee-strand:checked~\.wrap \.lopt--pl-ostsee-strand\{color:var\(--lime\);\}/, 'the chosen place is not lime, or is still being lifted out of a ghost that no longer exists');
 });
 
 test('an outfit is always checked on load, even if the named default leaves the menu', () => {
