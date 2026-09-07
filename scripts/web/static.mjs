@@ -2192,79 +2192,56 @@ input[type="file"]::file-selector-button {
 }
 .signin-alt { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-4); margin: var(--s-6) 0 0; font-size: var(--t-label); }
 
-/* --- pricing ----------------------------------------------------------- */
+/* --- pricing (2026-09-06): the lime band, three cards, the comparison ---- */
 
-/* EQUAL COLUMNS HERE ARE CORRECT, AND THE OLD LANDING'S THREE-COLUMN BLOCK IS
-   WHY THAT HAD TO BE SAID. A pricing table is a COMPARISON: the
-   reader is holding two purchasable things side by side and asking which, and
-   parallel things shown at parallel size is what makes that possible. Forcing
-   an uneven grid here would be the rule applied without judgment, which is its
-   own kind of slop.
-   What IS uneven is Free, because Free is not a third option -- it is what an
-   account already has, and it has no button. Sitting at equal width it read as
-   a purchase the visitor had somehow failed to make. It is narrower now, so
-   the row shows two choices and one piece of context. */
-.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--s-5); margin: 0 0 var(--s-6); }
-@media (max-width: 48rem) { .plans { grid-template-columns: 1fr; gap: var(--s-6); } }
+.pricing-hero { padding: var(--s-7) var(--s-6); text-align: center; margin: 0 0 var(--s-7); }
+.pricing-t { font-family: var(--display); text-transform: uppercase; font-size: var(--t-8); line-height: 0.9; letter-spacing: 0; font-weight: 400; margin: 0 0 var(--s-4); color: var(--on-lime); }
+.pricing-hero .lede { color: var(--on-lime-soft); max-width: 46ch; margin: 0 auto; }
+.pricing-hero .balance { font-weight: 600; color: var(--on-lime); margin: var(--s-4) 0 0; }
+.pricing-hero .notice { margin: var(--s-4) auto 0; max-width: 40ch; }
 
-/* THE PACKS, FROM THE DESIGN PROTOTYPE (2026-09-04). The grant left the row:
-   it has no price and no button, and at equal width beside two purchases it
-   read as one the visitor had somehow failed to make. It is the sentence under
-   the heading now, and the row holds the two things that can actually be
-   bought -- which is the one equal grid DESIGN.md allows, because two packs
-   that differ only in size are genuine peers. The recommended pack sits on the
-   lifted plate and the other on bare paper: depth does the grouping, per the
-   one rule, and no line is drawn. */
-.pricing-head { max-width: 40rem; margin: var(--s-5) auto var(--s-7); text-align: center; }
-.pricing-head .headline { margin-bottom: var(--s-3); }
-.pricing-head .sub { margin: 0 auto; }
-.packs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-5); align-items: start; margin: 0 0 var(--s-7); }
-@media (max-width: 48rem) { .packs { grid-template-columns: 1fr; gap: var(--s-6); } }
-.pack { padding: var(--s-6); }
-.pack--recommended { background: var(--lift); }
-.pack .pack-name { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
-/* A FLAG IS NOT A CHOICE, so it does not wear the accent: it is a small
-   outlined chip on the card plane, the same shape as .plan .mark, inline
-   because it sits in the label row rather than on a corner. */
-.pack .mark { font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 0.15rem 0.6rem; }
-/* The figure is display type; the count beneath it is the label role, so the
-   eye reads "$12" as the figure and "92 credits" as what it buys. */
-.pack .price { font-family: var(--display); font-size: var(--t-8); line-height: 0.9; letter-spacing: 0; text-transform: uppercase; color: var(--ink); margin: var(--s-3) 0 var(--s-1); }
-.pack .pack-credits { font-weight: 600; font-size: var(--d-2); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin: 0; }
-.pack ul { list-style: none; padding: 0; margin: var(--s-5) 0 0; color: var(--muted); font-size: var(--t-1); }
-.pack li { padding: 0.42rem 0; }
-/* The plainer pack takes the lifted button (the design system's "way"), so the
-   oxide button appears once on the page, on the pack the page recommends. */
+/* THREE EQUAL COLUMNS: a pricing comparison is the one place parallel things
+   at parallel size is the honest layout. Two when the Free card is absent. */
+.tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-5); align-items: start; margin: 0 0 var(--s-8); }
+.tiers--two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 52rem; margin-inline: auto; }
+.tier { padding: var(--s-6) var(--s-5); position: relative; }
+.tier--lime { transform: translateY(-0.75rem); }
+.tier-name { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); font-size: var(--t-label); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 var(--s-4); }
+.tier .price { font-family: var(--display); text-transform: uppercase; font-size: var(--t-8); line-height: 0.9; letter-spacing: 0; margin: 0 0 var(--s-1); }
+.tier .per { font-size: var(--t-1); margin: 0 0 var(--s-5); color: var(--ink-soft); }
+.tier--lime .per, .tier--lime .checks, .tier--lime .check--buy span, .tier--lime .hint { color: var(--on-lime-soft); }
+.checks { list-style: none; padding: 0; margin: 0 0 var(--s-5); font-size: var(--t-1); color: var(--ink-soft); }
+.checks li { position: relative; padding: 0.35rem 0 0.35rem 1.4rem; }
+.checks li::before { content: '✓'; position: absolute; left: 0; font-weight: 600; }
+.tier .mark { font-size: var(--t-label); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; background: var(--on-lime); color: var(--lime); border-radius: 999px; padding: 0.15rem 0.6rem; }
+.plan .mark { position: absolute; top: -0.65rem; left: 1.4rem; background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+/* The button on the lime card inverts: black on lime, the way the hero's does. */
+.tier--lime .record { background: var(--on-lime); color: var(--lime); }
+.tier--lime .record:hover { color: var(--lime-hover); }
+.tier--lime .check--buy input { accent-color: var(--on-lime); }
+.tier .record { margin-top: 0; }
+.tier > .hint { margin: var(--s-3) 0 0; text-align: center; }
+/* The plainer pack takes the outlined button, so the solid one appears once in
+   the row, on the card the page recommends. */
 .record--way { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
 .record--way:hover { background: var(--card); color: var(--ink); }
-.pack > .hint { margin: var(--s-3) 0 0; text-align: center; }
+/* Priced plans (fixtures only today) keep the struck/ghost grammar. */
+.tiers:has(.plan--current) .plan { opacity: var(--ghost); }
+.tiers:has(.plan--current) .plan--current { opacity: 1; }
+@media (max-width: 48rem) { .tiers, .tiers--two { grid-template-columns: 1fr; } .tier--lime { transform: none; } }
+
+/* THE COMPARISON. An outlined table, the recommended column lit. */
+.compare { max-width: 52rem; margin: 0 auto var(--s-8); }
+.compare-t { font-family: var(--display); text-transform: uppercase; font-size: var(--d-4); line-height: 0.92; letter-spacing: 0; font-weight: 400; margin: 0 0 var(--s-5); }
+.compare-scroll { overflow-x: auto; }
+.compare table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; font-size: var(--t-1); }
+.compare th, .compare td { padding: var(--s-3) var(--s-4); text-align: left; vertical-align: top; }
+.compare thead th { font-size: var(--t-label); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+.compare tbody th { font-weight: 600; color: var(--ink); }
+.compare td { color: var(--ink-soft); }
+.compare .lit { background: var(--lime); color: var(--on-lime); }
+.compare tbody tr + tr th, .compare tbody tr + tr td { border-top: 1px solid var(--line); }
 .pricing-foot { max-width: 44rem; margin: 0 auto; }
-/* EVERY VALUE PRESENT, ONE STRUCK -- the world's central mechanic, finally on
-   the page that most needs it. DESIGN.md § 23 recorded the failure in its own
-   words: the page that answers "which plan am I on?" was the one page not using
-   the grammar, and the current plan was marked with a bordered pill instead.
-   Ghosts sit at .5, which is the floor this world fixes and does not go below. */
-.plan { position: relative; transition: opacity 160ms linear; }
-/* GATED ON SOMETHING ACTUALLY BEING STRUCK. An unconditional ghost would dim
-   every plan for a visitor who has no plan yet -- which is most of the people
-   this page exists for, and it would read as the whole page being disabled.
-   Ghosting is only meaningful against something lit, so ':has' asks whether
-   there is anything lit before anything is dimmed. */
-.plans:has(.plan--current) .plan { opacity: var(--ghost); }
-.plans:has(.plan--current) .plan--current { opacity: 1; }
-.plan .price { font-family: var(--display); font-size: var(--t-6); line-height: 0.9; letter-spacing: 0; text-transform: uppercase; color: var(--ink); margin: 0.3rem 0 0.1rem; }
-.plan .per { color: var(--faint); font-size: var(--t-label); letter-spacing: 0.14em; text-transform: uppercase; }
-.plan ul { list-style: none; padding: 0; margin: 1rem 0 0; color: var(--muted); font-size: var(--t-1); }
-/* Fifteen of these were the only visible lines left in the product. Space does
-   the grouping now, per DESIGN.md's one rule. */
-.plan li { padding: 0.42rem 0; }
-.plan .mark {
-  position: absolute; top: -0.65rem; left: 1.4rem;
-  font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink);
-  /* A flag says which plan you are on. It is a fact, not a choice, so it is a
-     small outlined chip on the card plane rather than the accent. */
-  background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 0.15rem 0.6rem;
-}
 
 /* --- the world's primitives (2026-09-06) --------------------------------- */
 

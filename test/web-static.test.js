@@ -1276,10 +1276,11 @@ test('a rung says nothing about shape when every shape costs the same', () => {
   assert.ok(!/in 16:9 or 9:16/.test(html),
     'the page still carves out the wide shapes when they cost exactly the same');
 
-  // The summary line collapses to a single figure for the same reason, and it
-  // already did -- asserted so the two halves cannot drift apart.
-  assert.match(html, /480p — ~21 CR/, 'the summary still quotes a range over one price');
-  assert.ok(!/~21-21 CR/.test(html), 'the summary prints a range whose ends are equal');
+  // The page states each quality's price ONCE, in the comparison, and it is
+  // read from the same map the counts above are floored off -- so a shape
+  // priced differently one day moves the count and the quoted figure together.
+  assert.match(html, /<th scope="row">Credits per tape<\/th>\s*<td>21<\/td>\s*<td class="lit">46<\/td>/,
+    'the comparison row does not quote the price');
 });
 
 test('a rung with no per-shape prices states the plain count and invents nothing', () => {
@@ -1299,18 +1300,32 @@ test('a rung with no per-shape prices states the plain count and invents nothing
 });
 
 /**
- * THE PLANS PAGE FROM THE DESIGN PROTOTYPE (2026-09-04): two packs side by
- * side, the larger one lifted and marked, the free grant a sentence above them
- * rather than a third card. The fixtures below are the shipped ladder -- one
- * grant, two packs, two sizes -- so a rule that reads right against them reads
- * right in production.
+ * THE PRICING PAGE IN THE LIME WORLD (2026-09-06): three cards signed out --
+ * Free, Starter, and Standard lifted and lime -- then one table comparing the
+ * two qualities and one stating what comes back, and the landing's six
+ * questions. The fixtures below are the shipped ladder -- one grant, two packs,
+ * two sizes -- so a rule that reads right against them reads right in
+ * production.
+ *
+ * FREE IS A CARD AGAIN, AND THAT IS NOT A REVERSAL OF 2026-09-04. It left the
+ * row then because it sat at equal width beside two purchases with no price and
+ * no button, and read as a purchase the visitor had somehow failed to make. It
+ * has a price now -- the credit count -- and an action, Start free, which is
+ * the thing a signed-out visitor has actually come to do. Signed in it is gone
+ * entirely, because by then it is neither a choice nor news.
  */
+// THE ROWS CARRY THEIR RASTERS, and that is what makes the absence assertion
+// below mean anything. `resolutionRows` hands the page `width` and `height`
+// straight off config/credits.json (640x480 and 1280x720 today), so a fixture
+// without them lets "no raster reaches the page" pass against a page printing
+// `undefinedxundefined` -- an absence measured where the value could never
+// have been. Same shape as CLAUDE.md's own vacuous-absence rule.
 const LADDER = Object.freeze({
   plans: [{ id: 'free', label: 'Free', monthlyUSD: 0, creditsPerPeriod: 21 }],
   resolutions: [
-    { id: '480p', credits: 21, available: true,
+    { id: '480p', width: 640, height: 480, credits: 21, available: true,
       creditsByAspect: { '4:3': 21, '16:9': 28, '9:16': 28 } },
-    { id: '720p', credits: 46, available: true,
+    { id: '720p', width: 1280, height: 720, credits: 46, available: true,
       creditsByAspect: { '4:3': 46, '16:9': 61, '9:16': 61 } },
   ],
   packs: [
@@ -1320,55 +1335,66 @@ const LADDER = Object.freeze({
   currentPlan: null,
 });
 
-test('the two packs stand side by side, and the larger one is lifted and recommended', () => {
+test('the pricing page is three cards -- Free with a sign-up action, Starter, and Standard lifted, lime and recommended', () => {
   const html = pricingPage(LADDER);
   const { css } = createStylesheet({});
+  const cards = html.match(/<section class="(?:card|lime) tier[^"]*"/g) ?? [];
+  assert.equal(cards.length, 3, `three cards, found ${cards.length}: ${cards.join(' ')}`);
+  assert.match(cards[0], /tier--free/, 'Free leads');
+  assert.match(cards[1], /class="card tier tier--paid"/, 'Starter is a dark card');
+  assert.match(cards[2], /class="lime tier tier--paid tier--lime"/, 'Standard is the lime card');
 
-  const packs = html.match(/<section class="pack[^"]*"/g) ?? [];
-  assert.equal(packs.length, 2, 'one card per pack and nothing else in the row');
-  assert.equal(packs.filter((p) => p.includes('pack--recommended')).length, 1,
-    'exactly one pack is the recommended one');
+  const between = (a, b) => html.slice(html.indexOf(a), b ? html.indexOf(b) : undefined);
+  const free = between('tier--free', 'tier--paid');
+  assert.match(free, /<p class="price">21 credits<\/p>\s*<p class="per">when you sign up<\/p>/, 'the free figure is the credit count');
+  assert.match(free, /<li>1 tape at 480p \(none in 16:9 or 9:16\)<\/li><li>any shape<\/li><li>no card<\/li>/, 'the free checks');
+  assert.match(free, /<a class="record" href="\/signup">Start free<\/a>/, 'signed out, Free carries the sign-up action');
 
-  // THE RECOMMENDATION IS THE LARGER PACK, read off its own card: the marked
-  // section must be the one carrying the 138-credit count.
-  const marked = html.slice(html.indexOf('pack--recommended'));
-  const nextCard = marked.indexOf('<section class="pack', 1);
-  const card = nextCard === -1 ? marked : marked.slice(0, nextCard);
-  assert.match(card, /Standard/, 'the recommended card is the Standard pack');
-  assert.match(card, /138 credits/, 'and it is the one with more credits');
-  assert.match(card, /Recommended/, 'and it says so in words');
+  const standard = between('tier--lime');
+  assert.match(standard, /Standard/); assert.match(standard, /Recommended/, 'and it says so in words');
+  assert.match(standard, /<p class="price">\$19<\/p>\s*<p class="per">138 credits<\/p>/, 'price first, credits beneath');
+  assert.match(standard, /<li>6 tapes at 480p \(4 in 16:9 or 9:16\), or 3 tapes at 720p \(2 in 16:9 or 9:16\)<\/li><li>any shape<\/li><li>yours to download and keep<\/li><li>photograph deleted after 7 days<\/li>/);
 
-  // Two EQUAL columns. This is the one page DESIGN.md allows an equal grid on,
-  // because two purchases that differ only in size are genuinely peers.
-  assert.match(css, /\.packs\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
-    'the packs share one two-column grid');
-  assert.match(css, /\.pack--recommended\s*\{[^}]*background:\s*var\(--lift\)/,
-    'the recommended pack sits on the lifted plate');
+  assert.match(css, /\.tiers\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/, 'three equal columns');
+  assert.match(css, /\.tier--lime\s*\{[^}]*transform:\s*translateY\(/, 'the recommended card is not lifted');
+  assert.match(css, /\.tier \.price\s*\{[^}]*font-family:\s*var\(--display\)/, 'the figure is not in the display face');
+  assert.doesNotMatch(css, /\.tier \.per\s*\{[^}]*var\(--(display|osd)\)/, 'the credit count is the label beneath the figure');
+  // Tax sits beside each button, where the decision is made.
+  for (const paid of html.split('tier--paid').slice(1)) assert.match(paid, /Tax is added at checkout\./, 'a paid card does not say tax is added');
+  // The acknowledgement stays, word for word, on every paid form.
+  assert.equal((html.match(/name="withdrawal"/g) ?? []).length, 2, 'every paid form carries the acknowledgement');
+
+  // Signed in: the Free card is absent, the band carries the balance in tapes.
+  const mine = pricingPage({ ...LADDER, account: { email: 'a@b.com' }, balance: { credits: 43 } });
+  assert.equal((mine.match(/<section class="(?:card|lime) tier[^"]*"/g) ?? []).length, 2, 'signed in, the Free card is absent');
+  assert.doesNotMatch(mine, /tier--free|Start free/);
+  assert.match(mine, /class="tiers tiers--two"/, 'two cards share a two-column row');
+  assert.match(mine, /<p class="balance">43 credits left\. Enough for 2 more tapes at 480p\.<\/p>/, 'the band does not carry the balance in tapes');
+  assert.doesNotMatch(html, /credits left/, 'a stranger is told a balance');
 });
 
-test('the free grant opens the page as a sentence, not as a third card with no button', () => {
-  const html = pricingPage(LADDER);
-
-  assert.match(html, /Every account starts with 21 credits/, 'the grant is stated in words');
-  assert.match(html, /1 tape at 480p \(none in 16:9 or 9:16\)/,
-    'and it still says exactly what those credits buy, wide shapes included');
-  assert.ok(!/class="panel plan/.test(html), 'no plan card renders for the grant');
-  assert.ok(!/>FREE</.test(html), 'and no card prices it at FREE');
-});
-
-test('a pack states its price in the display face with the credit count directly beneath it', () => {
-  const html = pricingPage(LADDER);
-  const { css } = createStylesheet({});
-  assert.match(html, /<p class="price">\$12<\/p>\s*<p class="pack-credits">92 credits<\/p>/,
-    'the price and its credit count are adjacent, price first');
-  assert.match(html, /<p class="price">\$19<\/p>\s*<p class="pack-credits">138 credits<\/p>/);
-  assert.match(css, /\.pack \.price\s*\{[^}]*font-family:\s*var\(--display\)/, 'the figure is not in the display face');
-  assert.match(css, /\.pack \.price\s*\{[^}]*font-size:\s*var\(--t-8\)/, 'at the top of the type scale');
-  const credits = /\.pack \.pack-credits\s*\{([^}]*)\}/.exec(css);
-  assert.ok(credits, 'no .pack .pack-credits rule');
-  assert.doesNotMatch(credits[1], /var\(--(osd|display)\)/, 'the count is the label role beneath the figure, not a second figure');
-  const cards = html.split('<section class="pack').slice(1);
-  for (const card of cards) assert.match(card, /Tax is added at checkout\./, 'each pack says tax is added');
+test('the comparison has exactly two quality columns, its numbers come from the seam, and the recommended column is lit', () => {
+  const facts = { frames: 375, fps: 25, shapes: ['4:3', '16:9', '9:16'], lufs: -27, deliveryShortEdge: 1080, photoDays: 7, jobDays: 30, qualities: ['480p', '720p'] };
+  const html = pricingPage({ ...LADDER, facts });
+  const q = /<table class="compare-q">([\s\S]*?)<\/table>/.exec(html);
+  assert.ok(q, 'no quality comparison table');
+  assert.equal((q[1].match(/<th scope="col"/g) ?? []).length, 2, 'exactly two quality columns');
+  assert.match(q[1], /<th scope="col">480p<\/th>\s*<th scope="col" class="lit">720p<\/th>/, 'the second quality is the recommended column');
+  assert.match(q[1], /<th scope="row">Credits per tape<\/th>\s*<td>21<\/td>\s*<td class="lit">46<\/td>/);
+  assert.match(q[1], /<th scope="row">Source detail<\/th>\s*<td>480 lines<\/td>\s*<td class="lit">720 lines<\/td>/);
+  assert.match(q[1], /<th scope="row">Delivered file<\/th>\s*<td>1080 lines/, 'the delivered file is stated from config');
+  assert.match(q[1], /<th scope="row">The grain<\/th>\s*<td>identical, by design<\/td>\s*<td class="lit">identical, by design<\/td>/);
+  assert.match(q[1], /<th scope="row">What a pack buys<\/th>\s*<td>Starter: 4 tapes · Standard: 6 tapes<\/td>\s*<td class="lit">Starter: 2 tapes · Standard: 3 tapes<\/td>/);
+  assert.ok(!/1112|752x|960x720|640x480|1280x720/.test(html), 'a raster the model is ordered at, or delivers, must not be printed');
+  const f = /<table class="compare-f">([\s\S]*?)<\/table>/.exec(html);
+  assert.ok(f, 'no "what comes back" table');
+  assert.match(f[1], /<th scope="row">Length<\/th>\s*<td>Fifteen seconds exactly, 375 frames<\/td>/);
+  assert.match(f[1], /<th scope="row">Shapes<\/th>\s*<td>Three: 4:3, 16:9 and 9:16<\/td>/);
+  assert.match(f[1], /<th scope="row">Sound<\/th>\s*<td>A mono tape bed at -27 LUFS<\/td>/);
+  assert.match(f[1], /<th scope="row">Disclosure<\/th>\s*<td>Marked AI-generated in the file/);
+  // The lime band opens the page and the FAQ closes it.
+  assert.match(html, /<section class="lime pricing-hero">\s*<h1 class="pricing-t">Credits, not subscriptions\.<\/h1>/);
+  assert.equal((html.match(/<details class="faq-row">/g) ?? []).length, 6, 'the same six questions as the landing');
 });
 
 test('the signup page does not promise a recurring free allowance, because there is none', () => {

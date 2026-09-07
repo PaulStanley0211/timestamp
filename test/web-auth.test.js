@@ -1368,12 +1368,12 @@ test('the pricing page lists the plans in credits and marks the current one', as
     const anon = await fetch(`${base}/pricing`);
     assert.equal(anon.status, 200);
     const anonHtml = await anon.text();
-    // THE GRANT IS A SENTENCE, NOT A CARD (2026-09-04). A rung with no price
-    // and no button sat beside two purchases and read as a third one the
-    // visitor had somehow failed to make. It opens the page in words now and
-    // the paid plans keep their cards, so 'Free' is no longer a label here.
+    // THE GRANT LEADS THE ROW AS A CARD AGAIN (2026-09-06), because it has a
+    // figure -- the credit count -- and an action, which is what it lacked in
+    // 2026-09-04's row of two purchases. A priced plan still gets a card of its
+    // own after the packs, and keeps the struck/ghost grammar.
     for (const label of ['Shelf', 'Archive']) assert.ok(anonHtml.includes(label), `${label} is missing`);
-    assert.match(anonHtml, /Every account starts with 51 credits/, 'the grant is stated as a sentence');
+    assert.match(anonHtml, /<p class="price">51 credits<\/p>\s*<p class="per">when you sign up<\/p>/, 'the free grant is the first card');
     assert.ok(anonHtml.includes('$10') && anonHtml.includes('$12'));
     assert.ok(!anonHtml.includes('Your plan'), 'nothing is marked for a signed-out visitor');
 
@@ -1387,20 +1387,20 @@ test('the pricing page lists the plans in credits and marks the current one', as
     // time. A page that says "a month" next to a Buy button is describing a
     // subscription this application cannot sell.
     assert.ok(anonHtml.includes('153 credits'));
-    assert.ok(!/credits a month/.test(anonHtml), 'nothing on this page may claim to recur');
-    assert.ok(!/per month/.test(anonHtml), 'nothing on this page may claim to recur');
+    assert.ok(!/credits a month/.test(anonHtml) && !/per month/.test(anonHtml), 'nothing on this page may claim to recur');
     assert.ok(anonHtml.includes('3 tapes at 480p'), 'shelf is three 480p tapes');
     assert.ok(anonHtml.includes('1 tape at 720p'), 'and one 720p tape, singular');
     assert.ok(!anonHtml.includes('1 tapes'), 'and nothing reads like a placeholder');
-    // A plan that cannot fund a 720p tape says so in words rather than "0 tapes".
-    assert.ok(anonHtml.includes('not enough for a 720p tape'));
-    assert.ok(anonHtml.includes('480p — ~51 CR'));
-    assert.ok(anonHtml.includes('720p — ~152 CR'));
+    // WHAT A QUALITY COSTS IS SAID ONCE, IN THE COMPARISON. It used to be a
+    // summary line above the cards as well; two places quoting one number is
+    // how a page ends up disagreeing with itself, and the comparison is where
+    // the reader is actually choosing between the two.
+    assert.match(anonHtml, /<th scope="row">Credits per tape<\/th>\s*<td>51<\/td>\s*<td class="lit">152<\/td>/, 'the comparison quotes the two qualities');
     assert.ok(!anonHtml.includes('1080p'), 'a deferred size is not priced on the plans page');
 
     const mine = await (await fetch(`${base}/pricing`, { headers: { cookie } })).text();
     assert.ok(mine.includes('Your plan'));
-    assert.ok(/plan--current[\s\S]{0,200}Shelf/.test(mine), 'the Shelf plan is the one marked');
+    assert.ok(/plan--current[\s\S]{0,300}Shelf/.test(mine), 'the Shelf plan is the one marked');
   });
 });
 
@@ -1560,10 +1560,13 @@ test('a missing scripts/auth/ is a 503 with a sentence, and the assets still ser
     assert.ok([200, 404].includes(placeRes.status), `unexpected ${placeRes.status} from the place route`);
 
     // And the plans are public prose: 503-ing a marketing page because an
-    // unrelated module will not load is a worse answer than showing it.
+    // unrelated module will not load is a worse answer than showing it. The
+    // heading is the page's own, so this moves when the page is rebuilt; what
+    // it pins is that a page with no plans, no sizes and no packs still renders
+    // the thing it is for rather than an error.
     const plans = await fetch(`${base}/pricing`, { headers: { accept: 'text/html' } });
     assert.equal(plans.status, 200);
-    assert.ok((await plans.text()).includes('What a tape costs'));
+    assert.ok((await plans.text()).includes('Credits, not subscriptions.'));
   } finally {
     await app.close();
     fs.rmSync(root, { recursive: true, force: true });

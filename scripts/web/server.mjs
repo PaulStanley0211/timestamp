@@ -82,6 +82,22 @@ import { runFfprobe } from '../ffmpeg/run.mjs';
  *  own location rather than from cwd, so `npm run web` from anywhere finds them. */
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..').split(path.sep).join('/');
 
+/**
+ * The bed's loudness target, read from the look config so the pricing page
+ * states the number the renderer asserts rather than a typed one.
+ *
+ * SEARCHED FOR RATHER THAN ADDRESSED BY PATH: the audio block has moved inside
+ * that file before, and a page that silently stops stating a fact is a worse
+ * failure than one that states it from the wrong key. Null when the config
+ * carries no target at all, and the row is then simply absent.
+ */
+const TARGET_LUFS = (function find(o) {
+  if (!o || typeof o !== 'object') return null;
+  if (Number.isFinite(o.targetLufs)) return o.targetLufs;
+  for (const v of Object.values(o)) { const r = find(v); if (r !== null) return r; }
+  return null;
+}(JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config', 'look', 'base.json'), 'utf8'))));
+
 import { matchRoute, isPublicRoute } from './router.mjs';
 import { boundaryFromContentType, parseMultipart, fileSink, MultipartError } from './multipart.mjs';
 import { createStylesheet, sendFile } from './static.mjs';
@@ -1919,6 +1935,13 @@ export function createServer({
       shapes: aspectRows().filter((a) => a.available).map((a) => a.id),
       frames: Math.round((cfg?.durationSeconds ?? 15) * (cfg?.fps ?? 25)),
       fps: cfg?.fps ?? 25,
+      // THE SHORT EDGE OF THE DELIVERED FILE, which is the one raster this
+      // product controls: every shape holds its short edge, so the delivered
+      // picture is that many lines whichever frame was chosen. The raster the
+      // model is ORDERED at is deliberately not published anywhere -- the
+      // supplier does not always return it.
+      deliveryShortEdge: Math.min(cfg?.delivery?.width ?? 1080, cfg?.delivery?.height ?? 1920),
+      lufs: TARGET_LUFS,
     };
   }
 
@@ -3611,6 +3634,9 @@ export function createServer({
         // The credits arrive on the webhook, which is a different request with
         // a signature on it.
         checkout: query?.get('checkout') ?? null,
+        // The same object the landing reads, so the two public pages cannot
+        // state different lengths, shapes, qualities or retention windows.
+        facts: await publicFacts(),
       }));
     },
 
