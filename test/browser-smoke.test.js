@@ -36,6 +36,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { createServer } from '../scripts/web/server.mjs';
 import { SESSION_COOKIE } from '../scripts/web/session-middleware.mjs';
@@ -302,6 +303,11 @@ class Cdp {
  *  carried off screen) was measured at 51px of overflow for a 33-character
  *  address at 375px -- the length is the load, not decoration. */
 const LONG_EMAIL = 'a-genuinely-long-address-somebody-really-typed@example.com';
+const BROKE_EMAIL = 'one-credit@example.com';
+
+/** A real JPEG on disk, because DOM.setFileInputFiles hands the browser a
+ *  PATH and the page's FileReader then reads the bytes for the preview. */
+const TINY_JPG = fileURLToPath(new URL('./fixtures/showcase/tiny.jpg', import.meta.url));
 
 let shared = null;
 
@@ -388,6 +394,14 @@ async function session() {
   const { sessionId } = auth.createSession({ accountId: account.accountId });
   const cookieValue = auth.signCookie(sessionId, auth.sessionSecret());
 
+  // A SECOND ACCOUNT THAT CANNOT AFFORD THE CHEAPEST TAPE. The fake prices
+  // 480p at 51 CR, so one credit puts the order form in its refusing state --
+  // the Record button rendered disabled and the reason a plain paragraph with
+  // no id. That is the state the inline script has to survive, and the
+  // 5000-credit account above can never put the page in it.
+  const broke = auth.createAccount({ email: BROKE_EMAIL, password: 'correct horse battery', plan: 'free', credits: 1 });
+  const brokeCookie = auth.signCookie(auth.createSession({ accountId: broke.accountId }).sessionId, auth.sessionSecret());
+
   const queued = seedJob(app, root, { status: 'queued', owner: account });
   const finished = seedJob(app, root, { status: 'done', owner: account });
   const running = seedJob(app, root, { status: 'running', owner: account });
@@ -400,6 +414,9 @@ async function session() {
     account, queued, finished, running,
     async signIn() {
       await cdp.send('Network.setCookie', { name: SESSION_COOKIE, value: cookieValue, url: base });
+    },
+    async signInBroke() {
+      await cdp.send('Network.setCookie', { name: SESSION_COOKIE, value: brokeCookie, url: base });
     },
     async signOut() {
       await cdp.send('Network.clearBrowserCookies');
@@ -421,6 +438,40 @@ test.after(async () => {
 });
 
 /**
+ * Page exceptions, console.error calls and CSP refusals logged since `fence`,
+ * and nothing else -- §38C says why network noise is deliberately left out.
+ * Shared by `visit` and by any test that acts on a page AFTER it loaded, so
+ * an exception thrown by a change handler is judged by the same rule as one
+ * thrown at load.
+ */
+function errorsSince(cdp, fence) {
+  const errors = [];
+  for (const e of cdp.events.slice(fence)) {
+    if (e.method === 'Runtime.exceptionThrown') {
+      errors.push(`exception: ${e.params.exceptionDetails?.exception?.description ?? e.params.exceptionDetails?.text}`);
+    } else if (e.method === 'Runtime.consoleAPICalled' && e.params.type === 'error') {
+      errors.push(`console.error: ${e.params.args?.map((a) => a.value ?? a.description).join(' ')}`);
+    } else if (e.method === 'Log.entryAdded' && /Content Security Policy|Refused to/.test(e.params.entry?.text ?? '')) {
+      errors.push(`csp: ${e.params.entry.text}`);
+    }
+  }
+  return errors;
+}
+
+/**
+ * Choose a file through a real file input, the way a person does and the way
+ * no probe can: a page cannot set `input.files` itself, so the browser has to
+ * do it. DOM.setFileInputFiles takes the element by objectId and dispatches
+ * the same `input` and `change` events a picker dialog would.
+ */
+async function pickFile(cdp, selector, file) {
+  const { result, exceptionDetails } = await cdp.send('Runtime.evaluate', { expression: `document.querySelector(${JSON.stringify(selector)})` });
+  assert.equal(exceptionDetails, undefined, `lookup threw: ${exceptionDetails?.text}`);
+  assert.ok(result.objectId, `nothing on the page matches ${selector}`);
+  await cdp.send('DOM.setFileInputFiles', { objectId: result.objectId, files: [file] });
+}
+
+/**
  * Navigate and report what the engine computed.
  *
  * The report is one Runtime.evaluate returning JSON, because a chatty
@@ -438,16 +489,7 @@ async function visit(pathname, { width = 1440, height = 900, mobile = false, set
   await loaded;
   if (settleMs) await new Promise((r) => { setTimeout(r, settleMs); });
 
-  const errors = [];
-  for (const e of cdp.events.slice(fence)) {
-    if (e.method === 'Runtime.exceptionThrown') {
-      errors.push(`exception: ${e.params.exceptionDetails?.exception?.description ?? e.params.exceptionDetails?.text}`);
-    } else if (e.method === 'Runtime.consoleAPICalled' && e.params.type === 'error') {
-      errors.push(`console.error: ${e.params.args?.map((a) => a.value ?? a.description).join(' ')}`);
-    } else if (e.method === 'Log.entryAdded' && /Content Security Policy|Refused to/.test(e.params.entry?.text ?? '')) {
-      errors.push(`csp: ${e.params.entry.text}`);
-    }
-  }
+  const errors = errorsSince(cdp, fence);
 
   const evaluate = async (expression) => {
     const { result, exceptionDetails } = await cdp.send('Runtime.evaluate', { expression, returnByValue: true });
@@ -928,6 +970,95 @@ test('the own-place card in the rail is a live control in both states', { skip }
     'with a preset chosen the rail offers the upload rather than the way back, so there is no way back');
   assert.equal(onPreset.target[0], 'pl-own',
     `the way back points at ${JSON.stringify(onPreset.target[0])}, which does not reselect your own place`);
+});
+
+/**
+ * A PAGE THAT REFUSES THE ORDER MUST STILL REFUSE IT AFTER A PHOTO IS CHOSEN.
+ *
+ * When the balance cannot afford the cheapest tape, homePage renders the
+ * Record button disabled and the refusal as a plain `<p class="reason">` with
+ * no id. The inline script's change handler was written for the other page:
+ * it re-enabled the button and wrote into `#reason`, which is null here. A
+ * person with too few credits who chose a photo therefore watched the button
+ * light up -- the server still refuses, so no money moved, but the page said
+ * yes and then the handler threw, and every markup test passed the whole time
+ * because the button and the paragraph are both present and both correct.
+ * Only a browser can dispatch the change event and see what the script does.
+ */
+test('choosing a photo on a page that cannot afford a tape leaves the button disabled and throws nothing', { skip }, async () => {
+  const s = await session();
+  await s.signInBroke();
+  const page = await visit('/', LAPTOP);
+  assert.deepEqual(page.errors, [], page.errors.join('; '));
+
+  // The precondition first, so this cannot pass on a page that was never
+  // refusing: the button is disabled, the reason names the credits, and the
+  // reason has NO id -- the exact shape the handler has to survive.
+  const before = await page.evaluate(`(() => {
+    const record = document.getElementById('record');
+    return {
+      hasRecord: Boolean(record),
+      disabled: record ? record.disabled : null,
+      reasonById: Boolean(document.getElementById('reason')),
+      reasons: [...document.querySelectorAll('.reason')].map((p) => p.textContent).join(' | '),
+    };
+  })()`);
+  assert.ok(before.hasRecord, 'the signed-in page must carry the Record button');
+  assert.equal(before.disabled, true, 'a one-credit account arrived at an enabled Record button');
+  assert.match(before.reasons, /Not enough credits/,
+    `the page is not in its refusing state; the reasons read: ${before.reasons}`);
+  assert.equal(before.reasonById, false,
+    'the refusal now carries id="reason", so this test no longer exercises the null the handler met');
+
+  const fence = s.cdp.events.length;
+  await pickFile(s.cdp, '#photo', TINY_JPG);
+  const after = await page.evaluate(`(() => ({
+    disabled: document.getElementById('record').disabled,
+    named: (document.getElementById('photo-name') || {}).textContent,
+  }))()`);
+
+  // The handler ran -- otherwise the assertion below is vacuous.
+  assert.equal(after.named, path.basename(TINY_JPG),
+    'the change handler never ran, so nothing below is evidence of anything');
+  // One assertion over both halves, so a failure shows the re-enabled button
+  // AND the exception side by side rather than whichever comes first.
+  assert.deepEqual(
+    { disabled: after.disabled, errors: errorsSince(s.cdp, fence) },
+    { disabled: true, errors: [] },
+    'choosing a photo must leave a button the page disabled for want of credits disabled, and throw nothing',
+  );
+});
+
+/**
+ * And the page that CAN afford a tape still opens the button on a photo --
+ * the fix above must not become "disabled forever". Same event, same script,
+ * the other rendered state.
+ */
+test('choosing a photo on a page that can afford a tape enables the button and clears the reason', { skip }, async () => {
+  const s = await session();
+  await s.signIn();
+  const page = await visit('/', LAPTOP);
+  assert.deepEqual(page.errors, [], page.errors.join('; '));
+
+  const before = await page.evaluate(`(() => ({
+    disabled: document.getElementById('record').disabled,
+    reason: (document.getElementById('reason') || {}).textContent,
+  }))()`);
+  assert.equal(before.disabled, true, 'with scripting on, the button waits for a photo');
+  assert.equal(before.reason, 'Upload a photo first');
+
+  const fence = s.cdp.events.length;
+  await pickFile(s.cdp, '#photo', TINY_JPG);
+  const after = await page.evaluate(`(() => ({
+    disabled: document.getElementById('record').disabled,
+    reason: (document.getElementById('reason') || {}).textContent,
+    named: (document.getElementById('photo-name') || {}).textContent,
+  }))()`);
+  assert.equal(after.named, path.basename(TINY_JPG), 'the change handler never ran');
+  assert.equal(after.disabled, false, 'a paying account chose a photo and the button stayed disabled');
+  assert.equal(after.reason, '', `the reason under an enabled button still reads ${JSON.stringify(after.reason)}`);
+  const errors = errorsSince(s.cdp, fence);
+  assert.deepEqual(errors, [], errors.join('; '));
 });
 
 test('after a selection, lime is on exactly one card in each option row, and it is the one chosen', { skip }, async () => {

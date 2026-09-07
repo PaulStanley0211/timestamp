@@ -265,6 +265,9 @@ const HOME_SCRIPT = `
 (function () {
   var photo = document.getElementById('photo');
   var name = document.getElementById('photo-name');
+  // Null when the page is refusing the order outright: homePage renders that
+  // refusal as a plain paragraph with no id, on purpose, so nothing here can
+  // blank a reason that a photo does not answer. Every write below is guarded.
   var reason = document.getElementById('reason');
   var record = document.getElementById('record');
 
@@ -284,7 +287,14 @@ const HOME_SCRIPT = `
   }
 
   if (!photo || !record) return;
-  if (!record.disabled) { record.disabled = true; }
+  // THE PAGE'S OWN VERDICT IS READ FIRST, AND IT IS FINAL. homePage renders the
+  // button disabled when the balance cannot afford the cheapest tape; that is
+  // the server's refusal and no photo lifts it. It has to be read BEFORE the
+  // line after it, which disables an enabled button until a photo is chosen --
+  // once that has run the two states are indistinguishable, and the change
+  // handler used to re-enable both.
+  var refused = record.disabled;
+  if (!refused) { record.disabled = true; }
 
   var picked = document.getElementById('picked');
   var thumb = document.getElementById('photo-thumb');
@@ -314,14 +324,17 @@ const HOME_SCRIPT = `
     if (thumb) thumb.removeAttribute('src');
     if (picked) picked.hidden = true;
     record.disabled = true;
-    reason.textContent = 'Upload a photo first';
+    if (reason) { reason.textContent = 'Upload a photo first'; }
     photo.focus();
   }
 
   photo.addEventListener('change', function () {
     var file = photo.files && photo.files[0];
-    if (file) { show(file); record.disabled = false; reason.textContent = ''; }
-    else { forget(); }
+    if (file) {
+      show(file);
+      if (!refused) { record.disabled = false; }
+      if (reason) { reason.textContent = ''; }
+    } else { forget(); }
   });
 
   if (clear) clear.addEventListener('click', forget);
