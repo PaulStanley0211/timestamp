@@ -838,10 +838,11 @@ test('the grain plate is gone from the stylesheet, not merely switched off', () 
 });
 
 test('no border in the sheet draws a line of its own colour', () => {
-  // The one rule. Borders written against `var(--hairline)` are already
-  // transparent -- that is how the two converted pages went borderless without
-  // rewriting three hundred rules -- but a LITERAL colour in a border
-  // declaration cannot be neutralised by a token and is always a visible line.
+  // The one rule. A border written against `var(--line)` is the token's own
+  // line, so the whole world's edges move when that one value moves -- which
+  // is how three hundred rules changed ground twice without being rewritten.
+  // A LITERAL colour in a border declaration answers to nothing: no token can
+  // lighten it, dim it or turn it off, and it is a visible line for ever.
   // DESIGN.md's two exceptions are safe here: `outline` is not a border, and
   // `.shape` draws with a var.
   const { css } = createStylesheet(FOCUS_MENU);
@@ -2302,8 +2303,11 @@ test('the photo preview does not borrow a class that positions itself elsewhere'
  * ground: proof the photograph, the scrim and the lit layer are gone from the
  * markup, and that the helper which used to build them is gone from the module
  * rather than left dormant. The second ties the band's scrim solver to the ink
- * the band actually paints, and refuses the soft label tier anywhere inside
- * `.band` -- the successor to the plate rule this world no longer has.
+ * the band actually paints, and refuses the PAGE's dim tier anywhere inside
+ * `.band` -- the successor to the plate rule this world no longer has. The
+ * band's own soft tier, `--on-image-soft`, is allowed and is what the hint
+ * takes; what is refused is `--ink-soft` and `--faint`, the tiers measured
+ * against a flat ground and never against a picture.
  */
 test('the onboarding page is a card on the ground, with no photograph behind it', async () => {
   // §63 put a place photograph behind this page so the cream did not begin
@@ -2346,9 +2350,13 @@ test("the band's scrim is solved for the ink the band paints, and no dim tier si
   // THE SUCCESSOR TO §63C's PLATE RULE. That rule said: on a page sitting on a
   // photograph, the dim tier does not appear without a plate under it. The
   // plate went with the cream; the band has no plate; so the rule becomes: in
-  // the band, every colour is an on-image tier. The soft tier is deliberately
-  // outside the scrim solve (it would drag every place above 0.59), which is
-  // exactly why it may not be painted there.
+  // the band, every colour is an on-image tier.
+  // WHICH DIM TIER THIS REFUSES, since the band has two. `--ink-soft` and
+  // `--faint` are the PAGE's, measured against a flat ground and meaningless
+  // over a picture; those are refused. `--on-image-soft` is the band's own and
+  // is what the hint paints -- allowed, and deliberately outside the scrim
+  // solve, which targets `--on-image` alone (at 4.5:1 the soft tier would drag
+  // every place above 0.59 and undo the per-place scrim entirely).
   const bandRules = [...css.matchAll(/\n(\.band[^{}]*)\{([^}]*)\}/g)];
   assert.ok(bandRules.length >= 4, `the band has ${bandRules.length} rules -- the probe is not reading it`);
   for (const [, sel, body] of bandRules) {

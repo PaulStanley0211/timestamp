@@ -63,8 +63,32 @@ picture did not change when the ground did.
 The landing's band is the only photograph left behind text (onboarding lost
 its ground on 2026-09-07), and its per-place scrim is solved so `--on-image`
 clears 8:1 over that place's loop; the constant the solver protects is tied to
-the token by a test, and a second test refuses any dim-tier colour inside
-`.band`, because the soft tier is outside the solve on purpose.
+the token by a test, and a second test refuses the PAGE's dim tier —
+`--ink-soft` and `--faint`, measured against a flat ground — anywhere inside
+`.band`. The band's own `--on-image-soft` is allowed there and is what the
+hint paints; it sits outside the solve on purpose, because solving for it
+would drag every place back above 0.59 and undo the per-place scrim.
+
+**Which way the scrim moved when it was re-solved, because it moved the way
+nobody expected.** The solver used to protect the cream world's bone; on
+2026-09-07 it was re-pointed at `--on-image`, the colour the band actually
+paints. `#FAF7F2` is *brighter* than the value it replaced, so it reaches 8:1
+against a **lighter** scrim, not a heavier one: `amalfi-afternoon` went 0.62 →
+0.56, `space-centre` 0.53 → 0.46, `kuechentisch-fruehstueck` 0.37 → 0.30, and
+the other four were already at the 0.30 floor. Modelled the way the solver
+models it — mean loop luma, flat scrim alpha — `--on-image-soft`'s worst cases
+fall from about 5.9 to 5.11 / 5.17 / 5.34 and none drops below 4.5:1.
+
+**That model is a model, and the painted page is not obliged to match it.**
+Measured on real pixels (a screenshot of the band with its own text hidden,
+2026-09-07): the scrim is two partially transparent gradients multiplied by a
+layer opacity, so the alpha that lands is always *less* than the solved
+number; the rail's options are ghosts at `--ghost`, a floor solved on the flat
+ground and not over a picture; and a `text-shadow` does work no ratio can see.
+Words in the band measure 2.1–4.9:1 against the brightest pixel behind them.
+Nothing here is a defect to fix blind — it is the reason a composite-ratio
+test over this band has never held, and the reason the guards above are
+written as rules about which token may appear rather than as arithmetic.
 
 **The aliases.** `--accent`, `--accent-bright`, `--accent-deep`, `--faint`,
 `--alarm` and `--ghost-hover` are re-pointed once at `:root` and never
