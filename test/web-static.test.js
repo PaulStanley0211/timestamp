@@ -470,6 +470,23 @@ test('a field sits on the ground inside a card, outlined from the token; a banne
   assert.ok(input, 'no shared input rule');
   assert.match(input[1], /background:\s*var\(--ground\)/, 'a field inside a card does not recess to the ground');
   assert.match(input[1], /border:\s*1px solid var\(--line\)/, 'a field is not outlined from the token');
+  // AND THE OTHER HALF OF THE SAME SENTENCE. DESIGN.md's Surfaces rule reads
+  // both ways: "A field inside a card recesses to the ground; a field on the
+  // ground lifts to the card." Steps 2 and 3 are the arc's light panels --
+  // transparent, so their surface IS the ground -- and each carries a free-text
+  // field: "Or describe what you are wearing", "Or describe it, if you have no
+  // photograph of it." Recessed there, a field is ground on ground with nothing
+  // to say it is a field but a 1px line at 0.14 alpha. Its own sibling the slim
+  // dropzone already lifts for exactly this reason.
+  const open = /\n\.panel--choice\s*\{([^}]*)\}/.exec(css);
+  assert.ok(open, 'no .panel--choice rule');
+  assert.match(open[1], /background:\s*transparent/, 'an open panel is no longer the ground, so the lift below needs re-deciding');
+  const lifted = /\.panel--choice input\[type="text"\]\s*\{([^}]*)\}/.exec(css);
+  assert.ok(lifted, 'no rule lifts a field on an open panel; the free text on steps 2 and 3 is ground on ground');
+  assert.match(lifted[1], /background:\s*var\(--card\)/, 'a field on the ground does not lift to the card');
+  const slim = /\.drop--slim\s*\{([^}]*)\}/.exec(css);
+  assert.ok(slim, 'no .drop--slim rule');
+  assert.match(slim[1], /background:\s*var\(--card\)/, 'the field beside the dropzone lifts and the dropzone does not');
   const notice = /\n\.notice\s*\{([^}]*)\}/.exec(css);
   assert.ok(notice, 'no .notice rule');
   assert.match(notice[1], /background:\s*var\(--card\)/, 'the notice is not a card');
@@ -561,6 +578,15 @@ test('an option card is an outlined card, not a ghost, and the chosen one fills 
   const soonDetail = /\.qualitycard--soon \.detail\s*\{([^}]*)\}/.exec(css);
   assert.ok(soonDetail, 'no .qualitycard--soon .detail rule -- the deferred tier is the one text card still ghosted, and its detail line needs page ink');
   assert.match(soonDetail[1], /color:\s*var\(--ink\)/, 'the deferred quality card is still a ghost and its detail is in the soft tier: --ink-soft under --ghost measures 2.83:1 on this ground, below the floor');
+  // THE SAME CLASS ONE CARD OVER, AND IT IS A GLYPH RATHER THAN TEXT. A
+  // deferred shape still draws its rectangle -- the exception DESIGN.md grants
+  // is for the thing that depicts an aspect ratio, and one drawn in a colour
+  // nobody can see depicts nothing. Drawn in the soft tier under the ghost it
+  // composites to 2.85:1, below 1.4.11's 3:1 for a non-text glyph; page ink
+  // under the same ghost clears it.
+  const soonShape = /\.framecard--soon \.shape\s*\{([^}]*)\}/.exec(css);
+  assert.ok(soonShape, 'no .framecard--soon .shape rule -- a deferred shape must still draw its glyph');
+  assert.match(soonShape[1], /border-color:\s*var\(--ink\)/, 'a deferred shape glyph is drawn in the soft tier under the ghost: 2.85:1, below the 3:1 a glyph needs');
 });
 
 test('the chosen place keeps its photograph and takes a lime ring and a lime badge', () => {

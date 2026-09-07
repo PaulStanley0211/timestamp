@@ -1522,6 +1522,14 @@ input[type="text"], input[type="email"], input[type="password"], select {
    of value a theme gets away with dimming because nobody measures a hint; it
    takes the soft tier, which is the same colour every other hint uses and is
    measured against both surfaces by the palette test. */
+/* THE OTHER HALF OF THE SURFACES RULE. DESIGN.md: 'A field inside a card
+   recesses to the ground; a field on the ground lifts to the card.' Steps 2 and
+   3 are the weight arc's light panels -- transparent, so their surface is the
+   page ground -- and each carries a free-text field. Recessed there it is
+   ground on ground, and the only thing left saying 'this is a field' is a 1px
+   line at 0.14 alpha. Its sibling the slim dropzone already lifts, with the
+   same reasoning written above it. */
+.panel--choice input[type="text"] { background: var(--card); }
 input::placeholder { color: var(--ink-soft); }
 select { width: auto; min-width: 6rem; }
 
@@ -1607,9 +1615,15 @@ input[type="file"]::file-selector-button {
 /* A deferred shape still DRAWS its glyph -- the exception DESIGN.md grants is
    for the rectangle that depicts an aspect ratio, and one drawn in a
    transparent colour depicts nothing. It was invisible on the dark ground for
-   the same reason; ghosting it in --faint is what "unavailable" should have
-   looked like all along. */
-.framecard--soon .shape { border-color: var(--faint); }
+   the same reason; ghosting it is what "unavailable" should have looked like
+   all along.
+
+   PAGE INK, NOT THE SOFT TIER, FOR THE REASON THE DEFERRED QUALITY CARD'S
+   DETAIL LINE TAKES IT: the card is ghosted, and an opacity multiplies colour
+   away. The soft tier under --ghost composites to 2.85:1, under the 3:1 that
+   1.4.11 asks of a glyph carrying meaning; page ink under the same ghost is
+   about 4.8:1. */
+.framecard--soon .shape { border-color: var(--ink); }
 
 /* Same rule as the deferred quality card: a <span>, no radio behind it, so
    there is nothing to select and nothing that can be posted. */
