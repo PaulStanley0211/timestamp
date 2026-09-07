@@ -1874,6 +1874,35 @@ test('the account page sections carry readout labels, and the deletion sits in a
   assert.match(label[1], /font-weight:\s*600/, 'the label role is Inter 600');
 });
 
+test('the one-way door is an outlined button in ink, and the account heading is the address in the body face', () => {
+  // THE DELETE BUTTON WAS LIME. `.record--danger` was written into the markup
+  // on 2026-08-29 and no rule ever named it, so the cascade gave it .record's
+  // lime -- "go" -- on the one control whose whole meaning is the opposite.
+  // There is no alarm red in this world (DESIGN.md rule 2), so danger is weight
+  // and words: the same outlined card every other secondary control is, its
+  // label in ink, and the sentence above it saying there is no undo.
+  const { css } = createStylesheet({});
+  const danger = /\.record--danger\s*\{([^}]*)\}/.exec(css);
+  assert.ok(danger, 'no .record--danger rule -- the class is in the markup and styled by nothing, so the button is lime');
+  assert.match(danger[1], /background:\s*var\(--card\)/, 'the one-way door is not on the card plane');
+  assert.match(danger[1], /border:\s*1px solid var\(--line\)/, 'the one-way door is not outlined');
+  assert.match(danger[1], /color:\s*var\(--ink\)/, 'the one-way door is not written in ink');
+  assert.ok(!/var\(--(rec|lime|accent|accent-bright)\)/.test(danger[1]), 'the one-way door is lime or red -- it is neither go nor the record light');
+  const hover = /\.record--danger:hover\s*\{([^}]*)\}/.exec(css);
+  assert.ok(hover, 'no hover for the one-way door');
+  assert.ok(!/var\(--(lime|accent|accent-bright)\)/.test(hover[1]), 'hovering the one-way door turns it lime');
+  // The address is data.
+  const head = /\.account \.headline\s*\{([^}]*)\}/.exec(css);
+  assert.ok(head, 'no .account .headline rule');
+  assert.match(head[1], /font-family:\s*var\(--sans\)/, 'an email address is set in the poster face');
+  assert.match(head[1], /text-transform:\s*none/, 'an email address is uppercased, which makes it a different string');
+  assert.match(head[1], /overflow-wrap:\s*anywhere/, 'a long address cannot break');
+  // And the page still says what it said.
+  const html = accountPage({ account: { email: 'paul@example.com' }, balance: { credits: 43 }, csrf: 't', cheapest: { id: '480p', credits: 21 } });
+  assert.match(html, /<h1 class="headline">paul@example\.com<\/h1>/, 'the heading is no longer the address');
+  assert.match(html, /<button type="submit" class="record record--danger">Delete my account<\/button>/, 'the one-way door lost its class or its words');
+});
+
 test('nothing in the soft tier is also ghosted', () => {
   // SECTION 31 SOLVED THE GHOST FLOOR FOR `--ink` AND FOR NOTHING ELSE. 0.63 is
   // the least opacity at which `--ink` still clears 4.5:1 over `--paper`, and

@@ -1711,6 +1711,15 @@ input[type="file"]::file-selector-button {
   cursor: not-allowed;
 }
 
+/* THE ONE-WAY DOOR IS NOT GO. '.record--danger' was in the markup from
+   2026-08-29 and styled by nothing, so it rendered as the lime Record button.
+   There is no alarm red in this world; danger is weight and words -- the
+   sentence above the form says there is no undo -- and the control itself is
+   the same outlined card every secondary control is, in ink. Hover brightens
+   the outline and never the fill. */
+.record--danger { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+.record--danger:hover { background: var(--card); border-color: var(--ink); }
+
 .reason { text-align: center; color: var(--faint); font-size: var(--t-1); margin: var(--s-3) 0 0; }
 
 /* --- the shelf --------------------------------------------------------- */
@@ -2064,7 +2073,12 @@ input[type="file"]::file-selector-button {
    anywhere), the sections under readout labels, the one-way door in a narrow
    column so the field and the button read as one control. */
 .account { max-width: 44rem; }
-.account .headline { font-size: var(--t-6); overflow-wrap: anywhere; }
+/* THE ADDRESS IS DATA, NOT A HEADING. Every other .headline is the display
+   face, uppercase; an email address uppercased is a different string and in a
+   condensed poster face it shouts. It stays the page's h1 -- the markup and the
+   accessible outline are unchanged -- and takes the body face at 600. The
+   display-metrics test skips a rule that names --sans for exactly this. */
+.account .headline { font-family: var(--sans); font-weight: 600; font-size: var(--t-5); line-height: 1.2; letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
 .subhead--osd { font-weight: 600; font-size: var(--d-1); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin: var(--s-7) 0 var(--s-2); }
 .account-danger { max-width: 22rem; }
 .account-danger .record { margin-top: var(--s-4); }

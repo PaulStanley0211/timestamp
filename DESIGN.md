@@ -115,6 +115,10 @@ beside each file, under `font-src 'self'`. No network font is ever loaded.
 - **Anton is never set below 18px.** Anything smaller that wants to read as a
   label is the label role: Inter 600, 12px (`--t-label`), tracked, uppercase.
   That is the only uppercase body text.
+- **An identifier is data, not a heading.** The account page's `<h1>` is the
+  signed-in address; it keeps the body face at 600, sentence case, because an
+  email address uppercased is a different string. This is the one `.headline`
+  that is not Anton, and the metrics test exempts it by the face it names.
 - **The scale is unchanged from 2026-08-31:** a minor third on 16px,
   `--t-label` 12px through `--t-8`, `--t-hero clamp(48px, 8vw, 96px)` once per
   site, `--t-mark` for the footer's giant word -- sized off its own column
