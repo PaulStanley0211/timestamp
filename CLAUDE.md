@@ -7,11 +7,20 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-07, later) — READ §71 FIRST. EVERY PAGE IS IN THE LIME WORLD'S OWN LAYOUT. THE SECOND DEPLOY IS LIVE.
+## START HERE (2026-09-07, evening) — READ §72, THEN §71. EVERY PAGE IS IN THE LIME WORLD'S OWN LAYOUT, AND THE FIRST CHIP IS LIVE.
+
+**The box runs `637e170` (§72): the order-form chip, reviewed, fixed once on
+the review's one Important finding, fast-forwarded, pushed, deployed as three
+remote commands and verified from outside — the live CSP header is the
+pre-deploy header with exactly one hash replaced.** Local and
+`origin/supabase-identity-slice` carry this docs commit on top of it. Suite
+**2168 / 2165 / 0 / 3**, guards 7/7. **What is next is the scrim chip**
+(`bf51b05` on `claude/optimistic-aryabhata-c6b7c7`, committed, not reviewed,
+not on the box): rebase over this commit, review, suite, guards, then **the
+owner looks at the landing band at 375 and 1440 before it deploys** — §72F.
 
 **Deployed 2026-09-07 at `150de78`, from this machine at the owner's go, and
-verified from outside the same minute — §71.** The box runs `150de78`; local
-and `origin/supabase-identity-slice` carry this docs commit on top of it. The
+verified from outside the same minute — §71.** The
 second plan, `docs/superpowers/plans/2026-09-07-lime-redesign-second-deploy.md`
 (spec §10 steps 7–10), was executed with
 `superpowers:subagent-driven-development`: Tasks 0–7 one at a time, test-first,
@@ -29,8 +38,9 @@ not pay, and the handler threw), and the landing band's scrim solver, which
 models a flat tint the two stacked gradients never deliver, so the band's
 unchosen place names and its hint sit below 4.5:1 on the brightest places
 (`claude/optimistic-aryabhata-c6b7c7`; §71C has the measurement, §71F the
-rulings). **Neither is on this branch and neither is on the box.** The
-owner's own list (§61E) is unchanged. §70E's debt this plan did NOT take, on
+rulings). ~~**Neither is on this branch and neither is on the box.**~~ **The
+first IS, as of §72; the second is committed on its branch and waits for the
+owner's look.** The owner's own list (§61E) is unchanged. §70E's debt this plan did NOT take, on
 purpose: the favicon (the owner's), the pricing page's `sameInEveryShape`
 third state and the disabled Buy's look (both unreachable today). Everything
 below §71 is history kept for its reasoning; where two sections disagree, the
@@ -9667,6 +9677,132 @@ Chrome 122 / Safari 17.4 are not the target and the dialog's opener is a real
 link. 8. Minor 10 parked: the chosen framecard's `.detail` in `--on-lime` is a
 generated-rule contract two tests assert, one short word beside a glyph.
 9. Deploy `150de78` alone; the chips follow as their own deploys.
+
+### 72. THE ORDER FORM KEEPS REFUSING AFTER A PHOTO IS CHOSEN — THE FIRST CHIP, REVIEWED, LANDED AND DEPLOYED (2026-09-07, evening)
+
+**The box runs `637e170`; local and `origin/supabase-identity-slice` carry
+this docs commit on top of it.** Two commits: `722caa6`, the chip session's
+fix (its `78aec7f`, rebased), and `637e170`, the one Important finding of an
+independent review, fixed the same hour. **Suite 2166 / 2163 → 2168 / 2165
+pass / 0 fail / 3 skipped**, guards 7/7 counted before each commit. Deployed
+as three separate remote commands — pull, `up -d --build`, checks — and
+verified from outside the same minute (§72D).
+
+#### A — What the code does now
+
+`HOME_SCRIPT`'s change handler used to re-enable the Record button on any
+chosen file and blank the reason paragraph by id. `homePage` renders a
+balance that cannot afford the cheapest tape as a DISABLED button and a
+plain `<p class="reason">` with no id, so on that page a chosen photo lit the
+button up (the server still refused the order; no money was at risk) and the
+handler then threw on the null reason. Every markup test passed throughout,
+because the button and the paragraph are both present and both correct; only
+a dispatched change event shows what the script does with them.
+
+The script reads the button's rendered state BEFORE its own line that
+disables an enabled button until a photo is chosen, and treats a button the
+page disabled as final: a chosen photo shows its preview and its name and
+never re-enables it. Both writes to the reason are guarded, so a page whose
+refusal carries no id gets no exception. `disabled` is emitted on that button
+for exactly one reason today (`brokeEntirely`) and the rule is "whatever the
+page decided is final", so a second reason added later needs nothing here.
+
+**Two browser tests over CDP, both non-vacuous:** a one-credit account (the
+harness prices 480p at 51 CR) meets the refusing page — asserted first: the
+button disabled, the reason naming the credits, and NO `id="reason"`, so the
+test cannot pass on a page that was never refusing — chooses a real JPEG
+through `DOM.setFileInputFiles`, and one `deepEqual` shows the button and the
+exceptions side by side. The paying page's twin proves the fix is not
+"disabled forever". Both then press Remove (§72B).
+
+#### B — The review, and the arm the chip guarded without testing
+
+An Opus reviewer was handed the range and nothing of this session. Its one
+Important finding was right: the chip added two `if (reason)` guards and
+tested one. Choosing a photo reveals Remove; pressing it runs `forget()`,
+which used to write the reason back by id — the same null, one click later —
+and nothing in the suite clicked that button. **A sabotage deleting only
+that guard shipped green through the whole suite.**
+
+`637e170`, red first on the real script: with `forget()`'s guard replaced by
+the bare write, the one-credit test failed on `TypeError: Cannot set
+properties of null at HTMLButtonElement.forget`; with `forget()`'s
+re-disable removed, the paying test failed on `disabled: false`. Restored
+byte-identical from a copy after each (`cmp`, never `git checkout --`), green
+both times. `hidden` on the preview is the proof the click handler ran, so
+the Remove assertion cannot pass on a click that did nothing. Also taken from
+the review: `pickFile` releases the remote object handle it takes, and the
+script's comment that claimed "every write below is guarded" now says every
+write to the REASON is — the filename slot is required like the input and the
+button. **Parked, recorded here:** a source-reading guard over `HOME_SCRIPT`
+(no unconditional `record.disabled = false` in the change handler, every
+reason write inside `if (reason)`) so a Chrome-less machine still carries the
+fix; CI has Chrome on every leg, so it is a local-dev gap.
+
+**The comments inside the inline scripts ship to the browser, and that is a
+pre-existing pattern, not this commit's.** Before it, `HOME_SCRIPT` carried
+17 comment lines on the wire, `STATUS_SCRIPT` 11, `BG_SCRIPT` 9,
+`SIGNIN_SCRIPT` 2; after it about 52% of the order-form script is prose,
+roughly 200–250 bytes more per signed-in load once Caddy's zstd/gzip has it.
+§54D's zero-comments rule and its test are about HTML comments in the page
+templates; a JS `//` inside `<script>` is neither. Leave it; if it is ever
+worth acting on, the answer is §54D's interpolation-slot idiom applied to the
+scripts, not deleting the explanations.
+
+#### C — The rebase, so the tested tree is the deployed tree
+
+The chip branched from `150de78`; the trunk already carried the §71 docs
+commit `79cc99c`, so a fast-forward was impossible as the branches stood.
+The chip was rebased onto `79cc99c` in its own worktree FIRST (a docs-only
+base, `git diff 78aec7f 722caa6 -- scripts test` empty), then the suite and
+the guards ran on `722caa6`, then the fix commit, then `git merge --ff-only`
+from the main checkout. What was tested is byte for byte what the box pulled.
+
+#### D — Verified from outside
+
+`/api/health` `{"ok":true,"degraded":[]}`; web `(healthy)` on the first
+poll at 45 s of uptime, worker Up, zero FATAL since the swap, HEAD `637e170`
+on the box; the Content-Security-Policy header **byte-identical to the
+pre-deploy header with exactly one change** — the first `script-src` hash,
+the order-form script's, `GYmGFn43…` → `pC7+GWRK…` — and the old hash absent;
+`X-Robots-Tag: noindex, nofollow` still set; `/login` 200, `/pricing` 200,
+`/videos` 303 to `/login?next=%2Fvideos`; `/styles.css` still `max-age=300`.
+
+#### E — Things that will bite
+
+- **The expected CSP hash changed TWICE in one deploy.** The chip's own
+  commit moved it, then the review's comment edit moved it again. Compute
+  the value to check from the branch (`INLINE_SCRIPT_HASHES[0]` imported from
+  `views.mjs`) after the LAST commit, never from a number noted earlier.
+- **This machine's `grep -F -i -c` ABORTS on a 514-byte fixed pattern** and
+  prints "Aborted" instead of a count. A byte-exact header check is a script
+  that reads the file and compares strings; the one used is in the session's
+  scratchpad and takes thirty lines.
+- **`tee "$TMPDIR/x"` with `TMPDIR` unset in Git Bash writes to `/x`, fails,
+  and the `||` fallback runs** — the baseline capture printed the header
+  twice and saved nothing. Name the scratchpad path in full.
+- **`docker compose ps` showed web and worker "Up 14 minutes" beside Caddy
+  "Up 7 days" before this deploy.** `docker inspect` said `RestartCount 0`,
+  both started at 16:25Z, zero FATAL: a clean `up -d`, not a crash loop. Read
+  the restart count before reading uptime as trouble.
+- **The scrim session's branch carries its own CLAUDE.md section numbered
+  72.** This section landed first; theirs is renumbered to 73 when it is
+  rebased over this commit, and the memory file's reference with it.
+- **The commit-message guard's regex** (`[0-9]+ (CRITICAL|HIGH|MEDIUM)`,
+  `(ONE|TWO|THREE|FOUR) (CRITICAL|HIGH)`, …) is easy to trip in a message
+  that summarises a review by count. Say "one Important finding", never
+  "1 HIGH".
+
+#### F — What is next
+
+**The scrim chip** — `bf51b05` on `claude/optimistic-aryabhata-c6b7c7`,
+committed and clean, currently rebased onto `79cc99c` and so two commits
+behind the trunk. The same procedure: rebase onto this commit (CLAUDE.md and
+`test/browser-smoke.test.js` both touched on both sides, so expect a
+conflict in each), independent review, suite, guards, **and the owner looks
+at the landing band rendered at 375 and 1440 before it deploys**, because
+its scrim values moved and the memory file records that he has not seen
+them. The owner's own list (§61E) is unchanged.
 
 ## Not in scope
 
