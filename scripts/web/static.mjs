@@ -1451,7 +1451,7 @@ body {
   opacity: 0;
   transition: opacity 160ms;
 }
-.placecard .badge::before { content: "● Selected"; }
+.placecard .badge::before { content: "Selected"; }
 
 .dots { display: flex; gap: 0.35rem; justify-content: center; margin: 0.2rem 0 0; }
 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--line); }

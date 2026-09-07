@@ -574,6 +574,10 @@ test('the chosen place keeps its photograph and takes a lime ring and a lime bad
   assert.match(badge[1], /color:\s*var\(--on-lime\)/, 'the badge text is not the on-lime ink');
   assert.match(badge[1], /border-radius:\s*999px/, 'the badge is not a pill');
   assert.ok(!/text-shadow/.test(badge[1]), 'a filled pill needs no shadow to survive a photograph');
+  // The filled pill is the mark; a bullet inside it would say "chosen" twice.
+  const badgeText = /\.placecard \.badge::before\s*\{\s*content:\s*"([^"]*)"/.exec(css);
+  assert.ok(badgeText, 'no badge text rule');
+  assert.equal(badgeText[1], 'Selected', `the badge reads "${badgeText[1]}" -- one word, no bullet (owner, 2026-09-07)`);
   const card = /\n\.placecard\s*\{([^}]*)\}/.exec(css);
   assert.ok(card, 'no .placecard rule');
   assert.match(card[1], /border-radius:\s*var\(--r-sm\)/, 'the place card is squared while every other card is rounded');
