@@ -2009,3 +2009,36 @@ test('an outfit is always checked on load, even if the named default leaves the 
   const empty = homePage({ ...FOCUS_MENU, outfits: [], consentText: 'I agree' });
   assert.deepEqual(checked(empty), [], 'an empty menu checked a card that does not exist');
 });
+
+test("the wordmark's record light is still; only the status page's light blinks", () => {
+  // THE OWNER'S CALL, 2026-09-07. The dot beside the wordmark had blinked on
+  // every page since 2026-08-20, and on the lime world's near-black ground in
+  // the poster face it stopped reading as a camcorder lamp and started reading
+  // as a glitch -- to the person who built the product, which is the evidence.
+  // On the web a blinking red dot beside a name means "live" or "unread".
+  //
+  // The dot stays: it is the one trace of the camcorder in the chrome and the
+  // palette's one light. The BLINK moves to where recording is actually
+  // happening -- the status page's phase row -- and by leaving the masthead it
+  // means something there again. Both halves are asserted, so this cannot pass
+  // against a sheet that simply stopped blinking everything.
+  const { css } = createStylesheet(FOCUS_MENU);
+
+  // Every rule whose selector reaches the wordmark's dot. `.rec` is the span's
+  // only class, so a selector ending in `.rec` is the whole set -- including a
+  // reduced-motion `animation: none`, which on an element that never animates
+  // is a dead rule saying the thing used to move.
+  const dotRules = [...css.matchAll(/(^|[\s,}])([^{}]*\.rec)\s*\{([^}]*)\}/g)]
+    .map((m) => ({ selector: m[2].trim(), body: m[3] }));
+  assert.ok(dotRules.length >= 1, 'no rule in the sheet styles the wordmark\'s record light');
+  for (const { selector, body } of dotRules) {
+    assert.ok(!/\banimation\b/.test(body),
+      `"${selector}" still animates the wordmark's record light: ${body.trim()}`);
+  }
+  assert.ok(!/@keyframes\s+blink\b/.test(css),
+    'the masthead blink keyframes are still in the sheet with nothing left to use them');
+
+  // The half that keeps this honest: the status page's light still blinks.
+  assert.match(css, /\.reclight \.dot\s*\{[^}]*animation:\s*tally\b/,
+    "the status page's record light must still blink -- that is where the blink went");
+});

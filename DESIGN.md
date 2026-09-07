@@ -20,8 +20,10 @@ that has one.
    flag, not a numeral. That discipline is what lets colour answer "what have
    I chosen?".
 2. **Red means the record light.** One element on the status page, plus the
-   dot beside the wordmark. There is no alarm red; an error is carried by
-   weight and by words, in ink.
+   dot beside the wordmark. Only the status page's blinks: it sits on the phase
+   being filmed, and the wordmark's dot is still so that blink means
+   "recording" rather than "the site is live". There is no alarm red; an error
+   is carried by weight and by words, in ink.
 3. **The tape's texture is the tape's.** The interface never imitates it: no
    grain, no scanlines, no vignette, no cathode orange anywhere the ground is
    dark. The date stamp burnt into a tape is ffmpeg's (`config/look/base.json`,
@@ -125,7 +127,8 @@ The one rule of the two old worlds ("no borders anywhere") is inverted:
 
 ## Motion
 
-Nothing pulses or hurries the reader except the record light. The hero tape
+Nothing pulses or hurries the reader except the status page's record light,
+on the phase being filmed; the wordmark's dot is still. The hero tape
 and the place loops play muted, poster first, only when `BG_SCRIPT` finds
 motion permitted and the codec playable; reduced motion, save-data, a missing
 file or a refused `play()` each leave the poster standing.

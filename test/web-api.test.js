@@ -1121,7 +1121,11 @@ test('every place has an image URL and a gradient underneath it in one declarati
     assert.ok(reduced, 'there is no prefers-reduced-motion block');
     assert.match(reduced[1], /\.bg \{[^}]*animation: none/, 'reduced motion must stop the drift');
     assert.match(reduced[1], /\.bg \{[^}]*transition: none/, 'reduced motion must stop the cross-fade');
-    assert.match(reduced[1], /\.rec \{[^}]*animation: none/, 'reduced motion must stop the blinking dot');
+    // The wordmark's dot used to be asserted here too ("reduced motion must
+    // stop the blinking dot"). It stopped blinking for everybody on 2026-09-07,
+    // so there is nothing for reduced motion to stop and a rule saying so would
+    // be dead CSS; web-static pins the stillness and browser-smoke reads it off
+    // the real cascade.
   });
 });
 

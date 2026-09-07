@@ -1292,3 +1292,47 @@ test("the footer's giant word fits its own column, on every page and at every wi
   }
 });
 
+test("the wordmark's record light is painted and does not blink, in a real cascade", { skip }, async () => {
+  // THE STYLESHEET-TEXT GUARD IN web-static CANNOT SEE A LATER RULE WINNING.
+  // §60K's lesson: a rule of equal specificity that comes later restores the
+  // behaviour while every text assertion stays green. This reads what the
+  // browser resolved. Both public pages, both widths, because the wordmark is
+  // one function and the masthead is the one thing every page shares.
+  const s = await session();
+  await s.signOut();
+  for (const pathname of ['/', '/pricing']) {
+    for (const vp of [PHONE, LAPTOP]) {
+      const page = await visit(pathname, vp);
+      assert.deepEqual(page.errors, [], `${pathname} at ${vp.width}px: ${page.errors.join('; ')}`);
+      const r = await page.evaluate(`(() => {
+        const dot = document.querySelector('.wordmark .rec');
+        if (!dot) return { found: false };
+        const cs = getComputedStyle(dot);
+        const box = dot.getBoundingClientRect();
+        const probe = document.createElement('div');
+        probe.style.background = 'var(--rec)';
+        document.body.appendChild(probe);
+        const rec = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return {
+          found: true,
+          width: box.width, height: box.height,
+          animation: cs.animationName,
+          opacity: cs.opacity,
+          background: cs.backgroundColor,
+          rec,
+        };
+      })()`);
+      assert.ok(r.found, `${pathname} at ${vp.width}px: the wordmark has lost its record light`);
+      assert.ok(r.width > 0 && r.height > 0,
+        `${pathname} at ${vp.width}px: the record light paints at ${r.width}x${r.height}`);
+      assert.equal(r.background, r.rec,
+        `${pathname} at ${vp.width}px: the dot is ${r.background}, not the record-light red ${r.rec}`);
+      assert.equal(r.animation, 'none',
+        `${pathname} at ${vp.width}px: the wordmark's record light still blinks (animation "${r.animation}")`);
+      assert.equal(r.opacity, '1',
+        `${pathname} at ${vp.width}px: the dot sits at opacity ${r.opacity}, a leftover of the pulse`);
+    }
+  }
+});
+

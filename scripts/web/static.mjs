@@ -775,7 +775,6 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .bg { animation: none; transition: none; transform: scale(1.08); }
-  .rec { animation: none; }
 }
 
 .wrap { max-width: 44rem; margin: 0 auto; position: relative; z-index: 1; }
@@ -817,17 +816,18 @@ body {
    pixels across. Anything larger painted in the same value stops being a
    record light and becomes a second accent. See DESIGN.md. */
 
-/* The record light: a small dot beside the word, and the one piece of the
-   tape's idiom allowed into the chrome. Animated from here rather than from a
-   style attribute or block, because style-src self drops either one wherever
-   it appears, which is silent and total. */
-.rec { animation: blink 1.6s steps(1, end) infinite; }
-
-/* IT PULSES, IT DOES NOT VANISH. An earlier standalone dot bottomed out at
-   .12, which is right for a record light on its own: going fully dark IS the
-   idiom. This one sits inside the lockup, and at .12 the mark reads as a
-   rendering fault for half of every cycle. .45 keeps the rhythm and the mark. */
-@keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.45; } }
+/* THE RECORD LIGHT BESIDE THE WORD IS STILL (the owner's call, 2026-09-07).
+   It blinked on every page from 2026-08-20 until the lime world, where the
+   near-black ground and the poster face made the pulse read as a glitch, or
+   as the web's own idiom of a red dot beside a name meaning "live" -- to the
+   person who built the product, which is the evidence. The dot stays: it is
+   the palette's one light and the one trace of the camcorder in the chrome.
+   The blink now lives ONLY on the status page's phase row (.reclight below),
+   where recording is actually happening, and it means something there again
+   because the masthead no longer competes with it. The pulse this rule used
+   to carry bottomed at .45 rather than .12, because at .12 a dot inside a
+   lockup reads as a rendering fault for half of every cycle; worth knowing
+   only if the blink ever comes back. Guarded in web-static and browser-smoke. */
 
 /* min-width: 0 IS NEEDED ON BOTH LEVELS OR IT IS NEEDED ON NEITHER. The nav is
    itself a flex item inside .masthead, and a flex item defaults to

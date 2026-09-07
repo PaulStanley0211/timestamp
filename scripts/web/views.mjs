@@ -799,16 +799,19 @@ export function siteFooter({ account = null } = {}) {
 </footer>`;
 }
 
-/** The wordmark: the word, with the dot a camcorder blinks while it is
- *  recording. Not an illustration, and not an icon pack. */
+/** The wordmark: the word, with the record light a camcorder carries beside
+ *  its lens. Not an illustration, and not an icon pack. */
 function wordmark() {
   // LIVE TEXT IN THE DISPLAY FACE, so the accessible name is the word itself
   // and no hidden span has to be kept in step with a picture.
   //
   // THE RECORD LIGHT IS THE ONE THING BESIDE IT WEARING RED, and it is a
-  // <span> the stylesheet animates by class rather than anything that carries
+  // <span> the stylesheet paints by class rather than anything that carries
   // its own style: style-src self drops an inline style attribute and an
   // inline <style> block alike, wherever either appears, silently and totally.
+  // IT DOES NOT BLINK (2026-09-07): the blink is the status page's, on the
+  // phase being filmed, and it means "recording" there because it is nowhere
+  // else. See the .rec comment in static.mjs.
   //
   // ONE MARK, NOT TWO. A monogram drawing `Ts` used to sit ahead of the word
   // inside this same anchor. It went on 2026-08-28: it spelled the first two
