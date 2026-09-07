@@ -7,27 +7,33 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-07, evening) — READ §72, THEN §71. EVERY PAGE IS IN THE LIME WORLD'S OWN LAYOUT, AND THE FIRST CHIP IS LIVE.
+## START HERE (2026-09-07, night) — READ §73H, §72 AND §71. EVERY PAGE IS IN THE LIME WORLD'S OWN LAYOUT, AND BOTH CHIPS ARE LIVE.
 
-**The box runs `637e170` (§72): the order-form chip, reviewed, fixed once on
-the review's one Important finding, fast-forwarded, pushed, deployed as three
-remote commands and verified from outside — the live CSP header is the
-pre-deploy header with exactly one hash replaced.** Local and
-`origin/supabase-identity-slice` carry this docs commit on top of it. Suite
-**2168 / 2165 / 0 / 3**, guards 7/7. **What is next is the scrim chip**
-(`bf51b05` on `claude/optimistic-aryabhata-c6b7c7`, committed, not reviewed,
-not on the box): rebase over this commit, review, suite, guards, then **the
-owner looks at the landing band at 375 and 1440 before it deploys** — §72F.
+**The box runs `70e6583` (§73H): the scrim chip, on top of the order-form
+chip (§72), fast-forwarded, pushed, deployed as three remote commands and
+verified from outside — health ok, the live CSP header byte-identical to
+§72's (no script changed), the seven per-place scrim values of §73C's table
+on the live sheet.** Local and `origin/supabase-identity-slice` carry
+`e24e698` (§73K) and this docs commit on top of it. Suite **2174 / 2171 / 0 /
+3**, guards 7/7. **What is next is the owner's page-by-page review of the
+live site** — he said he would walk every page after this deploy and send
+notes; whatever he sends is the next work. The independent review of
+`926eb00..70e6583` reported after the swap (§73J): its finding on the
+highlight statistic was measured and its remedy refuted; its harness finding
+is fixed at `e24e698`, **on the branch and on origin and NOT on the box, on
+purpose** — it changes no served byte, and a rebuild would restart web under
+his review. It rides the next deploy.
 
-**THE SCRIM CHIP IS REBASED ONTO THIS COMMIT AND IS §73.** One commit on
-`claude/optimistic-aryabhata-c6b7c7`, fast-forwardable, NOT pushed, NOT on
-the box. Every word in the band is measured on real pixels and clears 4.5:1
-(254 runs, worst 5.43:1); the scrim is solved for the paint it ships and for
-each loop's HIGHLIGHT as well as its mean, which puts the three night places
-at about double their scrim (Tokyo 0.30 → 0.64). The band rendered at 375 and
-1440 for every place is in the worktree's `build/band-*.png`; §73C has the
-table and the levers if the location has stopped reading. Suite on the
-rebased tree **2174 / 2171 / 0 / 3**, guards 7/7.
+**THE SCRIM CHIP IS §73 AND IT IS LIVE.** One commit on
+`claude/optimistic-aryabhata-c6b7c7`, `70e6583`, fast-forwarded into the
+trunk and deployed at the owner's word (§73H). Every word in the band is
+measured on real pixels and clears 4.5:1 (254 runs, worst 5.43:1); the scrim
+is solved for the paint it ships and for each loop's HIGHLIGHT as well as its
+mean, which puts the three night places at about double their scrim (Tokyo
+0.30 → 0.64). The band rendered at 375 and 1440 for the night places was put
+in front of the owner before the go; he chose to deploy first and review
+every page live afterwards. §73C has the table and the levers if he reports
+that a location has stopped reading.
 
 **Deployed 2026-09-07 at `150de78`, from this machine at the owner's go, and
 verified from outside the same minute — §71.** The
@@ -48,9 +54,8 @@ not pay, and the handler threw), and the landing band's scrim solver, which
 models a flat tint the two stacked gradients never deliver, so the band's
 unchosen place names and its hint sit below 4.5:1 on the brightest places
 (`claude/optimistic-aryabhata-c6b7c7`; §71C has the measurement, §71F the
-rulings). ~~**Neither is on this branch and neither is on the box.**~~ **The
-first IS, as of §72; the second is committed on its branch and waits for the
-owner's look.** The owner's own list (§61E) is unchanged. §70E's debt this plan did NOT take, on
+rulings). ~~**Neither is on this branch and neither is on the box.**~~ **Both
+are, as of §72 and §73H.** The owner's own list (§61E) is unchanged. §70E's debt this plan did NOT take, on
 purpose: the favicon (the owner's), the pricing page's `sameInEveryShape`
 third state and the disabled Buy's look (both unreachable today). Everything
 below §71 is history kept for its reasoning; where two sections disagree, the
@@ -9820,8 +9825,9 @@ them. The owner's own list (§61E) is unchanged.
 
 **One commit on `claude/optimistic-aryabhata-c6b7c7`, rebased onto §72's
 docs commit, test-first, nine sabotages each watched red and restored from a
-copy. NOT PUSHED AND NOT DEPLOYED -- the owner deploys, and this one changes
-how the band looks (§73C), so he should see it first.** §71's final-review
+copy. ~~NOT PUSHED AND NOT DEPLOYED -- the owner deploys, and this one changes
+how the band looks (§73C), so he should see it first.~~ PUSHED AND DEPLOYED
+the same evening at the owner's word -- §73H.** §71's final-review
 wave had measured the landing band's words against the pixels behind them,
 found them at 2.1–4.9:1, and declined to ship a guard that was red on shipped
 design. This is the design change that guard was waiting for, and the guard.
@@ -9963,9 +9969,174 @@ whole distribution. **Green at 254 runs, worst 5.43:1; 18–29 s.**
 
 #### G -- What is left
 
-The owner: look at the night places (§73C), then fast-forward
+~~The owner: look at the night places (§73C), then fast-forward
 `supabase-identity-slice` onto `claude/optimistic-aryabhata-c6b7c7` and
-deploy. Everything in §72's list, §55G and §54I is unchanged.
+deploy.~~ **Done -- §73H.** Everything in §72's list, §55G and §54I is
+unchanged.
+
+#### H -- Landed and deployed (2026-09-07, night)
+
+**The box runs `70e6583`; local and `origin/supabase-identity-slice` carry
+this docs commit on top of it.** The chip session had rebased its own commit
+onto `926eb00` (the §72 docs commit, the trunk's tip) before finishing, so the
+landing was a pure `git merge --ff-only` from the main checkout: no conflict,
+no second rebase, and the tree the suite and the guards ran on is byte for
+byte the tree the box pulled. Verified on it first: `node --check` on
+`static.mjs` and `place-loops.mjs`, suite **2174 / 2171 pass / 0 fail / 3
+skipped**, guards 7/7 counted.
+
+**The owner's word came before the review's.** The band was put in front of
+him rendered at 375 and 1440 for the night places (the visible change §73C
+names), and his answer was to deploy first and review the whole site himself,
+page by page, afterwards -- so the deploy went ahead while the independent
+Opus review of `926eb00..70e6583` was still running. That is the one departure
+from §72's order, taken at his instruction and recorded here; the review's
+findings, if it has any, land as a follow-up commit through the same
+procedure and their own deploy.
+
+**Deployed as three separate remote commands** -- `git pull`, then
+`docker compose up -d --build`, then the checks -- because the classifier
+refuses the combined form (§70F). Web `(healthy)` at 53 seconds of uptime,
+worker Up, zero FATAL since the swap, HEAD `70e6583` on the box.
+
+**Verified from outside the same minute:** `/api/health`
+`{"ok":true,"degraded":[]}`; the Content-Security-Policy header
+**byte-identical to §72's**, checked by the same script (no script changed,
+so no hash moved); `X-Robots-Tag: noindex, nofollow` still set; `/` 200,
+`/login` 200, `/pricing` 200, `/videos` 303 to `/login?next=%2Fvideos`;
+`/styles.css` still `max-age=300`. And on the live stylesheet, the whole of
+§73B and §73C: **seven per-place scrim rules keyed on the radio alone**, at
+exactly the table's values -- Amalfi 0.69, the space centre 0.66, Times
+Square 0.65, Tokyo 0.64, the kitchen 0.62, the garden 0.61, the living room
+0.60 -- the `.band .scrim` fallback at **0.87**, the scrim's `background:`
+built from the paint constants (the linear stop pair and the radial one),
+**zero** `is-live~.scrim` rules, `.lopt` with no ghost opacity, and
+`.band-hint { color: var(--on-image) }`. Anyone who loaded the landing page in
+the five minutes before the swap held the old sheet for up to five minutes,
+as §71 records.
+
+**What is next is his.** He is reviewing every page of the live site and
+will send notes; each note is the next piece of work, test-first, reviewed,
+its own deploy. Nothing else is queued.
+
+#### I -- Things that will bite
+
+- **TWO SESSIONS REBASED THE SAME BRANCH TIP WITHIN MINUTES OF EACH OTHER.**
+  This session began the scrim chip's rebase in a landing worktree of its own
+  (`claude/optimistic-aryabhata-c6b7c7-landing`, the CLAUDE.md conflict
+  resolved by a script) while the chip's own session was doing the same rebase
+  on the branch itself. Theirs landed as `70e6583`; this one's was aborted and
+  its worktree and branch removed, and their commit was used. **Check the
+  branch tip and the session list before rebasing somebody else's branch** --
+  a chip session that is still running will rebase itself, and two rebases of
+  one branch make two commits with one diff.
+- **A memory file and `MEMORY.md` can change under you between a Read and an
+  Edit** when another session is writing the same files; the Edit tool refuses
+  with "modified since read". Re-read and re-edit; do not overwrite.
+- **The review that was dispatched before the go is still the review of
+  record.** Its report arrives as a task notification; act on any Important
+  finding as §72B did, in the chip's worktree (its session is finished and the
+  tree is clean), and deploy the follow-up on its own. **It reported -- §73J.**
+
+#### J -- The review's report, and what was taken (2026-09-07, night)
+
+The independent Opus review of `926eb00..70e6583` reported after the box had
+swapped: no Critical, two Important, eleven Minor, "ready with fixes". It
+checked the compositing model rather than taking it -- the radial geometry,
+the alpha interpolation (linear only because both stops share one colour, a
+shortcut it named as load-bearing), the layer combination, and the grid
+minimum, which it solved by hand and found on-grid at (0.5, 0.34) -- and it
+confirmed the scrim's paint byte-identical before and after the refactor,
+`-filter_threads` the right flag for a `-vf` graph, and `views.mjs` untouched
+so no CSP hash could move.
+
+**THE FIRST IMPORTANT WAS MEASURED RATHER THAN TAKEN, AND THE MEASUREMENT
+REFUTES ITS REMEDY.** The finding: `yhigh` is a strict per-frame maximum after
+a 2px blur -- an outlier statistic, one glint binding every place -- and that
+is what flattened seven scrims spanning 0.30–0.56 into 0.60–0.69. The proposed
+fixes were a p95 across frames or a wider blur. Every variant was run on the
+shipped loops through the shipped solver (`build/measure-variants.mjs`,
+scratch):
+
+| place | mean | σ2 max (shipped) | σ2 p95 | σ2 median | σ8 max | σ16 max | mean only |
+|---|---|---|---|---|---|---|---|
+| Amalfi | 160.3 | 232 → 0.69 | 230 → 0.69 | 228 → 0.69 | 227 → 0.69 | 222 → 0.69 | 0.69 |
+| kitchen | 100.6 | 224 → 0.62 | 222 → 0.62 | 194 → 0.54 | 210 → 0.59 | 194 → 0.54 | 0.37 |
+| Times Square | 90.9 | 233 → 0.65 | 233 → 0.65 | 232 → 0.64 | 228 → 0.63 | 217 → 0.61 | 0.30 |
+| garden | 92.7 | 220 → 0.61 | 219 → 0.61 | 218 → 0.61 | 216 → 0.60 | 215 → 0.60 | 0.30 |
+| space centre | 131.2 | 238 → 0.66 | 237 → 0.66 | 229 → 0.64 | 231 → 0.64 | 219 → 0.61 | 0.57 |
+| Tokyo | 91.8 | 230 → 0.64 | 229 → 0.64 | 228 → 0.63 | 224 → 0.62 | 220 → 0.61 | 0.30 |
+| living room | 49.1 | 216 → 0.60 | 215 → 0.60 | 213 → 0.60 | 210 → 0.59 | 199 → 0.55 | 0.30 |
+
+The blurred highlight is in the MEDIAN frame of every loop, within a few
+units of the maximum -- a neon sign or a sky is present through most of the
+six seconds, not one glint -- and even a 16px blur leaves it at 194–222. A
+p95 moves nothing; the widest blur moves the night places by 0.03 of layer.
+**The statistic is not the lever; the 4.5:1 requirement on the highlight is**,
+which is what §73C said. The levers that remain are the ones §73C named (a
+denser halo, a plate) plus one it did not: the highlight target itself, which
+is a decision about how bright a stroke's neighbour may be, and the owner's.
+Nothing moved; the table is here for his look at the night places.
+
+**THE SECOND IMPORTANT WAS REAL AND IS FIXED, `e24e698`** (§73K).
+The sweep's ground capture -- the render that reads what sits beside each
+stroke -- neutralised the text's colour and its shadow but not a decoration
+painted in its own colour, and the chosen option's focus rule underlines it
+in lime. Measured before fixing, by forcing the underline on for every
+option: **the shipped 6px-offset underline skips the descenders and never
+touches a stroke, so the sweep stayed green** -- the real-world risk at that
+offset was nil; a decoration that does touch the strokes (a 1px offset with
+ink-skipping off) **failed 60 of 254 runs at 1:1**, the lime read as the
+ground. The ground capture now also sets `text-decoration: none`, and the
+same injection goes green. The sweep's instrument is the thing a false red
+would discredit, which is why one declaration was worth three runs.
+
+**Taken from the Minors:** the capture's width is asserted equal to the
+viewport's; a rect with strokes and nothing touching them is a loud failure
+rather than an `Infinity` that passes (watched red by disabling the update);
+the per-place coverage count is derived from the rail rather than typed as
+seven; `--measure` keeps the manifest's own raster, or probes the first loop
+when there was none, instead of stamping the module's (red first on a
+manifest that said 640x360); the direct-invocation guard mirrors node's own
+derivation of the main module's URL (resolve, realpath, file URL) rather than
+a path-string compare that could miss and exit 0 having done nothing; and
+three comments corrected -- web-static's docstring said the hint's tier was
+allowed where the test refuses it, `static.mjs` claimed the test recomputes
+the cover minimum independently when it re-samples the same function, and
+`SCRIM_FLOOR` got back the reason it had lost.
+
+**Left, each with its reason:** `is-live` is dead in the stylesheet and
+`BG_SCRIPT` still sets it under a comment saying it drives the scrim (Minor
+4) -- a `views.mjs` edit moves a CSP hash and wants its own deploy, so it
+waits for the next script change; the 10-second in-page wait for a loop
+frame is the class §4 warns about and is where to look if the sweep ever
+flakes on CI (12); the sweep is the band's only contrast guard and self-skips
+without Chromium, as the whole file does (both CI images have Chrome, §38C);
+and `build/sabotage/` copies are scratch (13).
+
+#### K -- The fix landed and pushed, and deliberately not deployed (2026-09-07, night)
+
+`e24e698` on `claude/optimistic-aryabhata-c6b7c7`, fast-forwarded into
+`supabase-identity-slice` and pushed; **local and origin are one commit past
+the box, on purpose.** The commit changes no served byte: the stylesheet
+built from it and from `70e6583` is byte-identical on the catalog's cards
+and on an empty menu (`build/sheet-diff.mjs`, scratch -- the only
+`static.mjs` edits are comments outside the template), and `views.mjs` is
+untouched, so the CSP is too. A rebuild restarts the web container for about
+a minute, and the owner is walking every page of the live site as this is
+written. It rides the next deploy, whatever his notes produce. Suite
+**2174 / 2171 / 0 / 3** on the tree, guards 7/7 counted AFTER the commit so
+the message was scanned.
+
+**The sabotage record, in order:** the shipped underline (6px offset) forced
+on for every option -- green, 254 of 254; a 1px-offset decoration with
+ink-skipping off -- red, 60 of 254 at 1:1 with `rgb(217,255,0)` named as the
+lightest pixel; the fix with the same injection still present -- green; the
+`worst` update disabled -- red on the new assertion, "strokes were found and
+nothing touching them"; the file restored byte-identical from a copy
+(`cmp`), the injection removed and its marker counted at 0; the raster
+assertion red at "stamped 1024x576 over a manifest that said 640x360", then
+green.
 
 ## Not in scope
 
