@@ -9,8 +9,9 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-09-07, night) — READ §74 FIRST, THEN §73H, §72 AND §71. A PHOTOGRAPH OF A WRISTWATCH RENDERED A COMPLETE, VERIFIED TAPE OF A STRANGER.
 
-**Local, `origin/supabase-identity-slice` and the box are ALL at `3ded568`
-(§74)**, deployed as three remote commands and verified from outside — health
+**The box runs `3ded568` (§74)**, and local and `origin/supabase-identity-slice`
+carry this docs commit on top of it — the only difference, and it changes no
+served byte. It was deployed as three remote commands and verified from outside — health
 `{"ok":true,"degraded":[]}`, the live CSP header byte-identical to the copy
 taken before the swap (no inline script moved), noindex still set, zero FATAL.
 Suite **2199 / 2196 / 0 / 3**, guards 7/7. That commit carries §73K's harness
