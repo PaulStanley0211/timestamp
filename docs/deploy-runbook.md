@@ -129,17 +129,35 @@ top to bottom; nothing here is optional.
    BOX from the finished jobs so no face travels:
 
    ```bash
-   install -d -m 755 /opt/timestamp/showcase
+   # -o 1000 -g 1000: the image runs as `USER node`, which is uid 1000, so a
+   # root-owned directory gives the producer EACCES on its first write. `chown`
+   # takes a bare numeric id; `install -o` resolves it through the passwd
+   # database, which on this host has no user 1000 -- so the id is passed to
+   # both flags and no name is looked up.
+   install -d -m 755 -o 1000 -g 1000 /opt/timestamp/showcase
    cd /opt/timestamp
-   # the 9:16 Times Square tape and the 4:3 space-centre tape are already on the volume
-   docker compose run --rm -v /opt/timestamp/showcase:/showcase web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-125257-3a448b --slot=tape-9x16 --out=/showcase
-   docker compose run --rm -v /opt/timestamp/showcase:/showcase web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-200239-931272 --slot=tape-4x3 --out=/showcase
+   # the 9:16 Times Square tape and the 4:3 space-centre tape are already on the volume.
+   #
+   # MOUNTED AT /out, NOT AT /showcase. The `web` service already declares
+   # `/opt/timestamp/showcase:/showcase:ro` (compose.yaml), and a second mount
+   # of the same host path at the same container path in a `compose run` is a
+   # collision -- and the declared one is read-only, which is exactly what the
+   # producer must not write through. A different target cannot collide, and
+   # the service's own read-only mount stays as it is.
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-125257-3a448b --slot=tape-9x16 --out=/out
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-200239-931272 --slot=tape-4x3 --out=/out
+   # Stickers 2 and 3: one frame each, from the two tapes that live here and
+   # must not leave. They are OPTIONAL -- with no `sticker-N.jpg` the manifesto
+   # sentence renders as plain type -- and `--at=` is the second to lift, so
+   # re-run either line with a different value to change the frame.
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-200239-931272 --slot=tape-4x3 --out=/out --sticker=2 --at=3.0
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/jobs/20260905-125257-3a448b --slot=tape-9x16 --out=/out --sticker=3 --at=7.0
    ls -l /opt/timestamp/showcase
    ```
 
    The 16:9 hero (`20260905-221822-a32b2a`) was rendered on the development
-   machine, so `hero-16x9.mp4`, `hero-16x9.jpg` and the four `sticker-N.jpg`
-   are produced there and copied up with `scp` into the same directory. Then
+   machine, so `hero-16x9.mp4`, `hero-16x9.jpg` and stickers 1 and 4 are
+   produced there and copied up with `scp` into the same directory. Then
    `TIMESTAMP_SHOWCASE_DIR=/showcase` in `.env.web`, and `docker compose up -d`
    (the files are checked at boot). A missing file is not an error: the page
    falls back to a place photograph in that slot.

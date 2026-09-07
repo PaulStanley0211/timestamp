@@ -1232,7 +1232,12 @@ test('the four web fonts are served public, by name, with a day of cache, and no
       assert.match(res.headers.get('cache-control') ?? '', /max-age=86400/, 'a font is revalidated daily, like the brand assets');
       assert.ok((await res.arrayBuffer()).byteLength > 0);
     }
-    for (const target of ['/fonts/nope.woff2', '/fonts/..%2f..%2fpackage.json', '/fonts/OFL-anton.txt', '/fonts/tape-osd.ttf']) {
+    // `constructor` and `toString` are the interesting misses: they are not on
+    // the map and they are on every object's prototype, so a bare lookup finds
+    // an inherited member, calls it truthy and then destructures something that
+    // is not a pair. The answer to a name nobody put on the list is a miss.
+    for (const target of ['/fonts/nope.woff2', '/fonts/..%2f..%2fpackage.json', '/fonts/OFL-anton.txt', '/fonts/tape-osd.ttf',
+      '/fonts/constructor', '/fonts/toString', '/fonts/__proto__']) {
       const res = await fetch(`${base}${target}`);
       assert.ok(res.status === 404 || res.status === 400, `${target} answered ${res.status}, which is neither a refusal nor a miss`);
     }
@@ -1755,6 +1760,68 @@ test('the landing and the pricing page agree on whether the shape is part of the
     // exactly as the real config's finite, equal quotes would read today.
     assert.match(landingSentence, /a tape costs the same in every shape/,
       'the filter did not survive the forced zero quote');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * THE SAME AGREEMENT, IN THE STATE A NEW STRIPE ACCOUNT BOOTS IN.
+ *
+ * The test above forces a zero quote and proves the filter; it exercises only
+ * the path where `landingPricing()` ANSWERS. That function returns null
+ * whenever it cannot answer honestly -- no offered rows, no BUYABLE pack, or a
+ * seam that threw -- and "no buyable pack" is not a hypothetical: a pack whose
+ * `stripePriceId` is null is the designed pre-launch state of this config, and
+ * it is what an operator has on the day they create a fresh Stripe account and
+ * have not pasted the new Price ids in yet.
+ *
+ * With the landing reading the shape fact off that nullable object, `/` fell
+ * back to "costs the same" while `/pricing` -- which reads `facts` and is
+ * unaffected by whether anything is on sale -- said the opposite. The shape
+ * fact comes from `facts` on BOTH pages now, and `facts` is computed once.
+ *
+ * The fixture is the mirror of the one above: a real, finite, DIFFERING quote
+ * on one aspect (so the honest answer is "the shape is part of the price"),
+ * and packs that carry no Price id (so the price sentence has nothing to say).
+ */
+test('the landing and the pricing page still agree on the shape when no pack is buyable', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const auth = fakeAuth();
+  const realCreditCost = auth.creditCost.bind(auth);
+  // A real surcharge, not a zero: this one must SURVIVE the finite-and-positive
+  // filter, so both pages owe the reader "the shape is part of the price".
+  auth.creditCost = (opts = {}) => {
+    const base = realCreditCost(opts);
+    return opts.resolution === '480p' && opts.aspect === '9:16' ? base * 2 : base;
+  };
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth,
+    // Available, and not buyable: exactly `config/credits.json`'s own
+    // `stripePriceId: null` state, which `packRows` maps to `buyable: false`.
+    billing: { async packs() { return [{ id: 'starter', label: 'Starter', priceUSD: 12, credits: 92, available: true, stripePriceId: null }]; } },
+  });
+  const port = await app.listen();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const landing = await (await get(base, '/', null)).text();
+    const pricing = await (await get(base, '/pricing', null)).text();
+
+    const shapeSentence = (html) => {
+      const m = /Which shapes and qualities\?[\s\S]*?<p>([^<]*)<\/p>/.exec(html);
+      assert.ok(m, 'no "Which shapes and qualities?" answer on the page');
+      return m[1];
+    };
+    const landingSentence = shapeSentence(landing);
+    const pricingSentence = shapeSentence(pricing);
+    assert.equal(landingSentence, pricingSentence,
+      `the landing and /pricing disagree on the shape sentence with no pack buyable:\n  /        : ${landingSentence}\n  /pricing : ${pricingSentence}`);
+
+    // And pin the answer, so the two cannot agree on the wrong one: the forced
+    // surcharge is finite and positive, so it is a genuine second price.
+    assert.match(landingSentence, /the shape is part of the price/,
+      'a real per-shape surcharge did not reach the sentence');
   } finally {
     await app.close();
     fs.rmSync(root, { recursive: true, force: true });

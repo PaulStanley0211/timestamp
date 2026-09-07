@@ -1133,8 +1133,17 @@ export function landingPage({
   const first = places[0] ?? null;
   const second = places[1] ?? first;
   const third = places[2] ?? second;
+  // `sameInEveryShape` COMES OFF `facts`, NEVER OFF `pricing`. Both public
+  // pages answer the same FAQ question and `publicFacts()` computes the answer
+  // once, with the finite-and-positive filter. `pricing` is null whenever
+  // `landingPricing()` cannot answer honestly -- no offered rows, no BUYABLE
+  // pack, or a seam that threw -- and reading a money fact off a nullable
+  // object means the landing states the DEFAULT whenever nothing is on sale,
+  // which is the state a fresh Stripe account boots in. The pricing page has
+  // no such fallback, so the two pages disagreed there. `facts` is the same
+  // object on both pages and is never null.
   const { photoDays = RETENTION_DEFAULTS.photoDays, jobDays = RETENTION_DEFAULTS.jobDays, imageProcessor = null,
-    qualities = [], shapes = [], frames = 375, fps = 25 } = facts;
+    qualities = [], shapes = [], frames = 375, fps = 25, sameInEveryShape = true } = facts;
 
   // The hoisted radios stay siblings of .wrap so the generated rules can
   // reach both the rail and the ground; the ground itself lives in the band.
@@ -1275,7 +1284,7 @@ ${factCards({ frames, fps, shapes, photoDays, jobDays })}
 </section>
 
 <div class="inner">
-${faq(faqItems({ freeCredits: pricing?.freeCredits ?? null, photoDays, jobDays, imageProcessor, qualities, shapes, sameInEveryShape: pricing?.sameInEveryShape ?? true }))}
+${faq(faqItems({ freeCredits: pricing?.freeCredits ?? null, photoDays, jobDays, imageProcessor, qualities, shapes, sameInEveryShape }))}
 </div>
 
   ${/* SIGNING IN HAPPENS HERE, NOT ON ANOTHER PAGE. A returning visitor was

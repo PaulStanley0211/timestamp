@@ -2203,7 +2203,13 @@ export function createServer({
      * not a year, for the reason the brand assets give -- these are fixed names.
      */
     fontFile(req, res, { params }) {
-      const entry = FONT_FILES[String(params.file ?? '')];
+      // `Object.hasOwn` rather than a bare lookup, for the reason `showcaseFile`
+      // and the upload sink both give: every object inherits `constructor`,
+      // `toString` and the rest, so a bare lookup answers a name nobody put on
+      // the map with a truthy inherited member -- and the destructuring below
+      // then throws on something that is not a pair, turning a miss into a 500.
+      const name = String(params.file ?? '');
+      const entry = Object.hasOwn(FONT_FILES, name) ? FONT_FILES[name] : null;
       if (!entry) throw new HttpError(404, 'Not found.', { code: 'NO_FONT' });
       const [file, contentType] = entry;
       if (!sendFile(req, res, { file: `${assetsRoot}/fonts/${file}`, contentType, maxAge: 86_400 })) {
