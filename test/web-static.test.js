@@ -855,6 +855,46 @@ test('nothing in the sheet takes a focus outline away again', () => {
     + 'outline is never to be removed.');
 });
 
+test('every focus ring in the sheet is the same ring: 2px, offset 2px, and never in lime', () => {
+  // Spec §2.4 and DESIGN.md give the focus outline one shape and two colours --
+  // 2px at 2px offset, `--ink` on a dark surface and `--on-lime` inside a lime
+  // panel. A ring drawn in the accent says "chosen" to a keyboard user who has
+  // chosen nothing, and a ring at a different weight or offset reads as a
+  // different affordance on the one indicator that must read the same
+  // everywhere. The offset is what draws a chosen lime card's ring on the dark
+  // surface outside it, so no card needs a ring of its own.
+  // TWO EXCEPTIONS, BOTH NAMED, AND THE SECOND IS PINNED BELOW SO THE EXEMPTION
+  // CANNOT OUTLIVE ITS SUBJECT. A rule inside a lime panel draws in --on-lime.
+  // And the landing's wipe grip is itself drawn in page ink, so a page-ink ring
+  // on it would be ink on ink; it takes the go colour, which is the one thing
+  // guaranteed to read against the grip (the reasoning is in the sheet above
+  // that rule). An exemption for a rule that has since been deleted is a hole,
+  // so the grip's ring is asserted present rather than merely skipped.
+  const GRIP = '.wipe-grip';
+  const { css } = createStylesheet(FOCUS_MENU);
+  const wrong = [];
+  let sawGrip = false;
+  for (const m of css.matchAll(/([^{}\n]*:focus-visible[^{}\n]*)\{([^}]*)\}/g)) {
+    const sel = m[1].trim();
+    const body = m[2];
+    if (!/(^|;|\s)outline(-color)?:/.test(body)) continue;
+    if (sel.includes(GRIP)) { sawGrip = true; continue; }
+    if (/\.lime\b/.test(sel)) continue;
+    const colour = /(^|;|\s)outline(-color)?:\s*([^;]+);/.exec(body);
+    if (colour && /var\(--(accent|accent-deep|accent-bright|lime|lime-hover)\)/.test(colour[3])) {
+      wrong.push(`${sel} -> outline ${colour[3].trim()}`);
+    }
+    const width = /outline:\s*([0-9.]+)px/.exec(body);
+    if (width && width[1] !== '2') wrong.push(`${sel} -> ${width[1]}px ring`);
+    const offset = /outline-offset:\s*([0-9.]+)px/.exec(body);
+    if (offset && offset[1] !== '2') wrong.push(`${sel} -> offset ${offset[1]}px`);
+  }
+  assert.deepEqual(wrong, [],
+    'The focus ring is one ring, 2px at 2px offset, in --ink (or --on-lime '
+    + 'inside a lime panel):\n' + wrong.join('\n'));
+  assert.ok(sawGrip, 'the wipe grip is exempted above and has no focus ring left to exempt');
+});
+
 test('no page emits an <hr>', () => {
   // DESIGN.md states the one rule of this visual world -- "No borders, no
   // rules, no dividers. Anywhere." -- and names this element in it: the moment
@@ -2382,7 +2422,34 @@ test('the phase rows are outlined cards, titled in the display face, and the rec
   for (const m of css.matchAll(/(\.reclight[^{}]*)\{([^}]*)\}/g)) {
     assert.ok(!/var\(--(accent|accent-deep|lime)\)/.test(m[2]), `"${m[1].trim()}" paints the record light in the accent`);
   }
+  // AND THE SWEEP BELONGS ON THE WHOLE PAGE, NOT ON THE ONE ROW THAT WEARS RED.
+  // Aimed at '.reclight' alone it could not see the word "Done" painted lime,
+  // the done and skipped step marks, or the cassette label's date numeral --
+  // four places where colour answered "what state is this?" three rows above a
+  // form where the same colour answers "what have I chosen?". Lime is never a
+  // label and never a numeral (DESIGN.md, Lime means chosen); a state is a word
+  // in ink, and the one state that takes a colour takes red and blinks.
+  for (const m of css.matchAll(/([^{}\n]*\.(?:phase|step|label)[^{}]*)\{([^}]*)\}/g)) {
+    if (/:checked/.test(m[1])) continue;
+    assert.ok(!/var\(--(accent|accent-deep|lime)\)/.test(m[2]),
+      `"${m[1].trim()}" paints a state or a numeral in lime: ${m[2].trim()}`);
+  }
   assert.match(css, /\.status \.headline\s*\{[^}]*font-size:\s*var\(--t-7\)/, 'the status heading is not at the page-title size');
+  // The states must still be told apart without it: REC is red and blinks,
+  // done and stopped are ink words each with a dot, and a phase still to come
+  // is ghosted. Colour is not what carries this -- weight, a dot and the ghost.
+  assert.match(css, /\.phase-done \.phase-state\s*\{[^}]*color:\s*var\(--ink\)/, 'the done phase lost its ink');
+  assert.match(css, /\.phase-done \.phase-state \.dot\s*\{[^}]*display:\s*inline-block/, 'the done phase lost its dot');
+  assert.match(css, /\.phase-stopped \.phase-state \.dot\s*\{[^}]*display:\s*inline-block/, 'the stopped phase lost its dot');
+  assert.match(css, /\.phase-pending \.phase-title\s*\{[^}]*opacity:\s*var\(--ghost\)/, 'a phase still to come is not ghosted');
+  // A DECLARATION NOTHING CAN PAINT IS A DECLARATION THAT LIES. The base dot is
+  // display:none until a state class shows it, and all three that do set their
+  // own background, so a fill on the base rule only ever documented a colour
+  // the element never takes.
+  const baseDot = /\.phase-state \.dot\s*\{([^}]*)\}/.exec(css);
+  assert.ok(baseDot, 'no .phase-state .dot rule');
+  assert.ok(!/background:/.test(baseDot[1]),
+    `the base dot still declares a fill no state can show: ${baseDot[1].trim()}`);
 });
 
 test('the payoff page frames the tape in the card outline and heads it at the page-title size', () => {

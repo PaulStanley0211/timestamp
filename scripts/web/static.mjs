@@ -1871,9 +1871,20 @@ input[type="file"]::file-selector-button {
   border-radius: var(--r-sm);
 }
 .phase-state { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: var(--t-1); letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
-.phase-state .dot { display: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
-.phase-done .phase-state { color: var(--accent-deep); }
-.phase-done .phase-state .dot { display: inline-block; background: var(--accent-deep); }
+/* A STATE IS A WORD, NOT A COLOUR (2026-09-07). 'Done' was painted lime and so
+   was its dot, three rows above an order form where lime is the answer to
+   'what have I chosen?'. Lime is never a label (DESIGN.md, Lime means chosen),
+   so the states are told apart the way the rest of this world tells things
+   apart: done and stopped are ink words each carrying a dot, a phase still to
+   come is ghosted, and the one being filmed is red and blinks -- which is what
+   makes the record light mean something.
+
+   The base dot carries no fill: it is display:none until a state class shows
+   it, and every state that does sets its own, so a colour here was a
+   declaration nothing could ever paint. */
+.phase-state .dot { display: none; width: 9px; height: 9px; border-radius: 50%; }
+.phase-done .phase-state { color: var(--ink); }
+.phase-done .phase-state .dot { display: inline-block; background: var(--ink); }
 .phase-stopped .phase-state { color: var(--alarm); }
 .phase-stopped .phase-state .dot { display: inline-block; background: var(--alarm); }
 .phase-title { display: block; font-family: var(--display); font-size: var(--d-3); line-height: 0.92; letter-spacing: 0; text-transform: uppercase; font-weight: 400; color: var(--ink); }
@@ -1917,7 +1928,11 @@ input[type="file"]::file-selector-button {
   font-size: var(--t-1); padding: 0.2rem 0;
 }
 .stepdetail > summary:hover { opacity: 1; }
-.stepdetail > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; opacity: 1; }
+/* The one ring, at the one weight and the one offset: spec §2.4. This summary
+   was the only focus indicator on a dark surface drawn in the accent, and a
+   ring that says 'chosen' to somebody who has chosen nothing is the same
+   confusion the state colours above were. */
+.stepdetail > summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; opacity: 1; }
 
 .steps { list-style: none; padding: 0; margin: 0 0 1.75rem; }
 .step {
@@ -1934,12 +1949,18 @@ input[type="file"]::file-selector-button {
 .step-mark { grid-area: mark; width: 6px; height: 6px; margin-top: 0.6rem; border-radius: 50%; background: var(--line); }
 .step-name { grid-area: name; font-size: var(--t-2); }
 .step-note { grid-area: note; font-size: var(--t-1); color: var(--faint); }
+/* THE ELEVEN MARKS ARE THE SAME ARGUMENT ONE LINE DOWN. Done, skipped and
+   current were lime, so the disclosure a customer opens to read the detail of
+   a render answered 'what happened here?' in the colour that answers 'what did
+   I pick?'. Weight carries it instead: the step being worked is page ink and a
+   filled mark, the ones behind it are the soft tier, and skipped is the same
+   soft tier hollowed out. */
 .step-done { color: var(--ink); }
-.step-done .step-mark { background: var(--accent-deep); }
-.step-skipped .step-mark { box-shadow: inset 0 0 0 1px var(--accent-deep); background: transparent; }
+.step-done .step-mark { background: var(--ink-soft); }
+.step-skipped .step-mark { box-shadow: inset 0 0 0 1px var(--ink-soft); background: transparent; }
 .step-failed .step-mark { background: var(--alarm); }
 .step-current { color: var(--ink); }
-.step-current .step-mark { background: var(--accent); }
+.step-current .step-mark { background: var(--ink); }
 .step-current .step-note { color: var(--ink); }
 
 /* The order, as a definition list: where, wearing, frame. */
@@ -2023,10 +2044,14 @@ input[type="file"]::file-selector-button {
   grid-column: 1; grid-row: 2;
   color: var(--faint); font-size: var(--t-label);
 }
+/* THE READOUT FACE IS WHAT DEPICTS THE TAPE, NOT THE COLOUR. The date was the
+   one numeral on the site painted lime, and lime is never a numeral. VT323 on
+   its own already says 'camcorder' -- it is the only place in the interface
+   that uses the OSD face at all. */
 .label .ldate {
   grid-column: 2; grid-row: 1 / span 2;
   font-family: var(--osd); font-size: var(--t-2);
-  color: var(--accent); letter-spacing: 0.06em; white-space: nowrap;
+  color: var(--ink); letter-spacing: 0.06em; white-space: nowrap;
 }
 
 /* ON A PHONE THE DATE TAKES ITS OWN LINE. The date column is fixed-width and
