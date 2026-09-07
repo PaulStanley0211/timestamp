@@ -21,14 +21,19 @@ from `docs/superpowers/plans/2026-09-06-lime-redesign-first-deploy.md` with
 every guard sabotage-verified, and are DONE. **Suite 2147 / 2144 / 0 / 3.**
 `DESIGN.md` is the authority again and describes what ships.
 
-**THE NEXT THING IS THE SECOND PLAN — spec §10 steps 7–10**: the order form,
-status, result, the shelf, the account page, the auth five and the sign-in
-dialog, onboarding, the legal pages and the error trio. Write it with
-`superpowers:writing-plans` against the spec AND §70E, which names the debt
-the first plan deliberately left (the collapsed weight arc above all).
-Pulling on the box is no longer embargoed, but the next thing worth
-deploying is the second plan whole, so the live site never shows a page
-half-moved. Everything below §70 is history kept for its reasoning; where two
+**THE NEXT THING IS TO EXECUTE THE SECOND PLAN, WHICH IS WRITTEN:**
+`docs/superpowers/plans/2026-09-07-lime-redesign-second-deploy.md` (spec §10
+steps 7–10 as Tasks 0–8: the shared bones, the order form, status and result,
+the shelf and the account page, onboarding and its ground, the auth five and
+the dialog, the legal pages and the error trio, then the deploy). It was
+written from three read-only inventories of the stylesheet, the views and the
+tests, not from the spec alone, and it starts from §70E's debt: the collapsed
+weight arc, `SCRIM_BONE`, the `--lift`/`--ink-strong` names, the band's
+missing dim-tier guard, the per-row lime browser test. Execute it with
+`superpowers:subagent-driven-development` in its order; it stops for the owner
+after every page task and before the pull. Nothing is pulled on the box until
+its Task 8, and then the whole plan at once, so the live site never shows a
+page half-moved. Everything below §70 is history kept for its reasoning; where two
 sections disagree, the higher number wins.
 
 ## (the banner below is 2026-09-05, late, and describes the live site)
