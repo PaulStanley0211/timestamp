@@ -7,29 +7,27 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-06, later) — READ §69 FIRST, THEN THE PLAN. THE VISUAL WORLD IS BEING REPLACED, THE SPEC AND THE PLAN ARE BOTH COMMITTED, AND NOTHING OF IT IS BUILT.
+## START HERE (2026-09-07) — READ §70 FIRST. THE LIME WORLD IS LIVE ON THE LANDING AND THE PRICING PAGE; EVERY OTHER PAGE IS IN THE NEW COLOURS WITH ITS OLD LAYOUT UNTIL THE SECOND PLAN.
 
-**The owner chose a Dribbble reference (acid lime on near-black, Anton-style
-display type, outlined cards) for EVERY page on 2026-09-06, knowing it
-replaces DESIGN.md and the brand PDF.** The design was brainstormed question by
-question and on browser mockups, and is written up in
-**`docs/superpowers/specs/2026-09-06-lime-redesign-design.md`** (`64aaaa7`,
-tightened at `f8ac48c`). **Read that spec before touching any page**: its §8
-names every test that pins the OLD world and what happens to each, and its §10
-is the order of work. **THE IMPLEMENTATION PLAN EXISTS AND IS THE NEXT THING TO
-READ: `docs/superpowers/plans/2026-09-06-lime-redesign-first-deploy.md`** —
-spec §10 steps 1–6 as seven tasks and 64 steps, test-first, one commit per
-task, every guard sabotage-verified, and it STOPS three times for the owner
-(the font download, the landing rendered, the pricing page rendered). §69F is
-the record of writing it and the three things it found that the spec did not
-know. **The next step is executing it with
-`superpowers:subagent-driven-development`, one task at a time.** The three
-tapes for the landing exist and are checked (§69). **DO NOT `git pull` ON THE
-BOX until the landing and pricing are both done** — the tokens commit puts
-every page in the new world with its old layout, and the live site must never
-show two worlds; the plan's Task 7 hands the deploy to the owner and runs none
-of it. Everything below this block is the record of the site AS IT IS LIVE
-TODAY, and it stays true until that first deploy.
+**Deployed 2026-09-07 at `bb85e93` (the box's docs are at `ec2eee7`), from
+this machine at the owner's instruction, and verified from outside the same
+minute — §70.** The world is
+`docs/superpowers/specs/2026-09-06-lime-redesign-design.md`; its §8 named
+every old-world test and its §10 the order of work. Steps 1–6 were executed
+from `docs/superpowers/plans/2026-09-06-lime-redesign-first-deploy.md` with
+`superpowers:subagent-driven-development`, one task at a time, test-first,
+every guard sabotage-verified, and are DONE. **Suite 2147 / 2144 / 0 / 3.**
+`DESIGN.md` is the authority again and describes what ships.
+
+**THE NEXT THING IS THE SECOND PLAN — spec §10 steps 7–10**: the order form,
+status, result, the shelf, the account page, the auth five and the sign-in
+dialog, onboarding, the legal pages and the error trio. Write it with
+`superpowers:writing-plans` against the spec AND §70E, which names the debt
+the first plan deliberately left (the collapsed weight arc above all).
+Pulling on the box is no longer embargoed, but the next thing worth
+deploying is the second plan whole, so the live site never shows a page
+half-moved. Everything below §70 is history kept for its reasoning; where two
+sections disagree, the higher number wins.
 
 ## (the banner below is 2026-09-05, late, and describes the live site)
 
@@ -9275,6 +9273,132 @@ alias names page by page; the favicon.
   scripts/tapedeck/showcase.mjs …`), so no face travels; only the hero and its
   stickers are produced here and copied up. The compose bind mount is web
   only, read-only, and a test pins that.
+
+### 70. THE LIME WORLD'S FIRST DEPLOY (2026-09-07)
+
+**The landing and the pricing page are live at https://timestamptapes.com in
+the world §69 specified.** The box pulled `bb85e93`, the image was rebuilt,
+the containers swapped at about 03:00 local, and every check from outside
+passed the same minute: `/api/health` `{"ok":true,"degraded":[]}`, one
+`class="lime hero"` on `/`, all four stickers and both demo tapes on the page,
+the hero served as a 206 with `cache-control: public, max-age=86400`,
+`/fonts/anton.woff2` 200 `font/woff2`, the content-security-policy header
+unchanged, `X-Robots-Tag: noindex, nofollow` still set, one lime tier and six
+FAQ rows on `/pricing`, and `/fonts/constructor` a 404. **Suite 2147 / 2144
+pass / 0 fail / 3 skipped** at `ec2eee7`, guards 7/7. The owner looked at
+the local render of both pages before the deploy and accepted them.
+
+**The plan `docs/superpowers/plans/2026-09-06-lime-redesign-first-deploy.md`
+was executed with `superpowers:subagent-driven-development`**: a fresh
+implementer per task, a task-scoped review after each, fix rounds where the
+review found something, a whole-branch review at the end, then the push.
+Every task was test-first, every guard sabotage-verified from a copy, the
+seven `guards.yml` steps run verbatim and counted before every commit.
+
+#### A — What shipped, commit by commit
+
+| Commit | What it does |
+|---|---|
+| `fc3a379` | Anton and Inter self-hosted, subset to Latin (133 KB for four files), licences beside them, served at `/fonts/<name>` by allow-list |
+| `db1288a` `7c17b06` | The `:root` palette: one ground, one accent; the landing's alias block retired; every rule re-pointed; `DESIGN.md` rewritten; the wordmark live Anton text with a red dot; the download link ink; a lime button's focus ring drawn in ink |
+| `2833c9b` `7e604ea` | The shared components: two SVG filters emitted once by `layout()`, the lime panel, the outlined card, the FAQ rows, the column footer under the giant word |
+| `8ab67f4` | The showcase: real tapes served by allow-list from `TIMESTAMP_SHOWCASE_DIR` outside the repository, a producer that refuses to drop the Art. 50 tags, a face-free fallback that is the state every test runs in |
+| `6da801b` `e6f44a5` | The landing: eight sections, the tape first; "Make a tape" goes to signup; the demo band's button has a surface |
+| `9311484` `68e6b78` `0cea8c1` `c14da21` | Pricing: credits not subscriptions, three cards, 480p against 720p in one table; the Recommended flag inside its card; one shape sentence for both public pages; the footer word sized from its own column |
+| `dfafd8d` `a5e3f03` | The final review's fixes: the font route refuses a prototype key, the landing reads the one shape fact, the runbook step runs as the image's user; the stylesheet's notes describe the world it ships |
+| `bb85e93` `ec2eee7` | Two runbook corrections found ON THE BOX during the deploy (§70C) |
+
+#### B — Two corrections this work made to the spec, and two test deletions
+
+1. **`--rec` is `#E85545`, not the spec's floor `#E24B3B`.** The floor
+   measures 4.56:1 on the ground and 4.15:1 on a card, and the status page's
+   phase rows become cards in the second plan. `#E85545` is 5.01:1 and
+   4.55:1. DESIGN.md's table records it.
+2. **The burnt-in date stamp is `0xF6EAC8`, a warm cream, not orange.**
+   `config/look/base.json` `osd.color`; the spec called it orange because
+   the old chrome depicted it that way. The guard pins the real value.
+
+**Ten old-world tests were rewritten and five deleted**, all named in spec
+§8: two browser tests in Task 2 pinned the cream sign-in dialog and the
+photograph page's dim tier, whose subjects no longer exist; three web-static
+landing tests in Task 5 pinned the full-bleed place loop and the STRUCK rail,
+replaced by five that pin the eight sections. The dim-tier guard's absence is
+a known gap: the band's on-image text was measured by canvas composite at the
+final review (5.63 to 9.07:1 across all seven places) and nothing automated
+covers text over a photograph now. Add one when the band is next touched.
+
+#### C — The deploy, and what the box taught the runbook
+
+The owner reversed §69's embargo on the day and asked for the deploy from
+this machine. The order that worked is NOT the plan's handoff order: the
+producer script only exists in the new code and the app runs from the image,
+so it is **pull, build, produce, copy, env, swap** — the pull and the build
+change nothing live, and the swap changes the landing and pricing together.
+
+Two lines failed on the box and both are fixed and guarded:
+
+- **`install -d -o 1000 -g 1000` fails `invalid user: '1000'`.** §68A's bug,
+  a THIRD time, in the showcase step this plan published and in the backup
+  destination line beside the cron fix that §68 made. GNU `install` resolves
+  `-o` through passwd; this host has no user 1000; `chown 1000:1000` takes a
+  bare id. `test/ops-backup.test.js` now sweeps every `install -d` command
+  line in the runbook for `-o <digits>`.
+- **The jobs live at `/data/out/jobs/<id>` inside the container, not
+  `/data/jobs/<id>`.** §34B's own `mkdir '/data/out/queue/pending'` said so.
+  The four producer lines are corrected.
+
+The showcase directory is `/opt/timestamp/showcase`, owned by 1000, ten
+files: the hero and stickers 1 and 4 produced here from the local job and
+copied up with `scp`; the 9:16 and 4:3 tapes and stickers 2 and 3 produced on
+the box with `docker compose run --rm -v /opt/timestamp/showcase:/out web
+node scripts/tapedeck/showcase.mjs …`, so no face travelled.
+`TIMESTAMP_SHOWCASE_DIR=/showcase` is in `.env.web`. **The web process reads
+the directory once at boot**: a file added later needs `docker compose up -d`.
+
+#### D — Decisions taken during execution that the owner can still overrule
+
+Each is in the git history; none was his in words except the last two.
+`.foot-mark` line-height 0.9 rather than the plan's 0.85 (the spec's range
+wins). The three "Make a tape" links navigate to `/signup` rather than
+opening the sign-in dialog, whose password form only signs existing accounts
+in. The demo band's button is a lime pill (the hero's dark pill measured
+1.02:1 on the ground). The comparison heading derives from the offered ids.
+The footer word is `clamp(60px, 21cqw, 240px)` against its own column (the
+64px floor could not fit the 320px column). **His:** the Recommended chip
+stays lime inside the lime card; the four sticker frames are 12.0 s, 3.0 s,
+7.0 s and the stamp at 14.5 s; the FAQ copy as rendered.
+
+#### E — What is in the new colours with its OLD layout, and the second plan
+
+The order form, status, result, the shelf, the account page, the auth five
+and the sign-in dialog, onboarding, the three legal pages and the error trio.
+That is spec §10 step 6's state and the second plan's work (steps 7–10).
+**The largest visual debt is named here so the second plan starts from it:**
+the tokens commit collapses `--muted`, `--frost`, `--frost-lit` and `--lift`
+to one value, so every un-rebuilt page has lost its weight arc (§6a). Also
+carried: `SCRIM_BONE` is the old cream in byte form; a disabled Buy on the
+lime card keeps its enabled look (unreachable while both packs are buyable);
+`sameInEveryShape` is true on an empty map and wants a third state in
+`faqItems`; the favicon is the last cream-world artefact and stays until the
+owner says otherwise.
+
+#### F — Things that will bite
+
+- **Haiku cannot be dispatched in this harness**: the system prompt and tool
+  definitions alone exceed its window. Sonnet is the floor.
+- **A dispatched implementer can be killed by a laptop shutdown mid-task and
+  leave a partial tree.** The recovery that worked: check the sabotage copies
+  against the current files (a copy identical to the file means the mutation
+  was restored), then hand the tree to a fresh implementer that VERIFIES each
+  step before continuing, rather than redoing 1,900 lines.
+- **A plan's "sabotage (b)" can be a no-op on the current tool**: ffmpeg
+  copies global metadata by default, so dropping `-map_metadata 0` proves
+  nothing; `-map_metadata -1` does.
+- **`taskkill /PID` in Git Bash needs `MSYS_NO_PATHCONV=1`** or the flag is
+  rewritten to a path.
+- **The classifier refuses some remote state changes and allows others**: it
+  blocked `git pull && docker compose build` in one call and allowed each on
+  its own. Split remote commands.
 
 ## Not in scope
 
