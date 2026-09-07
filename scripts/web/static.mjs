@@ -2157,7 +2157,7 @@ input[type="file"]::file-selector-button {
    foot links, which is the layer that caught them painted for the wrong
    surface once already. */
 .signin { border: 0; padding: 0; background: transparent; max-width: min(26rem, calc(100vw - 2rem)); }
-.signin::backdrop { background: rgba(22, 22, 24, 0.72); }
+.signin::backdrop { background: color-mix(in srgb, var(--ground) 72%, transparent); }
 .signin-box {
   position: relative;
   background: var(--card);

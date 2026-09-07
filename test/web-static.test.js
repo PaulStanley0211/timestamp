@@ -1622,6 +1622,35 @@ test('the signup page does not promise a recurring free allowance, because there
     'the signup page claims the free allowance recurs, and it never does');
 });
 
+test('the five credential pages are one card each, Google first, form only; the dialog backdrop is the ground from the token', () => {
+  const pages = {
+    login: loginPage({ csrf: 't' }),
+    signup: signupPage({ csrf: 't', consentText: 'I am in this photo.' }),
+    verify: verifyPage({ email: 'a@b.com', csrf: 't' }),
+    reset: resetPage({ csrf: 't' }),
+    'reset-complete': resetCompletePage({ email: 'a@b.com', csrf: 't' }),
+  };
+  for (const [name, html] of Object.entries(pages)) {
+    assert.equal((html.match(/<section class="panel">/g) ?? []).length, 1, `${name} is not exactly one card`);
+    assert.match(html, /class="wrap wrap--narrow"/, `${name} is not in the narrow column`);
+    assert.ok(!/class="nav"/.test(html), `${name} carries the app nav -- the auth five are form only (§48)`);
+    assert.match(html, /<h1 class="headline">/, `${name} has no heading`);
+    assert.match(html, /class="record"/, `${name} has no lime button`);
+  }
+  for (const name of ['login', 'signup']) {
+    const html = pages[name];
+    const google = html.indexOf('action="/auth/google"');
+    const password = html.indexOf(name === 'login' ? 'action="/login"' : 'action="/signup"');
+    assert.ok(google > -1, `${name}: no Google door`);
+    assert.ok(password > google, `${name}: Google is not the first door`);
+  }
+  const { css } = createStylesheet({});
+  const backdrop = /\.signin::backdrop\s*\{([^}]*)\}/.exec(css);
+  assert.ok(backdrop, 'no dialog backdrop rule');
+  assert.match(backdrop[1], /background:\s*color-mix\(in srgb, var\(--ground\) 72%, transparent\)/, 'the backdrop is a literal copy of the ground rather than the token');
+  assert.ok(!/rgba\(/.test(backdrop[1]), 'the backdrop still carries the ground as bytes');
+});
+
 test('no page ships its own design rationale to the browser', () => {
   // WHY THIS IS A TEST AND NOT A TIDY-UP. These files are written in a register
   // that argues with itself -- the reasoning beside a rule is what stops the
