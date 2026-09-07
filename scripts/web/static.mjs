@@ -43,31 +43,30 @@ import { createHash } from 'node:crypto';
 // ---------------------------------------------------------------------------
 
 /**
- * Exported so a test can assert the ground is the delivery surround colour
- * rather than trusting a hex string copied between two files.
+ * THIS IS THE TAPE'S OWN MATTE COLOUR, AND IT IS NOT THE INTERFACE PALETTE.
+ * The interface's colours are decided in one place and one place only, the
+ * `:root` block further down this file; nothing outside it names a colour.
+ *
+ * The one value here is read by the video player's letterbox, so that the
+ * bars either side of a tape are the same colour the tape is matted onto and
+ * the player does not argue with the picture. It is exported so a test can
+ * assert that the page and the renderer agree, rather than trusting a hex
+ * string copied between two files.
  *
  * `#0B0A09` is not decoration. It is the colour the finished video is matted
- * onto (`config/render.json`), and it is not pure black there for a reason that
- * applies just as hard here: `#000` makes an image read as a sticker on a void,
- * and on an OLED phone the surround vanishes so the 4:3 framing looks like a
- * cropping accident rather than a choice. The page is the same object as the
- * thing it hands you.
+ * onto (`config/render.json`), and it is not pure black there for a reason
+ * that applies just as hard behind a player: `#000` makes an image read as a
+ * sticker on a void, and on an OLED phone the surround vanishes so the 4:3
+ * framing looks like a cropping accident rather than a choice.
+ *
+ * It held seven more values until 2026-09-06 -- a ground, three accents and
+ * three text tiers -- and every one of them belonged to the interface this
+ * file no longer ships. They are in git history at that date; do not add a
+ * colour back here to reach it from a rule, because a colour reachable from
+ * two places is a colour that can be changed in one of them.
  */
 export const PALETTE = Object.freeze({
   ground: '#0B0A09',
-  // FILM YELLOW, NOT ANTIQUE GOLD. Raised 2026-08-21 from `#C8A15A`, which was
-  // a muted brass and the reason the page read as tasteful-but-flat: every
-  // token in this object sat inside one 28-degree hue band, so there was no
-  // colour contrast anywhere on the page to adjust. `#FFB700` is the yellow of
-  // a Kodak box, and it is period-correct rather than a departure -- the film
-  // and tape packaging of the era this product evokes was genuinely loud.
-  accent: '#FFB700',
-  accentBright: '#FFD152',
-  accentDeep: '#B37F00',
-  ink: '#F2EDE4',
-  muted: '#A9A093',
-  faint: '#6E655A',
-  alarm: '#E03B2F',
 });
 
 // ---------------------------------------------------------------------------
@@ -469,17 +468,20 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
 /**
  * The base sheet. Everything that is not a function of the catalog.
  *
- * Type scale, written down so it can be argued with rather than guessed at:
- * step kicker 9px/0.20em uppercase, eyebrow 11px/0.22em uppercase, meta
- * 12px/0.14em, hint 13px, body 15px, section title 20px, wordmark 26px OSD,
- * headline 28px, page h1 clamp(29-40px), step numeral 44px OSD.
+ * THE `:root` BLOCK BELOW IS THE SINGLE PLACE A COLOUR OR A SIZE IS DECIDED.
+ * Read it first: it carries the whole palette, the `--t-*` body scale and the
+ * `--d-*` display ladder, each with the measured contrast ratio or the ratio
+ * of the step beside it. Every rule in this file names a token; a literal hex
+ * in a rule, or a `font-size` that is not a token, is a value that can be
+ * changed in one place and missed in the other, and a test fails on both.
  *
- * The two OSD entries are the only large type on the signed-in page, and that
- * is deliberate: the numeral and the wordmark are the tape's own character
- * generator, so the biggest things on the page are spoken in the product's
- * voice. Amber is the eyebrow, the 24px rule, a selected border, and the step
- * numeral at accent-DEEP -- and nothing else. The product's thesis is that
- * ordinary and quiet is the point; a page that glows argues with it.
+ * The rules that follow are grouped in the order a page is built: the reset,
+ * the ground and its texture filters, the shared components (masthead, cards,
+ * buttons, fields, FAQ, footer), then the per-page sections. What is NOT here
+ * is anything derived from the catalog -- the place grounds, the per-shape
+ * tile crops and the focus rings for the hoisted radios are generated from
+ * the presets by `presetCss` above, because their selectors name ids this
+ * file cannot know.
  */
 export const BASE_CSS = `
 @font-face {
@@ -646,11 +648,14 @@ export const BASE_CSS = `
      widest column on exactly 240px, unchanged. */
   --t-mark: clamp(60px, 21cqw, 240px);  /* the footer's giant word, once per site */
 
-  /* THE DISPLAY LADDER IS SEPARATE, AND IT HAS TO BE. VT323 reads noticeably
-     smaller than the system sans at the same pixel size -- it is a terminal
-     face with a small x-height -- so putting both ladders on one set of tokens
-     would make every readout look timid beside the prose next to it. Same 1.2
-     ratio, shifted up a step. Uppercase with open tracking, per DESIGN.md. */
+  /* THE DISPLAY LADDER IS SEPARATE, AND IT HAS TO BE. Anton is a heavy
+     condensed face: at the same pixel size it carries far more weight and far
+     less width than Inter beside it, so one shared ladder would either make
+     every heading shout or leave every readout timid. Same 1.2 ratio, shifted
+     up a step. Uppercase, line-height 0.9-0.92, and NO tracking -- the face is
+     drawn tight and letter-spacing on it opens holes in a word. Never below
+     18px, which is why --d-1 is the one rung this ladder does not set in
+     Anton. */
   --d-1: 15px;                          /* OSD labels, step numerals, hints   */
   --d-2: 18px;                          /* readouts in prose                  */
   --d-3: clamp(22px, 2.4vw, 26px);      /* card titles                        */
@@ -823,13 +828,6 @@ body {
    idiom. This one sits inside the lockup, and at .12 the mark reads as a
    rendering fault for half of every cycle. .45 keeps the rhythm and the mark. */
 @keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.45; } }
-
-/* The wordmark is a picture, so its name lives in a span no one sees. Not
-   display:none, which takes it from screen readers too. */
-.vh {
-  position: absolute; width: 1px; height: 1px; overflow: hidden;
-  clip-path: inset(50%); white-space: nowrap;
-}
 
 /* min-width: 0 IS NEEDED ON BOTH LEVELS OR IT IS NEEDED ON NEITHER. The nav is
    itself a flex item inside .masthead, and a flex item defaults to
@@ -1805,8 +1803,10 @@ input[type="file"]::file-selector-button {
 
 /* The player on /videos. 'object-fit: cover' matches the poster it replaces, so
    the tile does not resize the instant somebody presses play. Black behind it
-   because a video element with nothing decoded yet is transparent, and on cream
-   that reads as a hole rather than as a picture that has not started. */
+   because a video element with nothing decoded yet is transparent, and a tile
+   showing whatever is behind it reads as a hole rather than as a picture that
+   has not started. Black, not the tile's own surface: this is the tape's matte
+   and it must not follow the interface. */
 .tape--play { display: block; }
 .vplay { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
 
@@ -1971,11 +1971,12 @@ input[type="file"]::file-selector-button {
 /* --- the video --------------------------------------------------------- */
 
 /* THE PLAYER KEEPS THE TAPE'S OWN MATTE AND DOES NOT FOLLOW THE GROUND. It used
-   to be 'var(--ground)', which was right only while the page and the surround
-   happened to be the same near-black. On paper that would put a cream box behind
-   a letterboxed video -- the delivered file is matted on '#0B0A09' and the
-   player must not argue with it. This is PALETTE.ground, the colour the finished
-   video is actually matted onto. */
+   to name the interface's own ground token, which was right only while the page
+   and the surround happened to be the same near-black -- and the day the page
+   moved, a letterboxed video sat in bars of whatever the interface had become.
+   The delivered file is matted on '#0B0A09' and the player must not argue with
+   it, so this is PALETTE.ground, the colour the renderer actually mattes onto,
+   and it stays that colour however the interface is repainted. */
 .player {
   background: ${PALETTE.ground};
   border: 0;

@@ -1059,7 +1059,8 @@ function stepHead(n, name, subtitle) {
  * the sentence -- and it is several times the size of everything else.
  */
 /**
- * The page a stranger sees, in the world DESIGN.md calls STRUCK.
+ * The page a stranger sees. Its world is the one DESIGN.md describes: lime on
+ * near-black, Anton for every heading, outlined cards on a flat dark ground.
  *
  * WHY THE PLACE LIST IS A REAL CONTROL AND NOT A PICTURE OF ONE. The world's
  * central idea is that every possible value is already present, unlit, and one
