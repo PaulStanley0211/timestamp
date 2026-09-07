@@ -1841,17 +1841,26 @@ input[type="file"]::file-selector-button {
    is still to come, in words, with the record light on the one being filmed.
    The counter above keeps the "2 of 3" a bar used to imply. */
 .status { max-width: 44rem; }
-.status .headline { font-size: var(--t-6); text-wrap: balance; }
+.status .headline { font-size: var(--t-7); text-wrap: balance; }
 .counter { font-weight: 600; color: var(--faint); letter-spacing: 0.12em; text-transform: uppercase; font-size: var(--d-1); margin: var(--s-6) 0 var(--s-3); }
-.phases { list-style: none; padding: 0; margin: 0 0 var(--s-6); display: grid; gap: var(--s-4); }
-.phase { display: grid; grid-template-columns: 5rem minmax(0, 1fr) auto; column-gap: var(--s-4); align-items: baseline; }
+.phases { list-style: none; padding: 0; margin: 0 0 var(--s-6); display: grid; gap: var(--s-3); }
+/* EACH PHASE IS A CARD (2026-09-07, spec §6). The row grid is unchanged
+   inside it: state, body, number. The card is what makes three rows read as
+   three things a render does rather than three lines of a list. */
+.phase {
+  display: grid; grid-template-columns: 5rem minmax(0, 1fr) auto; column-gap: var(--s-4); align-items: baseline;
+  padding: var(--s-4) var(--s-5);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
 .phase-state { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: var(--t-1); letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
 .phase-state .dot { display: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
 .phase-done .phase-state { color: var(--accent-deep); }
 .phase-done .phase-state .dot { display: inline-block; background: var(--accent-deep); }
 .phase-stopped .phase-state { color: var(--alarm); }
 .phase-stopped .phase-state .dot { display: inline-block; background: var(--alarm); }
-.phase-title { display: block; font-size: var(--t-3); line-height: 1.3; font-weight: 500; color: var(--ink); }
+.phase-title { display: block; font-family: var(--display); font-size: var(--d-3); line-height: 0.92; letter-spacing: 0; text-transform: uppercase; font-weight: 400; color: var(--ink); }
 .phase-note { display: block; font-size: var(--t-1); color: var(--faint); margin-top: var(--s-1); max-width: 48ch; }
 /* A phase still to come is a ghost, at the floor and no lower. Hierarchy in
    the row is otherwise carried by size, which survives the opacity. */
@@ -1870,9 +1879,14 @@ input[type="file"]::file-selector-button {
    other. Caught by a test before it shipped.
 
    The blink is steps() rather than a fade, because a tally light is a lamp
-   being switched, not something that breathes. */
-.reclight { color: var(--accent); }
-.reclight .dot { display: inline-block; background: var(--accent); animation: tally 1.6s steps(1, end) infinite; }
+   being switched, not something that breathes.
+
+   THE RECORD LIGHT IS RED. It took --accent when the accent was cathode
+   orange and kept the name through two palettes, so in the lime world the one
+   element the palette reserves red for was the one painted in the colour
+   that means "chosen". A lime REC light is not a REC light (spec §2.1). */
+.reclight { color: var(--rec); }
+.reclight .dot { display: inline-block; background: var(--rec); animation: tally 1.6s steps(1, end) infinite; }
 @keyframes tally { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) { .reclight .dot { animation: none; } }
 
@@ -1955,12 +1969,14 @@ input[type="file"]::file-selector-button {
    and the surround happened to be the same near-black -- and the day the page
    moved, a letterboxed video sat in bars of whatever the interface had become.
    The delivered file is matted on '#0B0A09' and the player must not argue with
-   it, so this is PALETTE.ground, the colour the renderer actually mattes onto,
-   and it stays that colour however the interface is repainted. */
+   it, so this is PALETTE.ground, the colour the renderer actually mattes onto.
+   The outline is the card's, so the tape sits in the same frame as everything
+   else on this page; the colour behind the picture is the tape's own, and
+   stays that colour however the interface is repainted. */
 .player {
   background: ${PALETTE.ground};
-  border: 0;
-  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
   overflow: hidden; line-height: 0;
 }
 .player video { width: 100%; height: auto; display: block; background: ${PALETTE.ground}; }
@@ -2018,7 +2034,7 @@ input[type="file"]::file-selector-button {
 .result-grid { display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: var(--s-7); align-items: start; margin: 0 0 var(--s-8); }
 @media (max-width: 48rem) { .result-grid { grid-template-columns: 1fr; gap: var(--s-6); } }
 .result-words { padding-top: var(--s-2); }
-.result-words .headline { font-size: var(--t-6); text-wrap: balance; max-inline-size: 18ch; }
+.result-words .headline { font-size: var(--t-7); text-wrap: balance; max-inline-size: 18ch; }
 .result-words .sub { max-width: 44ch; }
 /* A label in the readout face, for a section whose content is a readout --
    "The file", "Earlier tapes". The same size and tracking as the status

@@ -390,13 +390,14 @@ async function session() {
 
   const queued = seedJob(app, root, { status: 'queued', owner: account });
   const finished = seedJob(app, root, { status: 'done', owner: account });
+  const running = seedJob(app, root, { status: 'running', owner: account });
   fs.writeFileSync(jobPaths(root, finished.jobId).video, Buffer.alloc(2048, 7));
 
   const { child, profile, cdp } = await launchBrowser();
 
   shared = {
     base, root, app, cdp, child, profile, showcase,
-    account, queued, finished,
+    account, queued, finished, running,
     async signIn() {
       await cdp.send('Network.setCookie', { name: SESSION_COOKIE, value: cookieValue, url: base });
     },
@@ -1029,6 +1030,38 @@ test('the status page runs its poller under the CSP the server really sends', { 
   }))()`);
   assert.ok(probes.cancel, 'the status page must offer cancellation');
   assert.match(probes.counter, /of \d+/, 'the step counter is not painted');
+});
+
+test('the record light on the phase being filmed is red and blinking, in a real cascade', { skip }, async () => {
+  const s = await session();
+  await s.signIn();
+  const page = await visit(`/j/${s.running.jobId}`, PHONE);
+  assert.deepEqual(page.errors, [], page.errors.join('; '));
+  const r = await page.evaluate(`(() => {
+    const dot = document.querySelector('.reclight .dot');
+    if (!dot) return { found: false };
+    const probe = document.createElement('div');
+    probe.style.background = 'var(--rec)';
+    document.body.appendChild(probe);
+    const rec = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const cs = getComputedStyle(dot);
+    const phase = dot.closest('.phase');
+    const pcs = getComputedStyle(phase);
+    return {
+      found: true, rec,
+      background: cs.backgroundColor, animation: cs.animationName,
+      border: pcs.borderTopWidth + ' ' + pcs.borderTopStyle,
+      phases: document.querySelectorAll('.phase').length,
+      lights: document.querySelectorAll('.reclight').length,
+    };
+  })()`);
+  assert.ok(r.found, 'a running job shows no record light');
+  assert.equal(r.background, r.rec, `the lamp is ${r.background}, not the record-light red ${r.rec}`);
+  assert.equal(r.animation, 'tally', `the lamp is not blinking (animation "${r.animation}")`);
+  assert.equal(r.border, '1px solid', `the phase row is not an outlined card (${r.border})`);
+  assert.equal(r.phases, 3);
+  assert.equal(r.lights, 1, 'more than one phase carries the record light');
 });
 
 test('the result page shows the tape and says it is AI-generated', { skip }, async () => {

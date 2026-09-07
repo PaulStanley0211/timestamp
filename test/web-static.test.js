@@ -2241,3 +2241,46 @@ test("the wordmark's record light is still; only the status page's light blinks"
   assert.match(css, /\.reclight \.dot\s*\{[^}]*animation:\s*tally\b/,
     "the status page's record light must still blink -- that is where the blink went");
 });
+
+test('the phase rows are outlined cards, titled in the display face, and the record light is red', () => {
+  // A LIME REC LIGHT IS NOT A REC LIGHT (spec §2.1). The status page's light
+  // took --accent when the accent was cathode orange and kept the name when
+  // the accent became lime, so the one element the palette reserves red for
+  // was the one element painted in the colour that means "chosen". The
+  // wordmark's dot is --rec and still; this one is --rec and blinks.
+  const { css } = createStylesheet({});
+  const phase = /\n\.phase\s*\{([^}]*)\}/.exec(css);
+  assert.ok(phase, 'no .phase rule');
+  assert.match(phase[1], /background:\s*var\(--card\)/, 'a phase row is not on the card plane');
+  assert.match(phase[1], /border:\s*1px solid var\(--line\)/, 'a phase row is not outlined');
+  assert.match(phase[1], /border-radius:\s*var\(--r-sm\)/, 'a phase row does not take the small radius');
+  const title = /\.phase-title\s*\{([^}]*)\}/.exec(css);
+  assert.ok(title, 'no .phase-title rule');
+  assert.match(title[1], /font-family:\s*var\(--display\)/, 'a card title is set in the body face');
+  assert.match(title[1], /font-size:\s*var\(--d-3\)/, 'a card title is not at the card-title size');
+  assert.match(title[1], /text-transform:\s*uppercase/, 'the display face is not uppercase');
+  const light = /\n\.reclight\s*\{([^}]*)\}/.exec(css);
+  assert.ok(light, 'no .reclight rule');
+  assert.match(light[1], /color:\s*var\(--rec\)/, 'REC is not red');
+  const dot = /\.reclight \.dot\s*\{([^}]*)\}/.exec(css);
+  assert.ok(dot, 'no .reclight .dot rule');
+  assert.match(dot[1], /background:\s*var\(--rec\)/, 'the lamp is not red');
+  assert.match(dot[1], /animation:\s*tally/, 'the lamp stopped blinking -- it is the one thing on the site that may');
+  for (const m of css.matchAll(/(\.reclight[^{}]*)\{([^}]*)\}/g)) {
+    assert.ok(!/var\(--(accent|accent-deep|lime)\)/.test(m[2]), `"${m[1].trim()}" paints the record light in the accent`);
+  }
+  assert.match(css, /\.status \.headline\s*\{[^}]*font-size:\s*var\(--t-7\)/, 'the status heading is not at the page-title size');
+});
+
+test('the payoff page frames the tape in the card outline and heads it at the page-title size', () => {
+  const { css } = createStylesheet({});
+  const player = /\n\.player\s*\{([^}]*)\}/.exec(css);
+  assert.ok(player, 'no .player rule');
+  assert.match(player[1], /border:\s*1px solid var\(--line\)/, 'the tape is not in the card outline');
+  assert.match(player[1], /border-radius:\s*var\(--r\)/, 'the tape does not take the card radius');
+  // The colour behind the picture is the tape's own matte, not the interface's
+  // card: PALETTE.ground is what the renderer mattes a 4:3 tape onto, and it
+  // must stay whatever the interface is painted.
+  assert.match(player[1], /background:\s*#0B0A09/i, "the player's ground is not the tape's matte");
+  assert.match(css, /\.result-words \.headline\s*\{[^}]*font-size:\s*var\(--t-7\)/, 'the result heading is not at the page-title size');
+});
