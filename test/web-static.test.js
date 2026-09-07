@@ -1009,7 +1009,18 @@ test('the hero carries one action and the free-grant sentence, and the landing p
   assert.ok(hero, 'no lime hero');
   assert.equal((hero[1].match(/class="hero-cta"/g) ?? []).length, 1, 'the hero carries exactly one action');
   assert.match(hero[1], /21 free credits with a new account\. One tape, no card\./, 'the free-grant line is missing or typed differently');
-  assert.match(hero[1], /Upload one photo of your face, choose a place and an outfit, and get back a tape that looks like it was found in a drawer\./);
+  // UPDATED 2026-09-08 with the copy it pins. "of your face" became "of
+  // yourself from the waist up" because asking for a face is what was making
+  // the model invent -- and inflate -- every body below it (§74E); the sentence
+  // is otherwise the one that shipped. Verbatim is the right strength here (a
+  // hero line is design, and a silent rewrite of the proposition should fail),
+  // but it had no message, so a copy edit failed with a wall of markup and no
+  // statement of what was wanted. It has one now.
+  assert.match(
+    hero[1],
+    /Upload one photo of yourself from the waist up, choose a place and an outfit, and get back a tape that looks like it was found in a drawer\./,
+    'the hero lost or reworded its proposition line',
+  );
   assert.match(hero[1], /class="ruler"[\s\S]*>REC<[\s\S]*>00:15</, 'the counter ruler is missing or does not run to fifteen');
   assert.match(hero[1], /<nav class="hero-nav"[\s\S]*href="#places">Places<[\s\S]*href="\/pricing">Pricing<[\s\S]*data-signin>Sign in<[\s\S]*class="navpill"/, 'the nav is not inside the hero, or lost a link');
   assert.doesNotMatch(html, /\$\d/, 'a dollar price reached the landing; the pack prices live on the pricing page');
@@ -2643,4 +2654,52 @@ test('the payoff page frames the tape in the card outline and heads it at the pa
   // must stay whatever the interface is painted.
   assert.match(player[1], /background:\s*#0B0A09/i, "the player's ground is not the tape's matte");
   assert.match(css, /\.result-words \.headline\s*\{[^}]*font-size:\s*var\(--t-7\)/, 'the result heading is not at the page-title size');
+});
+
+test('the photograph the page asks for shows the body, not only the face', () => {
+  // WHY THIS EXISTS (2026-09-08). Friends' tapes came back reading as real and
+  // rendering the person heavier than they are -- every subject, not one. The
+  // root cause is not the grade, the lens or the model: it is this copy. A page
+  // that asks for "a photo of your face" is sent a face, the reference then
+  // carries no evidence of build at all, and the model fills the gap from its
+  // own prior. An invented body is an average body, and average is heavier than
+  // most people look. §74E names this as the root of the three causes.
+  //
+  // WAIST UP AND NOT FULL LENGTH, deliberately. Intake scales a reference to
+  // fit 2048 on the long edge (LIMITS.maxReferenceEdge, and it never upscales),
+  // so a standing shot spends most of those pixels on legs and leaves the face
+  // small -- and the face is the half already proven to hold. Waist up is the
+  // most build the frame can carry without spending the likeness to get it.
+  //
+  // NOTHING ELSE HAD TO MOVE FOR THIS, which is why it is copy and not a
+  // feature. Intake accepts a waist-up photograph today and always has: nothing
+  // crops to a face, nothing rejects on framing, and the only resize is that
+  // scale-to-fit. The defect was only ever that we asked for the wrong picture.
+  //
+  // ANCHORED TO THE TWO ELEMENTS THAT DO THE ASKING rather than swept over the
+  // page, because a bare word match is how this guard would go vacuous: §74F
+  // records a bare /face/i matching `surfaceScale` in layout()'s SVG filter and
+  // a privacy assertion passing against the wrong page entirely.
+  //
+  // THE NEGATIVE IS THE DEFECT'S SHAPE, NOT THE WORD "face". Copy that says
+  // "waist up, face clearly visible" is better than what shipped and must not
+  // be refused; what is banned is naming the face as the SUBJECT of the
+  // photograph, which is the sentence that produced the face-only uploads.
+  const say = /<span class="say">([\s\S]*?)<\/span>/.exec(homePage({ ...FOCUS_MENU, consentText: 'I agree' }));
+  const sub = /<p class="hero-sub">([\s\S]*?)<\/p>/.exec(landingPage({ places: PLACES_FIXTURE, account: null }));
+  assert.ok(say, "the order form's photo hint has gone");
+  assert.ok(sub, "the landing's proposition line has gone");
+
+  for (const [where, copy] of [['the order form', say[1]], ['the landing', sub[1]]]) {
+    assert.match(
+      copy,
+      /waist up/i,
+      `${where} does not say how much of the person to photograph, so it will be sent a face and the model will invent the body`,
+    );
+    assert.doesNotMatch(
+      copy,
+      /(photo|photograph|picture|shot|image) of your face/i,
+      `${where} still asks for a face-only photograph`,
+    );
+  }
 });

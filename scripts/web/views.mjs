@@ -1191,7 +1191,7 @@ export function landingPage({
   </nav>
   <div class="hero-body">
     <h1 class="hero-line">One photograph. Fifteen seconds of 2003.</h1>
-    <p class="hero-sub">Upload one photo of your face, choose a place and an outfit, and get back a tape that looks like it was found in a drawer.</p>
+    <p class="hero-sub">Upload one photo of yourself from the waist up, choose a place and an outfit, and get back a tape that looks like it was found in a drawer.</p>
     <a class="hero-cta" href="/signup">Make a tape</a>
     ${free}
   </div>
@@ -1618,7 +1618,7 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
     <label class="drop" for="photo">
       <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp" required>
       <span class="plus">+ Add photo</span>
-      <span class="say">A clear photo of your face. JPEG, PNG or WebP, up to 12&nbsp;MB.
+      <span class="say">A clear photo of you from the waist up, so the tape can match your build. JPEG, PNG or WebP, up to 12&nbsp;MB.
       The location and camera data are stripped before anything else happens.</span>
     </label>
     ${/* THE PREVIEW AND THE REMOVE BUTTON LIVE OUTSIDE THE LABEL, and that is
@@ -1699,7 +1699,7 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
          true when the page arrives. No JavaScript, exactly as before. */''}
     <div class="ownplace">
       <p class="hint">A photograph of the place &mdash; your actual back garden, the kitchen
-      you remember. Used as a second reference alongside your face.</p>
+      you remember. Used as a second reference alongside your own photo.</p>
       ${/* §43D CLOSED. This was a bare native "Choose File" sitting directly
            across from step 1's designed dropzone, and it was left that way
            deliberately: .drop hides its real input at opacity 0 and names the

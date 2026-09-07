@@ -286,3 +286,48 @@ test('no shipped outfit is a single-gender garment', () => {
     }
   }
 });
+
+test('no shipped outfit inflates the person wearing it', () => {
+  // WHY (2026-09-08). Tapes render the subject heavier than they are, on every
+  // subject, and the wardrobe line is one of the three causes §74E names. The
+  // DEFAULT card said "worn loose" and the fleece said "an oversized half-zip",
+  // so the two garments a person is most likely to end up in both asked the
+  // model, in prose, for volume around the body.
+  //
+  // THE PROSE IS THE ONLY LEVER THERE IS ON THIS PATH, which is what makes a
+  // word here expensive. §74D: `falReferenceVideoBody` sends six fields and
+  // `negative_prompt` is not one of them, and fal.mjs deliberately does not
+  // append the negatives to the prompt either -- a model with no negative
+  // channel reads "no crowd, no text" as a list of things the scene contains.
+  // So every "fitted cut" in these files is inert and cannot answer back, and
+  // a volume word in the wardrobe line goes to the model unopposed.
+  //
+  // FIT WORDS, NOT GARMENT WORDS. "Padded" and "quilted" are excluded on
+  // purpose: they describe how a jacket is CONSTRUCTED, and a padded jacket
+  // with the padding taken out is a different garment. What is banned is an
+  // adjective about how much room there is around the wearer, because that is
+  // the one the model resolves into a body rather than into cloth.
+  //
+  // THE PERIOD SURVIVES THIS, which is the objection to answer. The 2003 cue in
+  // these presets was never the volume word: it is "stonewashed" and
+  // "straight-leg", which tshirt-jeans' own comment already calls load-bearing,
+  // plus the half-zip, the marl grey and the stand collar. All still there.
+  const inflating = [
+    'oversized', 'loose', 'loosely', 'baggy', 'roomy', 'boxy',
+    'slouchy', 'billowing', 'voluminous', 'bulky', 'shapeless',
+  ];
+  const catalog = loadCatalog();
+  for (const outfit of catalog.outfits.values()) {
+    // The negatives are swept too, for §65A's reason rather than for effect:
+    // they reach no model on the shipped path, but a negative is exactly where
+    // a word somebody was told not to use goes to hide, and the still path
+    // could be revived.
+    const prose = `${outfit.label} ${outfit.wardrobe} ${outfit.negatives.join(' ')}`.toLowerCase();
+    for (const word of inflating) {
+      assert.ok(
+        !new RegExp(`\\b${word}\\b`).test(prose),
+        `outfit "${outfit.id}" says "${word}", which this model renders as body rather than as cloth`,
+      );
+    }
+  }
+});
