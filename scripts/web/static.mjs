@@ -1267,11 +1267,6 @@ body {
    sibling of the field below it rather than as a competing hero. */
 .drop--slim { min-height: 5.5rem; gap: var(--s-2); background: var(--card); }
 .drop--slim .plus { font-size: var(--t-2); }
-/* IT LIFTS INSTEAD OF RECESSING, AND THE RULE ABOVE SAYS WHY IT MUST. Step 3
-   is a choice panel, which already sits on the ground -- so a well cut into it
-   is invisible, and measured on the rendered page the control read as a centred
-   heading with no affordance at all. The only direction left there is nearer,
-   which is what the card plane is. Same depth idea, opposite sign. */
 /* Hover brightens the outline rather than lifting the fill: the fill is what
    says "well", the dash is what says "drop here", and only the second should
    answer the pointer. */

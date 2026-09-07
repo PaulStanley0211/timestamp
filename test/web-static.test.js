@@ -552,6 +552,15 @@ test('an option card is an outlined card, not a ghost, and the chosen one fills 
   // Hierarchy inside a card is colour again now that nothing multiplies it.
   const detail = /\.lookcard \.detail\s*\{([^}]*)\}/.exec(css);
   assert.match(detail[1], /color:\s*var\(--ink-soft\)/, 'an unchosen card cannot use the soft tier only while it is ghosted; it is not ghosted');
+  // AND THE ONE CARD STILL GHOSTED KEEPS PAGE INK INSIDE IT. DESIGN.md's ghost
+  // rule forbids the soft tier inside a ghosted control, because colour is what
+  // an opacity multiplies away; the whole-sheet "nothing in the soft tier is
+  // also ghosted" sweep is per-RULE, so it cannot see an ancestor's opacity
+  // over a descendant's colour and this pair has to be named here. (Teaching
+  // that sweep to walk ancestors would touch every rule in the sheet.)
+  const soonDetail = /\.qualitycard--soon \.detail\s*\{([^}]*)\}/.exec(css);
+  assert.ok(soonDetail, 'no .qualitycard--soon .detail rule -- the deferred tier is the one text card still ghosted, and its detail line needs page ink');
+  assert.match(soonDetail[1], /color:\s*var\(--ink\)/, 'the deferred quality card is still a ghost and its detail is in the soft tier: --ink-soft under --ghost measures 2.83:1 on this ground, below the floor');
 });
 
 test('the chosen place keeps its photograph and takes a lime ring and a lime badge', () => {
