@@ -7,22 +7,31 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-07, night) — READ §73H, §72 AND §71. EVERY PAGE IS IN THE LIME WORLD'S OWN LAYOUT, AND BOTH CHIPS ARE LIVE.
+## START HERE (2026-09-07, night) — READ §74 FIRST, THEN §73H, §72 AND §71. A PHOTOGRAPH OF A WRISTWATCH RENDERED A COMPLETE, VERIFIED TAPE OF A STRANGER.
 
-**The box runs `70e6583` (§73H): the scrim chip, on top of the order-form
-chip (§72), fast-forwarded, pushed, deployed as three remote commands and
-verified from outside — health ok, the live CSP header byte-identical to
-§72's (no script changed), the seven per-place scrim values of §73C's table
-on the live sheet.** Local and `origin/supabase-identity-slice` carry
-`e24e698` (§73K) and this docs commit on top of it. Suite **2174 / 2171 / 0 /
-3**, guards 7/7. **What is next is the owner's page-by-page review of the
-live site** — he said he would walk every page after this deploy and send
-notes; whatever he sends is the next work. The independent review of
-`926eb00..70e6583` reported after the swap (§73J): its finding on the
-highlight statistic was measured and its remedy refuted; its harness finding
-is fixed at `e24e698`, **on the branch and on origin and NOT on the box, on
-purpose** — it changes no served byte, and a rebuild would restart web under
-his review. It rides the next deploy.
+**Local, `origin/supabase-identity-slice` and the box are ALL at `3ded568`
+(§74)**, deployed as three remote commands and verified from outside — health
+`{"ok":true,"degraded":[]}`, the live CSP header byte-identical to the copy
+taken before the swap (no inline script moved), noindex still set, zero FATAL.
+Suite **2199 / 2196 / 0 / 3**, guards 7/7. That commit carries §73K's harness
+fix and the two docs commits with it, so nothing is held back any more.
+
+**THE ONE THING TO KNOW FROM §74: `faceGate` HAS NEVER CHECKED FOR A FACE, AND
+IT COST A RENDER.** A photograph of a wristwatch went through all eleven steps
+and produced a finished tape of a person who does not exist — 375 frames, 15s,
+−27.1 LUFS, **every assertion in `verify` green**. That is §56 in a third
+costume: the measurements were right and the product was wrong. A detector now
+exists behind the seam (`scripts/safety/face-detect-aws.mjs`, Rekognition
+DetectFaces) — **and it is OFF, so the hole is still open on the live site**
+until the owner signs the AWS agreement and sets `TIMESTAMP_IMAGE_PROCESSOR`.
+One signature switches on this AND §52's moderation. **Its request shape has
+never been checked against the AWS API reference — treat a first live 422 as a
+field-name problem, which is BUG 3 exactly.**
+
+**What is next is the owner's**, in whatever order he wants it: the AWS
+agreement (which is what makes §74 real rather than dormant), his page-by-page
+review of the live site, and the body-shape test at §74E — **still unproven,
+and it needs a photograph with a person in it, verified before spending.**
 
 **THE SCRIM CHIP IS §73 AND IT IS LIVE.** One commit on
 `claude/optimistic-aryabhata-c6b7c7`, `70e6583`, fast-forwarded into the
@@ -10138,6 +10147,213 @@ nothing touching them"; the file restored byte-identical from a copy
 assertion red at "stamped 1024x576 over a manifest that said 640x360", then
 green.
 
+### 74. A WRISTWATCH RENDERED A TAPE OF A STRANGER, AND THE FACE GATE GOT A DETECTOR (2026-09-07, night)
+
+**2174 / 2171 -> 2199 / 2196 pass / 0 fail / 3 skipped.** One commit, `3ded568`,
+test-first throughout, four sabotages watched red and restored from copies, all
+seven `guards.yml` steps run verbatim and COUNTED 7/7. **Pushed and deployed;
+local, `origin/supabase-identity-slice` and the box are all at `3ded568`.**
+Verified from outside after the swap: health `{"ok":true,"degraded":[]}`, the CSP
+header **byte-identical** to the copy taken before it (no inline script moved),
+`X-Robots-Tag: noindex, nofollow` still set, `/` `/pricing` `/login` `/privacy`
+all 200, `/videos` still 303 to `/login?next=%2Fvideos`, zero FATAL.
+
+The session began as two feature questions from the owner and ended somewhere
+neither of them pointed.
+
+#### A -- THE DEFECT: INTAKE ACCEPTS ANY IMAGE AS A PHOTOGRAPH OF A PERSON
+
+While testing something else, a photograph of **a wristwatch held in a hand**
+was rendered as a normal order. It went through all eleven steps and produced a
+finished tape of a person who does not exist. Job `20260907-193119-401b87`,
+$0.75, and step 10 printed:
+
+```
+verify: delivery, composite, grade, colour, burn-in, bed · 375 frames · 15s · -27.1 LUFS
+```
+
+**Every assertion passed on a tape of somebody who has never existed.** That is
+section 56 in a third costume and the most useful thing this session found: the
+measurements were all correct and the product was completely wrong.
+
+`faceGate` has been a permissive SEAM since it was written -- its own header
+says "This is a SEAM, not a face detector" -- checking only that the aspect is
+under 3:1 and the short edge over 256px. A watch passes both. **A customer doing
+this on the live site spends 21 credits and is handed a stranger's face.**
+CLAUDE.md's own "Not in scope" section has said since 2026-08-20 that face
+detection "moved from hygiene to load-bearing" and is "no longer deferrable";
+it was never built, and this is the first time it cost anything.
+
+#### B -- WHAT SHIPPED, AND IT SHIPS OFF
+
+`scripts/safety/face-detect-aws.mjs` is a detector for that seam, backed by
+Rekognition **DetectFaces**. The seam always took one -- "An injected detector
+owns the verdict AND the confidence" -- and nothing ever passed it one, which is
+section 8's bug in a second place: a unit test of a detector cannot see the call
+site that forgot to wire it.
+
+It mirrors `image-moderate-aws.mjs` in every structural decision, because it is
+the same service reading the same photograph: the same hand-signed request over
+`node:crypto` (no dependency), the same host derived from the region rather than
+accepted from a caller, the same 5 MB inline cap, and the same demand for an
+injected transport BEFORE a credential is read.
+
+| Verdict | What happens |
+|---|---|
+| no face | refused, `confidence: 'verified'`, and the pipeline's existing sentence reaches the customer |
+| one face | passes; `largestFaceFraction` recorded |
+| several faces | **passes, count recorded** -- the owner's call, taken with refusal on the table |
+| service failure | throws; the job refunds. A gate that silently passes reads, a year later, exactly like a clean result |
+
+**A LOCAL DETECTOR WAS CONSIDERED AND REJECTED ON THIS CASE.** The obvious
+dependency-free answer is a skin-tone heuristic, and **the watch is held in a
+hand**, so it passes one. The honest options were a real detector or nothing.
+
+**`DetectFaces` requests the DEFAULT attribute set, never `ALL`.** The question
+is whether a face exists and how big it is; `ALL` also returns age, gender and
+emotion. A product that renders somebody's likeness has no business collecting
+an inferred age it will never use.
+
+**IT IS OFF AND THE HOLE IS STILL OPEN ON THE LIVE SITE.** It refuses to build
+without `TIMESTAMP_IMAGE_PROCESSOR`, which is section 52's guard applied
+unchanged -- the photograph reaches AWS either way and `/privacy` says where it
+goes. Proved off after the deploy rather than assumed: `/privacy` still reads
+"and to nobody else" with no classifier clause, and the worker banner prints no
+face-detector line. **One signature and one `.env` line switch on this AND
+section 52's moderation together.**
+
+**UNVERIFIED AGAINST THE REAL API, AND THIS IS THE ONE TO KNOW.** The
+`RekognitionService.DetectFaces` target string and the `FaceDetails` response
+shape came from model knowledge, **not from the AWS API reference**, and no live
+call has ever been made. That is BUG 3 exactly -- `fal-ai/uso` answered 422
+because it wanted `input_image_urls` and nobody had read the page. Read the
+reference, or treat the first live 422 as a field-name problem rather than a
+credential one.
+
+#### C -- THE PRIVACY PAGE WAS ONE EDIT FROM BEING HALF TRUE
+
+`/privacy` names the processor AND its purpose -- "checks it for illegal or
+abusive content" -- because Art. 13 asks for the purpose and not only the
+recipient. Face detection is a SECOND purpose. Both sentences now read "and
+confirms it shows a face".
+
+**There were TWO copies of that sentence** (`faqItems` and `privacyPage`), only
+one was tested, and the first pass updated the tested one and missed the other.
+A test now holds them to saying the same thing. **The FAQ is the one a customer
+is more likely to read.**
+
+#### D -- THE VOICE PROBES, PARKED BY THE OWNER, AND THE FINDING WORTH KEEPING
+
+The owner asked for the person on screen to speak -- "a casual conversation
+between the two persons" -- and after two paid probes parked it: *"the voice
+probe is too much for this generation."* Nothing was committed for it. The
+throwaway lives in `build/voice-probe/` (gitignored). **$1.50, and it bought a
+real fact about this model:**
+
+**PROMPT PLACEMENT DECIDES WHETHER THE SUBJECT SPEAKS.** Same model, same
+reference photograph, `audio: true` both times:
+
+| | Probe 1 (living room) | Probe 2 (garden) |
+|---|---|---|
+| the conversation line | near the bottom, naming no beat | with the camera clause AND inside the final shot beat |
+| wording | "in easy conversation" | "their lips moving with the words", "mid-sentence" |
+| mouth | **closed in all 20 frames** at 10fps | **open, teeth visible, shapes changing** |
+| audio | silent to 4.4s, then the television | continuous foreground speech, all 15s |
+| loudness | -22.8 LUFS | -15.0 LUFS |
+
+That is sections 17 and 53 again: this model honours what sits early and ignores
+what sits fifth, and a beat that does not name the subject gets the subject left
+out of it.
+
+**Other things those two renders established, all free to keep:**
+
+- **Wan generates contextual period audio unasked.** Probe 1 produced television
+  dialogue plus a constant ~15.4 kHz tone -- a CRT flyback whistle, PAL being
+  15,625 Hz -- for the CRT the model had itself drawn.
+- **THE LOUDNESS CONTRACT DOES NOT SURVIVE SPEECH.** Band-limited to 8 kHz mono
+  and mixed under the real bed, the two land at -24.5 and -23.5 LUFS against the
+  tape's -27 target. `bed.mjs` bans `loudnorm` precisely so the bed cannot drift
+  with content, and speech is content. Shipping model audio needs that rethought.
+- **THIS ENDPOINT HAS NO NEGATIVE CHANNEL AT ALL.** `falReferenceVideoBody`
+  sends six fields and `negative_prompt` is not one of them, and `fal.mjs`'s
+  header says the negatives are deliberately NOT appended to the prompt either,
+  because a model with no negative channel reads "no crowd, no text" as a list
+  of things the scene contains. **So all ~40 `BASE_NEGATIVES` are inert on the
+  shipped path** -- which is why probe 1's television carried on-screen text and
+  a person in it. Correct anyone who says otherwise, including this file's own
+  older sections.
+- **Never established, because it was parked:** whether the audio is actually
+  SYNCED to the mouth, and whether the voice is plausible as the subject's.
+
+#### E -- THE BODY SHAPE: DIAGNOSED, STILL UNPROVEN
+
+The owner reported that his tapes render him heavier than he is. Investigated
+with systematic-debugging; no fix applied and none is warranted yet.
+
+**Not a geometry bug.** `test/tapedeck-geometry.test.js` was RUN rather than
+read: green, a circle stays round in all three shapes on the delivered frame.
+The section 35A stretch family is not back.
+
+**Three compounding causes, in order:**
+
+1. **THE ROOT ONE -- WE ASK FOR THE WRONG PHOTOGRAPH.** `views.mjs` says "a
+   clear photo of your face" at the step-1 dropzone and "one photo of your face"
+   in the landing hero. A head-and-shoulders selfie carries no evidence of
+   build, so the model invents one, and an invented body is an average body.
+   Average is heavier than thin.
+2. **Every place is a wide lens at chest-up or waist-up** -- the broadening
+   configuration, the same reason an arm's-length selfie widens a face. All
+   seven presets; the living room is literally "wide and close in a small
+   space". Deliberate, because it is the camcorder look.
+3. **The outfits carry bulk words** -- the DEFAULT (`tshirt-jeans`) says "worn
+   loose", `fleecepulli` says "oversized". **The `fitted cut` negatives are
+   INERT** (see §74D), so only the prose matters. The owner explicitly said this
+   is not what he is asking about.
+
+**INTAKE PUTS UP NO OBSTACLE:** no face detector, nothing crops to a face, and
+the only resize is a scale-to-fit-2048 that never upscales. **A waist-up or
+full-length photograph is accepted today, unchanged.** So the fix is copy, and
+then optionally a SECOND reference -- Wan takes 10 and the product sends 2.
+
+**The test is still owed** and the attempt at it is what produced §74A. Use
+waist-up rather than full-length: references scale to 2048 on the long edge, so
+a full-length shot leaves the face small, and the face is the half already
+proven to work. **VERIFY A REFERENCE HAS A PERSON IN IT BEFORE SPENDING.**
+
+**Do NOT propose describing the build in the prompt.** CLAUDE.md bans it by name
+and `SUBJECT = 'The person in the reference image'` is the only reference to the
+person anywhere in `scripts/compose/prompt.mjs`.
+
+#### F -- Things that will bite
+
+- **A GUARD OF MINE PASSED WHILE BROKEN, AND ONLY THE SABOTAGE CAUGHT IT.** The
+  first worker test asserted `/faceDetectImpl/`, which matches the line that
+  CONSTRUCTS it -- so deleting the `deps` hand-off left it green. It now pins
+  `deps:\s*\{[^}]*\bfaceDetectImpl\b[^}]*\}`. **When a guard names a symbol,
+  make it name the symbol IN THE PLACE THAT MATTERS.**
+- **A BARE `/face/i` MATCHES `surfaceScale`**, which `layout()`'s SVG filter
+  emits, so the first version of the privacy assertion passed on the wrong page
+  entirely. Same family as `avgblur` containing `gblur` and a bare `/ARRI/`
+  matching "carriageway". A test that passes on its first run is suspect.
+- **THE BASH HEREDOC ATE ESCAPES THREE TIMES IN ONE SESSION.** `\\b` inside
+  `<<'PY'` arrived as `\b`, which Python turned into a real **backspace byte**
+  (`^H`) inside a JS regex -- so the guard could never match anything and its
+  "catch" was a false positive. A `\\n` became a real newline and broke a file's
+  parse. **This file has said since section 31 to use Write/Edit for anything
+  with an escape. Do it.** `cat -A` is how you see what actually landed.
+- **`-v error` SUPPRESSES `metadata=print`**, so an ffmpeg measurement returns
+  nothing and reads as a broken filtergraph. Recorded in sections 56 and 64 and
+  it still caught me. Use `-v info`.
+- **THE SHELL'S CWD PERSISTS BETWEEN TOOL CALLS.** A second `cd build/x` fails
+  with "No such file or directory" because you are already in it, which reads as
+  a missing file.
+- **`web:3000` IS NOT PUBLISHED ON THE BOX** and curling `127.0.0.1:3000` there
+  refuses -- Caddy is the only doorway (section 41) and a test fails if a
+  `ports:` block ever appears. Read the container's own healthcheck instead.
+- **A PHOTO A CUSTOMER NAMES IS NOT A PHOTO YOU HAVE SEEN.** The whole of §74A
+  happened because a file was copied on the owner's say-so and never opened.
+  The technical gates all passed; the content was a watch.
+
 ## Not in scope
 
 ~~**Billing.** Accounts, credits, Stripe, rate limits.~~ **ALL FOUR ARE BUILT
@@ -10149,6 +10365,6 @@ is hosted on the provider's own domain.
 
 ~~The web app~~ — **no longer out of scope.** Paul reordered on 2026-08-20: build the app end to end with generation stubbed, *then* uploads, *then* real video APIs. See "Where things stand" at the top.
 
-~~Face detection at intake~~ — **no longer deferrable.** It was deferred for a CLI Paul ran on his own photos. The product takes uploads from strangers, so it is required, along with the consent gate, retention limits and takedown path.
+~~Face detection at intake~~ — **no longer deferrable**, and as of 2026-09-07 it is BUILT and switched OFF: `scripts/safety/face-detect-aws.mjs`, §74. It was deferred for a CLI Paul ran on his own photos. The product takes uploads from strangers, so it is required, along with the consent gate, retention limits and takedown path. **The gap between "built" and "running" is one AWS agreement**, and until it closes a customer can still upload anything at all and be charged for a tape of a stranger.
 
 **A second paid provider.** `fixtureProvider` is a genuinely different implementation exercised by the same conformance test, which is what makes the interface an abstraction rather than a wrapper with optimism. Replicate would buy vendor-risk insurance, not interface validation.
