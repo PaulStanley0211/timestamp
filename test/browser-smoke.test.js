@@ -686,6 +686,46 @@ test('the archive label sits in its gutter and never runs into the heading', { s
   }
 });
 
+test('the Recommended flag stays inside the card it flags, at every width', { skip }, async () => {
+  // THE SAME SHAPE AS THE ARCHIVE LABEL ABOVE, one page over. `.tier-name` is a
+  // flex row -- the pack's name, then the flag -- and in the three-column grid
+  // the lime card is 219px wide while the name and a 126px chip need 223px. The
+  // row does not shrink, so the chip ran 16px past the card's right edge and
+  // `.lime`'s own `overflow: hidden` sliced it: the owner's first screenshot
+  // read "RECOMMENDEI".
+  //
+  // MEASURED HERE BECAUSE ONLY A LAYOUT ENGINE CAN SEE IT. Every markup test in
+  // the suite passes on a page whose flag is cut in half, and the widths that
+  // break it are exactly the ones where the grid is three columns -- so a phone
+  // check alone would have reported it fixed.
+  const s = await session();
+  await s.signOut();
+  for (const viewport of [PHONE, { width: 1024, height: 900, mobile: false }, LAPTOP]) {
+    const page = await visit('/pricing', viewport);
+    assert.deepEqual(page.errors, [], page.errors.join('; '));
+    const probe = await page.evaluate(`(() => {
+      const card = document.querySelector('.tier--lime');
+      const mark = card && card.querySelector('.mark');
+      if (!card || !mark) return { found: false };
+      const range = document.createRange();
+      range.selectNodeContents(mark);
+      const t = range.getBoundingClientRect();
+      const c = card.getBoundingClientRect();
+      const b = mark.getBoundingClientRect();
+      return { found: true, text: mark.textContent.trim(),
+        textRight: Math.round(t.right), textWidth: Math.round(t.width),
+        boxRight: Math.round(b.right), cardRight: Math.round(c.right),
+        cardWidth: Math.round(c.width) };
+    })()`);
+    assert.ok(probe.found, 'the recommended pack lost its card or its flag');
+    assert.ok(probe.textWidth > 0, 'the flag paints at zero width');
+    assert.ok(probe.textRight <= probe.cardRight,
+      `at ${viewport.width}px the flag's text ends at ${probe.textRight}px, past the ${probe.cardWidth}px card's right edge at ${probe.cardRight}px -- it is being cut off`);
+    assert.ok(probe.boxRight <= probe.cardRight + 0.5,
+      `at ${viewport.width}px the flag's box ends at ${probe.boxRight}px, past the card's right edge at ${probe.cardRight}px`);
+  }
+});
+
 test('a long email cannot carry Sign out off a phone screen', { skip }, async () => {
   // §36B, re-measured in the engine that found it: the fix was min-width on
   // TWO nested flex items, and a markup test can never see either of them.

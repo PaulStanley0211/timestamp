@@ -2206,7 +2206,14 @@ input[type="file"]::file-selector-button {
 .tiers--two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 52rem; margin-inline: auto; }
 .tier { padding: var(--s-6) var(--s-5); position: relative; }
 .tier--lime { transform: translateY(-0.75rem); }
-.tier-name { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); font-size: var(--t-label); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 var(--s-4); }
+/* THE FLAG WRAPS RATHER THAN BEING CUT (2026-09-06). A flex item will not
+   shrink below its content, so in the three-column grid the name and a
+   126px chip needed 223px of a 219px card and the chip ran past the edge,
+   where the lime panel's own clipping sliced it in half. Wrapping is the
+   honest answer: the row genuinely does not fit, and a flag on its own line
+   still reads as the flag. A browser test measures it, because no markup
+   test can see an overflow. */
+.tier-name { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--s-2) var(--s-3); font-size: var(--t-label); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 var(--s-4); }
 .tier .price { font-family: var(--display); text-transform: uppercase; font-size: var(--t-8); line-height: 0.9; letter-spacing: 0; margin: 0 0 var(--s-1); }
 .tier .per { font-size: var(--t-1); margin: 0 0 var(--s-5); color: var(--ink-soft); }
 .tier--lime .per, .tier--lime .checks, .tier--lime .check--buy span, .tier--lime .hint { color: var(--on-lime-soft); }
