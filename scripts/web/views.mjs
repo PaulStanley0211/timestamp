@@ -267,7 +267,7 @@ const HOME_SCRIPT = `
   var name = document.getElementById('photo-name');
   // Null when the page is refusing the order outright: homePage renders that
   // refusal as a plain paragraph with no id, on purpose, so nothing here can
-  // blank a reason that a photo does not answer. Every write below is guarded.
+  // blank a reason that a photo does not answer. Every write to it below is guarded.
   var reason = document.getElementById('reason');
   var record = document.getElementById('record');
 

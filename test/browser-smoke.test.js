@@ -469,6 +469,7 @@ async function pickFile(cdp, selector, file) {
   assert.equal(exceptionDetails, undefined, `lookup threw: ${exceptionDetails?.text}`);
   assert.ok(result.objectId, `nothing on the page matches ${selector}`);
   await cdp.send('DOM.setFileInputFiles', { objectId: result.objectId, files: [file] });
+  await cdp.send('Runtime.releaseObject', { objectId: result.objectId });
 }
 
 /**
@@ -1027,6 +1028,23 @@ test('choosing a photo on a page that cannot afford a tape leaves the button dis
     { disabled: true, errors: [] },
     'choosing a photo must leave a button the page disabled for want of credits disabled, and throw nothing',
   );
+
+  // THE OTHER ARM OF THE SAME BUG. Choosing a photo reveals Remove; pressing
+  // it runs forget(), which used to write the reason back BY ID -- the same
+  // null, one click later. `hidden` is the proof the handler ran: show() had
+  // just revealed the preview, so a Remove that did nothing leaves it showing.
+  const fence2 = s.cdp.events.length;
+  await page.evaluate(`document.getElementById('photo-clear').click()`);
+  const cleared = await page.evaluate(`(() => ({
+    disabled: document.getElementById('record').disabled,
+    named: document.getElementById('photo-name').textContent,
+    hidden: document.getElementById('picked').hidden,
+  }))()`);
+  assert.deepEqual(
+    { ...cleared, errors: errorsSince(s.cdp, fence2) },
+    { disabled: true, named: '', hidden: true, errors: [] },
+    'Remove must clear the photo, leave the refused button disabled, and throw nothing',
+  );
 });
 
 /**
@@ -1059,6 +1077,22 @@ test('choosing a photo on a page that can afford a tape enables the button and c
   assert.equal(after.reason, '', `the reason under an enabled button still reads ${JSON.stringify(after.reason)}`);
   const errors = errorsSince(s.cdp, fence);
   assert.deepEqual(errors, [], errors.join('; '));
+
+  // And Remove takes the page back to where it started: the button waits for
+  // a photo again and the reason says so.
+  const fence2 = s.cdp.events.length;
+  await page.evaluate(`document.getElementById('photo-clear').click()`);
+  const cleared = await page.evaluate(`(() => ({
+    disabled: document.getElementById('record').disabled,
+    reason: (document.getElementById('reason') || {}).textContent,
+    named: document.getElementById('photo-name').textContent,
+    hidden: document.getElementById('picked').hidden,
+  }))()`);
+  assert.deepEqual(
+    { ...cleared, errors: errorsSince(s.cdp, fence2) },
+    { disabled: true, reason: 'Upload a photo first', named: '', hidden: true, errors: [] },
+    'Remove must clear the photo, disable the button again, restore the reason, and throw nothing',
+  );
 });
 
 test('after a selection, lime is on exactly one card in each option row, and it is the one chosen', { skip }, async () => {
