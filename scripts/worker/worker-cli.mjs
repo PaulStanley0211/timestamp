@@ -284,6 +284,17 @@ async function main() {
     console.log('  moderation image classifier: AWS Rekognition');
   }
 
+  // The face gate's detector, built the same way and gated by the same
+  // disclosure, because it is the same service reading the same photograph.
+  // Unset, `faceGate` runs the permissive check it has always run.
+  const { awsFaceDetectorFromEnv } = await import('../safety/face-detect-aws.mjs');
+  const faceDetectImpl = awsFaceDetectorFromEnv(process.env, {
+    fetchImpl: globalThis.fetch.bind(globalThis),
+  });
+  if (faceDetectImpl && !json) {
+    console.log('  intake face detector:        AWS Rekognition');
+  }
+
   const t0 = Date.now();
   let lastLine = null;
   const worker = createWorker({
@@ -304,7 +315,7 @@ async function main() {
     // Null when unconfigured, which `makeResolver` treats as an explicit
     // override equal to the default it already had. Nothing changes until the
     // three AWS variables exist.
-    deps: { imageModerateImpl },
+    deps: { imageModerateImpl, faceDetectImpl },
     // THE OTHER WIRE THAT MUST NOT DANGLE. The worker consults this seam when
     // a job ends without a tape; the glue walks the ownership index back to
     // the account that paid at enqueue and asks `refundIfUnspent`, which

@@ -750,7 +750,12 @@ export function faqItems({
   const packs = ' After that, credits come in packs; the pricing page says what they cost.';
   // The processor sentence mirrors /privacy word for word, so an added
   // classifier appears here the day it appears there.
-  const classifier = imageProcessor ? `, and to ${imageProcessor}, which checks it for illegal or abusive content before anything is generated` : '';
+  // TWO PURPOSES, NOT ONE. The same credentials and the same service answer
+  // both questions about the same photograph -- is this abusive, and does it
+  // show a face -- and Art. 13 asks for the purpose rather than only the
+  // recipient. A sentence naming a processor and half of what it does is the
+  // §52B failure with a smaller radius: true, and incomplete.
+  const classifier = imageProcessor ? `, and to ${imageProcessor}, which checks it for illegal or abusive content and confirms it shows a face, before anything is generated` : '';
   return [
     { q: 'Is it free?', a: `To start, yes. ${free}${packs}` },
     { q: 'What happens to my photograph?', a: `It is sent to fal.ai, the AI provider that generates the tape${classifier}, and to nobody else. Location and camera data are stripped the moment it arrives. It is deleted after ${photoDays} days and the finished tape after ${jobDays} days, and you can delete either sooner from your account page.` },
@@ -2356,8 +2361,8 @@ export function privacyPage({
        recipient with no stated purpose answers the wrong question. */''}
   <p class="sub">Your photograph is sent to fal.ai, the AI provider that generates the
   video${imageProcessor
-    ? `, and to ${h(imageProcessor)}, which checks it for illegal or abusive content before
-  anything is generated`
+    ? `, and to ${h(imageProcessor)}, which checks it for illegal or abusive content and
+  confirms it shows a face, before anything is generated`
     : ''}, and to nobody else. fal.ai runs on its own infrastructure outside the EU and keeps
   what it receives under its own privacy policy. Sign-in runs through Supabase; when you sign
   in or sign up, your IP address is passed to Supabase, which uses it to limit abuse. Payments

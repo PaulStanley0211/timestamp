@@ -565,6 +565,31 @@ test('a configured classifier is named, and "nobody else" stays true because the
   // question -- GDPR Art. 13 asks for the purpose, not just the recipient.
   assert.match(html, /illegal or abusive/i,
     'the page names a processor without saying what it does with the photograph');
+
+  // AND THE SECOND PURPOSE, added 2026-09-07 with the face gate's detector.
+  // The same credentials, the same service and the same photograph now also
+  // answer "is there a face in this", and a purpose statement that names only
+  // the first is incomplete in exactly the way the comment above forbids.
+  // NOT a bare /face/ -- the SVG filter layout() emits contains `surfaceScale`,
+  // which matches it, and the first version of this assertion passed on that.
+  assert.match(html, /shows a face/i,
+    'the processor also checks the photograph for a face, and the page does not say so');
+});
+
+test('the FAQ tells a customer the same thing the privacy page does', async () => {
+  // TWO PLACES SAY THIS, and on 2026-09-07 one of them was updated and the
+  // other was not -- caught only because the privacy test went red while the
+  // FAQ, which nothing pinned, would have kept the old half-true sentence.
+  // A customer who reads the FAQ and never opens /privacy is owed the same
+  // disclosure, so the purposes are asserted here rather than the wording.
+  const { faqItems } = await import('../scripts/web/views.mjs');
+  const answers = faqItems({ imageProcessor: 'Amazon Web Services (Rekognition), Frankfurt' })
+    .map((i) => `${i.q} ${i.a}`).join(' | ');
+
+  assert.match(answers, /Amazon Web Services \(Rekognition\), Frankfurt/,
+    'the FAQ names the generation provider but not the processor');
+  assert.match(answers, /illegal or abusive/i, 'the FAQ omits the moderation purpose');
+  assert.match(answers, /shows a face/i, 'the FAQ omits the face-check purpose');
 });
 
 test('the disclosed processor is escaped like every other operator-supplied value', () => {

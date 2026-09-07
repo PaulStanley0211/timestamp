@@ -1242,3 +1242,47 @@ test('an exact source says nothing at all', () => {
   const cfg = { totalFrames: 375, fps: 25, durationSeconds: 15 };
   assert.deepEqual(assembleFrameWarnings({ frames: 375, seconds: 15, cfg }), []);
 });
+
+// ---------------------------------------------------------------------------
+// The face gate's detector. Added 2026-09-07, after a photograph of a
+// WRISTWATCH rendered a finished, verified tape of a person who does not
+// exist -- 375 frames, 15s, -27.1 LUFS, every assertion in `verify` green.
+// The seam always accepted a detector; nothing ever handed it one.
+// ---------------------------------------------------------------------------
+
+test('the configured face detector reaches the gate', async () => {
+  const seen = [];
+  const faceDetectImpl = async () => ({
+    ok: true, reason: null, confidence: 'verified', impl: 'fake-detector', faces: 1, largestFaceFraction: 0.2,
+  });
+  await runFake({
+    deps: {
+      faceDetectImpl,
+      faceGate: async (photoPath, opts) => {
+        seen.push(opts?.detectImpl);
+        return { ok: true, reason: null, confidence: 'verified', impl: 'fake-detector', faces: 1, largestFaceFraction: 0.2 };
+      },
+    },
+  });
+  assert.equal(seen.length, 1, 'the gate ran exactly once');
+  assert.equal(seen[0], faceDetectImpl,
+    'the gate was called without the detector, so a configured detector would never run');
+});
+
+test('the manifest records what the detector actually found', async () => {
+  // `entriesOf` in credits.mjs is this repo's standing lesson about a fixed
+  // shape that projects fields: a value written and not named in the
+  // projection reads back undefined for ever. The face count is the owner's
+  // chosen record for the multiple-faces decision, so it has to survive.
+  const { job } = await runFake({
+    deps: {
+      faceGate: async () => ({
+        ok: true, reason: null, confidence: 'verified', impl: 'fake-detector', faces: 3, largestFaceFraction: 0.184,
+      }),
+    },
+  });
+  const gate = job.steps.find((s) => s.name === 'intake')?.output?.faceGate;
+  assert.equal(gate.faces, 3, 'the face count never reached the manifest');
+  assert.equal(gate.largestFaceFraction, 0.184, 'the face size never reached the manifest');
+  assert.equal(gate.confidence, 'verified');
+});

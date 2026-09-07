@@ -268,6 +268,11 @@ const STATIC = Object.freeze({
   /** No image classifier exists in this repo. `moderateJob` records a warning
    *  saying so rather than a silent pass; see safety/moderate.mjs. */
   imageModerateImpl: null,
+  /** No face detector either, by default. `faceGate` then runs the permissive
+   *  check it has always run and records `confidence: 'unverified'`, so a tape
+   *  made with this unset says truthfully that no face was ever verified.
+   *  `safety/face-detect-aws.mjs` is the implementation; worker-cli builds it. */
+  faceDetectImpl: null,
 });
 
 function makeResolver(overrides = {}) {
@@ -531,7 +536,7 @@ async function stepIntake(ctx) {
   }
 
   const photo = await ingestPhoto(staged, `${paths.input}/photo.jpg`);
-  const gate = await faceGate(photo.path);
+  const gate = await faceGate(photo.path, { detectImpl: await dep('faceDetectImpl') });
   if (!gate.ok) {
     throw new PipelineError(
       `the face gate refused ${slash(photo.path)}: ${gate.reason} (impl ${gate.impl})`,
@@ -556,7 +561,22 @@ async function stepIntake(ctx) {
     photo: { ...job.input.photo, rotated: photo.rotated, stripped: photo.stripped },
     // Recorded by name so that every job rendered before a real detector exists
     // says honestly, in its own manifest, that no face was ever verified.
-    faceGate: { ok: gate.ok, reason: gate.reason, confidence: gate.confidence, impl: gate.impl },
+    // `faces` and `largestFaceFraction` are absent on the permissive gate and
+    // present once a detector is configured. Named here rather than spread,
+    // because a spread would carry whatever a future detector decides to
+    // return -- but named means a field a detector adds and this line does not
+    // know about reads back undefined for ever, which is `entriesOf` in
+    // credits.mjs and cost an hour once already.
+    faceGate: {
+      ok: gate.ok,
+      reason: gate.reason,
+      confidence: gate.confidence,
+      impl: gate.impl,
+      ...(gate.faces === undefined ? {} : { faces: gate.faces }),
+      ...(gate.largestFaceFraction === undefined
+        ? {}
+        : { largestFaceFraction: gate.largestFaceFraction }),
+    },
     place: null,
   };
 
