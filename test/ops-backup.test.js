@@ -195,3 +195,22 @@ test('the runbook cron line can actually run, and cannot fail silently', () => {
     'the redirect covers only the last command, so a failure in the setup before it '
     + 'writes no log at all and reads as a quiet success');
 });
+
+test('no directory the runbook creates for the container user goes through install -o', () => {
+  // The same trap, a third time (2026-09-07): the showcase step was published
+  // with `install -d -m 755 -o 1000 -g 1000` and died "invalid user: '1000'"
+  // on the box during the lime world's first deploy. Every directory the
+  // runbook hands to uid 1000 has to reach that owner through chown, which
+  // takes a bare id, so the sweep here covers every `install -d` line in the
+  // file rather than the one the previous test happens to name.
+  const runbook = fs.readFileSync(new URL('../docs/deploy-runbook.md', import.meta.url), 'utf8');
+  // Command lines only: the file also quotes the old command in prose, in
+  // backticks, while explaining why it failed, and prose begins with a word or
+  // a backtick, never with the command itself.
+  const creates = runbook.split('\n').filter((l) => /^\s*install\s+-d\b/.test(l));
+  assert.ok(creates.length >= 1, 'the runbook no longer creates a directory with install -d');
+  for (const line of creates) {
+    assert.ok(!/install\s+-d[^&|]*\s-o\s*\d/.test(line),
+      `a runbook line hands a numeric uid to install -o, which fails on this host: ${line.trim()}`);
+  }
+});

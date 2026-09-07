@@ -129,12 +129,12 @@ top to bottom; nothing here is optional.
    BOX from the finished jobs so no face travels:
 
    ```bash
-   # -o 1000 -g 1000: the image runs as `USER node`, which is uid 1000, so a
+   # chown 1000:1000: the image runs as `USER node`, which is uid 1000, so a
    # root-owned directory gives the producer EACCES on its first write. `chown`
-   # takes a bare numeric id; `install -o` resolves it through the passwd
-   # database, which on this host has no user 1000 -- so the id is passed to
-   # both flags and no name is looked up.
-   install -d -m 755 -o 1000 -g 1000 /opt/timestamp/showcase
+   # takes a bare numeric id; `install -o 1000` does NOT -- it resolves the
+   # owner through the passwd database, this host has no user 1000, and it
+   # fails with "invalid user" (the same trap the backup cron fell into).
+   install -d -m 755 /opt/timestamp/showcase && chown 1000:1000 /opt/timestamp/showcase
    cd /opt/timestamp
    # the 9:16 Times Square tape and the 4:3 space-centre tape are already on the volume.
    #
@@ -311,7 +311,7 @@ the redirect, so any failure, including one in the setup, lands in the log.
 never been observed working is not a backup:
 
 ```bash
-install -d -m 700 -o 1000 -g 1000 /var/backups/timestamp
+install -d -m 700 /var/backups/timestamp && chown 1000:1000 /var/backups/timestamp
 cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups \
   web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14
 find /var/backups/timestamp -type f          # accounts/, _index/, _free-tapes.json, backup.json
