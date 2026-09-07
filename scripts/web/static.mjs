@@ -359,10 +359,14 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
       `#${slug}:checked~.wrap .lopt--${slug} .lidx{color:var(--lime);}`,
       `#${slug}:focus-visible~.wrap .lopt--${slug}{opacity:1;text-decoration:underline;text-underline-offset:6px;text-decoration-color:var(--lime);}`,
       focusRing(slug, 'placecard'),
-      // STRUCK LIGHTS THE PHOTOGRAPH. The ghost lives on '.thumb' rather than on
-      // the card (see the rule for why -- the caption must stay readable while
-      // unlit), so the rule that undoes the ghost has to name the same element.
-      `#${slug}:checked~.wrap .placecard--${slug}{transform:scale(1.03);}`,
+      // CHOSEN LIGHTS THE PHOTOGRAPH AND RINGS THE CARD. The ghost lives on
+      // '.thumb' rather than on the card (see the rule for why -- the caption
+      // must stay readable while unlit), so the rule that undoes the ghost has
+      // to name the same element. A text card fills lime; a photograph cannot,
+      // because filling it would cover the picture that IS the choice, so it
+      // takes a ring instead. The ring is a box-shadow rather than a border so
+      // the card's box does not grow by two pixels the moment it is chosen.
+      `#${slug}:checked~.wrap .placecard--${slug}{transform:scale(1.03);box-shadow:0 0 0 2px var(--lime);}`,
       `#${slug}:checked~.wrap .placecard--${slug} .thumb{opacity:1;}`,
       `#${slug}:checked~.wrap .placecard--${slug} .badge{opacity:1;}`,
       `#${slug}:checked~.wrap .dot--${slug}{background:var(--accent);}`,
@@ -372,12 +376,11 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
     if (!CSS_IDENT_RE.test(String(outfit.id))) continue;
     const slug = outfitSlug(outfit.id);
     out.push(
-      `#${slug}:checked~.wrap .lookcard--${slug}{opacity:1;}`,
-      // NO HALO. A glow behind a lit value was a baked-in literal that no token
-      // could have re-pointed, and a glow is a texture on a card. Chosen is
-      // carried by the accent and by full opacity against the ghost, which is
-      // DESIGN.md's own grammar.
-      `#${slug}:checked~.wrap .lookcard--${slug} .name{color:var(--accent);}`,
+      // CHOSEN FILLS LIME. The card's outline and fill become the accent and its
+      // text takes the ink solved for lime; the mark lights. No halo, no ghost.
+      `#${slug}:checked~.wrap .lookcard--${slug}{background:var(--lime);border-color:var(--lime);}`,
+      `#${slug}:checked~.wrap .lookcard--${slug} .name{color:var(--on-lime);}`,
+      `#${slug}:checked~.wrap .lookcard--${slug} .detail{color:var(--on-lime-soft);}`,
       `#${slug}:checked~.wrap .lookcard--${slug} .tick{opacity:1;}`,
       focusRing(slug, 'lookcard'),
     );
@@ -392,8 +395,9 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
     if (res.available === false) continue;
     const slug = qualitySlug(res.id);
     out.push(
-      `#${slug}:checked~.wrap .qualitycard--${slug}{opacity:1;}`,
-      `#${slug}:checked~.wrap .qualitycard--${slug} .name{color:var(--accent);}`,
+      `#${slug}:checked~.wrap .qualitycard--${slug}{background:var(--lime);border-color:var(--lime);}`,
+      `#${slug}:checked~.wrap .qualitycard--${slug} .name,#${slug}:checked~.wrap .qualitycard--${slug} .cr,#${slug}:checked~.wrap .qualitycard--${slug} .flag{color:var(--on-lime);}`,
+      `#${slug}:checked~.wrap .qualitycard--${slug} .detail{color:var(--on-lime-soft);}`,
       `#${slug}:checked~.wrap .qualitycard--${slug} .tick{opacity:1;}`,
       focusRing(slug, 'qualitycard'),
     );
@@ -428,9 +432,9 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
     const slug = aspectSlug(a.id);
     if (!CSS_IDENT_RE.test(slug)) continue;
     out.push(
-      `#${slug}:checked~.wrap .framecard--${slug}{opacity:1;}`,
-      `#${slug}:checked~.wrap .framecard--${slug} .ratio{color:var(--accent);}`,
-      `#${slug}:checked~.wrap .framecard--${slug} .shape{border-color:var(--accent);}`,
+      `#${slug}:checked~.wrap .framecard--${slug}{background:var(--lime);border-color:var(--lime);}`,
+      `#${slug}:checked~.wrap .framecard--${slug} .ratio,#${slug}:checked~.wrap .framecard--${slug} .detail{color:var(--on-lime);}`,
+      `#${slug}:checked~.wrap .framecard--${slug} .shape{border-color:var(--on-lime);}`,
       `#${slug}:checked~.wrap .framecard--${slug} .tick{opacity:1;}`,
       // The quality cards quote the chosen SHAPE. One rule per shape rather
       // than per (tier, shape) pair, because a card already knows its own tier
@@ -452,7 +456,7 @@ export function presetCss({ places = [], outfits = [], resolutions = [], aspects
   out.push(
     `#pl-own:checked~.wrap .placecard--own-pick{display:none;}`,
     `#pl-own:checked~.wrap .placecard--own-add{display:block;}`,
-    `#pl-own:checked~.wrap .placecard--own{transform:scale(1.03);}`,
+    `#pl-own:checked~.wrap .placecard--own{transform:scale(1.03);box-shadow:0 0 0 2px var(--lime);}`,
     `#pl-own:checked~.wrap .placecard--own .thumb{opacity:1;}`,
     `#pl-own:checked~.wrap .placecard--own .badge{opacity:1;}`,
     `#pl-own:checked~.wrap .ownplace{display:block;}`,
@@ -1243,20 +1247,19 @@ body {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 0.5rem;
   min-height: 15rem;
-  border: 0;
+  border: 1px dashed var(--line);
   border-radius: var(--r-sm);
-  /* DEPTH, NOT A DASHED BOX. What says "drop a photo here" is the well behind
-     the control, never an outline: the panel around it is a card, so dropping
-     back to the ground is the recess. */
+  /* DEPTH AND A DASHED OUTLINE, because each says a different half of it. The
+     well behind the control says "this is a recess in the card"; the dash is
+     what spec §6 names, and it is what says "drop here" rather than "this box
+     is a heading". On the open step-3 panel there is no card plane to recess
+     from at all, so the recess alone read as centred prose with no affordance. */
   background: var(--ground);
   text-align: center;
   padding: 1.5rem;
   cursor: pointer;
-  transition: background 160ms;
+  transition: border-color 140ms;
 }
-/* Hover lifts the recess back to the card rather than drawing a line round
-   it -- a hard rectangle appearing under the pointer is the wrong signal, and
-   the well cannot deepen without failing the hint inside it. */
 /* THE SECOND UPLOAD IN A STEP IS NOT THE SUBJECT OF ONE. Step 1's dropzone is
    15rem because the face IS that step; the place photograph is one of two ways
    to answer step 3, sitting above a text field that answers it equally well.
@@ -1269,7 +1272,10 @@ body {
    is invisible, and measured on the rendered page the control read as a centred
    heading with no affordance at all. The only direction left there is nearer,
    which is what the card plane is. Same depth idea, opposite sign. */
-.drop:hover { background: var(--card); }
+/* Hover brightens the outline rather than lifting the fill: the fill is what
+   says "well", the dash is what says "drop here", and only the second should
+   answer the pointer. */
+.drop:hover { border-color: var(--ink-soft); }
 
 /* THE CHOSEN PHOTO, SHOWN BACK. Step 1 named the file and showed nothing, so a
    wrong photo was invisible until the finished tape came back -- on the step
@@ -1313,24 +1319,22 @@ body {
 
 .lookcard {
   position: relative;
-  display: block;
-  padding: var(--s-3) 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  opacity: var(--ghost);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
   cursor: pointer;
-  /* VALUES SNAP. Only the ghost's own legibility eases; the strike does not. */
-  transition: opacity 160ms linear;
+  /* VALUES SNAP. The outline brightens on hover; the fill does not ease. */
+  transition: border-color 140ms;
 }
-.lookcard:hover { opacity: var(--ghost-hover); }
+.lookcard:hover { border-color: var(--ink-soft); }
 .lookcard .name { display: block; font-size: var(--t-2); color: var(--ink); }
-/* NOTHING INSIDE A GHOSTED CARD IS WRITTEN IN THE SOFT TIER. --ink-soft under
-   the ghost measures 2.45:1; it would need .97 opacity to clear the floor, and
-   .97 is not a ghost. The hierarchy inside a card is carried by SIZE -- 15px
-   name over 13px detail -- which survives being multiplied by an opacity, and a
-   colour step does not. */
-.lookcard .detail { display: block; font-size: var(--t-1); color: var(--ink); margin-top: 0.15rem; }
+/* HIERARCHY INSIDE A CARD IS COLOUR AGAIN. The rule that forbade the soft tier
+   inside these cards was about GHOSTS -- --ink-soft under a 0.5 opacity is
+   2.45:1 -- and the card is not a ghost any more. Unchosen it is an outline on
+   the ground with page ink inside it; chosen it fills lime and the generated
+   rule re-inks name and detail for the lime. */
+.lookcard .detail { display: block; font-size: var(--t-1); color: var(--ink-soft); margin-top: 0.15rem; }
 /* The state marks carry NO TEXT IN THE MARKUP. They are hidden by opacity, and
    with the stylesheet switched off an opacity rule does nothing -- so a badge
    that spelled out "Selected" would appear on all nine cards at once and the
@@ -1342,13 +1346,13 @@ body {
    pinned its own to the top-right corner, and the owner saw the two rows
    disagree. A two-column grid gives the dot a gutter of its own, the way the
    frame card's in-flow tick does: unlit it is invisible and the gutter is
-   empty, struck it sits on the name's baseline. Everything that is not the
+   empty, chosen it sits on the name's baseline. Everything that is not the
    tick lives in the second column, so the names align across the row. */
 .lookcard { display: grid; grid-template-columns: 0.9rem minmax(0, 1fr); column-gap: 0.5rem; align-items: baseline; }
 .lookcard > :not(.tick) { grid-column: 2; }
 .lookcard .tick {
   grid-column: 1; grid-row: 1;
-  color: var(--accent); font-size: var(--t-label);
+  color: var(--on-lime); font-size: var(--t-label);
   opacity: 0; transition: opacity 140ms;
 }
 .lookcard .tick::before { content: "●"; }
@@ -1384,7 +1388,7 @@ body {
   width: 17rem; height: 9.5rem;
   scroll-snap-align: center;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--r-sm);
   overflow: hidden;
   cursor: pointer;
   transition: transform 220ms cubic-bezier(.2,.9,.3,1);
@@ -1437,18 +1441,18 @@ body {
 .placecard .cap .name { display: block; font-size: var(--t-1); color: var(--on-image); line-height: 1.25; }
 .placecard .cap .when { display: block; font-size: var(--t-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--on-image-soft); margin-top: 0.25rem; }
 
+/* CHOSEN, ON THE IMAGE: a lime pill, the same object as the pricing page's
+   Recommended mark, sitting on the picture it marks. Filled rather than
+   text-with-a-shadow because a fill survives any photograph without a halo,
+   and a halo on a photograph reads as a filter. Top-left, where the
+   selection mark sits in every other row (§60G). */
 .placecard .badge {
   position: absolute; top: 0.6rem; left: 0.6rem;
-  font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase;
-  /* Struck, ON THE IMAGE -- so it takes the on-image accent rather than the
-     accent used against the ground. There is no halo: on a photograph a glow
-     reads as a filter. What is left is the drop shadow, which is legibility
-     over an unknown picture rather than decoration. */
-  color: var(--on-image-accent);
-  background: none;
-  border: 0;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-  padding: 0;
+  font-size: var(--t-label); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--on-lime);
+  background: var(--lime);
+  border: 0; border-radius: 999px;
+  padding: 0.15rem 0.55rem;
   opacity: 0;
   transition: opacity 160ms;
 }
@@ -1576,23 +1580,25 @@ input[type="file"]::file-selector-button {
 
 .framecard {
   position: relative; display: flex; align-items: center; gap: 0.6rem;
-  padding: var(--s-2) 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  opacity: var(--ghost);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
   cursor: pointer;
-  /* VALUES SNAP. Only the ghost's own legibility eases; the strike does not. */
-  transition: opacity 160ms linear;
+  transition: border-color 140ms;
 }
-.framecard:hover { opacity: var(--ghost-hover); }
+.framecard:hover { border-color: var(--ink-soft); }
 .framecard .ratio { font-size: var(--t-2); font-weight: 600; letter-spacing: 0.08em; color: var(--ink); }
-.framecard .detail { font-size: var(--t-label); color: var(--ink); }
-.framecard .tick { color: var(--accent); font-size: var(--t-label); opacity: 0; transition: opacity 140ms; }
+.framecard .detail { font-size: var(--t-label); color: var(--ink-soft); }
+.framecard .tick { color: var(--on-lime); font-size: var(--t-label); opacity: 0; transition: opacity 140ms; }
 .framecard .tick::before { content: "●"; }
 
-/* The drawn shape. Height is fixed at 18px and the width carries the ratio. */
-.framecard .shape { display: block; border: 1px solid var(--accent-deep); height: 18px; flex: none; }
+/* The drawn shape. Height is fixed at 18px and the width carries the ratio.
+   IT IS DRAWN IN INK, NOT IN THE ACCENT. Lime means chosen, and a glyph in lime
+   on every card says every shape is chosen -- which is exactly the thing colour
+   is reserved to answer. The generated rule redraws it in the on-lime ink on
+   the card that is actually filled. */
+.framecard .shape { display: block; border: 1px solid var(--ink); height: 18px; flex: none; }
 .framecard--a-4x3 .shape { width: 24px; }
 .framecard--a-16x9 .shape { width: 32px; }
 .framecard--a-9x16 .shape { width: 10px; }
@@ -1607,9 +1613,9 @@ input[type="file"]::file-selector-button {
    there is nothing to select and nothing that can be posted. */
 /* A DEFERRED SHAPE SITS AT THE SAME FLOOR AS EVERY OTHER UNLIT ONE. It was at
    .26, which is --ink at 1.70:1 -- text nobody can read, on the element whose
-   only job is to say "not yet". Opacity cannot carry this distinction on paper
-   without going under the floor, so the FLAG carries it, in words, which is
-   also the only version a screen reader ever had. */
+   only job is to say "not yet". Opacity cannot carry this distinction below the
+   floor, so the FLAG carries it, in words, which is also the only version a
+   screen reader ever had. */
 .framecard--soon { cursor: default; opacity: var(--ghost); }
 .framecard--soon:hover { opacity: var(--ghost); }
 .framecard--soon .flag { font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); }
@@ -1620,16 +1626,14 @@ input[type="file"]::file-selector-button {
 
 .qualitycard {
   position: relative; display: block;
-  padding: var(--s-3) 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  opacity: var(--ghost);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
   cursor: pointer;
-  /* VALUES SNAP. Only the ghost's own legibility eases; the strike does not. */
-  transition: opacity 160ms linear;
+  transition: border-color 140ms;
 }
-.qualitycard:hover { opacity: var(--ghost-hover); }
+.qualitycard:hover { border-color: var(--ink-soft); }
 .qualitycard .name { display: block; font-family: var(--display); font-size: var(--t-3); letter-spacing: 0; text-transform: uppercase; line-height: 1; color: var(--ink); }
 /* One price per shape, hidden until the frame row says which shape. Painting
    them all at once would list three numbers on one card; painting the un-shaped
@@ -1638,24 +1642,32 @@ input[type="file"]::file-selector-button {
    switch to, because creditCost refuses it outright. */
 .qualitycard .cr { display: none; font-size: var(--t-label); letter-spacing: 0.14em; color: var(--ink); margin-top: 0.1rem; }
 .qualitycard .cr--soon { display: block; }
-.qualitycard .detail { display: block; font-size: var(--t-1); color: var(--ink); margin-top: 0.35rem; }
+.qualitycard .detail { display: block; font-size: var(--t-1); color: var(--ink-soft); margin-top: 0.35rem; }
 .qualitycard .flag { display: inline-block; font-size: var(--t-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); margin-top: 0.4rem; }
 /* The same gutter as .lookcard, for the same reason: the mark on the left,
    before the name, in every row. The deferred card has no tick, and its
    children take the second column too, so its name lines up with the rest. */
 .qualitycard { display: grid; grid-template-columns: 0.9rem minmax(0, 1fr); column-gap: 0.5rem; align-items: baseline; }
 .qualitycard > :not(.tick) { grid-column: 2; }
-.qualitycard .tick { grid-column: 1; grid-row: 1; color: var(--accent); font-size: var(--t-label); opacity: 0; transition: opacity 140ms; }
+.qualitycard .tick { grid-column: 1; grid-row: 1; color: var(--on-lime); font-size: var(--t-label); opacity: 0; transition: opacity 140ms; }
 .qualitycard .tick::before { content: "●"; }
 
 /* Unavailable options are a <span>, not a <label>: there is no radio behind
    them, so there is nothing to select and nothing that can be posted. */
-/* A refused value stays unlit rather than outlined: this world has no lines.
+/* A REFUSED VALUE IS OUTLINED LIKE ITS SIBLINGS AND GHOSTED AS WELL. This world
+   has lines now, so an unlit card is still a card -- "not yet" is a value in the
+   row, not an absence from it -- and the ghost is what says it cannot be had.
    AT THE FLOOR AND NOT BELOW IT -- .26 put --ink at 1.70:1. The flag says
    "coming soon" in words, which is the only version that ever reached a screen
    reader anyway, and words do not have a contrast ratio to fail. */
 .qualitycard--soon { cursor: default; opacity: var(--ghost); }
 .qualitycard--soon:hover { opacity: var(--ghost); }
+/* THE ONE CARD STILL GHOSTED KEEPS PAGE INK INSIDE IT. Every other card took
+   the soft tier for its detail line above, which is right on a card at full
+   strength and wrong here: --ink-soft under the ghost measures 2.83:1 on this
+   ground, and DESIGN.md's rule is that nothing inside a ghosted control is
+   written in the soft tier, because colour is what an opacity multiplies away. */
+.qualitycard--soon .detail { color: var(--ink); }
 
 /* One cost per resolution, all hidden until the matching radio is checked. */
 .cost { display: none; }
@@ -1667,6 +1679,18 @@ input[type="file"]::file-selector-button {
 .facts { display: grid; grid-template-columns: 1fr auto; gap: var(--s-1) var(--s-4); margin: var(--s-5) 0; }
 .facts dt { font-size: var(--t-label); text-transform: uppercase; letter-spacing: 0.22em; color: var(--faint); }
 .facts dd { margin: 0; font-size: var(--t-2); font-weight: 600; letter-spacing: 0.12em; color: var(--ink); text-align: right; }
+
+/* THE PRICE BESIDE THE BUTTON. Two columns, the facts filling and the button
+   sized to its own label, aligned on the bottom edge so the button stands
+   level with the credits line. Below 30rem -- the width where the nav wraps
+   too -- the row stacks and the button takes the full width again. */
+.commit-foot { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s-5); align-items: end; margin: var(--s-5) 0 0; }
+.commit-foot .facts { margin: 0; }
+.commit-foot .record { width: auto; margin-top: 0; padding: 0.85rem 1.6rem; }
+@media (max-width: 30rem) {
+  .commit-foot { grid-template-columns: 1fr; row-gap: var(--s-4); }
+  .commit-foot .record { width: 100%; }
+}
 
 .record {
   display: block; width: 100%;

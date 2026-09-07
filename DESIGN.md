@@ -16,6 +16,8 @@ that has one.
 
 1. **Lime means chosen, or go.** The selected place, outfit, shape and quality;
    the primary button on every page; the wordmark; the big display moments.
+   Chosen is a FILL on a text card and a RING on a photograph; the glyph on an
+   unchosen shape card and the mark on an unchosen option are ink, never lime.
    Nothing else takes it: not a label, not a link in prose, not a price, not a
    flag, not a numeral. That discipline is what lets colour answer "what have
    I chosen?".
@@ -84,12 +86,19 @@ no blur and no plate: nothing sits behind a card but the ground.
 
 ## Ghosts and the floor
 
-Unlit options sit at `--ghost: 0.5`. `--ink` at that opacity measures 4.83:1
-over the ground and 4.70:1 over a card; .48 is the least that clears the card.
-A ghost sits at the floor and no lower, and nothing inside a ghosted control
-is written in the soft tier: hierarchy inside a card is carried by size, which
-survives being multiplied by an opacity, and not by colour, which does not.
-Both are tests.
+A ghost is an unlit PHOTOGRAPH, a deferred option and a phase still to come,
+at `--ghost: 0.5`. `--ink` at that opacity measures 4.83:1 over the ground and
+4.70:1 over a card; .48 is the least that clears the card. A ghost sits at the
+floor and no lower, and nothing inside a ghosted control is written in the
+soft tier, because colour is what an opacity multiplies away. Both are tests.
+
+A text option card is not a ghost (since 2026-09-07). Unchosen it is an
+outlined card on the ground with page ink inside it — name in `--ink`, detail
+in `--ink-soft`, which the outline at full strength allows; chosen it fills
+lime, its text takes `--on-lime` and `--on-lime-soft`, and its mark lights. A
+chosen photograph keeps its picture, lifts it out of the ghost, and takes a
+2px lime ring and a lime badge. A browser test clicks every row and counts
+exactly one lime card in each.
 
 ## Type — Anton for display, Inter for everything else
 

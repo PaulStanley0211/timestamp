@@ -1792,12 +1792,6 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
     not this row. What changes is how much detail exists before the tape, and the tape
     works at 576 lines on its short edge, so above that there is nothing left to keep.</p>
 
-    <dl class="facts">
-      <dt>Length</dt><dd>15 SEC</dd>
-      <dt>Estimated cost</dt><dd>${costLines}</dd>
-      <dt>Credits</dt><dd>${h(`${balance.credits} CR`)}</dd>
-    </dl>
-
     <label class="check">
       <input type="checkbox" id="consent" name="consent" value="yes" required>
       <span class="consent-text">${
@@ -1809,7 +1803,21 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
 }</span>
     </label>
 
+    ${''/* THE PRICE STANDS BESIDE THE BUTTON (2026-09-07, spec section 6: "the
+          Record button lime with the price beside it"). The three facts and the
+          button used to stack with the consent between them, so the number a
+          person was agreeing to sat two blocks above the thing that spent it.
+          One row now: agree, then read the price, then press -- and on a phone
+          the row stacks with the price above the button. The facts keep their
+          words; tests elsewhere read them. */}
+    <div class="commit-foot">
+    <dl class="facts">
+      <dt>Length</dt><dd>15 SEC</dd>
+      <dt>Estimated cost</dt><dd>${costLines}</dd>
+      <dt>Credits</dt><dd>${h(`${balance.credits} CR`)}</dd>
+    </dl>
     <button type="submit" class="record" id="record"${brokeEntirely ? ' disabled' : ''}>&#10685; Record the tape</button>
+    </div>
     ${brokeEntirely
     ? `<p class="reason">${h(`Not enough credits — the cheapest tape costs ~${cheapest} CR and you have ${balance.credits} CR.`)}</p>`
     : `<p class="reason" id="reason">Upload a photo first</p>${

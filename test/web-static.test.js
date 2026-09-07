@@ -514,6 +514,101 @@ test('the display face is never tracked or set loose, on any page heading', () =
   }
 });
 
+test('an option card is an outlined card, not a ghost, and the chosen one fills lime', () => {
+  // WHY THE GHOST GOES FROM TEXT CARDS AND STAYS ON PHOTOGRAPHS. An unchosen
+  // option used to be the same markup at half opacity, and "chosen" was full
+  // opacity plus the name in the accent. Spec §6 gives every option card an
+  // outline; an outline in --line (0.14 alpha) multiplied by --ghost (0.5) is
+  // a 0.07-alpha line, which is invisible, so the two states would be "no card"
+  // and "lime card". The outline carries "here is a choice" at full strength
+  // and the fill carries "this one". A photograph is different: dimming it is
+  // exactly how the world says which picture is lit (see the .thumb comment),
+  // so the place card keeps its ghost and takes a ring instead of a fill.
+  const { css } = createStylesheet(FOCUS_MENU);
+  for (const kind of ['lookcard', 'qualitycard', 'framecard']) {
+    const base = new RegExp(`\\n\\.${kind}\\s*\\{([^}]*)\\}`).exec(css);
+    assert.ok(base, `no .${kind} rule`);
+    assert.match(base[1], /border:\s*1px solid var\(--line\)/, `.${kind} is not outlined`);
+    assert.match(base[1], /border-radius:\s*var\(--r-sm\)/, `.${kind} does not take the small radius`);
+    assert.ok(!/opacity:\s*var\(--ghost\)/.test(base[1]), `.${kind} is still a ghost -- its outline is invisible at half opacity`);
+    const soon = new RegExp(`\\n\\.${kind}--soon\\s*\\{([^}]*)\\}`).exec(css);
+    if (soon) assert.match(soon[1], /opacity:\s*var\(--ghost\)/, `a deferred .${kind} lost its ghost -- "not yet" is still an unlit value`);
+  }
+  // The FOCUS_MENU's own ids, so the assertion follows the fixture.
+  assert.ok(css.includes('#of-tshirt-jeans:checked~.wrap .lookcard--of-tshirt-jeans{background:var(--lime);border-color:var(--lime);}'), 'the chosen outfit does not fill lime');
+  assert.ok(css.includes('#of-tshirt-jeans:checked~.wrap .lookcard--of-tshirt-jeans .name{color:var(--on-lime);}'), 'the chosen outfit keeps page ink on lime');
+  assert.ok(css.includes('#of-tshirt-jeans:checked~.wrap .lookcard--of-tshirt-jeans .detail{color:var(--on-lime-soft);}'), 'the chosen outfit detail keeps page ink on lime');
+  assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p{background:var(--lime);border-color:var(--lime);}'), 'the chosen quality does not fill lime');
+  assert.ok(css.includes('#a-4x3:checked~.wrap .framecard--a-4x3{background:var(--lime);border-color:var(--lime);}'), 'the chosen shape does not fill lime');
+  assert.ok(css.includes('#a-4x3:checked~.wrap .framecard--a-4x3 .shape{border-color:var(--on-lime);}'), 'the glyph on a lime card is not drawn in the on-lime ink');
+  // Lime means chosen. Nothing unchosen wears it -- not the glyph, not the mark.
+  for (const m of css.matchAll(/([^{}\n]*\.shape[^{}]*)\{([^}]*)\}/g)) {
+    if (/:checked/.test(m[1])) continue;
+    assert.ok(!/var\(--(accent|accent-deep|lime)\)/.test(m[2]), `an unchosen shape glyph is drawn in lime: "${m[1].trim()}"`);
+  }
+  for (const m of css.matchAll(/\.(lookcard|qualitycard|framecard) \.tick\s*\{([^}]*)\}/g)) {
+    assert.match(m[2], /color:\s*var\(--on-lime\)/, `.${m[1]} .tick only ever shows on a lime card and is not in the on-lime ink`);
+  }
+  // Hierarchy inside a card is colour again now that nothing multiplies it.
+  const detail = /\.lookcard \.detail\s*\{([^}]*)\}/.exec(css);
+  assert.match(detail[1], /color:\s*var\(--ink-soft\)/, 'an unchosen card cannot use the soft tier only while it is ghosted; it is not ghosted');
+});
+
+test('the chosen place keeps its photograph and takes a lime ring and a lime badge', () => {
+  const { css } = createStylesheet(FOCUS_MENU);
+  assert.ok(css.includes('#pl-ostsee-strand:checked~.wrap .placecard--pl-ostsee-strand{transform:scale(1.03);box-shadow:0 0 0 2px var(--lime);}'), 'the chosen place carries no lime ring');
+  assert.ok(css.includes('#pl-ostsee-strand:checked~.wrap .placecard--pl-ostsee-strand .thumb{opacity:1;}'), 'the chosen photograph is not lit');
+  assert.ok(css.includes('#pl-own:checked~.wrap .placecard--own{transform:scale(1.03);box-shadow:0 0 0 2px var(--lime);}'), 'the own-place card is chosen without the ring');
+  const badge = /\.placecard \.badge\s*\{([^}]*)\}/.exec(css);
+  assert.ok(badge, 'no .placecard .badge rule');
+  assert.match(badge[1], /background:\s*var\(--lime\)/, 'the badge is not a lime pill');
+  assert.match(badge[1], /color:\s*var\(--on-lime\)/, 'the badge text is not the on-lime ink');
+  assert.match(badge[1], /border-radius:\s*999px/, 'the badge is not a pill');
+  assert.ok(!/text-shadow/.test(badge[1]), 'a filled pill needs no shadow to survive a photograph');
+  const card = /\n\.placecard\s*\{([^}]*)\}/.exec(css);
+  assert.ok(card, 'no .placecard rule');
+  assert.match(card[1], /border-radius:\s*var\(--r-sm\)/, 'the place card is squared while every other card is rounded');
+  assert.ok(!/box-shadow/.test(card[1]), 'every place card wears the ring');
+  const thumb = /\n\.thumb\s*\{([^}]*)\}/.exec(css);
+  assert.match(thumb[1], /opacity:\s*var\(--ghost\)/, 'the unlit photograph lost its ghost -- the ghost is what says which picture is lit');
+});
+
+test('a dropzone says so with a dashed outline, from the token', () => {
+  const { css } = createStylesheet({});
+  const drop = /\n\.drop\s*\{([^}]*)\}/.exec(css);
+  assert.ok(drop, 'no .drop rule');
+  assert.match(drop[1], /border:\s*1px dashed var\(--line\)/, 'the dropzone is not dashed -- spec §6 says a dashed --line outline');
+  assert.match(drop[1], /background:\s*var\(--ground\)/, 'the photo well is not recessed to the ground inside its card');
+  const hover = /\.drop:hover\s*\{([^}]*)\}/.exec(css);
+  assert.ok(hover, 'no .drop:hover rule');
+  assert.match(hover[1], /border-color:\s*var\(--ink-soft\)/, 'hover does not brighten the outline');
+  assert.ok(!/background/.test(hover[1]), 'hover still lifts the fill, which was the recess idiom');
+  const slim = /\.drop--slim\s*\{([^}]*)\}/.exec(css);
+  assert.ok(slim, 'no .drop--slim rule');
+  assert.match(slim[1], /background:\s*var\(--card\)/, 'the place dropzone sits on an open panel; on the ground it needs the card plane to read as a well');
+});
+
+test('the record button stands beside the price, after the consent, not under a list', () => {
+  const html = homePage({ ...FOCUS_MENU, consentText: 'I agree' });
+  const commit = html.slice(html.indexOf('panel--commit'), html.indexOf('panel--archive'));
+  const check = commit.indexOf('<label class="check">');
+  const foot = commit.indexOf('<div class="commit-foot">');
+  assert.ok(check > -1, 'no consent on the commit panel');
+  assert.ok(foot > check, 'the consent does not come before the price and the button');
+  const inside = commit.slice(foot, commit.indexOf('</div>', foot));
+  assert.match(inside, /<dl class="facts">/, 'the facts are not in the row with the button');
+  assert.match(inside, /<button type="submit" class="record" id="record"/, 'the button is not in the row with the facts');
+  // The three facts are still the three facts, in the same words the tests
+  // elsewhere read.
+  assert.match(inside, /<dt>Length<\/dt><dd>15 SEC<\/dd>/);
+  assert.match(inside, /<dt>Estimated cost<\/dt>/);
+  assert.match(inside, /<dt>Credits<\/dt>/);
+  const { css } = createStylesheet(FOCUS_MENU);
+  assert.match(css, /\.commit-foot\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/, 'the row is not facts-then-button');
+  assert.match(css, /\.commit-foot \.record\s*\{[^}]*width:\s*auto/, 'the button still spans the card instead of standing beside the price');
+  assert.match(css, /@media \(max-width: 30rem\)\s*\{[^}]*\.commit-foot\s*\{[^}]*grid-template-columns:\s*1fr/, 'the row does not stack on a phone');
+});
+
 test('no page promises the still-approval gate that direct mode deleted', () => {
   // THE LANDING PAGE SOLD A REFUND THAT DOES NOT EXIST. Its closing paragraph
   // read "You approve a still before any video is made, so a likeness you do

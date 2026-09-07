@@ -1100,16 +1100,18 @@ test('every place has an image URL and a gradient underneath it in one declarati
     // bug: it would match whatever the frame row says and quote one number.
     assert.ok(!/\.cost--q-\d+p\{/.test(css),
       'a cost rule keyed on the tier alone quotes one price for every shape');
-    // CHANGED 2026-08-24 with the STRUCK world. This asserted the selected card
-    // gained `border-color:var(--accent)`. DESIGN.md forbids borders outright --
-    // grouping is depth and gauze density, never a line -- so selection is now
-    // expressed as a strike: the ghost comes to full opacity and its name burns
-    // cathode orange. The rule this test protects did not move: the selection is
-    // still carried entirely by CSS with no script involved.
-    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p{opacity:1;}'),
-      'the selected quality card must be struck by CSS alone');
-    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p .name{color:var(--accent);'),
-      'and the strike must be visible as colour, not only as opacity');
+    // CHANGED TWICE, AND THE RULE THIS TEST PROTECTS DID NOT MOVE EITHER TIME:
+    // the selection is carried entirely by CSS with no script involved. In 2026-08-24
+    // it asserted the selected card gained a border colour; the STRUCK world
+    // forbade borders outright, so it became a strike -- the ghost coming to full
+    // opacity with its name in the accent. On 2026-09-07 the lime world gave every
+    // option card an outline at full strength and made CHOSEN a FILL: the card's
+    // background and border become lime and its text takes the ink solved for
+    // lime. That is spec §6's grammar and the pricing page's already.
+    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p{background:var(--lime);border-color:var(--lime);}'),
+      'the selected quality card must fill lime by CSS alone');
+    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p .name,#q-480p:checked~.wrap .qualitycard--q-480p .cr,#q-480p:checked~.wrap .qualitycard--q-480p .flag{color:var(--on-lime);}'),
+      'and its text must take the ink solved for lime, or the chosen card is unreadable');
     assert.ok(!css.includes('#q-1080p:checked'), 'a deferred resolution gets no selection rule');
 
     // The cross-fade is a CSS transition, not a script -- which is why it works

@@ -929,6 +929,49 @@ test('the own-place card in the rail is a live control in both states', { skip }
     `the way back points at ${JSON.stringify(onPreset.target[0])}, which does not reselect your own place`);
 });
 
+test('after a selection, lime is on exactly one card in each option row, and it is the one chosen', { skip }, async () => {
+  // Spec §8's named browser test. The stylesheet-text tests above prove the
+  // generated rule exists; only a cascade can prove that exactly ONE card in a
+  // row resolves to lime after a click -- a selector typo that matched every
+  // card, or a later rule of equal specificity, passes every text assertion.
+  const s = await session();
+  await s.signIn();
+  const page = await visit('/', LAPTOP);
+  assert.deepEqual(page.errors, [], page.errors.join('; '));
+  const r = await page.evaluate(`(() => {
+    const probe = document.createElement('div');
+    probe.style.background = 'var(--lime)';
+    document.body.appendChild(probe);
+    const lime = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const rows = { look: '.looks label.lookcard', quality: '.quality label.qualitycard', frame: '.frames label.framecard' };
+    const out = { lime };
+    for (const [row, sel] of Object.entries(rows)) {
+      const cards = [...document.querySelectorAll(sel)];
+      const target = cards[cards.length - 1];
+      target.click();
+      const lit = cards.filter((c) => getComputedStyle(c).backgroundColor === lime);
+      out[row] = { cards: cards.length, lit: lit.length, litIsTarget: lit.length === 1 && lit[0] === target,
+        inkOnLime: getComputedStyle(target.querySelector('.name, .ratio')).color };
+    }
+    const places = [...document.querySelectorAll('.rail label.placecard:not(.placecard--own)')];
+    places[1].click();
+    const ringed = places.filter((p) => getComputedStyle(p).boxShadow.includes(lime));
+    out.place = { cards: places.length, ringed: ringed.length, ringedIsTarget: ringed.length === 1 && ringed[0] === places[1],
+      badge: getComputedStyle(places[1].querySelector('.badge')).backgroundColor };
+    return out;
+  })()`);
+  for (const row of ['look', 'quality', 'frame']) {
+    assert.ok(r[row].cards >= 2, `${row}: fewer than two cards to choose between`);
+    assert.equal(r[row].lit, 1, `${row}: ${r[row].lit} cards are lime after one choice`);
+    assert.ok(r[row].litIsTarget, `${row}: the lime card is not the one that was clicked`);
+    assert.notEqual(r[row].inkOnLime, r.lime, `${row}: the chosen card's text is lime on lime`);
+  }
+  assert.equal(r.place.ringed, 1, `${r.place.ringed} place cards carry the lime ring after one choice`);
+  assert.ok(r.place.ringedIsTarget, 'the ringed place is not the one that was clicked');
+  assert.equal(r.place.badge, r.lime, 'the chosen place badge is not a lime pill');
+});
+
 test('/videos paints a real player for a finished tape, and fits a phone', { skip }, async () => {
   // WHAT ONLY A LAYOUT ENGINE CAN SAY. A markup test can see a <video> tag; it
   // cannot see whether the element has a box, whether the CSP let the media
