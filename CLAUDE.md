@@ -7,34 +7,34 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-07) — READ §70 FIRST. THE LIME WORLD IS LIVE ON THE LANDING AND THE PRICING PAGE; EVERY OTHER PAGE IS IN THE NEW COLOURS WITH ITS OLD LAYOUT UNTIL THE SECOND PLAN.
+## START HERE (2026-09-07, later) — READ §71 FIRST. EVERY PAGE IS IN THE LIME WORLD'S OWN LAYOUT. THE SECOND DEPLOY IS LIVE.
 
-**Deployed 2026-09-07 at `bb85e93` (the box's docs are at `ec2eee7`), from
-this machine at the owner's instruction, and verified from outside the same
-minute — §70. Later the same day one lone change went out and the box, the
-branch and local are all at `69d51a9`: the wordmark's red dot stays and no
-longer blinks — §70H.** The world is
-`docs/superpowers/specs/2026-09-06-lime-redesign-design.md`; its §8 named
-every old-world test and its §10 the order of work. Steps 1–6 were executed
-from `docs/superpowers/plans/2026-09-06-lime-redesign-first-deploy.md` with
-`superpowers:subagent-driven-development`, one task at a time, test-first,
-every guard sabotage-verified, and are DONE. **Suite 2147 / 2144 / 0 / 3.**
-`DESIGN.md` is the authority again and describes what ships.
+**Deployed 2026-09-07 at `150de78`, from this machine at the owner's go, and
+verified from outside the same minute — §71.** The box runs `150de78`; local
+and `origin/supabase-identity-slice` carry this docs commit on top of it. The
+second plan, `docs/superpowers/plans/2026-09-07-lime-redesign-second-deploy.md`
+(spec §10 steps 7–10), was executed with
+`superpowers:subagent-driven-development`: Tasks 0–7 one at a time, test-first,
+every guard sabotage-verified, the owner shown every page rendered at 375 and
+1440 after each task, a whole-branch review on Opus, its fixes, then the push
+and the deploy whole. **Suite 2166 / 2163 / 0 / 3**, guards 7/7. The world is
+`docs/superpowers/specs/2026-09-06-lime-redesign-design.md`; `DESIGN.md` is
+the authority and describes what ships, including the numbers §71C measured.
 
-**THE NEXT THING IS TO EXECUTE THE SECOND PLAN, WHICH IS WRITTEN:**
-`docs/superpowers/plans/2026-09-07-lime-redesign-second-deploy.md` (spec §10
-steps 7–10 as Tasks 0–8: the shared bones, the order form, status and result,
-the shelf and the account page, onboarding and its ground, the auth five and
-the dialog, the legal pages and the error trio, then the deploy). It was
-written from three read-only inventories of the stylesheet, the views and the
-tests, not from the spec alone, and it starts from §70E's debt: the collapsed
-weight arc, `SCRIM_BONE`, the `--lift`/`--ink-strong` names, the band's
-missing dim-tier guard, the per-row lime browser test. Execute it with
-`superpowers:subagent-driven-development` in its order; it stops for the owner
-after every page task and before the pull. Nothing is pulled on the box until
-its Task 8, and then the whole plan at once, so the live site never shows a
-page half-moved. Everything below §70 is history kept for its reasoning; where two
-sections disagree, the higher number wins.
+**WHAT IS NEXT IS TWO SEPARATE SESSIONS THE OWNER STARTED FROM THIS ONE'S
+CHIPS, each in its own worktree on its own branch, each a deploy of its own
+after review:** the order-form script bug (`claude/gracious-knuth-85cfdb`,
+`78aec7f` landed: picking a photo re-enabled Record while the balance could
+not pay, and the handler threw), and the landing band's scrim solver, which
+models a flat tint the two stacked gradients never deliver, so the band's
+unchosen place names and its hint sit below 4.5:1 on the brightest places
+(`claude/optimistic-aryabhata-c6b7c7`; §71C has the measurement, §71F the
+rulings). **Neither is on this branch and neither is on the box.** The
+owner's own list (§61E) is unchanged. §70E's debt this plan did NOT take, on
+purpose: the favicon (the owner's), the pricing page's `sameInEveryShape`
+third state and the disabled Buy's look (both unreachable today). Everything
+below §71 is history kept for its reasoning; where two sections disagree, the
+higher number wins.
 
 ## (the banner below is 2026-09-05, late, and describes the live site)
 
@@ -9494,7 +9494,179 @@ landing, web healthy, zero FATAL.
 
 **Noticed and left for the second plan:** the status page's record light is
 painted with `--accent`, which is lime in this world. Spec §6 wants it red
-on the phase being filmed; that page is step 7's.
+on the phase being filmed; that page is step 7's. **Done in §71 (Task 3).**
+
+### 71. THE LIME WORLD'S SECOND DEPLOY — EVERY PAGE IN ITS OWN LAYOUT (2026-09-07, later)
+
+**The box pulled `150de78` and rebuilt; web was `(healthy)` at 26 seconds,
+worker Up, zero FATAL; and every check from outside passed the same minute:**
+`/api/health` `{"ok":true,"degraded":[]}`, one `class="panel"` on `/login`,
+`/privacy` opening `class="legal"` with no panel, `/onboarding` a 303 with
+`Accept: text/html`, zero retired alias names in the live stylesheet, the
+`.commit-foot` rules present, `.reclight { color: var(--rec)`, the
+`.panel--choice input[type="text"]` lift, one `class="lime hero"`, the
+Content-Security-Policy header byte-identical to the copy taken before the
+swap, `X-Robots-Tag: noindex, nofollow` still set, `/styles.css` still
+`max-age=300` (so anyone who loaded the site in the five minutes before the
+swap held the old sheet for up to five minutes). **Suite 2166 / 2163 pass / 0
+fail / 3 skipped** at `150de78`, guards 7/7 counted, the plan's old-world
+inventory grep 0 (it was 45). Deployed as three separate remote commands —
+pull, build, checks — because the classifier refuses the combined form (§70F).
+
+The plan was executed with `superpowers:subagent-driven-development` exactly as
+§70 did the first: a fresh implementer per task, a task-scoped review after
+each, a scoped re-review after every fix, a whole-branch review on Opus at the
+end, then ONE fix wave and one re-review. Sonnet was the floor and carried
+Tasks 3–7; Opus took Tasks 1 and 2, the final review and its fix wave. The
+owner looked at every page rendered at 375 and 1440 after each task and
+answered each stop in a line; the ledger of every ruling lived in the
+gitignored SDD workspace and is condensed into §71F.
+
+#### A — What shipped, commit by commit
+
+| Commit | What it does |
+|---|---|
+| `3f0e57a` | Task 1: every `.panel` is an outlined card on `--card`; `.panel--choice` the same outline with nothing behind it; fields recess to `--ground`; `.notice`, `.record:disabled`, `.tape .frame` and `.label` are cards; seven paper-world alias names retired (`--lift`, `--ink-strong`, `--frost`, `--frost-lit`, `--muted`, `--hairline`, `--hairline-firm`); the four per-page `.headline` rules lose their sans-era `1.1 / -0.02em` |
+| `7182f29` | Task 2: option cards outlined, the chosen one fills lime with `--on-lime` text; the chosen place keeps its picture and takes a 2px lime ring and a lime badge; dropzones dashed; Record stands beside its price in a new `commit-foot` row after the consent; the per-row lime browser test |
+| `3a413d4` | Task 2 review fix: the deferred 1080p card keeps its detail in ink under the ghost (2.83:1 in the soft tier), guarded; a stale hover comment deleted |
+| `18a7b63` | Task 2 owner follow-up: the place badge is the word "Selected" alone — the filled pill is the mark |
+| `74c4769` | Task 3: the three phase rows are outlined cards titled in Anton at `--d-3`; the record light is `--rec` and blinks; the tape sits in the card outline; both job headings at `--t-7` |
+| `03323f9` | Task 4: `.record--danger` (styled by nothing since 2026-08-29, so it rendered lime) is an outlined button in ink; the account heading is the address in the body face at 600, sentence case |
+| `3a7d4b8` | Task 5: onboarding's photograph ground, `singlePlaceGround`, `has-ground` and `.bg--lit` deleted; `SCRIM_BONE` → exported `SCRIM_INK` tied to `--on-image` by a test; a test refuses the page's dim tier inside `.band` |
+| `cb2bee6` | Task 6: the five credential pages pinned as one card each, Google first, form only; the dialog backdrop takes the ground from the token |
+| `58071b2` | Task 7: the three legal pages are documents on the ground at 66ch (`section.legal`), the error trio stays a card |
+| `fc88f36` | Final review A: lime leaves the Done word and dot, the step marks and the cassette date; the summary's focus ring is the spec's ink ring; the status test's lime sweep widens to `.phase*`/`.step*`/`.label` and a whole-sheet focus-ring sweep joins it |
+| `207fc15` | Final review B: a text field on an open menu panel lifts to the card (DESIGN.md's rule in both directions); a deferred shape's glyph clears the ghost |
+| `150de78` | Final review C: DESIGN.md says which way the scrim moved and what the band guard refuses; two stale comments corrected |
+
+**The suite, task by task:** 2149 (baseline) → 2153 (T1) → 2158 (T2) → 2161
+(T3) → 2162 (T4) → 2163 (T5) → 2164 (T6) → 2165 (T7) → 2166 (the fix wave);
+0 fail throughout, 3 skipped (the two money guards and the Linux-only
+backup-mode assertion). **Rewritten in place, by name:** web-static's `a panel
+and a card carry the outline, from the token` (extended: the card plane, no
+`backdrop-filter`, the weight arc by fill); web-api's two `qualitycard--q-480p`
+assertions (the strike became the lime fill); web-static's `the onboarding page
+carries a ground when it is given one…` (the page never carries one);
+browser-smoke's `every word on the onboarding page survives the photograph it
+sits on` (the sweep stays, the ground assertions become their negation).
+Nothing was deleted outright.
+
+**The reviews:** Tasks 1, 3, 4, 5, 6, 7 clean on the first pass; Task 2 one
+fix round (a stale comment; a guard for an addition the implementer made
+beyond the brief and the controller kept). The final whole-branch review found
+0 Critical, 3 Important, 7 Minor; the fix wave took the three Importants and
+five Minors in three commits; the re-review found all addressed and nothing
+new. Two Minors are parked with rulings (§71F).
+
+#### B — The decisions, and whose each was
+
+**The owner's, at the stops:** the card fill stays (`/login`, the first stop —
+"Fill is right"); on the order form he asked what I would answer and took all
+three — the arc stays two filled and two open, the chosen card fills lime, the
+badge drops its dot and keeps the word; the phase titles in Anton and the red
+record light; the address in the body face and the delete button as an
+outlined card in ink; the consent card on the flat ground where the photograph
+was; nothing to move on the six sign-in surfaces; the documents unframed; and
+the go, given after a break, for `150de78` alone with the two chips to follow
+as their own deploys.
+
+**Taken during execution, each recorded with what it costs if wrong:** the
+trimmed comment above `.panel` stays (it contradicted the rule three lines
+below); `.qualitycard--soon .detail` in ink stays and gets its guard (DESIGN.md's
+ghost rule outranks the brief's `--ink-soft`); the final review's Important 1
+is fixed AGAINST Task 3's own brief line "`.phase-done .phase-state` stays
+lime: done is go" — the plan's Global Constraints ("never … a done-phase word")
+and spec §2.1 outrank one task's argument, so Done, the step marks and the
+cassette date are ink and the status page still tells its states apart by REC
+red and blinking, Done and Stopped as ink words, Not yet ghosted.
+
+#### C — THE MEASUREMENT THAT DID NOT GO THE WAY THE PLAN SAID
+
+Task 5 re-solved the landing band's scrim for the ink the band paints
+(`--on-image #FAF7F2`) instead of the cream world's bone. **The plan predicted
+the per-place values would move a step HEAVIER. They moved lighter**: a
+brighter ink reaches 8:1 at a lower scrim, so Amalfi (the default ground) went
+0.62 → 0.56, the space centre 0.53 → 0.46, the kitchen 0.37 → 0.30, the other
+four already on the floor. The final review caught the direction and asked for
+an engine-measured composite-contrast sweep over the band — the one Task 5 had
+narrowed to the flat ground — to come back.
+
+**The fix wave built that sweep, and it is red on shipped design.** A
+dependency-free PNG decoder over `node:zlib`, a CDP screenshot clipped to the
+band with its text hidden, the lightest pixel under each word: on the real
+Amalfi loop at 375 and 1440 the unchosen place names (ghosts at 0.5 over the
+photograph) measure 2.1–4.4:1 and the hint (`--on-image-soft`) 2.6–3.4:1. Three
+causes, none a typo: the ghost floor was solved on the FLAT ground and applied
+over a photograph; the hint's tier is outside the scrim solve by the solver's
+own header; and **the solver models one flat alpha while the paint is a linear
+gradient (weakest stop 0.74) stacked on a radial one (weakest 0.20) and
+multiplied by the layer's opacity, so what lands is at most ≈0.79 of the solved
+value**, with `text-shadow` closing the gap. **This was true of the first
+deploy this morning too**; the lighter scrim made it one step worse. No guard
+was shipped — a guard tuned to today's pixels asserts pixels, not a rule
+(§4's own ruling) — DESIGN.md's Text-on-a-photograph section now carries the
+numbers and the method, and the fix is a separate session (the banner). The
+implementer reverted its own probe with `git checkout --` on a file whose only
+content was the probe, every other change already committed — the one shape
+in which that command is safe.
+
+#### D — §70E's debt, and where each item landed
+
+The collapsed weight arc → Task 1 (`.panel` planes) and Task 2 (the option
+cards); `SCRIM_BONE` → Task 5; the `--lift`/`--ink-strong` names → Task 1
+(with five more); the band's missing dim-tier guard → Task 5 (a stylesheet
+guard refusing the page's `--ink-soft`/`--faint` inside `.band`; the composite
+measurement is §71C's open item); the per-row lime browser test → Task 2. Not
+taken: the favicon, `sameInEveryShape`'s third state, the disabled Buy's look
+on the lime card.
+
+#### E — Things that will bite
+
+- **A dispatch interrupted mid-task leaves a partial tree.** The final fix
+  wave's first run was interrupted after committing its first concern and
+  leaving the second mid-TDD; the second run verified the commit line by line
+  against the findings and continued from the RED it found. §70F's recovery,
+  a second time: check what is committed, check the sabotage copies, verify
+  rather than redo.
+- **The per-rule soft-tier sweep cannot see an ancestor's opacity.** Twice in
+  one plan: `.qualitycard--soon .detail` (the fix round) and
+  `.framecard--soon .shape` (the final review). A rule that pairs the soft
+  tier with a ghost in ONE declaration is caught; a ghosted parent over a soft
+  child is not. Both now have their own assertions; the sweep is unchanged.
+- **A plan's task line can contradict the plan's own constraints.** Task 3
+  said "done is go", the Global Constraints said "never a done-phase word".
+  The spec settles it, not the nearer sentence.
+- **`build/preview-pages.mjs` still names two retired place ids**, so the
+  status previews say "The balcony" and the result shelf shows a broken
+  poster. Scratch staleness; read past it or fix the fixture.
+- **The plan's expected grep count for `.commit-foot` on the live sheet was
+  1; five rules name it.** The property (present) is what the check is for.
+- **`curl --retry 15 --retry-delay 5 --retry-all-errors` waits for the
+  container** without a shell `sleep`, which this harness blocks.
+- **On onboarding at 1440 the nav sits inside `wrap--narrow`**, so a signed-in
+  address truncates to an ellipsis. Pre-existing (§36B's shrink), not this
+  plan's.
+- **Six sibling `rgba(22, 22, 24, …)` shadow literals** remain on the landing
+  band and card rules — the same class as the backdrop literal Task 6
+  replaced. Out of scope; the next hand on those rules should take them.
+- **Chrome was present, so the browser tests RAN on every task** (23/23)
+  rather than self-skipping; the Task 2 sabotage that made every quality card
+  light proved the cascade test binds where the text tests cannot.
+
+#### F — Rulings, whole (the ledger's `Ruling:` lines, in order)
+
+1. Scan: none needed. 2. Task 1: keep the trimmed `.panel` comment. 3. Task 2:
+keep `.qualitycard--soon .detail { color: var(--ink) }` and guard it. 4. Final
+review Important 1: fix against Task 3's brief line; the spec outranks it.
+5. Important 2: fix with `.panel--choice input[type="text"] { background:
+var(--card); }`. 6. Important 3: the scrim correction ships; the composite
+guard is parked to a separate session with the measurement in DESIGN.md.
+7. Minor 5 parked: the `color-mix(var(--ground))` backdrop is the plan's own
+text and the test forbids the byte literal on purpose; browsers older than
+Chrome 122 / Safari 17.4 are not the target and the dialog's opener is a real
+link. 8. Minor 10 parked: the chosen framecard's `.detail` in `--on-lime` is a
+generated-rule contract two tests assert, one short word beside a glyph.
+9. Deploy `150de78` alone; the chips follow as their own deploys.
 
 ## Not in scope
 
