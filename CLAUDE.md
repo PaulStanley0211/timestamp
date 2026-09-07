@@ -11,7 +11,9 @@ Warm, grainy, quiet.
 
 **Deployed 2026-09-07 at `bb85e93` (the box's docs are at `ec2eee7`), from
 this machine at the owner's instruction, and verified from outside the same
-minute — §70.** The world is
+minute — §70. Later the same day one lone change went out and the box, the
+branch and local are all at `69d51a9`: the wordmark's red dot stays and no
+longer blinks — §70H.** The world is
 `docs/superpowers/specs/2026-09-06-lime-redesign-design.md`; its §8 named
 every old-world test and its §10 the order of work. Steps 1–6 were executed
 from `docs/superpowers/plans/2026-09-06-lime-redesign-first-deploy.md` with
@@ -9448,6 +9450,46 @@ owner says otherwise.
   `cd`s elsewhere then runs `rm -rf .superpowers/...` removes nothing and
   prints its own success line.** Run cleanup from the repo root and `ls` the
   result.
+
+#### H — The wordmark's record light is still (2026-09-07, later)
+
+**One commit, `69d51a9`, pushed and deployed on its own; box, branch and
+local agree. Suite 2147 / 2144 → 2149 / 2146 pass / 0 fail / 3 skipped,
+guards 7/7 counted.** The owner saw the red dot beside TIMESTAMP on the live
+landing page and asked why it was there. It is the record light, beside the
+word since 2026-08-20, and it had blinked on every page the whole time; the
+lime tokens commit pulled it out of the drawn SVG into a live span on a
+near-black ground, where the pulse read as a glitch, or as the web's own
+idiom of a red dot beside a name meaning "live". **His decision, on the
+recommendation offered: keep the dot, stop the blink.** The dot is the
+palette's one light and the only camcorder trace in the chrome; the blink
+now belongs to the status page's phase row alone, where recording is
+actually happening, and it means something there again because the masthead
+no longer competes with it. **Do not re-propose blinking it, and do not
+delete it without asking him.**
+
+What the code does now: the masthead blink rule, its keyframes and the
+reduced-motion rule that only existed because the dot moved are gone from
+`static.mjs`; the status page's `tally` animation is untouched; DESIGN.md's
+Palette and Motion rules say so. Two guards, both sabotage-verified from a
+copy: `web-static` refuses any rule that animates the wordmark's dot AND
+insists the status page's light still blinks, so a sheet that went still
+everywhere fails; `browser-smoke` reads the dot's computed animation, size,
+colour and opacity off the real cascade on both public pages at both widths,
+because a text guard cannot see a later rule of equal specificity winning
+(§60K). A late blink rule turned both red; stripping the status page's blink
+turned the text guard red on its other half. One `web-api` assertion was
+retired with a note: there is nothing left for reduced motion to stop.
+
+**Deployed as three separate remote commands** (pull, then `up -d --build`,
+then the checks), because the classifier refused the combined form last
+time (§70F). Verified from outside: health ok, the live stylesheet carries
+zero `animation: blink` and one `animation: tally`, the `rec` span is on the
+landing, web healthy, zero FATAL.
+
+**Noticed and left for the second plan:** the status page's record light is
+painted with `--accent`, which is lime in this world. Spec §6 wants it red
+on the phase being filmed; that page is step 7's.
 
 ## Not in scope
 
