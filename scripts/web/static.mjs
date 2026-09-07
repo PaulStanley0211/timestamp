@@ -197,7 +197,10 @@ function contrast(a, b) {
  * power; `SCRIM_COVER_MIN` is its minimum over the box, and it is what the
  * solver divides by. Sampled on a grid rather than solved in closed form: the
  * combined alpha is smooth and the grid is fine enough that the sampled
- * minimum is within a thousandth of the true one, which the test recomputes.
+ * minimum is within a thousandth of the true one. The test does not
+ * recompute it independently -- it re-samples this same function -- so what
+ * carries the weight there are two points derived by hand in its comment,
+ * one of them the minimum itself.
  *
  * The linear gradient runs top to bottom (180deg); the radial one is an
  * ellipse of 120% x 70% centred at the top middle, its inner stop at the
@@ -286,6 +289,11 @@ export const SCRIM_COVER_MIN = (() => {
  * here can see it, so it is margin, not budget. The browser sweep in
  * test/browser-smoke.test.js is what reads the composite as painted.
  */
+// The least layer any place gets whatever its loop measures: the scan starts
+// here. Since the highlight term binds every shipped loop (all solve to 0.60
+// or more) the floor no longer decides anything in practice; it stays as the
+// ground's minimum darkness, so a loop that measured black would still carry
+// a scrim rather than none.
 const SCRIM_FLOOR = 0.30;
 export const SCRIM_INK = [0xFA, 0xF7, 0xF2];        /* --on-image: every word in the band  */
 export const SCRIM_ACCENT_INK = [0xD9, 0xFF, 0x00]; /* --lime: the chosen option, a shade darker */

@@ -1741,9 +1741,17 @@ test('every word in the landing band clears the floor against the pixels painted
     return decodePng(Buffer.from(data, 'base64'));
   };
   const SENTINEL = '.band-in, .band-in * { color: #FF00FF !important; text-shadow: none !important; opacity: 1 !important; text-decoration: none !important; }';
-  const KNOCKOUT = '.band-in, .band-in * { color: transparent !important; }';
+  // The ground capture holds the ground and the halo and nothing else. A
+  // transparent colour does not hide a decoration whose colour is set on its
+  // own (the chosen option's focus underline is lime), and a stroke of it
+  // beside a glyph would be read as the ground at about 1:1 -- a false red
+  // that reads as a contrast regression. Measured 2026-09-07: the shipped
+  // 6px-offset underline skips the descenders and never touches a stroke, but
+  // one that did failed 60 of 254 runs until this declaration.
+  const KNOCKOUT = '.band-in, .band-in * { color: transparent !important; text-decoration: none !important; }';
 
   const measured = [];
+  let placeCount = 0;
   try {
     for (const viewport of [PHONE, LAPTOP]) {
       for (const state of ['still', 'live']) {
@@ -1759,6 +1767,7 @@ test('every word in the landing band clears the floor against the pixels painted
           return [...document.querySelectorAll('input[name="lplace"]')].map((i) => i.id);
         })()`);
         assert.ok(places.length >= 2, `the landing offers ${places.length} places -- the probe is not reading the rail`);
+        placeCount = places.length;
 
         for (const slug of places) {
           const ready = await run(`(async () => {
@@ -1829,6 +1838,10 @@ test('every word in the landing band clears the floor against the pixels painted
 
           const mask = await capture(SENTINEL);
           const ground = await capture(KNOCKOUT);
+          // CSS px and PNG px agree because visit() emulates at scale 1; a
+          // capture wider than the viewport would put every rect on the
+          // wrong pixels and fail further down as "painted no glyph".
+          assert.equal(mask.width, viewport.width, `at ${viewport.width}px the capture is ${mask.width}px wide -- the device scale factor is not 1`);
           const ox = Math.round(g.band.left); const oy = Math.round(g.band.top);
           for (const w of g.words) {
             assert.ok(w.color, `"${w.text}" (${w.cls}) has an unparseable colour`);
@@ -1851,6 +1864,9 @@ test('every word in the landing band clears the floor against the pixels painted
               const rect = { left: left + ox, top: r.top + oy, right: right + ox, bottom: r.bottom + oy };
               const { glyphs, worst, where } = worstContrast({ mask, ground, rect, color: w.color, opacity: w.opacity });
               assert.ok(glyphs > 0, `at ${viewport.width}px (${state}, ${slug}): the sentinel render painted no glyph for "${w.text}" (${w.cls}) -- the probe is blind`);
+              // Infinity < need is false, so a rect with strokes and nothing
+              // touching them would pass in silence; say so instead.
+              assert.ok(Number.isFinite(worst), `at ${viewport.width}px (${state}, ${slug}): no pixel beside "${w.text}" (${w.cls}) was read -- strokes were found and nothing touching them`);
               measured.push({
                 width: viewport.width, state, place: slug.replace(/^pl-/, ''),
                 text: w.text, cls: w.cls, ratio: Math.round(worst * 100) / 100, need: title ? 3 : 4.5,
@@ -1875,7 +1891,9 @@ test('every word in the landing band clears the floor against the pixels painted
   for (const viewport of [PHONE, LAPTOP]) {
     for (const state of ['still', 'live']) {
       const own = measured.filter((m) => m.width === viewport.width && m.state === state && m.cls.includes(`lopt--pl-${m.place}`));
-      assert.ok(own.length >= 7, `at ${viewport.width}px (${state}) only ${own.length} of the places had their own option measured`);
+      // Every place the rail offered, whatever that count is today -- a place
+      // retired tomorrow must not turn this into a probe bug.
+      assert.ok(placeCount >= 2 && own.length >= placeCount, `at ${viewport.width}px (${state}) only ${own.length} of the ${placeCount} places had their own option measured`);
     }
   }
 

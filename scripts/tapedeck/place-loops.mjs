@@ -41,8 +41,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
-import { REPO_ROOT, runFfmpeg } from '../ffmpeg/run.mjs';
+import { pathToFileURL } from 'node:url';
+import { REPO_ROOT, runFfmpeg, probe } from '../ffmpeg/run.mjs';
 import { loadLookProfile, buildVideoFilter } from './look.mjs';
 
 const OUT_DIR = path.join(REPO_ROOT, 'build', 'place-loops');
@@ -225,23 +225,41 @@ async function renderLoop({ id, src, cfg, look, seconds, crf, frames }) {
  * so every other background would quietly go heavy while the one being worked
  * on looked right.
  */
-function writeManifest(dir, results) {
+/** The manifest already in a directory, or an empty one; unreadable is empty and says so. */
+function readManifest(dir) {
   const manifestFile = path.join(dir, 'loops.json');
-  let loops = {};
-  if (fs.existsSync(manifestFile)) {
-    try {
-      loops = JSON.parse(fs.readFileSync(manifestFile, 'utf8')).loops ?? {};
-    } catch {
-      console.log('  (existing loops.json was unreadable; rebuilding it from this run alone)');
-    }
+  if (!fs.existsSync(manifestFile)) return { loops: {}, raster: null };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    return { loops: parsed.loops ?? {}, raster: typeof parsed.raster === 'string' ? parsed.raster : null };
+  } catch {
+    console.log('  (existing loops.json was unreadable; rebuilding it from this run alone)');
+    return { loops: {}, raster: null };
   }
+}
+
+/** The video raster of a loop on disk, as the manifest spells it. */
+async function rasterOf(file) {
+  const { streams = [] } = await probe(file);
+  const v = streams.find((s) => s.codec_type === 'video');
+  if (!v?.width || !v?.height) throw new Error(`ffprobe found no video stream in ${file}`);
+  return `${v.width}x${v.height}`;
+}
+
+// `raster` is what the CALLER knows: the cutter cut at it, and --measure --
+// which cuts nothing -- passes the manifest's own value, or the first loop's
+// probed size when there was no manifest. The module constant is never stamped
+// over a directory this run did not cut at it.
+function writeManifest(dir, results, raster) {
+  const manifestFile = path.join(dir, 'loops.json');
+  const { loops } = readManifest(dir);
   for (const r of results) loops[r.id] = { yavg: r.yavg, yhigh: r.yhigh };
 
   const ordered = {};
   for (const id of Object.keys(loops).sort()) ordered[id] = loops[id];
   fs.writeFileSync(manifestFile, `${JSON.stringify({
     _comment: 'Per loop: yavg is the mean luma 0-255 averaged over every frame; yhigh is the highlight -- the brightest luma any frame shows after a 2px blur. The page solves each place\'s scrim from both: 8:1 for the band\'s ink on the mean, 4.5:1 on the highlight. Regenerate with: node scripts/tapedeck/place-loops.mjs (cuts and measures) or --measure (measures the loops on disk, cuts nothing)',
-    raster: `${W}x${H}`,
+    raster,
     loops: ordered,
   }, null, 2)}\n`);
   console.log(`loops.json now describes ${Object.keys(ordered).length} loop(s)`);
@@ -270,7 +288,8 @@ async function main() {
       results.push({ id, yavg, yhigh });
       console.log(`luma ${yavg}   highlight ${yhigh}`);
     }
-    writeManifest(dir, results);
+    const raster = readManifest(dir).raster ?? await rasterOf(path.join(dir, `${ids[0]}.mp4`));
+    writeManifest(dir, results, raster);
     return;
   }
 
@@ -313,12 +332,18 @@ async function main() {
   // nothing else can recover it: by the time a stylesheet is being generated the
   // mp4 is a byte range on a disk, and re-deriving it would mean running ffmpeg
   // inside a web request.
-  writeManifest(OUT_DIR, results);
+  writeManifest(OUT_DIR, results, `${W}x${H}`);
 }
 
 // Only when run as the command: a test imports measureLuma, and an import that
 // cut seven loops would be a test that took minutes and rewrote build/.
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+// The comparison mirrors how node itself derives the main module's URL --
+// resolve, realpath, then a file URL -- so a symlinked or differently-cased
+// invocation matches exactly when node would have made this the main module,
+// rather than a platform path-string compare that can miss and exit 0 having
+// done nothing.
+const invokedAs = process.argv[1] ? pathToFileURL(fs.realpathSync(path.resolve(process.argv[1]))).href : null;
+if (invokedAs === import.meta.url) {
   main().catch((err) => {
     console.error(err?.message ?? err);
     process.exitCode = 1;

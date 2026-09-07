@@ -2308,10 +2308,11 @@ test('the photo preview does not borrow a class that positions itself elsewhere'
  * markup, and that the helper which used to build them is gone from the module
  * rather than left dormant. The second ties the band's scrim solver to the ink
  * the band actually paints, and refuses the PAGE's dim tier anywhere inside
- * `.band` -- the successor to the plate rule this world no longer has. The
- * band's own soft tier, `--on-image-soft`, is allowed and is what the hint
- * takes; what is refused is `--ink-soft` and `--faint`, the tiers measured
- * against a flat ground and never against a picture.
+ * `.band` -- the successor to the plate rule this world no longer has. Refused
+ * there since 2026-09-07 is every tier but the two the solver protects:
+ * `--ink-soft` and `--faint`, the page's tiers measured against a flat ground
+ * and never against a picture, and `--on-image-soft` too, which sat outside
+ * the solve and measured 1.57:1 over the Tokyo neon.
  */
 test('the onboarding page is a card on the ground, with no photograph behind it', async () => {
   // §63 put a place photograph behind this page so the cream did not begin

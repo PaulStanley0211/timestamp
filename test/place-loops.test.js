@@ -72,7 +72,9 @@ test('--measure rewrites a manifest from the loops on disk without cutting anyth
   // A stale manifest with a second loop in it, to prove the command merges
   // rather than overwrites -- the same rule the cutter already keeps, because a
   // manifest rebuilt from one run silently drops every other place.
-  fs.writeFileSync(path.join(dir, 'loops.json'), JSON.stringify({ loops: { 'somewhere-else': { yavg: 77, yhigh: 200 } } }));
+  // It also names a raster the module does not cut at, because --measure cuts
+  // nothing: a raster it did not measure is a fact it must not rewrite.
+  fs.writeFileSync(path.join(dir, 'loops.json'), JSON.stringify({ raster: '640x360', loops: { 'somewhere-else': { yavg: 77, yhigh: 200 } } }));
 
   try {
     const { stdout } = await promisify(execFile)(process.execPath, [CLI, '--measure', `--dir=${dir}`], { cwd: ROOT, timeout: 120_000 });
@@ -90,6 +92,7 @@ test('--measure rewrites a manifest from the loops on disk without cutting anyth
     assert.ok(written.loops[id].yhigh > written.loops[id].yavg, 'the highlight is not above the mean');
 
     assert.deepEqual(written.loops['somewhere-else'], { yavg: 77, yhigh: 200 }, 'the command overwrote a manifest it should have merged into');
+    assert.equal(written.raster, '640x360', `--measure stamped the raster ${written.raster} over a manifest that said 640x360, having cut nothing`);
     assert.match(written._comment ?? '', /highlight/i, 'the manifest comment does not say what the second number is');
 
     // Nothing was cut: the loop is byte-for-byte the copy that went in, no
