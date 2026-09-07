@@ -25,9 +25,11 @@ costume: the measurements were right and the product was wrong. A detector now
 exists behind the seam (`scripts/safety/face-detect-aws.mjs`, Rekognition
 DetectFaces) — **and it is OFF, so the hole is still open on the live site**
 until the owner signs the AWS agreement and sets `TIMESTAMP_IMAGE_PROCESSOR`.
-One signature switches on this AND §52's moderation. **Its request shape has
-never been checked against the AWS API reference — treat a first live 422 as a
-field-name problem, which is BUG 3 exactly.**
+One signature switches on this AND §52's moderation. **Its request shape WAS
+verified on 2026-09-07** against botocore's service model and AWS's own API
+reference (§74B) — target prefix, json version, body and response array all
+read rather than assumed. **What is still unproven is the credential, the IAM
+policy and the region**, and only one live call proves those.
 
 **What is next is the owner's**, in whatever order he wants it: the AWS
 agreement (which is what makes §74 real rather than dormant), his page-by-page
@@ -10223,13 +10225,22 @@ goes. Proved off after the deploy rather than assumed: `/privacy` still reads
 face-detector line. **One signature and one `.env` line switch on this AND
 section 52's moderation together.**
 
-**UNVERIFIED AGAINST THE REAL API, AND THIS IS THE ONE TO KNOW.** The
-`RekognitionService.DetectFaces` target string and the `FaceDetails` response
-shape came from model knowledge, **not from the AWS API reference**, and no live
-call has ever been made. That is BUG 3 exactly -- `fal-ai/uso` answered 422
-because it wanted `input_image_urls` and nobody had read the page. Read the
-reference, or treat the first live 422 as a field-name problem rather than a
-credential one.
+**THE SHAPE WAS UNVERIFIED FOR ABOUT AN HOUR AND THEN WAS READ.** It came
+from model knowledge first, which is BUG 3 exactly -- `fal-ai/uso` answered 422
+because it wanted `input_image_urls` and nobody had read the page. Checked the
+same night against botocore's `rekognition/2016-06-27/service-2.json`
+(`targetPrefix: "RekognitionService"`, `jsonVersion: "1.1"`) and AWS's
+`API_DetectFaces` reference: the target, the content type, the
+`{ Image: { Bytes } }` body and the top-level `FaceDetails` array all hold, and
+the page also confirms that omitting `Attributes` returns no AgeRange, Gender
+or Emotions -- so the privacy argument is a property of the request rather than
+a hope. The provenance is recorded above `AWS_FACE_TARGET`.
+
+**WHAT IS STILL UNPROVEN IS THE CREDENTIAL, THE IAM POLICY AND THE REGION**, and
+one live call proves all three. Make that call from a throwaway BEFORE setting
+the variables on the box: the gate THROWS on a service failure and `stepIntake`
+runs first, so a wrong credential would fail every render at step 1 rather than
+degrade.
 
 #### C -- THE PRIVACY PAGE WAS ONE EDIT FROM BEING HALF TRUE
 

@@ -45,6 +45,29 @@ import {
 
 export { MAX_INLINE_BYTES, rekognitionEndpoint, AWS_FACE_SERVICE };
 
+/**
+ * VERIFIED 2026-09-07 AGAINST AWS'S OWN SOURCES, not inferred from the sibling.
+ * That distinction is BUG 3's: `fal-ai/uso` answered 422 on 2026-08-23 because
+ * it wanted `input_image_urls` and the field name had been assumed from a
+ * neighbour rather than read.
+ *
+ *   target prefix   `RekognitionService`, jsonVersion `1.1`
+ *                   -- botocore/data/rekognition/2016-06-27/service-2.json
+ *   request body    `{ Image: { Bytes: <base64> } }`, `Attributes` optional
+ *   response        top-level `FaceDetails` array; each entry carries
+ *                   `BoundingBox` (Width/Height/Left/Top as ratios of the
+ *                   image) and `Confidence`
+ *                   -- docs.aws.amazon.com/rekognition/latest/APIReference/API_DetectFaces.html
+ *
+ * AND THE REASON THE DEFAULT ATTRIBUTE SET IS RIGHT, confirmed on that page:
+ * omitting `Attributes` returns BoundingBox, Confidence, Pose, Quality and
+ * Landmarks -- and NOT AgeRange, Gender or Emotions, which arrive only with
+ * `ALL`. So the privacy argument below is a property of the request rather
+ * than a hope about it.
+ *
+ * STILL NEVER CALLED LIVE. The shape is read; the credential, the IAM policy
+ * and the region are not, and only one real call proves those.
+ */
 export const AWS_FACE_TARGET = 'RekognitionService.DetectFaces';
 
 /** The name that lands in the manifest, so a tape says which gate passed it. */
