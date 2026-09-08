@@ -7,7 +7,20 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-08, evening) — READ §77 FIRST. THE SITE IS LIVE, INDEXABLE AND FIT TO SHARE; THE TWO THINGS BETWEEN IT AND AN AUDIENCE ARE AN AWS SIGNATURE AND ONE NUMBER IN A CONFIG FILE. THEN §76, §75 AND §74.
+## START HERE (2026-09-08, night) — READ §78 FIRST, THEN §77. THE SITE IS LIVE, INDEXABLE AND FIT TO SHARE; THE TWO THINGS BETWEEN IT AND AN AUDIENCE ARE AN AWS SIGNATURE AND ONE NUMBER IN A CONFIG FILE. THEN §76, §75 AND §74.
+
+**THE BOX RUNS `f21cb93`** — the owner's first batch of page-by-page live-review notes,
+built and deployed on 2026-09-08 night (§78). Four notes: the frame row on one line, the
+date tiles gone, a manifesto sentence with no number in it, and the tab icon into lime.
+**Two of the four were real defects rather than the cosmetic asks they looked like** — the
+frame row overflowed its 640px panel by 11px at EVERY width, and one two-class shorthand
+had been zeroing 192px of the landing's section rhythm (§78A, §78B).
+
+**AND READ §78E BEFORE THE NEXT DEPLOY, BECAUSE IT COST TWO FALSE STARTS.** SSH now drops
+silently whenever the owner's ISP re-assigns his address (§75B, exactly as predicted), and
+**a deploy that never ran looks identical from outside to one that worked** — health green,
+every page 200, the CSP header byte-identical, because the OLD containers keep serving.
+**Compare actual bytes, not status codes.**
 
 **THE NUMBER, BECAUSE NOBODY WOULD FIND IT: `freeTape.globalCeiling` IS 100 LIFETIME AND
 SIX ARE SPENT.** Ninety-four free tapes remain, forever — about $70. A successful Reddit
@@ -29,14 +42,15 @@ fourteen are near-zero-traffic backlink forms; and **AppSumo and PitchGround are
 dangerous** — lifetime deals against a $0.75 per-tape marginal cost is unbounded
 liability. Do not re-research this.
 
-**"WHY 2003?" IS ANSWERED AND THE HEADLINE STAYS — §77C.** It is not 2003: the prompt asks
+**"WHY 2003?" IS ANSWERED AND THE HERO HEADLINE STAYS — §77C, NARROWED BY §78C: the
+MANIFESTO line lost its year on 2026-09-08 and the hero h1 kept its own.** It is not 2003: the prompt asks
 for 1999–2005 and each tape's burnt-in date is derived from its own seed, so real tapes on
 this disk read 1999, 2001, 2002, 2003, 2004, 2005. **The customer is never told their
 tape's date, anywhere** — which is the one small thing worth building.
 
-**THE BOX RUNS `5ca4b7f`.** `noindex` was lifted on 2026-09-08 at the owner's word (§76)
-and the site was then given the sitemap and the card tags it needed to be worth finding
-(§76E, deployed and verified from outside).
+**`noindex` was lifted on 2026-09-08 at the owner's word (§76)** and the site was then
+given the sitemap and the card tags it needed to be worth finding (§76E), and then §78's
+four fixes. All deployed and verified from outside.
 
 **`noindex` WAS LIFTED ON 2026-09-08 AT THE OWNER'S WORD — §76.** One line,
 `TIMESTAMP_INDEXABLE=1`, in `/opt/timestamp/.env.web` plus a web restart. No
@@ -10938,6 +10952,202 @@ complaint.**
 
 **AGENT-BUILDABLE AND UNGATED:** the result page telling somebody their tape's date
 (§77C). Nothing else, and that one is small.
+
+---
+
+### 78. THE OWNER'S FIRST BATCH OF LIVE-REVIEW NOTES, AND TWO OF THE FOUR WERE REAL BUGS (2026-09-08, night)
+
+**2203 -> 2207 tests / 2203 pass / 0 fail / 3 skipped.** Two commits, `61aa6a7` and
+`f21cb93`, every change test-first, eight sabotages each watched red and restored from a
+copy, all seven `guards.yml` steps run verbatim and COUNTED 7/7 before each. **Pushed and
+DEPLOYED; local, `origin/supabase-identity-slice` and the box are all at `f21cb93`.**
+
+This is the page-by-page review §73H said was next. The owner sent four notes as
+screenshots. **Two were the cosmetic asks they looked like and two were defects with
+measurements behind them.**
+
+#### A -- THE FRAME ROW WRAPPED AT EVERY WIDTH, NOT ON PHONES
+
+He saw 9:16 sitting under 4:3 and 16:9 on a laptop. It is not a narrow-screen wrap:
+`.panel--commit` caps at **640px**, so the row has **590px whatever the viewport is**, and
+the three cards plus their two gaps measured **601.1px**. Over by 11.1px at 375px and at
+2560px alike.
+
+**ONE LABEL WAS MOST OF THE DIFFERENCE.** "The camcorder shape" is **124.6px** at the
+label size against "Widescreen" at 67.7 and "Phone" at 36 -- and the hint paragraph
+directly below the row already explains all three in full, so the long one was the only
+one paying rent twice. `ASPECT_DETAIL['4:3']` is **`Camcorder`** now: the row fits with
+about 50px to spare and the three read as the parallel one-word set they always were.
+
+**LAYOUT ANSWERS WERE MEASURED AND REJECTED, so nobody re-proposes them.** A three-column
+grid with the copy unchanged wraps "The camcorder shape" to three lines and takes every
+card from 43.6px to 75.6px tall. Putting the detail on its own line inside each card works
+at 1440 (67.6px) and at 375 makes the cards 129.9px tall **and moves the tick above the
+ratio**, which fails §71's own left-mark rule and its two guards. Shortening the copy
+changes no layout at all.
+
+**IT STILL STACKS AT 375px AND THAT IS LEFT ALONE ON PURPOSE.** Three cards with a glyph,
+a ratio and a word each need ~110px apiece and a phone gives 90. Making it one line there
+is a redesign of the card, not a tweak; it was offered and the owner has not asked.
+
+#### B -- THE LANDING HAD LOST EVERY SECTION'S VERTICAL RHYTHM. 192px OF IT.
+
+He said the manifesto and the two cards below it had "no spacing". Measured on the running
+page, the gap was **0.0px** against the 64px `.manifesto` asks for.
+
+**THE CAUSE IS ONE SHORTHAND AND A SPECIFICITY NO SECTION COULD OUTRANK.**
+`.page-landing .inner` is **two classes**; `.manifesto`, `.how2` and `.demo` are **one
+each**. So `padding: 0 1.15rem` on the column beat all three and reset their top and bottom
+to zero -- and **source order could never have saved them**, which is why it survived
+§71's whole page-by-page rebuild. It sets `padding-inline` now: the column owns the
+gutters, a section owns its own vertical space.
+
+**THE GENERAL RULE, because this will happen again: a page-scoped wrapper of two classes
+must never use a `padding` shorthand.** It silently takes the vertical axis off every
+one-class section it wraps, and the page just looks slightly wrong everywhere.
+
+**THE DIAGNOSIS COST FOUR WRONG TURNS AND ONE OF THEM IS WORTH KEEPING.** The rule was
+found by walking the CSSOM, and the first three walks returned NOTHING -- `for...of` over
+`sheet.cssRules` yielded zero entries against a `length` of 600, and `.inner` does not
+exist as a bare selector at all. **Index the rule list, and search for what MATCHES the
+element rather than for the selector you expect.**
+
+#### C -- THE MANIFESTO NAMES NO YEAR, AND THIS NARROWS §77C
+
+The line is now **"You, somewhere you have never been, on a tape that was always in the
+drawer."** -- the owner's pick from three offered.
+
+**§77C's "THE HEADLINE STAYS" IS STILL TRUE OF THE HERO AND IS NOT TRUE OF THE MANIFESTO.**
+They are two different elements and the reasoning survives the split: the hero h1 keeps
+"One photograph. Fifteen seconds of 2003", because a specific year is a memory and a range
+is a spec sheet. What changed is that the year was printed **twice on one screen**, and the
+second one was in the largest type the site owns. It was also the only FIXED year the
+product promises -- `deriveStamp` derives each tape's burnt-in date from its own seed
+across 1999-2005, and real tapes on this disk read 1999, 2001, 2002, 2004 and 2005.
+
+**The guard is the rule, not the words:** a test fails if any digit appears in the
+manifesto line at all, so the owner can move the wording whenever he likes.
+
+**AND THE FLIP COUNTER IS GONE, RULE AND MARKUP TOGETHER.** Ten boxed digits spelling one
+date sat between the demo button and the questions -- "unnecessary", and it was: it
+repeated the hero's year, printed one of seven dates a tape can carry, and put a second
+bright object directly under the only button in that section. **Deleted rather than
+hidden**, this file's standing rule, and its two-step font climb-down in the narrow query
+went with it. That measurement is in `61aa6a7`'s parent if a readout counter ever returns.
+
+#### D -- THE TAB ICON CAME INTO THE LIME WORLD
+
+The last artefact of the cream album page still shipping, which DESIGN.md had been holding
+open as his decision. It is the `Ts` knocked out of a **`--lime` tile in the `--on-lime`
+ink** now, across `icon.svg`, `favicon.ico` and the three PNGs. **Lime tile with dark
+letters rather than the inverse, his choice:** at 16px in a tab strip a bright chip is what
+a person can pick out, and this face's strokes are thin enough that lime on the page's own
+near-black starts to disappear.
+
+**RECOLOURED PIXEL BY PIXEL, NOT RE-RENDERED, and that is the part worth keeping.**
+`assets/brand/README.md` records that the head-switch tear is floored at one FINAL pixel,
+so a fresh downsample is exactly where it goes missing and leaves a plain serif `Ts`.
+Every pixel in these files is a blend of precisely two colours, so the blend factor is
+recoverable: project onto the old tile-to-ink axis, re-emit the same factor between the new
+pair, carry the alpha through untouched. Off-axis residual was at most **10.6/255** on
+every opaque pixel; the 732 above that all sit at alpha under 64, which is the rounded
+corner. The tear is still legible at 48px.
+
+**THE RASTER ASSERTION EARNED ITSELF INSIDE THE COMMIT THAT ADDED IT.** Building the ICO
+from `icon-512.png` after the same run had already overwritten it remaps an already-lime
+image against the oxide endpoints a second time -- not a no-op, it lands the tile at about
+**62%** and every entry comes out olive. The test named the size and the wrong rgb triple.
+
+**The guard reads `--lime` and `--on-lime` OUT OF THE STYLESHEET rather than repeating
+them**, so the mark cannot drift from the palette, and it decodes all four rasters plus
+every ICO entry -- recolouring the vector and forgetting the rasters is the whole failure
+mode, it is silent, and the SVG is the one file a Chrome tab does NOT reach for on Windows.
+
+**FOUR BRAND FILES ARE STILL IN THE CREAM WORLD'S COLOURS AND NO ROUTE SERVES ANY OF
+THEM**: `wordmark.svg`, `wordmark-inline.svg`, `monogram.svg`, `monogram-inline.svg`. The
+masthead became live Anton text in §70, so nothing reaches them. They are press-kit files;
+delete, recolour or leave is the owner's call. The brand test sweeps only what the server
+actually serves, derived from its own asset list.
+
+**The letterforms are untouched** -- still Cormorant Garamond Italic, still the tear.
+Redrawing them in Anton to match the display face is a further step and was not taken.
+
+#### E -- THE DEPLOY TOOK THREE ATTEMPTS, AND BOTH FAILURES ARE THE SECTION
+
+**FIRST: SSH TIMED OUT SILENTLY WHILE 443 ANSWERED IN 45ms.** That is §75B's signature
+exactly -- a DROP, not a refusal, on a host that is plainly alive -- and the cause is the
+one §75B predicted in as many words: **the address is dynamic and this rule will break.**
+The ISP had re-assigned it. Fixing it meant re-pointing the rule on the firewall
+**actually attached to the server**, which is the same created-is-not-attached trap §75B
+already records going wrong once. **The diagnostic is two lines:**
+`curl https://api.ipify.org` for the new address, and the drop-versus-refuse timing (a
+full silent timeout is the firewall; an instant refusal is something else).
+
+**SECOND, AND IT IS THE ONE WORTH THE SECTION: THE DEPLOY COMMANDS WERE RUN IN THE LOCAL
+WINDOWS SHELL AND THE BOX WAS NEVER TOUCHED.** `cd /opt/timestamp` fails on Windows, so
+nothing happened -- and **every ordinary check said the deploy had worked.** Health
+`{"ok":true,"degraded":[]}`, all nine public pages 200, the gates still 303, and the CSP
+header **byte-identical to the pre-deploy capture**. Of course it was: the OLD containers
+were still running and serving perfectly.
+
+**A FAILED DEPLOY IS INVISIBLE FROM OUTSIDE UNLESS YOU COMPARE ACTUAL BYTES.** What
+exposed it was `favicon.ico` at **3442b live against 2860b local**, `icon-512.png` at
+25331 against 19445, and `.page-landing .inner` still carrying the shorthand in the live
+stylesheet. Cache was ruled out first with a unique query string and no-cache headers, so
+the finding was not a phantom. **This is §68's silent backup in a third costume, and §56's
+in a fourth: the thing that reports health was not measuring the thing that changed.**
+Every deploy write-up in this file should be read with that in mind -- a green health
+check proves the box is up, never that it is running your code.
+
+**THE VERIFICATION THAT ACTUALLY SETTLED IT**, after the real deploy: box at `f21cb93`,
+both containers recreated with **0 restarts** and no FATAL, and from outside -- health ok
+and not degraded, the CSP header byte-identical to the pre-deploy capture (**no inline
+script moved, which is the expected result and was checked rather than assumed**),
+`X-Robots-Tag` still absent, all nine public pages 200, `/videos`, `/account` and a real
+`/j/<id>` all still 303 to login, and every one of the four changes read back off the live
+bytes -- 0 digits in the manifesto line, 0 `.flip` in the HTML and 0 in the sheet,
+`padding-inline` on the column, `#D9FF00` in `icon.svg`, and both rasters byte-identical
+to local.
+
+**`e24e698`, THE SCRIM HARNESS FIX §73K PARKED, IS NOT OUTSTANDING**: it reached the box
+with §76E's deploy. That debt is closed.
+
+#### F -- Things that will bite
+
+- **`web:3000` IS NOT PUBLISHED ON THE BOX**, so `curl 127.0.0.1:3000/api/health` from the
+  host answers **000** and that is CORRECT, not a fault -- Caddy is the only doorway (§41,
+  §74F). Read the container's own healthcheck instead.
+- **THE BASH HEREDOC ATE BACKSLASHES AGAIN**, twice: `\\\\` arrived as `\\` and turned a
+  JS `RegExp('\\\\' + sel)` into a syntax error. **Use Write/Edit for anything with an
+  escape**, as this file has said since §31. Python's own `"\\U"` in a Windows path
+  (`C:\\Users\\...`) is the same trap one layer over and broke a memory write.
+- **THE BACKTICK TRAP FIRED ONCE MORE**, in a new CSS comment in `static.mjs`.
+  `node --check` caught it in seconds, which is the entire argument for the rule.
+- **THE SHELL'S CWD PERSISTS BETWEEN TOOL CALLS** (§74F) and it fired: a `cd assets/brand`
+  in one call made every relative path in the next one fail with ENOENT.
+- **A BROWSER-SMOKE TEST THAT READS `/` MUST `signOut` FIRST.** The session is shared
+  across that whole file, so a test that signed in earlier leaves the cookie and `/`
+  renders the ORDER FORM. Passing in isolation and failing in the suite is the tell.
+- **RUNNING `node --test test/browser-smoke.test.js` IMMEDIATELY AFTER A FULL SUITE
+  REPORTS FALSE FAILURES** -- 9 in one run, 0 in the next -- because the previous run's
+  Chrome instances are still exiting. Let it settle before believing a browser red.
+- **THE LANDING BAND'S CONTRAST SWEEP TIMES OUT IN EVERY FULL-SUITE RUN ON THIS MACHINE**
+  (`Runtime.evaluate got no answer in 15000ms`), and is green alone and green with the
+  whole browser-smoke file. Pre-existing, **predicted at §73F**, and it will go red on CI
+  the same way. Spawned as its own task, deliberately not fixed here; §4's ruling applies
+  -- take work OUT of the measured window, never widen the budget.
+
+#### G -- What is left
+
+**THE OWNER'S, unchanged from §77F except where noted:** the AWS signature (§74, §52,
+still the gate before strangers), the free-tape ceiling (§77A, still 100 lifetime with six
+spent), Search Console indexing and the sitemap submission (§77E), then Reddit and §77B's
+order. Plus, new from this session and both small: whether the frame row should be a
+straight line at 375px too (a card redesign), and what happens to the four unserved
+cream-world brand files.
+
+**AGENT-BUILDABLE AND UNGATED:** the result page telling somebody their tape's date
+(§77C), and the band-sweep flake above. Nothing else.
 
 ---
 
