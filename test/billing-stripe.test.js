@@ -369,6 +369,33 @@ test('the session carries the account id, the price, and the pack as metadata', 
   assert.equal(body.get('amount'), null);
 });
 
+test('the session names no payment method, because Managed Payments refuses the parameter', async () => {
+  // THE FIRST LIVE CHECKOUT WAS REFUSED (2026-09-04): "Unsupported parameter:
+  // payment_method_types. Managed Payments ... handles this parameter for
+  // you." The account sells through Managed Payments (CLAUDE.md section 46B,
+  // a deliberate 3.5% decision), and under it Stripe controls which methods a
+  // customer sees; `payment_method_types`, `excluded_payment_method_types`,
+  // `payment_method_configuration` and `payment_method_options` are all
+  // refused on the request. So the body names none of them -- and a method
+  // that settles later is handled where Stripe says to handle it, on
+  // `checkout.session.async_payment_succeeded` in the webhook.
+  let body = null;
+  const fetchImpl = async (url, init) => {
+    body = new URLSearchParams(init.body);
+    return new Response(JSON.stringify({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    });
+  };
+  await createCheckoutSession({
+    ...SESSION, fetchImpl, envImpl: () => ({ STRIPE_SECRET_KEY: 'sk_test_x' }),
+  });
+
+  const refused = [...body.keys()].filter((k) => /^(excluded_)?payment_method_/.test(k));
+  assert.deepEqual(refused, [], 'the body names a payment-method parameter Managed Payments refuses');
+  // The Price is still the only thing that sets what is paid.
+  assert.equal(body.get('line_items[0][price]'), SESSION.priceId);
+});
+
 test('the redirect urls must be absolute http(s), because Stripe will send somebody to them', async () => {
   const fetchImpl = async () => { throw new Error('this must not run'); };
   for (const successUrl of ['/pricing', 'javascript:alert(1)', '', 'ftp://x/y']) {

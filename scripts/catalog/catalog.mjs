@@ -54,6 +54,59 @@ import { CLIMATE_SCALE, PresetError, validateOutfit, validatePlace } from './sch
  *  that says "menu 4f2a9c" stops meaning one thing. */
 export const CATALOG_HASH_VERSION = 1;
 
+/**
+ * The labels of places that have left the menu, as they read the day they left.
+ *
+ * A manifest stores the preset ID, and the page translates it through the
+ * loaded catalog. A preset that is no longer in the catalog therefore falls
+ * through as its id, so the day the four ordinary places became famous ones
+ * (2026-09-04, section 60I) every tape anyone had made in the car park would
+ * have captioned as `autobahn-raststaette` on their shelf. The tape is theirs
+ * and its caption is part of it; a menu change must not rewrite it. A retired
+ * id is never reused for a new place, for the same reason.
+ */
+export const RETIRED_PLACE_LABELS = Object.freeze({
+  'autobahn-raststaette': 'The car park, at dusk',
+  'balkon-waesche': 'The balcony',
+  'hallenbad-nachmittag': 'The swimming pool',
+  'plattenbau-treppenhaus': 'The stairwell',
+  // Retired the next morning in the Amalfi coast's favour -- the owner's
+  // call that one beach is enough and it should be the summer one.
+  'ostsee-strand': 'The beach, out of season',
+});
+
+/**
+ * The same courtesy for outfits, and it was owed a day earlier than it was
+ * paid: places have had this since 2026-09-04 and outfits never got it, so
+ * `labelsOf` fell straight through to the raw id for a retired garment.
+ *
+ * Retired 2026-09-05, when the menu became five garments that go on anybody
+ * (section 65). The summer dress is the one that made step 2 read as a
+ * gendered menu; the cardigan is the only preset that ever layered two visible
+ * garments and it was the fussiest thing on the page. Both are still orderable
+ * -- the free-text box takes any garment at all -- they are simply not cards.
+ *
+ * A retired id is never reused, exactly as for places: somebody's tape says
+ * `sommerkleid` in its manifest for ever, and pointing that id at a different
+ * garment would rewrite the caption on a tape they already own.
+ */
+export const RETIRED_OUTFIT_LABELS = Object.freeze({
+  sommerkleid: 'Cotton summer dress',
+  strickjacke: 'Knitted cardigan',
+});
+
+/**
+ * The outfit step 2 opens on, so that nobody has to think about wardrobe.
+ *
+ * It is named rather than derived, because every derivation is wrong: sorted by
+ * id the first outfit is the fleece, and "whichever file the directory listed
+ * first" is a default decided by a filesystem. The page falls back to the first
+ * outfit in the menu if this id is ever missing -- SOME outfit must be checked
+ * on load or step 2 goes back to being a required choice with no default, which
+ * is the defect this constant exists to have fixed.
+ */
+export const DEFAULT_OUTFIT_ID = 'tshirt-jeans';
+
 export const REPO_ROOT = path
   .resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
   .replace(/\\/g, '/');

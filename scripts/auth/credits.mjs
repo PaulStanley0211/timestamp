@@ -649,6 +649,15 @@ export function providerWasCalled(job) {
  * absence of any recorded error. Every one of those is a case where the
  * request may have been served and billed while the answer was lost, which is
  * exactly the ambiguity §37E refused to guess at.
+ *
+ * AND NOT `generation_failed`, which is the code fal's adapter gives any
+ * terminal failure that arrives AFTER the queue accepted the request -- a
+ * status that comes back FAILED, or a result URL that answers 4xx. Those are
+ * 4xx by shape and not by meaning: the work was queued and ran, and fal's own
+ * documentation says a failed generation is billable on some plans. The
+ * provider's underlying classification is kept in `error.detail.refused` for
+ * the status page; it is not consulted here, on purpose. A refusal of the
+ * OUTPUT is a generation that happened.
  */
 const UNBILLED_REFUSALS = Object.freeze(['moderation_refused', 'bad_request', 'credential']);
 
@@ -697,7 +706,15 @@ export function refundIfUnspent(account, job, { reason, nowImpl } = {}) {
     // reached a provider, the other reached one and was turned away. A refund
     // labelled "failed-before-provider" for a job that plainly did call fal is
     // the kind of line that makes an audit trail stop being trusted.
-    reason: reason ?? (refused ? 'refund:provider-refused' : 'refund:failed-before-provider'),
+    //
+    // THE FACT WINS OVER THE CALLER'S GUESS. The worker asks with the one
+    // reason it knows -- the job failed -- and cannot know whether a provider
+    // was reached until the steps are read, which happens here. With the
+    // caller's reason taking precedence, the refused label was dead code and
+    // the line above was written for every refused job. A caller's reason
+    // still stands for a job that never reached a provider, because there it
+    // IS the fact: cancelled, reaped, never enqueued.
+    reason: refused ? 'refund:provider-refused' : (reason ?? 'refund:failed-before-provider'),
     spent: false,
     nowImpl,
   });

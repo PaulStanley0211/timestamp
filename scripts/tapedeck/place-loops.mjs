@@ -28,11 +28,21 @@
  *   node scripts/tapedeck/place-loops.mjs --only=ostsee-strand
  *   node scripts/tapedeck/place-loops.mjs --crf=32 --seconds=8
  *   node scripts/tapedeck/place-loops.mjs --frames        # also dump stills to look at
+ *   node scripts/tapedeck/place-loops.mjs --measure       # re-measure the SHIPPED loops, cut nothing
+ *   node scripts/tapedeck/place-loops.mjs --measure --dir=build/place-loops
+ *
+ * `--measure` rewrites a directory's loops.json from the mp4s already in it
+ * (assets/places by default) and touches no loop. It exists because the
+ * manifest can want a statistic the loops were not cut with: on 2026-09-07
+ * the solver gained a highlight beside the mean, and re-cutting seven
+ * committed clips to add one number to a JSON file would have been the wrong
+ * size of change.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { REPO_ROOT, runFfmpeg } from '../ffmpeg/run.mjs';
+import { pathToFileURL } from 'node:url';
+import { REPO_ROOT, runFfmpeg, probe } from '../ffmpeg/run.mjs';
 import { loadLookProfile, buildVideoFilter } from './look.mjs';
 
 const OUT_DIR = path.join(REPO_ROOT, 'build', 'place-loops');
@@ -120,7 +130,7 @@ function driftChain(seconds) {
 }
 
 /**
- * Mean luma of a finished loop, sampled across the drift.
+ * Mean and highlight luma of a finished loop, sampled across the drift.
  *
  * `signalstats` prints to stderr as metadata lines, one set per frame, and EVERY
  * frame is averaged rather than a handful sampled. Sampling would be the obvious
@@ -130,16 +140,37 @@ function driftChain(seconds) {
  * `select` expression, whose argument separator is a comma that has to survive
  * both JavaScript's escaping and ffmpeg's. A six-second clip is 150 frames and
  * decodes in about a second, so the exact answer is cheaper than the shortcut.
+ *
+ * THE HIGHLIGHT IS THE BRIGHTEST BLURRED PIXEL ANY FRAME SHOWS. A mean cannot
+ * see a neon sign: solved on the mean alone, the three night places sat at the
+ * scrim's floor while a browser read the band's hint at 1.57:1 over Tokyo's
+ * highlights (2026-09-07). So the manifest carries the maximum luma as well --
+ * after a 2px Gaussian blur, which stands in for the blur the page puts on the
+ * loop (3 CSS px, about two source pixels on a laptop) and stops one grain
+ * speck being the answer. The maximum over frames, not the mean of maxima,
+ * because the brightest thing a stroke can sit beside is what the floor is
+ * for. Single-threaded: full-frame gblur is deterministic, and a measurement
+ * that differed by machine would be a manifest nobody could regenerate.
  */
-async function measureLuma(file) {
-  const { stderr } = await runFfmpeg([
-    '-v', 'info', '-i', file,
-    '-vf', 'signalstats,metadata=print',
-    '-f', 'null', '-',
-  ]);
-  const values = [...stderr.matchAll(/YAVG=([0-9.]+)/g)].map((m) => Number(m[1]));
-  if (values.length === 0) throw new Error(`signalstats printed no YAVG for ${file}`);
-  return Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(1));
+export async function measureLuma(file) {
+  const stats = async (filter, extra = []) => {
+    const { stderr } = await runFfmpeg([
+      '-v', 'info', ...extra, '-i', file,
+      '-vf', `${filter}signalstats,metadata=print`,
+      '-f', 'null', '-',
+    ]);
+    return stderr;
+  };
+  const plain = await stats('');
+  const avgs = [...plain.matchAll(/YAVG=([0-9.]+)/g)].map((m) => Number(m[1]));
+  if (avgs.length === 0) throw new Error(`signalstats printed no YAVG for ${file}`);
+  const yavg = Number((avgs.reduce((a, b) => a + b, 0) / avgs.length).toFixed(1));
+
+  const blurred = await stats('gblur=sigma=2,', ['-filter_threads', '1']);
+  const maxes = [...blurred.matchAll(/YMAX=([0-9.]+)/g)].map((m) => Number(m[1]));
+  if (maxes.length === 0) throw new Error(`signalstats printed no YMAX for ${file}`);
+  const yhigh = Math.max(...maxes);
+  return { yavg, yhigh };
 }
 
 async function renderLoop({ id, src, cfg, look, seconds, crf, frames }) {
@@ -171,7 +202,7 @@ async function renderLoop({ id, src, cfg, look, seconds, crf, frames }) {
   // and sand at 3s. The page needs this: a single scrim opacity cannot serve a
   // mean luma of 49 and one of 164, and guessing it per place by eye is how a
   // background ends up either invisible or fighting the text.
-  const yavg = await measureLuma(out);
+  const { yavg, yhigh } = await measureLuma(out);
 
   if (frames) {
     const frameDir = path.join(OUT_DIR, 'frames');
@@ -183,11 +214,85 @@ async function renderLoop({ id, src, cfg, look, seconds, crf, frames }) {
       ]);
     }
   }
-  return { id, kb, elapsed, yavg };
+  return { id, kb, elapsed, yavg, yhigh };
+}
+
+/**
+ * The manifest, MERGED into whatever the directory already holds. `--only=x`
+ * is the normal way to re-cut one place after a look change, and a manifest
+ * rebuilt from just that run would silently drop the other places -- which the
+ * page reads as "no measurement" and answers with the white-photograph scrim,
+ * so every other background would quietly go heavy while the one being worked
+ * on looked right.
+ */
+/** The manifest already in a directory, or an empty one; unreadable is empty and says so. */
+function readManifest(dir) {
+  const manifestFile = path.join(dir, 'loops.json');
+  if (!fs.existsSync(manifestFile)) return { loops: {}, raster: null };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    return { loops: parsed.loops ?? {}, raster: typeof parsed.raster === 'string' ? parsed.raster : null };
+  } catch {
+    console.log('  (existing loops.json was unreadable; rebuilding it from this run alone)');
+    return { loops: {}, raster: null };
+  }
+}
+
+/** The video raster of a loop on disk, as the manifest spells it. */
+async function rasterOf(file) {
+  const { streams = [] } = await probe(file);
+  const v = streams.find((s) => s.codec_type === 'video');
+  if (!v?.width || !v?.height) throw new Error(`ffprobe found no video stream in ${file}`);
+  return `${v.width}x${v.height}`;
+}
+
+// `raster` is what the CALLER knows: the cutter cut at it, and --measure --
+// which cuts nothing -- passes the manifest's own value, or the first loop's
+// probed size when there was no manifest. The module constant is never stamped
+// over a directory this run did not cut at it.
+function writeManifest(dir, results, raster) {
+  const manifestFile = path.join(dir, 'loops.json');
+  const { loops } = readManifest(dir);
+  for (const r of results) loops[r.id] = { yavg: r.yavg, yhigh: r.yhigh };
+
+  const ordered = {};
+  for (const id of Object.keys(loops).sort()) ordered[id] = loops[id];
+  fs.writeFileSync(manifestFile, `${JSON.stringify({
+    _comment: 'Per loop: yavg is the mean luma 0-255 averaged over every frame; yhigh is the highlight -- the brightest luma any frame shows after a 2px blur. The page solves each place\'s scrim from both: 8:1 for the band\'s ink on the mean, 4.5:1 on the highlight. Regenerate with: node scripts/tapedeck/place-loops.mjs (cuts and measures) or --measure (measures the loops on disk, cuts nothing)',
+    raster,
+    loops: ordered,
+  }, null, 2)}\n`);
+  console.log(`loops.json now describes ${Object.keys(ordered).length} loop(s)`);
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+
+  if (args.flags.has('measure')) {
+    const dir = args.dir ? path.resolve(REPO_ROOT, args.dir) : SRC_DIR;
+    const ids = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith('.mp4'))
+      .map((f) => f.slice(0, -4))
+      .filter((id) => !args.only || id === args.only);
+    if (ids.length === 0) {
+      console.error(`no loops matched${args.only ? ` --only=${args.only}` : ''} in ${dir}`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`measuring ${ids.length} loop(s) in ${dir}, cutting nothing`);
+    const results = [];
+    for (const id of ids) {
+      process.stdout.write(`  ${id.padEnd(28)}`);
+      const { yavg, yhigh } = await measureLuma(path.join(dir, `${id}.mp4`));
+      results.push({ id, yavg, yhigh });
+      console.log(`luma ${yavg}   highlight ${yhigh}`);
+    }
+    const raster = readManifest(dir).raster ?? await rasterOf(path.join(dir, `${ids[0]}.mp4`));
+    writeManifest(dir, results, raster);
+    return;
+  }
+
   const seconds = Number(args.seconds ?? 6);
   const crf = Number(args.crf ?? 30);
   const frames = args.flags.has('frames');
@@ -218,7 +323,7 @@ async function main() {
     process.stdout.write(`  ${id.padEnd(28)}`);
     const r = await renderLoop({ id, src, cfg, look, seconds, crf, frames });
     results.push(r);
-    console.log(`${String(r.kb).padStart(5)} kB   ${r.elapsed}s   luma ${r.yavg}`);
+    console.log(`${String(r.kb).padStart(5)} kB   ${r.elapsed}s   luma ${r.yavg}   highlight ${r.yhigh}`);
   }
   const total = results.reduce((n, r) => n + r.kb, 0);
   console.log(`\ntotal ${total} kB across ${results.length} loop(s) -> ${OUT_DIR}`);
@@ -227,34 +332,20 @@ async function main() {
   // nothing else can recover it: by the time a stylesheet is being generated the
   // mp4 is a byte range on a disk, and re-deriving it would mean running ffmpeg
   // inside a web request.
-  //
-  // MERGED, NOT OVERWRITTEN. `--only=x` is the normal way to re-cut one place
-  // after a look change, and a manifest rebuilt from just that run would silently
-  // drop the other seven -- which the page reads as "no measurement" and answers
-  // with the default scrim, so every other background would quietly go wrong
-  // while the one being worked on looked right.
-  const manifestFile = path.join(OUT_DIR, 'loops.json');
-  let loops = {};
-  if (fs.existsSync(manifestFile)) {
-    try {
-      loops = JSON.parse(fs.readFileSync(manifestFile, 'utf8')).loops ?? {};
-    } catch {
-      console.log('  (existing loops.json was unreadable; rebuilding it from this run alone)');
-    }
-  }
-  for (const r of results) loops[r.id] = { yavg: r.yavg };
-
-  const ordered = {};
-  for (const id of Object.keys(loops).sort()) ordered[id] = loops[id];
-  fs.writeFileSync(manifestFile, `${JSON.stringify({
-    _comment: 'Mean luma of each loop, 0-255, averaged over every frame. The page derives its per-place scrim from this. Regenerate with: node scripts/tapedeck/place-loops.mjs',
-    raster: `${W}x${H}`,
-    loops: ordered,
-  }, null, 2)}\n`);
-  console.log(`loops.json now describes ${Object.keys(ordered).length} loop(s)`);
+  writeManifest(OUT_DIR, results, `${W}x${H}`);
 }
 
-main().catch((err) => {
-  console.error(err?.message ?? err);
-  process.exitCode = 1;
-});
+// Only when run as the command: a test imports measureLuma, and an import that
+// cut seven loops would be a test that took minutes and rewrote build/.
+// The comparison mirrors how node itself derives the main module's URL --
+// resolve, realpath, then a file URL -- so a symlinked or differently-cased
+// invocation matches exactly when node would have made this the main module,
+// rather than a platform path-string compare that can miss and exit 0 having
+// done nothing.
+const invokedAs = process.argv[1] ? pathToFileURL(fs.realpathSync(path.resolve(process.argv[1]))).href : null;
+if (invokedAs === import.meta.url) {
+  main().catch((err) => {
+    console.error(err?.message ?? err);
+    process.exitCode = 1;
+  });
+}

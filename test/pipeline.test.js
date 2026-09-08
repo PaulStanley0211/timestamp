@@ -232,7 +232,7 @@ export function makeDeps({ ffmpeg = makeFfmpeg(), overrides = {} } = {}) {
   };
 }
 
-export function makeJob(root, { place, outfit, stillCount = 3, jobId, direct = false } = {}) {
+export function makeJob(root, { place, outfit, stillCount = 3, jobId, direct = false, arc } = {}) {
   return createJob({
     root,
     jobId,
@@ -243,6 +243,9 @@ export function makeJob(root, { place, outfit, stillCount = 3, jobId, direct = f
       outfit: outfit ?? { kind: 'preset', value: 'trainingsjacke' },
       stillCount,
       direct,
+      // Only when asked for, exactly as the CLI writes it: an absent arc is
+      // the default, and the manifest should not carry a key nobody set.
+      ...(arc ? { arc } : {}),
       consent: CONSENT,
     },
   });
@@ -408,8 +411,8 @@ test('--dry-run names every call and its price and never touches the provider', 
   const plan = await dryRun({
     provider,
     input: {
-      place: { kind: 'preset', value: 'ostsee-strand' },
-      outfit: { kind: 'preset', value: 'sommerkleid' },
+      place: { kind: 'preset', value: 'amalfi-afternoon' },
+      outfit: { kind: 'preset', value: 'tshirt-jeans' },
       stillCount: 3,
     },
     deps: makeDeps(),
@@ -661,8 +664,8 @@ test('consent missing from the manifest is refused before anything is generated'
     root, provider: 'fake',
     input: {
       photo: { path: 'input/photo.jpg' },
-      place: { kind: 'preset', value: 'ostsee-strand' },
-      outfit: { kind: 'preset', value: 'sommerkleid' },
+      place: { kind: 'preset', value: 'amalfi-afternoon' },
+      outfit: { kind: 'preset', value: 'tshirt-jeans' },
       stillCount: 1,
     },
   });
@@ -750,8 +753,8 @@ test('a job staged by the web app runs with no --photo, extension or not', async
       provider: 'fake',
       input: {
         photo: { path: `input/${name}` },
-        place: { kind: 'preset', value: 'ostsee-strand' },
-        outfit: { kind: 'preset', value: 'sommerkleid' },
+        place: { kind: 'preset', value: 'amalfi-afternoon' },
+        outfit: { kind: 'preset', value: 'tshirt-jeans' },
         stillCount: 1,
         consent: CONSENT,
       },
@@ -909,6 +912,41 @@ test('a direct job never makes a still, and never asks anybody to choose one', a
   assert.equal(job.status, 'done', 'the job still finishes; the tape is the product');
 });
 
+test('the arc on the job input reaches the frozen reference prompt, and the dry run quotes it', async () => {
+  // `arc` is the switch between the six-beat vlog and the three-beat
+  // continuous moment (compose/prompt.mjs). It rides the input like `direct`
+  // does, because the manifest is the only channel to the worker, and it is
+  // frozen into the reference prompt at compose so a resume sends what the
+  // manifest describes.
+  const { provider } = makeProvider({ maxClipSeconds: 15 });
+  const plan = await dryRun({
+    provider,
+    input: {
+      place: { kind: 'preset', value: 'amalfi-afternoon' },
+      outfit: { kind: 'preset', value: 'tshirt-jeans' },
+      direct: true,
+      arc: 'three',
+    },
+    deps: makeDeps(),
+  });
+  const quoted = plan.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
+  assert.equal(quoted.length, 3, 'the dry run quoted the six-beat prompt for a three-beat order');
+
+  const { job } = await runFake({ input: { direct: true, arc: 'three' }, provider: { maxClipSeconds: 15 } });
+  const frozen = job.resolved.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
+  assert.equal(frozen.length, 3, 'the manifest froze the six-beat prompt for a three-beat order');
+
+  // And a job that says nothing gets the default, which is three as of the
+  // 2026-09-04 comparison -- the web app never sets an arc, so this IS what
+  // a customer's order composes.
+  const { job: plain } = await runFake({ input: { direct: true }, provider: { maxClipSeconds: 15 } });
+  assert.equal(plain.resolved.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 3);
+
+  // Six is still reachable by name.
+  const { job: six } = await runFake({ input: { direct: true, arc: 'six' }, provider: { maxClipSeconds: 15 } });
+  assert.equal(six.resolved.referencePrompt.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 6);
+});
+
 test('a direct job animates from the photographs, not from a start frame', async () => {
   const { calls } = await runFake({ input: { direct: true }, provider: { maxClipSeconds: 15 } });
 
@@ -969,6 +1007,66 @@ test('a direct job is refused outright when the model cannot do the whole take a
       assert.match(String(err.message), /8/, 'the number that was too small is named');
       return true;
     });
+});
+
+/**
+ * THE MANIFEST IS THE ONLY TRUST ANCHOR THE WORKER HAS, AND IT LIVES ON A
+ * VOLUME THE WEB PROCESS CAN WRITE. The direct-mode guard above runs at
+ * compose, and a resumed job skips compose; so a manifest with compose marked
+ * done and `resolved.segments` padded to N entries used to make the worker
+ * buy N generations, one paid call per entry, with nothing between the file
+ * and the bill. Animate now re-derives the plan from the config shipped
+ * INSIDE THE IMAGE -- not from `resolved.cfg`, which is the same file -- and
+ * refuses by name when the two disagree, before the first call.
+ */
+test('animate re-derives the segment plan from the shipped config and refuses a manifest that disagrees', async () => {
+  for (const [label, input, provider, padTo] of [
+    ['direct', { direct: true }, { maxClipSeconds: 15 }, 3],
+    ['still path', {}, { maxClipSeconds: 8 }, 5],
+  ]) {
+    const root = tmpRoot();
+    const photo = writeUpload(root);
+    const pair = makeProvider(provider);
+    const { job: parked } = await runFake({ root, photo, providerPair: pair, input, stopAfter: 'compose' });
+    assert.equal(stepStatus(parked, 'compose'), 'done', `${label}: parked after compose`);
+    const before = pair.calls.video;
+
+    // What a writer on the volume would do: keep every frozen field honest
+    // and multiply the one that is a bill.
+    const manifestPath = jobPaths(root, parked.jobId).manifest;
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const [first] = manifest.resolved.segments;
+    manifest.resolved.segments = Array.from({ length: padTo }, (_, i) => ({ ...first, index: i + 1 }));
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+    const resumed = loadJob({ root, jobId: parked.jobId });
+    const deps = makeDeps({ ffmpeg: makeFfmpeg() });
+    await assert.rejects(
+      runPipeline(resumed, { provider: pair.provider, root, deps, sources: { photo } }),
+      (err) => {
+        assert.equal(err.code, 'PLAN_MISMATCH', `${label}: ${err.message}`);
+        assert.match(String(err.message), new RegExp(`\\b${padTo}\\b`), `${label}: the number on the manifest is named`);
+        return true;
+      },
+    );
+    assert.equal(pair.calls.video, before, `${label}: no provider call was made against the padded plan`);
+  }
+});
+
+test('an honest resume through animate still buys exactly the planned segments', async () => {
+  // The guard must not refuse the plan it was given. Parked after compose,
+  // untouched, resumed: one call per planned segment, and the job finishes.
+  const root = tmpRoot();
+  const photo = writeUpload(root);
+  const pair = makeProvider({ maxClipSeconds: 8 });
+  const { job: parked } = await runFake({ root, photo, providerPair: pair, stopAfter: 'compose' });
+  const resumed = loadJob({ root, jobId: parked.jobId });
+  const finished = await runPipeline(resumed, {
+    provider: pair.provider, root, deps: makeDeps({ ffmpeg: makeFfmpeg() }), sources: { photo },
+  });
+  assert.equal(finished.status, 'done');
+  assert.equal(pair.calls.video, resumed.resolved.segments.length);
+  assert.equal(pair.calls.video, 2);
 });
 
 test('a direct job does not care that the still model is unverified, because it makes no still', async () => {
@@ -1143,4 +1241,48 @@ test('a long source says the tail is truncated', () => {
 test('an exact source says nothing at all', () => {
   const cfg = { totalFrames: 375, fps: 25, durationSeconds: 15 };
   assert.deepEqual(assembleFrameWarnings({ frames: 375, seconds: 15, cfg }), []);
+});
+
+// ---------------------------------------------------------------------------
+// The face gate's detector. Added 2026-09-07, after a photograph of a
+// WRISTWATCH rendered a finished, verified tape of a person who does not
+// exist -- 375 frames, 15s, -27.1 LUFS, every assertion in `verify` green.
+// The seam always accepted a detector; nothing ever handed it one.
+// ---------------------------------------------------------------------------
+
+test('the configured face detector reaches the gate', async () => {
+  const seen = [];
+  const faceDetectImpl = async () => ({
+    ok: true, reason: null, confidence: 'verified', impl: 'fake-detector', faces: 1, largestFaceFraction: 0.2,
+  });
+  await runFake({
+    deps: {
+      faceDetectImpl,
+      faceGate: async (photoPath, opts) => {
+        seen.push(opts?.detectImpl);
+        return { ok: true, reason: null, confidence: 'verified', impl: 'fake-detector', faces: 1, largestFaceFraction: 0.2 };
+      },
+    },
+  });
+  assert.equal(seen.length, 1, 'the gate ran exactly once');
+  assert.equal(seen[0], faceDetectImpl,
+    'the gate was called without the detector, so a configured detector would never run');
+});
+
+test('the manifest records what the detector actually found', async () => {
+  // `entriesOf` in credits.mjs is this repo's standing lesson about a fixed
+  // shape that projects fields: a value written and not named in the
+  // projection reads back undefined for ever. The face count is the owner's
+  // chosen record for the multiple-faces decision, so it has to survive.
+  const { job } = await runFake({
+    deps: {
+      faceGate: async () => ({
+        ok: true, reason: null, confidence: 'verified', impl: 'fake-detector', faces: 3, largestFaceFraction: 0.184,
+      }),
+    },
+  });
+  const gate = job.steps.find((s) => s.name === 'intake')?.output?.faceGate;
+  assert.equal(gate.faces, 3, 'the face count never reached the manifest');
+  assert.equal(gate.largestFaceFraction, 0.184, 'the face size never reached the manifest');
+  assert.equal(gate.confidence, 'verified');
 });

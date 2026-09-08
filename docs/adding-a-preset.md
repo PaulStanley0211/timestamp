@@ -26,17 +26,23 @@ must not use.
 
 ## The world
 
-**German / European suburban, 1999–2005. Warm and ordinary.**
+**1999–2005, on a camcorder. Warm and ordinary, wherever it is.**
 
-Not American nostalgia, and not liminal-empty-mall melancholy. The register is
-someone's actual home video: a garden in late summer, a tiled kitchen at
-breakfast, a grey Baltic beach. Nothing dramatic is happening. The feeling is
-"this was a normal afternoon and it is gone".
+The product is the era and the medium, not a country (CLAUDE.md §42F). Not
+liminal-empty-mall melancholy either. The register is someone's actual home
+video: a garden in late summer, a kitchen at breakfast, a grey beach out of
+season. Nothing dramatic is happening. The feeling is "this was a normal
+afternoon and it is gone".
 
-Balconies with drying laundry, Schrebergärten, Plattenbau stairwells, indoor
-swimming pools, Autobahn rest stops, tiled kitchens with patterned lino, a car
-back seat on a long drive. CRT televisions, wired phones, Opel and VW estates,
-plastic garden furniture, net curtains.
+Three of the seven places are ordinary and four are famous (§60I, §60J): a
+garden, a kitchen table and a living room beside Times Square, a Tokyo
+crossing, the Amalfi coast and a space centre. **On the tape, a famous place
+is never a sign.** `BASE_NEGATIVES` forbid text and logos because a model
+invents lettering that reads as generated, so the Times Square preset asks for
+lit colour panels and says so again in its own negatives; the CARD may show the
+real thing, because the card never reaches a model. The era still comes from
+named objects: CRT televisions, wired phones, payphones, disposable cameras,
+flip phones, estate cars with roof boxes, plastic garden furniture.
 
 If a preset needs something to happen in it, it is the wrong preset.
 
@@ -153,8 +159,8 @@ Three things will bite you:
    asserts no shipped preset is clamped.
 3. **Watch the sign on `colorbalance`.** `bm` *negative* adds **yellow**. Raising
    `cbBlueMid` towards zero makes a scene **cooler**, not warmer. This is
-   counter-intuitive and it is why `plattenbau-treppenhaus` and `ostsee-strand`
-   both carry a note about it.
+   counter-intuitive and it is why every preset that pulls towards cool
+   carries a note about it.
 
 An empty `{}` is a perfectly good answer for a scene the base profile suits.
 

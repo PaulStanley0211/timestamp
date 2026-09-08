@@ -191,10 +191,10 @@ test('explicit content, violence, gore and hate symbols are refused', async () =
   }
 });
 
-test('SWIMWEAR PASSES, because "The beach, out of season" is a shipped preset', async () => {
+test('SWIMWEAR PASSES, because "The Amalfi coast, afternoon" is a shipped preset', async () => {
   // The single most important assertion in this file. A generic block-list
   // refuses this category, and doing so would reject a holiday photograph --
-  // the exact customer `ostsee-strand` exists for.
+  // the exact customer `amalfi-afternoon` exists for.
   const moderate = createAwsImageModerator({
     ...CREDS,
     fetchImpl: recordingFetch(okWith([

@@ -259,10 +259,6 @@ export const GENERIC_PLACE_NEGATIVES = Object.freeze([
  * than falling through to the token overlap below.
  */
 export const PLACE_AFFINITY = Object.freeze({
-  'ostsee-strand': Object.freeze([
-    'beach', 'seaside', 'sea', 'coast', 'shore', 'sand', 'dune', 'dunes', 'ocean',
-    'pier', 'promenade', 'harbour', 'harbor', 'lake', 'riverbank', 'waterfront', 'cliff',
-  ]),
   'schrebergarten-august': Object.freeze([
     'garden', 'allotment', 'lawn', 'hedge', 'greenhouse', 'orchard', 'meadow',
     'vegetable patch', 'back yard', 'campsite', 'picnic', 'field',
@@ -275,40 +271,67 @@ export const PLACE_AFFINITY = Object.freeze({
     'living room', 'sitting room', 'front room', 'sofa', 'television', 'lounge',
     'bedroom', 'hotel room', 'pub', 'bar', 'waiting room',
   ]),
-  'balkon-waesche': Object.freeze([
-    'balcony', 'washing line', 'laundry', 'courtyard', 'rooftop', 'veranda',
-    'window ledge', 'terrace',
+  // THE FOUR FAMOUS PLACES (2026-09-04, section 60I) replaced the stairwell,
+  // the car park, the swimming pool and the balcony. The retired entries are
+  // NOT re-pointed at these: the car park used to catch every roadside word
+  // -- street, road, bus stop, market, kiosk -- and its borrowed props (an
+  // estate car, a payphone, a route map) were plausible on any road on earth.
+  // A yellow cab and a hot-dog cart are not. "the street outside our house"
+  // borrowing Manhattan is the confidently-wrong scene the neutral skeleton
+  // exists to refuse, so a generic street, stairwell, pool or balcony falls
+  // through to neutral now, and only a request that NAMES one of these places
+  // gets its dressing.
+  'new-york-times-square': Object.freeze([
+    'new york', 'times square', 'manhattan', 'brooklyn', 'nyc', 'broadway',
+    'yellow cab', 'fifth avenue', 'brownstone', 'fire escape',
   ]),
-  'plattenbau-treppenhaus': Object.freeze([
-    'stairwell', 'stairs', 'staircase', 'corridor', 'hallway', 'landing', 'lobby',
-    'entrance hall', 'basement', 'cellar', 'underpass', 'tunnel', 'block of flats',
+  'tokyo-night': Object.freeze([
+    'tokyo', 'japan', 'japanese', 'lantern', 'lanterns', 'izakaya', 'osaka',
+    'kyoto', 'shibuya', 'shinjuku', 'ramen',
   ]),
-  // Water only. `gym`, `sports hall` and `arena` were here in the first draft
-  // and produced "the school gym, pale blue tiles, lane ropes across the water,
-  // a lifeguard chair at the side" -- a prompt that generates a swimming pool
-  // when the user asked for a gym. A dry sports hall has no near neighbour in
-  // this menu, and the neutral skeleton's honest vagueness beats a confident
-  // wrong scene every time.
-  'hallenbad-nachmittag': Object.freeze([
-    'swimming pool', 'pool', 'swimming', 'baths', 'leisure centre', 'sauna', 'lido',
-    'changing room', 'lane ropes',
+  // THE ONLY BEACH ON THE MENU since 2026-09-05, when the owner retired the
+  // out-of-season one in its favour, so it carries every coast word that
+  // beach used to carry. `lake` and `riverbank` were on that list and are
+  // deliberately not on this one: an inland shore borrowing striped umbrellas
+  // and fishing boats on the stones is the confidently-wrong scene the neutral
+  // skeleton exists to refuse. A winter beach still lands here as the nearest
+  // skeleton and loses the summer dressing on the climate gap.
+  'amalfi-afternoon': Object.freeze([
+    'amalfi', 'positano', 'sorrento', 'capri', 'italy', 'italian', 'riviera',
+    'mediterranean', 'fishing village', 'marina', 'cove', 'lemon grove',
+    'beach', 'seaside', 'sea', 'coast', 'shore', 'sand', 'dune', 'dunes', 'ocean',
+    'pier', 'promenade', 'harbour', 'harbor', 'waterfront', 'cliff',
   ]),
-  'autobahn-raststaette': Object.freeze([
-    'car park', 'carpark', 'parking', 'motorway', 'autobahn', 'petrol station',
-    'service station', 'forecourt', 'layby', 'bus stop', 'train station', 'platform',
-    'kiosk', 'roundabout', 'junction', 'street', 'road', 'market',
+  // `rocket` is here and `space` alone is not: "a parking space" and "an open
+  // space" are places, and neither of them has a rocket in it.
+  'space-centre': Object.freeze([
+    'space centre', 'space center', 'rocket', 'rockets', 'nasa', 'cape canaveral',
+    'kennedy space', 'launch pad', 'spaceport', 'shuttle', 'rocket garden',
   ]),
 });
 
-/** Same idea for the six outfits. `suit`, `wedding` and `tie` are deliberately
- *  absent: nothing in the menu is formalwear, and pointing a suit at the
- *  cardigan would inherit "modern knitwear" as a negative and call it a match. */
+/** Same idea for the five outfits. `suit`, `wedding` and `tie` are deliberately
+ *  absent: nothing in the menu is formalwear, and pointing a suit at the fleece
+ *  would inherit "modern sportswear branding" as a negative and call it a match.
+ *
+ *  THE DRESS AND CARDIGAN WORDS ARE GONE WITH THEIR PRESETS (2026-09-05). What
+ *  a retired entry cost is worth stating, because it is the price of the unisex
+ *  menu and it is small: a typed "a summer dress" no longer finds a skeleton to
+ *  borrow scene-appropriate negatives from, so it expands against the neutral
+ *  fallback instead. The garment itself still reaches the model verbatim -- this
+ *  table decides which preset's DRESSING a typed outfit inherits, never whether
+ *  it is allowed. Nobody is refused a dress; it simply arrives undressed by a
+ *  neighbour, which is the correct outcome when it has no neighbour.
+ *
+ *  `dress`, `skirt` and `blouse` are therefore NOT re-pointed at a surviving
+ *  preset. Aiming them at the t-shirt would hand a sundress "skinny jeans" and
+ *  "ripped denim" as negatives and call that a match -- the same mistake the
+ *  suit paragraph above already refuses. */
 export const OUTFIT_AFFINITY = Object.freeze({
-  fleecepulli: Object.freeze(['fleece', 'hoodie', 'hoody', 'sweatshirt', 'jumper', 'pullover', 'sweater', 'half-zip']),
+  fleecepulli: Object.freeze(['fleece', 'hoodie', 'hoody', 'sweatshirt', 'jumper', 'pullover', 'sweater', 'half-zip', 'knit', 'knitted', 'wool', 'cardigan']),
   trainingsjacke: Object.freeze(['tracksuit', 'trackie', 'sports top', 'zip-up', 'bomber', 'windbreaker', 'football shirt']),
-  'hemd-jeans': Object.freeze(['jeans', 'denim', 'checked shirt', 'flannel', 'trousers', 'chinos', 'shirt']),
-  sommerkleid: Object.freeze(['sundress', 'summer dress', 'dress', 'skirt', 'floral', 'linen']),
-  strickjacke: Object.freeze(['cardigan', 'knit', 'knitted', 'wool', 'blouse', 'waistcoat', 'blazer']),
+  'hemd-jeans': Object.freeze(['checked shirt', 'flannel', 'shirt', 'overshirt']),
+  'tshirt-jeans': Object.freeze(['t-shirt', 'tshirt', 'tee', 'jeans', 'denim', 'trousers', 'chinos', 'vest top']),
   winterjacke: Object.freeze(['coat', 'parka', 'anorak', 'padded jacket', 'puffer', 'quilted', 'scarf', 'gloves', 'snow boots']),
 });
 
@@ -668,6 +691,36 @@ const STOPWORDS = new Set([
   'some', 'very', 'really', 'me', 'i', 'we', 'us', 'near', 'about', 'like', 'just',
 ]);
 
+/**
+ * Words that carry no evidence about WHICH place, excluded from the lexical
+ * score and nowhere else.
+ *
+ * The clock and the season have their own inference tables (TIME_TERMS,
+ * CLIMATE_TERMS) and their own bonus in choosePlaceSkeleton, so as tokens they
+ * are pure noise -- and expensive noise, because they sit in labels, ids and
+ * scenes at once. "Tokyo, at night" carries `night` in all three, which is 25
+ * points of overlap for every request that says "at night": "our street at
+ * night" would have borrowed paper lanterns, and "the pool in august" was
+ * already borrowing the garden's tablecloth off the `august` in its id before
+ * any famous place existed. `centre` is here for the same reason in a smaller
+ * way: "town centre", "leisure centre", "garden centre" are all about the
+ * word BEFORE it, and the space centre's label must not answer for them.
+ * `square` is the same word one city over -- "the market square" is not
+ * Times Square, and the label "Times Square, at night" would score it at 12.
+ *
+ * STOPWORDS above is deliberately NOT extended for this. hasContent() reads it
+ * to decide whether a stripped clause still says anything, and "at night" is
+ * a clause that does -- it just does not say which place.
+ */
+const UNSCORED = new Set([
+  ...TIMES_OF_DAY.flatMap((t) => t.split(' ')),
+  'evening', 'dawn', 'sunrise', 'sunset', 'twilight', 'nighttime', 'midnight', 'noon',
+  'spring', 'summer', 'autumn', 'winter',
+  'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
+  'september', 'october', 'november', 'december',
+  'centre', 'center', 'square',
+]);
+
 /** Crude singularisation, on purpose. A real stemmer is a dependency and this
  *  only has to make "dunes" match "dune"; getting "buses" wrong costs one
  *  point of overlap on one skeleton. */
@@ -676,7 +729,7 @@ const stem = (word) => (word.length > 3 && word.endsWith('s') && !word.endsWith(
 export function tokenise(text) {
   return [...new Set(
     text.toLowerCase().split(/[^a-z0-9']+/)
-      .filter((w) => w.length >= 3 && !STOPWORDS.has(w))
+      .filter((w) => w.length >= 3 && !STOPWORDS.has(w) && !UNSCORED.has(w))
       .map(stem),
   )];
 }

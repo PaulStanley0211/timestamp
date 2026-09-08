@@ -549,6 +549,18 @@ function normalizeInput(input, jobId) {
       { code: 'BAD_INPUT', jobId });
   }
 
+  // THE SHOT ARC, when one was asked for: `six` (the vlog) or `three` (one
+  // continuous moment), see compose/prompt.mjs. It rides the input for the
+  // same reason `direct` does. Absent stays absent rather than becoming null,
+  // because every manifest written before 2026-09-04 has no arc and means the
+  // default. Validated here by name rather than against the composer's list:
+  // the job model sits below compose and must not import from it.
+  const arc = input.arc;
+  if (arc !== undefined && arc !== 'six' && arc !== 'three') {
+    throw new JobError(`input.arc must be six or three, got ${JSON.stringify(arc)}`,
+      { code: 'BAD_INPUT', jobId });
+  }
+
   let consent = null;
   if (input.consent != null) {
     if (input.consent.granted !== true) {
@@ -585,6 +597,7 @@ function normalizeInput(input, jobId) {
     },
     stillCount,
     direct,
+    ...(arc !== undefined ? { arc } : {}),
     // What was asked for, and therefore what was charged for. These have to
     // survive into the manifest because the manifest is the ONLY channel
     // between the web process and the worker -- the worker never sees the
@@ -1047,9 +1060,21 @@ export function failStep(job, name, error) {
     // the floor, so a refusal a customer can trigger was one an operator could
     // not diagnose.
     //
-    // It is safe on the manifest and it does not reach the browser: `jobView`
-    // projects errors through `customerError`, which is a two-field allow-list
-    // of code and message. The body is capped at 2000 characters upstream.
+    // It does not reach the browser: `jobView` projects errors through
+    // `customerError`, which is a two-field allow-list of code and message.
+    //
+    // WHAT MAKES IT SAFE ON THE MANIFEST IS A REDACTION, NOT THE CAP. A 4xx
+    // from an image endpoint echoes the request it refused, and the request
+    // carries the photograph inline as a base64 data URI -- so "capped at
+    // 2000 characters" was keeping up to 2000 characters of JPEG in a file
+    // that outlives the photo window and the customer's own delete. Measured
+    // on a real refusal: two `data:image/jpeg;base64,` runs on disk, header
+    // bytes only because the prompt happened to come first. `classifyHttp`
+    // now strips every inline payload BEFORE it truncates, so no ordering
+    // upstream can put pixels here, and the sentence the provider wrote after
+    // the image survives the cap. The manifest holds no image; that claim is
+    // made by the purge and the delete handler too, and this is what keeps
+    // it true.
     detail: error?.detail ?? null,
     step: name,
     at,

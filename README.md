@@ -96,7 +96,7 @@ PAL, 720×576 at SAR 16/15, 25fps — what a camcorder tape in Europe actually w
 |---|---|
 | **M1 — the tape look** | **Done.** PAL chain, 4:3 in 9:16, five-run bit-identical purity check |
 | **M2 — audio bed, single-pass mux** | **Done.** Synthesised bed at −27.2 LUFS, joined in one ffmpeg invocation |
-| **M3 — preset catalog + prompts** | **Done.** 8 places, 6 outfits, three prompt rules enforced at load |
+| **M3 — preset catalog + prompts** | **Done.** 7 places, 6 outfits, three prompt rules enforced at load |
 | M0 — the validation gate | **Not run — the only real blocker.** One still generated so far. `docs/phase-0-validation.md` |
 | **Next — the app, end to end** | Next.js locally + a render worker with ffmpeg + a job queue, generation stubbed by the fixture provider |
 | Then | Real uploads · real video APIs (model chosen at that point) · moderation · billing |

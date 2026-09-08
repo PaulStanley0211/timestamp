@@ -40,7 +40,8 @@
  * manager that fills the wrong thing.
  */
 
-import { h, layout } from './views.mjs';
+import { h, layout, balanceSentence, faq, faqItems, inWords } from './views.mjs';
+import { RETENTION_DEFAULTS } from '../safety/consent.mjs';
 
 function field({ id, name, label, type = 'text', value = '', autocomplete = 'off', required = true, hint = '' }) {
   return `<div class="field">
@@ -346,6 +347,17 @@ export function resetCompletePage({ email = '', error = null, csrf = '' } = {}) 
  * record never sees this branch; re-asking somebody who already agreed would
  * be asking a person to agree to a photo they have not even uploaded yet.
  */
+/**
+ * ONBOARDING IS A CARD ON THE GROUND (2026-09-07), like every other page.
+ *
+ * From 2026-09-05 to 2026-09-07 it carried the landing's place photograph
+ * behind it (§63), so the cream world did not begin until the work started.
+ * There is no cream now: spec §6 makes the dark ground every page's ground,
+ * and a photograph behind a four-second consent form was the one photograph
+ * left behind text that was not the landing's band. The band keeps the
+ * mechanism; this page keeps the form. The browser sweep still measures every
+ * word here against the ground it sits on.
+ */
 export function onboardingPage({ account = null, consentText = '', csrf = '', error = null } = {}) {
   const body = `
 <main>
@@ -396,27 +408,39 @@ export function onboardingPage({ account = null, consentText = '', csrf = '', er
  * payment records, because those live at Stripe under Stripe's own legal
  * basis and pretending otherwise would be a promise this code cannot keep.
  */
-export function accountPage({ account, balance = null, csrf = '', error = null } = {}) {
+export function accountPage({ account, balance = null, csrf = '', error = null, cheapest = null } = {}) {
+  /**
+   * WHAT THE CREDITS ARE GOOD FOR, IN TAPES (2026-09-04, from the design
+   * prototype). "43 credits" tells a first-time reader nothing; "enough for 2
+   * more tapes at 480p" is the fact they came for. `cheapest` is the least
+   * expensive offered size, read by the server off the same seam that prices
+   * an order, so a repriced tape moves this sentence by itself. With no price
+   * to measure against the count stands alone rather than against a guess.
+   */
+  const creditLine = balanceSentence({ credits: balance ? Number(balance.credits) : NaN, cheapest });
+
   const body = `
-<main>
-  <section class="panel">
-    <p class="eyebrow">Your account</p>
-    <h1 class="headline">${h(account?.email ?? '')}</h1>
-    <p class="sub">${balance ? `${h(String(balance.credits))} credits on the ${h(String(balance.planId ?? account?.plan ?? ''))} plan.` : ''}</p>
+<main class="account">
+  <p class="eyebrow">Your account</p>
+  <h1 class="headline">${h(account?.email ?? '')}</h1>
+  ${creditLine ? `<p class="sub">${h(creditLine)}</p>` : ''}
 
-    ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
+  ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
 
-    <h2 class="subhead">Your data</h2>
-    <p class="sub">One JSON document: your account record, your credit history, and the
-    order details of every tape on your shelf. The tapes themselves are on the shelf --
-    download any of them there.</p>
-    <p><a class="button" href="/api/account/export" download>Export your data</a></p>
+  <h2 class="subhead subhead--osd">Your data</h2>
+  <p class="sub">One JSON document: your account record, your credit history, and the
+  order details of every tape on your shelf. The tapes themselves are on the shelf --
+  download any of them there.</p>
+  <p><a class="go" href="/api/account/export" download>Export your data</a></p>
 
-    <h2 class="subhead">Delete this account</h2>
-    <p class="sub">Your photo, your tapes, your credit history and your sign-in are deleted
-    together, immediately, everywhere this service keeps them. There is no undo and nothing
-    to restore from. If a tape is still rendering, cancel it first.</p>
+  <h2 class="subhead subhead--osd">Delete this account</h2>
+  <p class="sub">Your photo, your tapes, your credit history and your sign-in are deleted
+  together, immediately, everywhere this service keeps them. There is no undo and nothing
+  to restore from. If a tape is still rendering, cancel it first.</p>
 
+  ${/* THE ONE-WAY DOOR IN A NARROW COLUMN, so the field and the button read as
+       one control and the button cannot stretch to the width of the prose. */''}
+  <div class="account-danger">
     <form method="post" action="/account/delete">
       ${csrfField(csrf)}
       ${field({
@@ -425,7 +449,7 @@ export function accountPage({ account, balance = null, csrf = '', error = null }
   })}
       <button type="submit" class="record record--danger">Delete my account</button>
     </form>
-  </section>
+  </div>
 </main>
 `;
 
@@ -433,7 +457,6 @@ export function accountPage({ account, balance = null, csrf = '', error = null }
     title: 'Timestamp - your account',
     body,
     bodyClass: 'page-account',
-    wrapClass: 'wrap--narrow',
     account,
     balance,
   });
@@ -490,17 +513,55 @@ export function identityUnavailablePage() {
  * four 480p tapes -- "three at 480p and two at 720p" is not a rung anyone can
  * write, at any price. Move the credits and both numbers move together.
  *
+ * THREE CARDS, AND THE COMPARISON UNDER THEM (2026-09-06). The row is Free,
+ * Starter and Standard, the last one lime and lifted, and the page opens on a
+ * lime band that says what it is selling in four words. Free is a card again
+ * and that is not a reversal of the 2026-09-04 decision below: it left the row
+ * then because it had no figure and no button and read as a purchase somebody
+ * had failed to make, and it has both now -- the credit count, and Start free.
+ * SIGNED IN IT IS ABSENT ENTIRELY, because to a person with an account it is
+ * neither a choice nor news, and the band carries their balance instead.
+ *
+ * WHAT A QUALITY COSTS IS SAID ONCE, IN THE COMPARISON. Until today the page
+ * quoted each size twice -- a summary line above the cards, and again inside
+ * every rung's count -- which is how a page ends up disagreeing with itself.
+ * The 480p-against-720p table is where a reader is actually choosing between
+ * the two, so the figure lives there and the cards say what a pool BUYS.
+ *
+ * AND THE COMPARISON NEVER PRINTS A RASTER. Source detail is the label's own
+ * number ("480 lines"), not the pixel size the model is ordered at: the
+ * supplier does not always deliver what it is ordered (752x560 came back from
+ * an ordered 640x480 for months), so a printed raster is an invitation to
+ * "that is not what I got". The delivered file's short edge is config's and is
+ * the one raster this product does control.
+ *
  * @param {{plans: Array<{id,label,monthlyUSD,annualUSD,creditsPerPeriod}>,
  *          resolutions: Array<{id,credits,available}>,
  *          packs: Array<{id,label,priceUSD,credits,buyable}>,
  *          retentionDays?: number|null,
+ *          facts?: object,
  *          currentPlan?: string|null}} data
  */
 export function pricingPage({
   plans = [], resolutions = [], packs = [], currentPlan = null, account = null,
-  balance = null, checkout = null, retentionDays = null,
+  balance = null, checkout = null, retentionDays = null, facts = {}, meta = null,
 } = {}) {
   const offered = resolutions.filter((r) => r.available && r.credits > 0);
+  // Every number the prose states, handed in by the server from config or from
+  // a seam. The fallbacks are the same constants the consent text and the
+  // landing's fact cards are written against, so a page rendered with no facts
+  // at all still cannot contradict the thing that does the deleting.
+  const { photoDays = RETENTION_DEFAULTS.photoDays, jobDays = retentionDays ?? RETENTION_DEFAULTS.jobDays,
+    imageProcessor = null, qualities = offered.map((r) => r.id), shapes = [],
+    frames = 375, fps = 25, lufs = null, deliveryShortEdge = null,
+    // WHETHER THE SHAPE IS PART OF THE PRICE -- read from `publicFacts()`,
+    // never recomputed here. It forked on 2026-09-06: this page filtered
+    // non-finite and zero quotes out of a row's `creditsByAspect` before
+    // comparing them, and `landingPricing()` did not, so a row that ever
+    // carries one could make `/` and `/pricing` state opposite answers to the
+    // same FAQ question. `sameInEveryShape` is now computed once, with the
+    // filter, in `publicFacts()`, and both pages read it from there.
+    sameInEveryShape = true } = facts;
 
   /**
    * What one pool of credits buys, per size that is actually on sale.
@@ -510,7 +571,7 @@ export function pricingPage({
    * for the same reason: "1 tapes" is the sort of thing a reader notices
    * instead of the number.
    */
-  const tapeLines = (credits) => offered.map((r) => {
+  const tapeCounts = (credits) => offered.map((r) => {
     // THE SHAPE IS PART OF THE PRICE AND THIS COUNTED AT ONE SHAPE'S. `credits`
     // is the un-shaped figure, i.e. the 4:3 one. A non-default shape holds the
     // short edge and is exactly 4/3 the pixels, so it is charged 4/3 -- 28 CR
@@ -528,114 +589,143 @@ export function pricingPage({
       ? `not enough for a ${r.id} tape`
       : `${n} ${n === 1 ? 'tape' : 'tapes'} at ${r.id}`;
 
-    // Both wide shapes cost the same 4/3, but the number is READ rather than
-    // assumed: a shape the pricing refuses has no entry, and a shape priced
-    // differently one day would be reported as it is rather than as 4/3.
+    // The number is READ rather than assumed: a shape the pricing refuses has
+    // no entry, and a shape priced differently one day is reported as it is.
+    //
+    // AND IT IS SAID ONLY WHEN THERE IS SOMETHING TO SAY (2026-09-05). The
+    // surcharge came off when the price caught up with Wan's per-second
+    // billing, so all three shapes now cost the same and this would read
+    // "4 tapes at 480p (4 in 16:9 or 9:16)" -- true, and noise. A parenthetical
+    // is for an EXCEPTION; one that restates the number it follows teaches the
+    // reader that the shapes differ, which is the opposite of what it says.
+    // Derived rather than deleted, so a supplier that bills by pixels again
+    // brings the sentence back without anybody remembering to.
     const wide = ['16:9', '9:16']
       .map((a) => r.creditsByAspect?.[a])
       .filter((c) => Number.isFinite(c) && c > 0);
-    const suffix = wide.length && n > 0
+    const dearest = wide.length ? Math.max(...wide) : base;
+    const suffix = wide.length && n > 0 && dearest !== base
       ? ` (${(() => {
-        const m = Math.floor(credits / Math.max(...wide));
+        const m = Math.floor(credits / dearest);
         return m === 0 ? 'none' : String(m);
       })()} in 16:9 or 9:16)`
       : '';
-    return `<li>${h(line + suffix)}</li>`;
-  }).join('');
+    return line + suffix;
+  });
+  const tapeLines = (credits) => tapeCounts(credits).map((t) => `<li>${h(t)}</li>`).join('');
 
   /**
-   * HOW LONG A TAPE ACTUALLY SURVIVES, read from the retention config rather
-   * than asserted here.
+   * WHAT A POOL BUYS, AS ONE CHECK-MARK: "4 tapes at 480p, or 2 tapes at 720p".
    *
-   * Every card on this page used to say "Every tape stays on your shelf". That
-   * was FALSE the whole time it was shipped: `config/render.json` sets
-   * `retention.jobDays` to 30 and `scripts/render/purge-cli.mjs` deletes the
-   * video when it expires. A promise the purge contradicts is the one kind of
-   * copy this page must never carry, because the person reading it is deciding
-   * whether to pay on the strength of it. It is threaded in rather than written
-   * here so that changing the window is one edit to `config/render.json`.
+   * A card's job is to say what you GET, so a quality the pool cannot fund is
+   * left out of the line rather than stated as a negative on it. The count
+   * itself is `tapeCounts` above, unchanged and still parenthesising the wide
+   * shapes only when they genuinely differ -- so the free rung still says, in
+   * the one place a visitor reads before spending an upload, that its credits
+   * buy nothing in the phone shape when that is true.
+   *
+   * A pool that funds nothing at all says so, rather than rendering an empty
+   * tick: that is the "0 tapes" reading `tapeCounts` was written to avoid.
    */
-  const shelfLine = Number.isFinite(retentionDays) && retentionDays > 0
-    ? `Kept on your shelf for ${retentionDays} days`
-    : null;
+  const buysLine = (credits) => {
+    const counts = tapeCounts(credits).filter((t) => !/^not enough/.test(t));
+    return counts.length ? counts.join(', or ') : 'not enough for a tape';
+  };
+
+  /** What a balance is measured against, and what the comparison's first
+   *  column is: the cheapest size on sale at the default shape. */
+  const cheapest = offered.length ? offered.reduce((a, b) => (a.credits <= b.credits ? a : b)) : null;
 
   /**
-   * THE LADDER, IN ORDER. The grant is first because it is where a reader
-   * starts, not because it is a product -- it has no price and no button, and
-   * `plans` holds exactly one row since the stale subscription tiers were
-   * deleted on 2026-08-27.
+   * A plan WITH a price still gets a card of its own after the packs. `plans`
+   * holds one grant row in production, but the test harness ships priced
+   * tiers, and DESIGN.md § 23's "which plan am I on" grammar is theirs.
    */
-  const rungs = [
-    ...plans.map((plan) => ({
-      id: plan.id,
-      label: plan.label,
-      priceUSD: plan.monthlyUSD,
-      credits: plan.creditsPerPeriod,
-      grant: true,
-      buyable: false,
-      current: plan.id === currentPlan,
-    })),
-    ...packs.map((pack) => ({
-      id: pack.id,
-      label: pack.label,
-      priceUSD: pack.priceUSD,
-      credits: pack.credits,
-      grant: false,
-      buyable: pack.buyable,
-      current: false,
-    })),
-  ];
+  const grants = plans.filter((plan) => plan.monthlyUSD === 0);
+  const tiers = plans.filter((plan) => plan.monthlyUSD !== 0);
+  const free = grants[0] ?? null;
 
-  const cards = rungs.map((rung) => {
-    /**
-     * THE BROWSER SENDS A RUNG ID AND NOTHING ELSE -- no amount, no credit
-     * count, no price. A tampered form has nothing to tamper with, and
-     * test/web-auth.test.js asserts exactly this: one input, hidden, named
-     * `pack`. Adding a second field to this form fails that test, which is what
-     * the test is for.
-     */
-    const buy = rung.grant ? '' : `
+  /**
+   * THE RECOMMENDATION IS THE LARGER PACK, and only when there is more than
+   * one: a single pack "recommended" against nothing is a flag with no
+   * comparison behind it. Chosen by credit count rather than by name, so a
+   * repriced ladder moves the mark by itself.
+   */
+  const most = packs.length > 1 ? Math.max(...packs.map((pack) => pack.credits)) : null;
+
+  const checks = (items) => `<ul class="checks">${items.map((c) => `<li>${h(c)}</li>`).join('')}</ul>`;
+
+  /**
+   * THE BROWSER SENDS A PACK ID AND NOTHING ELSE -- no amount, no credit
+   * count, no price. A tampered form has nothing to tamper with, and
+   * test/web-auth.test.js asserts exactly this: the hidden `pack` and the
+   * withdrawal acknowledgement, and no field named like money. Adding a
+   * third field to this form fails that test, which is what the test is for.
+   *
+   * TAX SITS BESIDE THE BUTTON, where the decision is made, as well as in the
+   * foot. The rate follows the buyer, so no total printed here would be true
+   * everywhere; what the page owes the reader is that the figure above is not
+   * the last one they will see.
+   */
+  const buyForm = (pack, recommended) => `
       <form method="post" action="/api/billing/checkout">
-        <input type="hidden" name="pack" value="${h(rung.id)}">
+        <input type="hidden" name="pack" value="${h(pack.id)}">
         <label class="check check--buy">
           <input type="checkbox" name="withdrawal" value="yes" required>
           <span class="consent-text"><span>I want my credits straight away. I understand they are
           added to my account the moment I pay, and that I cannot then cancel them for a
           refund.</span></span>
         </label>
-        <button type="submit" class="record"${rung.buyable ? '' : ' disabled'}>
-          ${h(rung.buyable ? `Buy ${rung.label}` : 'Not open yet')}
+        <button type="submit" class="record${recommended ? '' : ' record--way'}"${pack.buyable ? '' : ' disabled'}>
+          ${h(pack.buyable ? `Buy ${pack.label}` : 'Not open yet')}
         </button>
       </form>
-      ${rung.buyable ? '' : '<p class="hint">Checkout opens once the price is set. Nothing is charged here.</p>'}`;
+      ${pack.buyable ? '' : '<p class="hint">Checkout opens once the price is set. Nothing is charged here.</p>'}
+      <p class="hint">Tax is added at checkout.</p>`;
 
+  /**
+   * FREE LEADS THE ROW SIGNED OUT AND IS ABSENT SIGNED IN. Its figure is the
+   * credit count, because that is what the rung actually gives; its action is
+   * the one thing a visitor without an account has come here to do.
+   */
+  const freeCard = free && !account ? `
+    <section class="card tier tier--free">
+      <p class="tier-name">${h(free.label)}</p>
+      <p class="price">${h(`${free.creditsPerPeriod} credits`)}</p>
+      <p class="per">when you sign up</p>
+      ${checks([buysLine(free.creditsPerPeriod), 'any shape', 'no card'])}
+      <a class="record" href="/signup">Start free</a>
+    </section>` : '';
+
+  const packCards = packs.map((pack) => {
+    const recommended = most !== null && pack.credits === most;
     return `
-    <section class="panel plan${rung.current ? ' plan--current' : ''}">
-      ${rung.current ? '<span class="mark">Your plan</span>' : ''}
-      <p class="eyebrow">${h(rung.label)}</p>
-      <p class="price">${h(rung.priceUSD === 0 ? 'FREE' : `$${rung.priceUSD}`)}</p>
-      <p class="per">${h(rung.grant ? 'on sign-up' : 'one payment')}</p>
-      <ul>
-        <li>${h(`${rung.credits} credits`)}</li>
-        ${tapeLines(rung.credits)}
-        <li>15 seconds, 25 fps, in 4:3, 16:9 or 9:16</li>
-        ${shelfLine ? `<li>${h(shelfLine)}</li>` : ''}
-      </ul>
-      ${buy}
+    <section class="${recommended ? 'lime' : 'card'} tier tier--paid${recommended ? ' tier--lime' : ''}">
+      <p class="tier-name">${h(pack.label)}${recommended ? ' <span class="mark">Recommended</span>' : ''}</p>
+      <p class="price">${h(`$${pack.priceUSD}`)}</p>
+      <p class="per">${h(`${pack.credits} credits`)}</p>
+      ${checks([buysLine(pack.credits), 'any shape', 'yours to download and keep', `photograph deleted after ${photoDays} days`])}
+      ${buyForm(pack, recommended)}
     </section>`;
   }).join('');
 
-  // A RANGE HERE, a parenthetical in the rungs, and for a reason. This line is
-  // a summary of what sizes cost; the rungs are a count of what a reader gets,
-  // and a range there would leave them working out which end applies to them.
-  // Both ends are read from the same map the charge is computed from, so a
-  // shape priced differently one day widens this by itself.
-  const costs = offered.map((r) => {
-    const quotes = Object.values(r.creditsByAspect ?? {}).filter((c) => Number.isFinite(c) && c > 0);
-    const low = quotes.length ? Math.min(...quotes) : r.credits;
-    const high = quotes.length ? Math.max(...quotes) : r.credits;
-    return h(low === high ? `${r.id} — ~${low} CR` : `${r.id} — ~${low}-${high} CR`);
-  }).join(' &middot; ');
+  // Priced plans exist only in test fixtures today (the shipped config has one
+  // grant and no paid plan); they keep the struck/ghost grammar for whoever
+  // turns subscriptions back on.
+  const planCards = tiers.map((plan) => {
+    const current = plan.id === currentPlan;
+    return `
+    <section class="card tier plan${current ? ' plan--current' : ''}">
+      ${current ? '<span class="mark">Your plan</span>' : ''}
+      <p class="tier-name">${h(plan.label)}</p>
+      <p class="price">${h(`$${plan.monthlyUSD}`)}</p>
+      <p class="per">on sign-up</p>
+      <ul class="checks"><li>${h(`${plan.creditsPerPeriod} credits`)}</li>${tapeLines(plan.creditsPerPeriod)}</ul>
+    </section>`;
+  }).join('');
+
+  const columns = (freeCard ? 1 : 0) + packs.length;
+  const balanceLine = account && balance ? balanceSentence({ credits: Number(balance.credits), cheapest }) : '';
 
   /**
    * Coming back from Stripe.
@@ -660,43 +750,80 @@ export function pricingPage({
   const key = String(checkout ?? '');
   const returned = Object.hasOwn(RETURNED, key) ? RETURNED[key] : null;
 
+  // 480p AGAINST 720p: one product, two qualities. Source detail is the label's
+  // own number and never the raster the model is ordered at -- the supplier
+  // does not always deliver what is ordered, and a printed raster invites
+  // "that is not what I got". The recommended column is the dearer one and is
+  // lit, which is the only place lime appears in a table: it is the choice
+  // being pointed at, not a decoration on a figure.
+  const lines = (r) => `${parseInt(r.id, 10)} lines`;
+  const packBuys = (r) => packs.map((p) => { const n = Math.floor(p.credits / (r.creditsByAspect?.['4:3'] ?? r.credits)); return `${p.label}: ${n} ${n === 1 ? 'tape' : 'tapes'}`; }).join(' · ');
+  const cell = (r, i, inner) => (i === 1 ? `<td class="lit">${inner}</td>` : `<td>${inner}</td>`);
+  const row = (head, f) => `<tr><th scope="row">${h(head)}</th>${offered.slice(0, 2).map((r, i) => cell(r, i, h(f(r)))).join('')}</tr>`;
+  const delivered = deliveryShortEdge ? `${deliveryShortEdge} lines; edge to edge in the wide shapes, matted in 4:3` : 'edge to edge in the wide shapes, matted in 4:3';
+  const compareQ = offered.length >= 2 ? `
+  <section class="compare">
+    <h2 class="compare-t">${h(offered[0].id)} against ${h(offered[1].id)}</h2>
+    <div class="compare-scroll"><table class="compare-q">
+      <thead><tr><th scope="row" class="blank"></th>${offered.slice(0, 2).map((r, i) => (i === 1 ? `<th scope="col" class="lit">${h(r.id)}</th>` : `<th scope="col">${h(r.id)}</th>`)).join('')}</tr></thead>
+      <tbody>
+        ${row('Credits per tape', (r) => String(r.creditsByAspect?.['4:3'] ?? r.credits))}
+        ${row('Source detail', lines)}
+        ${row('Delivered file', () => delivered)}
+        ${row('The grain', () => 'identical, by design')}
+        ${packs.length ? row('What a pack buys', packBuys) : ''}
+      </tbody>
+    </table></div>
+  </section>` : '';
+
+  const compareF = `
+  <section class="compare">
+    <h2 class="compare-t">What comes back</h2>
+    <div class="compare-scroll"><table class="compare-f"><tbody>
+      <tr><th scope="row">Length</th><td>${h(`${inWords(Math.round(frames / fps)).replace(/^./, (c) => c.toUpperCase())} seconds exactly, ${frames} frames`)}</td></tr>
+      ${shapes.length ? `<tr><th scope="row">Shapes</th><td>${h(`${inWords(shapes.length).replace(/^./, (c) => c.toUpperCase())}: ${shapes.slice(0, -1).join(', ')} and ${shapes[shapes.length - 1]}`)}</td></tr>` : ''}
+      ${Number.isFinite(lufs) ? `<tr><th scope="row">Sound</th><td>${h(`A mono tape bed at ${lufs} LUFS`)}</td></tr>` : ''}
+      <tr><th scope="row">Disclosure</th><td>Marked AI-generated in the file, in machine-readable metadata.</td></tr>
+    </tbody></table></div>
+  </section>`;
+
+  // THE LISTED PRICE IS BEFORE TAX, AND THE PAGE HAS TO SAY SO (2026-08-31).
+  // Measured in the Stripe dashboard rather than assumed: a $12 pack shows a
+  // German buyer a $14.28 total, VAT added on top and remitted for us. It is
+  // stated rather than folded into the price because this is sold worldwide
+  // and the rate follows the BUYER -- 19% in Germany, nothing in much of the
+  // world -- so there is no single final price that would be true for
+  // everyone, and a number printed here would be a lie somewhere. A source
+  // comment, not page copy: this is a measurement, and the wire never sees it.
   const body = `
-<main>
-  <section class="panel">
-    <p class="eyebrow">Credits</p>
-    <h1 class="headline">What a tape costs</h1>
-    <p class="sub">A tape is fifteen seconds of generated video put through the tape deck.
-    You spend credits, and how many depends on the size the video is generated at before
-    the tape gets hold of it, and on the frame you choose.</p>
-    <p class="hint">${costs || 'Costs are unavailable right now.'}</p>
-    ${/* THE LISTED PRICE IS BEFORE TAX, AND THE PAGE HAS TO SAY SO (2026-08-31).
-         Measured in the Stripe dashboard rather than assumed: a $12 pack shows a
-         German buyer a $14.28 total, VAT added on top and remitted for us.
-         It is stated here rather than folded into the price because this is sold
-         worldwide and the rate follows the BUYER -- 19% in Germany, nothing in
-         much of the world. There is no single final price that would be true for
-         everyone, so a number printed here would be a lie somewhere. */''}
+<main class="pricing">
+  <section class="lime pricing-hero">
+    <h1 class="pricing-t">Credits, not subscriptions.</h1>
+    <p class="lede">A tape costs credits, credits come in packs, and tax is added at checkout.</p>
+    ${balanceLine ? `<p class="balance">${h(balanceLine)}</p>` : ''}
+    ${returned ? `<p class="notice">${h(returned)}</p>` : ''}
+  </section>
+
+  <div class="tiers${columns === 2 ? ' tiers--two' : ''}">${freeCard}${packCards}${planCards}</div>
+
+  ${compareQ}
+  ${compareF}
+
+  ${faq(faqItems({ freeCredits: free?.creditsPerPeriod ?? null, photoDays, jobDays, imageProcessor, qualities, shapes, sameInEveryShape }))}
+
+  <section class="pricing-foot">
     <p class="hint">Prices are before tax. VAT or sales tax is added at checkout where it
     applies, at the rate for the country you are in, and the total is shown to you before
     you pay.</p>
     <p class="hint">There is no payment form here and there is not one anywhere else either.
     Checkout is hosted by the payment provider on their own domain, and this application
     never sees a card number.</p>
-    ${returned ? `<p class="notice">${h(returned)}</p>` : ''}
-  </section>
-
-  <div class="plans">${cards}</div>
-
-  <section class="panel">
-    <p class="hint">Nothing here renews and nothing is a subscription. Credits do not expire,
-    and when you want more tapes you buy another bundle — including a second one the same
-    size. Every figure on this page is an estimate of provider cost until a metered run
-    proves it, and it will be revisited when one does.</p>
-    <p class="actions"><a class="quiet" href="/">Back to the shelf</a></p>
+    <p class="hint">Nothing here renews and nothing is a subscription. When you want more
+    tapes you buy another bundle, including a second one the same size.</p>
   </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - plans', body, bodyClass: 'page-pricing', account, balance });
+  return layout({ title: 'Timestamp - pricing', body, bodyClass: 'page-pricing', account, balance, meta });
 }
 
 /**

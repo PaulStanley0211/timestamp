@@ -18,7 +18,7 @@
  * Nothing here can cost money. It is pure string assembly against local JSON.
  *
  * Usage:
- *   npm run compose -- --place=schrebergarten-august --outfit=sommerkleid
+ *   npm run compose -- --place=schrebergarten-august --outfit=tshirt-jeans
  *   npm run compose -- --place=... --outfit=... --count=5 --segments=3 --job=demo
  *   npm run compose -- --all
  *   npm run compose -- --all --json

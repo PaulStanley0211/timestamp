@@ -55,10 +55,27 @@ export class DeletionError extends Error {
 
 /** Every job id in the account's ownership index. The index file's existence
  *  is the ownership fact (session-middleware.mjs owns the format); anything in
- *  the directory that is not a job entry is removed with the directory. */
+ *  the directory that is not a job entry is removed with the directory.
+ *
+ *  ABSENT MEANS ENOENT AND NOTHING ELSE. An index that exists but cannot be
+ *  listed -- EACCES, EIO, EMFILE -- used to read as "no jobs", and the
+ *  deletion then ran to completion on that answer: upstream identity gone,
+ *  zero jobs purged, account record gone, and every job directory with a
+ *  face in it left under an owner nothing could trace any more. A read that
+ *  fails for any reason but absence is a refusal, thrown here so it lands
+ *  BEFORE step 1, where a refusal changes nothing and the retry is clean. */
 function ownedJobIds(fsImpl, root, accountId) {
+  const dir = `${root}/${OWNERS_DIR}/${accountId}`;
   let names;
-  try { names = fsImpl.readdirSync(`${root}/${OWNERS_DIR}/${accountId}`); } catch { return []; }
+  try {
+    names = fsImpl.readdirSync(dir);
+  } catch (err) {
+    if (err?.code === 'ENOENT') return [];
+    throw new DeletionError(`the ownership index could not be listed (${err?.code ?? 'unknown'}): ${err?.message ?? err}`, {
+      code: 'OWNERS_UNREADABLE',
+      userMessage: 'We could not delete the account right now. Please try again in a few minutes.',
+    });
+  }
   return names
     .filter((name) => name.endsWith('.json'))
     .map((name) => name.slice(0, -'.json'.length))

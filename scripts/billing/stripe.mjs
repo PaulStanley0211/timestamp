@@ -331,6 +331,19 @@ export async function createCheckoutSession({
     mode: 'payment',
     'line_items[0][price]': priceId,
     'line_items[0][quantity]': '1',
+    // NO PAYMENT METHOD IS NAMED, AND IT CANNOT BE. The account sells through
+    // Managed Payments (Stripe as merchant of record -- CLAUDE.md section 46B),
+    // and under it Stripe controls which methods a customer sees: the API
+    // refuses `payment_method_types`, `excluded_payment_method_types`,
+    // `payment_method_configuration` and `payment_method_options` outright.
+    // The first live checkout (2026-09-04) was refused with exactly that
+    // message because this body named cards, on the theory that it made
+    // `completed` always mean `paid`. The theory was right and the lever was
+    // wrong: a method that settles later can be offered here, so the webhook
+    // reads `payment_status` off `completed` and grants a delayed payment on
+    // `checkout.session.async_payment_succeeded`, which the endpoint must be
+    // subscribed to (docs/deploy-runbook.md). test/billing-stripe.test.js
+    // pins that none of the refused parameters is sent.
     // THE LINK BETWEEN A PAYMENT AND AN ACCOUNT, and the only one. Stripe hands
     // it back on the completed session, and the webhook reads it there.
     client_reference_id: accountId,

@@ -52,6 +52,9 @@ export const ROUTES = Object.freeze([
   { method: 'GET', pattern: '/', name: 'homePage' },
   { method: 'GET', pattern: '/styles.css', name: 'stylesheet' },
   { method: 'GET', pattern: '/tape-osd.ttf', name: 'font' },
+  // The world's two faces, by name from a four-entry map in the handler --
+  // the placeImage discipline: no byte of the request becomes a path.
+  { method: 'GET', pattern: '/fonts/:file', name: 'fontFile' },
   { method: 'GET', pattern: '/favicon.ico', name: 'favicon' },
   // The brand marks. Listed one per row rather than served from a `/brand/:file`
   // pattern on purpose: an explicit row cannot be talked into reading a path
@@ -85,6 +88,11 @@ export const ROUTES = Object.freeze([
   // and session-free like the stylesheet; see `indexable` in server.mjs for
   // why the default refuses everything.
   { method: 'GET', pattern: '/robots.txt', name: 'robots' },
+  // The list of pages this product ASKS to have indexed. Served only while
+  // indexing is open, for the reason the two halves of `robots.txt` already
+  // give: a sitemap under `Disallow: /` invites a crawler to index a site
+  // every other signal is telling it to leave alone.
+  { method: 'GET', pattern: '/sitemap.xml', name: 'sitemap' },
 
   // --- where a new account first lands (spec §10, task 12) ----------------
   // BEHIND A SESSION, unlike everything else in this block: every route that
@@ -159,6 +167,17 @@ export const ROUTES = Object.freeze([
   // is the designed state, and the CSS falls through to the gradient layer.
   { method: 'GET', pattern: '/places/:file', name: 'placeImage' },
 
+  // The landing page's before/after pair: one place photograph, and that same
+  // photograph through `buildVideoFilter`. Two fixed names resolved through a
+  // map in the handler, so -- as with `placeImage` -- no byte of the request
+  // is ever concatenated into a path.
+  { method: 'GET', pattern: '/landing/:file', name: 'landingImage' },
+
+  // The owner's own tapes, served from a directory OUTSIDE the repository, by
+  // allow-list -- see SHOWCASE_FILES in server.mjs. No byte of the request
+  // ever becomes a path component.
+  { method: 'GET', pattern: '/showcase/:file', name: 'showcaseFile' },
+
   { method: 'GET', pattern: '/j/:id', name: 'statusPage' },
   { method: 'GET', pattern: '/j/:id/select', name: 'selectPage' },
   { method: 'GET', pattern: '/j/:id/result', name: 'resultPage' },
@@ -191,7 +210,7 @@ export const ROUTES = Object.freeze([
  * queue's counts and whether ffmpeg is present, and no job ids.
  */
 export const PUBLIC_ROUTES = Object.freeze(new Set([
-  'stylesheet', 'font', 'favicon', 'placeImage',
+  'stylesheet', 'font', 'fontFile', 'favicon', 'placeImage', 'landingImage', 'showcaseFile',
   'iconSvg', 'icon180', 'icon192', 'icon512',
   'loginPage', 'login', 'signupPage', 'signup', 'logout',
   // Google. Whoever lands on `/auth/callback` is, by definition, not signed
@@ -213,7 +232,7 @@ export const PUBLIC_ROUTES = Object.freeze(new Set([
   'privacyPage', 'termsPage', 'impressumPage',
   // A crawler holds no session, and a robots.txt that answered 303 to /login
   // would be read as "no rules" -- the opposite of what it is for.
-  'robots',
+  'robots', 'sitemap',
   // PUBLIC SINCE 2026-08-21, AND IT IS THE ONE ENTRY HERE THAT SERVES TWO
   // DIFFERENT PAGES. `/` used to 303 a signed-out visitor to `/login`, which
   // made the entire product a password box: there was nowhere to say what this

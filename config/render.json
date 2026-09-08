@@ -1,13 +1,10 @@
 {
   "_comment": "Render contract. These are not preferences -- several of them are asserted by tests and changing one without changing the test is a build break. PAL was chosen because 25fps x 15s is exactly 375 frames; at NTSC's 30000/1001 it is 449.55, so 'exactly 15.000 seconds' would be a rounding argument rather than an assertion.",
-
   "durationSeconds": 15,
   "fps": 25,
   "totalFrames": 375,
-
   "_comment_aspect": "THE SHORT EDGE IS HELD AT 576 IN EVERY SHAPE and only the long edge varies. That single constraint is why there is one set of tuning constants and not three: a 14px head-switch band is 14px of a 576-high picture whichever shape it is in, and the short edge always scales 576 -> 1080, so the grain is not merely similar across aspects, it is arithmetically identical. `tape` and `delivery` below ARE the 4:3 contract -- the default shape is the base, not an entry in `aspects`, so it is structurally impossible for the 4:3 path to drift while adding a new shape. See docs/aspect-ratios-plan.md.",
   "defaultAspect": "4:3",
-
   "tape": {
     "_comment": "The tape raster itself. SAR 16/15 on 720x576 gives DAR 4:3, which is what PAL 4:3 actually was. work* carries jitter headroom so the transport wobble has pixels to steal from instead of exposing an edge; both work dimensions must stay divisible by 4 for chroma subsampling.",
     "width": 720,
@@ -18,7 +15,6 @@
     "jitterOriginX": 8,
     "jitterOriginY": 6
   },
-
   "delivery": {
     "_comment": "1080x810 is the 4:3 tape image unsqueezed to 1080 wide. Centred in 1080x1920 it leaves 555px above and below. surroundColor is deliberately not pure black -- see CLAUDE.md, 'The output contract'.",
     "width": 1080,
@@ -27,10 +23,8 @@
     "tapeDisplayHeight": 810,
     "surroundColor": "0x0B0A09"
   },
-
   "aspects": {
     "_comment": "The shapes that are NOT the default. Each one replaces `tape` and `delivery` wholesale; there is no partial inheritance, so a half-filled entry fails loudly instead of quietly borrowing 4:3's delivery frame.",
-
     "16:9": {
       "_comment": "Offered. The delivery block below is what makes this shape finishable; `available` and that block land together, which is the whole reason the flag is written down rather than inferred.",
       "available": true,
@@ -53,7 +47,6 @@
         "surroundColor": "0x0B0A09"
       }
     },
-
     "9:16": {
       "_comment": "Offered. The delivery block below is what makes this shape finishable; `available` and that block land together, which is the whole reason the flag is written down rather than inferred.",
       "available": true,
@@ -77,21 +70,20 @@
       }
     }
   },
-
   "encode": {
     "_comment": "filterComplexThreads MUST stay 1. gblur is slice-threaded and goes nondeterministic when frame height approaches the core count; pinning threads is the global safety net behind the avgblur fix on the head-switch band. Costs about 19% render time and buys a hard purity guarantee.",
     "filterComplexThreads": 1,
     "videoCodec": "libx264",
-    "crf": 19,
+    "crf": 26,
     "preset": "medium",
     "pixFmt": "yuv420p",
     "x264Params": "deterministic=1",
     "audioCodec": "aac",
     "audioBitrate": "128k",
     "audioSampleRate": 48000,
-    "audioChannels": 1
+    "audioChannels": 1,
+    "_crfComment": "26, AND IT WAS 19 UNTIL 2026-09-05. 19 is a MASTERING setting, and this product's look is GRAIN -- random noise, which is incompressible, so x264 spends whatever the quality setting asks for on encoding noise faithfully. The result was 42.3 Mbit/s: a fifteen-second tape weighing 76 MB, which the owner reported as taking a very long time to load and which no ordinary connection can stream. It was not the server -- range requests, faststart and the moov atom at byte 32 were all already correct. MEASURED ON A REAL TAPE before changing: crf 19 = 76 MB keeping 100% of frame-to-frame grain energy, 26 = 20 MB and 81%, 28 = 12 MB and 72%, 30 = 5 MB and 61%. The owner looked at all four at 1:1 and chose 26; 30 is where the grain visibly goes smooth. RAISING QUALITY HERE COSTS THE CUSTOMER THE THING THEY WAITED FOR -- test/ffmpeg-output.test.js fails the delivery contract above 20 Mbit/s, which is what stops this drifting back."
   },
-
   "provider": {
     "_comment": "MAX_INFLIGHT is 1 because a CLI run is one job, one call at a time. It lives here so that raising it on the day a web app fans out is a one-line change rather than a refactor. Backoff is the 1/2/4/8 ladder from Ad-Regenerator's meta-adapter.",
     "maxInflight": 1,
@@ -101,7 +93,6 @@
     "pollIntervalMs": 5000,
     "pollTimeoutMs": 900000
   },
-
   "retention": {
     "_comment": "This system stores photographs of people's faces. Designing deletion in now costs an afternoon; retrofitting it onto a live app that has been accumulating strangers' faces is a rewrite plus a disclosure.",
     "photoDays": 7,

@@ -36,6 +36,39 @@ top to bottom; nothing here is optional.
    **When PR #1 is merged, drop the `-b` and delete this paragraph**; until
    then the branch is the deployable ref.
 
+   **Then close the front door, before anything else is on the box.** A fresh
+   Ubuntu image answers SSH password authentication to the whole internet, and
+   the brute-force fleets find a new port 22 within the hour. This box will
+   hold every secret this product has and every customer's face; it is the
+   single highest-value target there is. Three steps, ten minutes, and **keep
+   the session you are typing in open until a second key login has succeeded**
+   -- a mistake here locks you out of your own server.
+
+   ```bash
+   # 1. key-only SSH. Ubuntu ships an override under sshd_config.d/ that can
+   #    re-enable passwords, so the drop-in below takes precedence by name.
+   cat > /etc/ssh/sshd_config.d/00-timestamp.conf <<'EOF'
+   PasswordAuthentication no
+   KbdInteractiveAuthentication no
+   PermitRootLogin prohibit-password
+   EOF
+   sshd -t && systemctl reload ssh
+   # in a SECOND terminal: ssh in again with your key. Only then close this one.
+
+   # 2. no account on the box may have a password at all
+   passwd -S root            # must say L or NP, never P
+   passwd -l root
+
+   # 3. belt and braces: a ban after repeated failures
+   apt-get install -y fail2ban && systemctl enable --now fail2ban
+   ```
+
+   Then **Hetzner console → Firewalls → create** one and attach it to the
+   server: inbound TCP 22 from your own address only (or a VPN range), TCP 80
+   and 443 and UDP 443 from anywhere, nothing else. That takes port 22 off the
+   internet entirely; the sshd change above is what protects you on the day
+   the firewall rule is edited wrongly.
+
 3. Write **three** env files in `/opt/timestamp`, not one. Each container is
    given only the secrets its own process reads, so a compromise of the
    internet-facing web process does not also hand over the render budget.
@@ -91,11 +124,62 @@ top to bottom; nothing here is optional.
    (36 filters + the font) and refuses to produce an image on a bad ffmpeg,
    so a successful build IS the preflight.
 
+5. **The showcase.** The landing plays three of the owner's tapes; they live in
+   `/opt/timestamp/showcase`, outside the repository, and are produced ON THE
+   BOX from the finished jobs so no face travels:
+
+   ```bash
+   # chown 1000:1000: the image runs as `USER node`, which is uid 1000, so a
+   # root-owned directory gives the producer EACCES on its first write. `chown`
+   # takes a bare numeric id; `install -o 1000` does NOT -- it resolves the
+   # owner through the passwd database, this host has no user 1000, and it
+   # fails with "invalid user" (the same trap the backup cron fell into).
+   install -d -m 755 /opt/timestamp/showcase && chown 1000:1000 /opt/timestamp/showcase
+   cd /opt/timestamp
+   # the 9:16 Times Square tape and the 4:3 space-centre tape are already on the volume.
+   #
+   # MOUNTED AT /out, NOT AT /showcase. The `web` service already declares
+   # `/opt/timestamp/showcase:/showcase:ro` (compose.yaml), and a second mount
+   # of the same host path at the same container path in a `compose run` is a
+   # collision -- and the declared one is read-only, which is exactly what the
+   # producer must not write through. A different target cannot collide, and
+   # the service's own read-only mount stays as it is.
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/out/jobs/20260905-125257-3a448b --slot=tape-9x16 --out=/out
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/out/jobs/20260905-200239-931272 --slot=tape-4x3 --out=/out
+   # Stickers 2 and 3: one frame each, from the two tapes that live here and
+   # must not leave. They are OPTIONAL -- with no `sticker-N.jpg` the manifesto
+   # sentence renders as plain type -- and `--at=` is the second to lift, so
+   # re-run either line with a different value to change the frame.
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/out/jobs/20260905-200239-931272 --slot=tape-4x3 --out=/out --sticker=2 --at=3.0
+   docker compose run --rm -v /opt/timestamp/showcase:/out web node scripts/tapedeck/showcase.mjs --job=/data/out/jobs/20260905-125257-3a448b --slot=tape-9x16 --out=/out --sticker=3 --at=7.0
+   ls -l /opt/timestamp/showcase
+   ```
+
+   The 16:9 hero (`20260905-221822-a32b2a`) was rendered on the development
+   machine, so `hero-16x9.mp4`, `hero-16x9.jpg` and stickers 1 and 4 are
+   produced there and copied up with `scp` into the same directory. Then
+   `TIMESTAMP_SHOWCASE_DIR=/showcase` in `.env.web`, and `docker compose up -d`
+   (the files are checked at boot). A missing file is not an error: the page
+   falls back to a place photograph in that slot.
+
 ## 2. DNS (Cloudflare)
 
 - `A  timestamptapes.com      <server IPv4>` — **DNS only (grey cloud)**.
 - `A  www.timestamptapes.com  <server IPv4>` — DNS only.
 - Leave the `send.timestamptapes.com` records (Resend mail) untouched.
+- **Mail from this domain must be rejectable when it is forged.** Every
+  customer of this service has a face on file, and "your tape is ready, sign
+  in here" from `support@timestamptapes.com` is the phishing lure the brand
+  hands an attacker. With DMARC at `p=none` and the apex SPF ending `~all`,
+  a forged message is delivered (at worst to spam); nothing rejects it.
+  - `TXT  _dmarc.timestamptapes.com` →
+    `v=DMARC1; p=quarantine; sp=quarantine; adkim=r; aspf=r; rua=mailto:support@timestamptapes.com`
+  - `TXT  timestamptapes.com` (the apex SPF) → change the trailing `~all` to
+    `-all`. Outbound mail is From the `send.` subdomain, which has its own
+    SPF and DKIM and aligns under relaxed mode, so legitimate mail passes.
+  - Read the aggregate reports that arrive at `support@` for a week. If they
+    show only Resend passing, move `p=quarantine` to **`p=reject`**. Checked
+    2026-09-03: the record was `p=none`.
 
 Grey cloud matters at first boot: Caddy proves domain control over port 80 to
 issue its certificates, and the proxy in front complicates that on day one.
@@ -108,7 +192,7 @@ prerequisite.
 |---|---|
 | **Supabase** (Auth → URL Configuration) | Site URL → `https://timestamptapes.com`; add `https://timestamptapes.com/**` to Redirect URLs. KEEP the `http://localhost:3000/**` entry — local dev still signs in. |
 | **Google** Cloud Console | Verify only, change nothing: the authorized redirect URI is Supabase's callback (`https://<ref>.supabase.co/auth/v1/callback`), and in this architecture Google never sees our URL at all. |
-| **Stripe** | New webhook endpoint `https://timestamptapes.com/api/stripe/webhook` (event: `checkout.session.completed`); paste its signing secret into the server `.env` as `STRIPE_WEBHOOK_SECRET`. **This first deploy stays in TEST mode and that is the plan** — smoke step 5 proves the whole path without a penny moving. Going live is a separate exercise on a separate account: see "Going live on Stripe" below. |
+| **Stripe** | New webhook endpoint `https://timestamptapes.com/api/stripe/webhook` (events: `checkout.session.completed` and `checkout.session.async_payment_succeeded`); paste its signing secret into the server `.env` as `STRIPE_WEBHOOK_SECRET`. **This first deploy stays in TEST mode and that is the plan** — smoke step 5 proves the whole path without a penny moving. Going live is a separate exercise on a separate account: see "Going live on Stripe" below. |
 | **TIMESTAMP_PUBLIC_URL** | `https://timestamptapes.com` in the server `.env` — it is where Stripe sends the buyer back and what the OAuth state cookie lives on; the bound address is wrong here in ways that only fail at the callback. |
 | **DNS** | §2 above. Nothing else: `support@timestamptapes.com` already receives, through Cloudflare Email Routing to the owner's Gmail (2026-08-30, §42A — MX and SPF verified from the authoritative nameserver and from public resolvers, and a real message logged as Forwarded). Catch-all is deliberately OFF, so mail to a mistyped address bounces to its sender rather than vanishing. |
 
@@ -133,6 +217,10 @@ prerequisite.
    during a friends-only launch. **Do not skip this on the assumption that an
    unlinked site is unfindable** — the TLS certificate publishes the hostname
    to Certificate Transparency logs the moment Caddy issues it.
+9. `https://timestamptapes.com/showcase/hero-16x9.mp4` with a
+   `Range: bytes=0-99` header answers 206 and
+   `Cache-Control: public, max-age=86400`; the landing's hero plays muted;
+   `/showcase/anything-else` is 404.
 
 ### Going live on Stripe
 
@@ -197,15 +285,33 @@ job is self-healing if the directory is ever lost.
 ```bash
 crontab -e
 # 03:10 nightly; keep two weeks
-10 3 * * * install -d -o 1000 -g 1000 /var/backups/timestamp && cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14 >> /var/log/timestamp-backup.log 2>&1
+10 3 * * * { install -d -m 700 /var/backups/timestamp && chown 1000:1000 /var/backups/timestamp && cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14 ; } >> /var/log/timestamp-backup.log 2>&1
 ```
+
+**TWO THINGS IN THAT LINE ARE SCAR TISSUE AND MUST NOT BE TIDIED AWAY.**
+
+**`chown` AND NOT `install -o 1000`.** GNU `install` resolves `-o` through the
+passwd database, and a fresh Ubuntu cloud image has no user with uid 1000 — so
+`install -d -o 1000` fails `invalid user: '1000'` on every run. `chown` takes a
+bare numeric id and does not consult passwd. This shipped in the runbook from
+2026-09-01 to 2026-09-05 and the nightly backup did not run once in that time.
+
+**THE BRACES, WHICH ARE THE HALF THAT MATTERS.** In `A && B >> log 2>&1` the
+redirect binds to `B` alone. The chain above died at `A`, so its stderr went to
+cron's mail — discarded, because no MTA is installed — and
+`/var/log/timestamp-backup.log` was never created at all. **An absent log reads
+exactly like a quiet success**, which is how four nights passed unnoticed with a
+real payment in the middle of them. The braced group puts the whole chain inside
+the redirect, so any failure, including one in the setup, lands in the log.
+
+`test/ops-backup.test.js` asserts both properties against this file.
 
 **RUN IT ONCE BY HAND BEFORE TRUSTING THE SCHEDULE** — everything after
 `crontab -e` in the line above is invisible until 03:10, and a backup that has
 never been observed working is not a backup:
 
 ```bash
-install -d -o 1000 -g 1000 /var/backups/timestamp
+install -d -m 700 /var/backups/timestamp && chown 1000:1000 /var/backups/timestamp
 cd /opt/timestamp && docker compose run --rm -v /var/backups/timestamp:/backups \
   web node scripts/ops/backup-cli.mjs --root=/data --to=/backups --keep=14
 find /var/backups/timestamp -type f          # accounts/, _index/, _free-tapes.json, backup.json
@@ -214,6 +320,17 @@ find /var/backups/timestamp -type f          # accounts/, _index/, _free-tapes.j
 `/var/backups/timestamp` is on the host filesystem, outside the volume —
 `backup-cli` refuses a destination inside the root it protects. For offsite,
 rsync that directory anywhere; it contains no media and no faces.
+
+**`-m 700` ON THE DESTINATION AND OWNER-ONLY MODES ON EVERYTHING INSIDE IT.**
+The backup holds every account's email, ledger and record on the host, where
+`0755`/`0644` -- the umask defaults -- is every local user on the box.
+`backup-cli` writes each directory `0700` and each file `0600` itself (a test
+pins it on Linux); the `-m 700` is for the parent it cannot see.
+
+**`--keep=14` IS A NUMBER THE PRIVACY PAGE STATES.** `/privacy` tells a person
+that a deleted account can survive in a backup for up to 14 days. Change the
+keep count here and that sentence in `scripts/web/views.mjs` in the same
+commit, or the page promises something the cron does not do.
 
 **IT DOES NOT COVER THE THREE `.env` FILES**, deliberately (§7 splits them and
 they hold every live credential). Only Hetzner's disk-level backup in §1 would

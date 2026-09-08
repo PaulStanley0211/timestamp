@@ -140,10 +140,16 @@ const MUST_BE_INCLUDED = [
   'scripts/preflight/doctor.mjs',
   'config/render.json',
   'config/credits.json',
-  'presets/places/ostsee-strand.json',
+  'presets/places/amalfi-afternoon.json',
   'assets/fonts/tape-osd.ttf',
   'assets/fonts/OFL.txt',
-  'assets/places/ostsee-strand.jpg',
+  'assets/fonts/anton.woff2',
+  'assets/fonts/anton.ttf',
+  'assets/fonts/inter-400.woff2',
+  'assets/fonts/inter-600.woff2',
+  'assets/fonts/OFL-anton.txt',
+  'assets/fonts/OFL-inter.txt',
+  'assets/places/amalfi-afternoon.jpg',
 ];
 
 test('the image excludes every credential and every photograph of a real person', () => {

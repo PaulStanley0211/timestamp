@@ -1,0 +1,54 @@
+{
+  "_comment": "The first of the four famous places (2026-09-04, section 60I), and the one whose card decided its scene. It was written as a brownstone side street in autumn -- the rule being that a famous place is a street, not a sign, because BASE_NEGATIVES forbid lettering -- and the owner asked for Times Square itself, signs and all. He was right that the square is the picture people forward; the rule survives one layer down: the tape prompt still forbids readable words and brand logos, so on the tape the billboards are lit colour panels rather than adverts, and the negatives say so twice. The card (assets/places/new-york-times-square.jpg) shows the square at night with nobody in it, a police kiosk and a hot-dog cart on the island, and this preset describes exactly that.",
+  "id": "new-york-times-square",
+  "label": "Times Square, at night",
+  "climate": "cool",
+  "timeOfDay": "night",
+  "prompt": {
+    "_comment": "The billboards are the light source and the era at once: in 2003 they were painted panels and early video screens stacked up the wedge, not one wraparound LED skin, and a 2003 holiday tape of the square is nothing but them. The police kiosk on the island and the cart under its umbrella are what put a person somewhere specific in the square rather than in front of a backdrop.",
+    "scene": "Times Square in New York at night, the wedge of buildings above the crossing stacked with lit billboards and glowing screens, yellow cabs waiting at the lights, a police kiosk on the traffic island, a hot-dog cart under a red and white umbrella, wet pavement and crosswalk stripes holding every light",
+    "light": "the whole square lit from above by the billboards, cold white from the screens and warm red from the signs mixing on the wet ground, sodium street lamps under it all, the sky above gone to black",
+    "lens": "wide from the pavement looking up the square, the far end going soft behind the glare, every screen drawing a hard block of light, a little barrel bend at the edges",
+    "framing": "chest-up on the traffic island, the billboards stacked up behind and the cabs passing",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "turning on the spot to take it all in, one arm half raised towards the tallest screen, half turned back to the camera",
+    "eraProps": "a yellow cab with a roof light, a payphone bank on the corner, a newspaper vending box, a hot-dog cart under a striped umbrella, a disposable camera with a wind-on wheel"
+  },
+  "negatives": [
+    "billboards with readable words",
+    "brand logos",
+    "modern LED wraparound screens",
+    "smartphone",
+    "crowds",
+    "modern cars"
+  ],
+  "motionHint": "the screens flicker through their loops, cabs cross the far side of the square, and the wet ground holds and loses each light as they pass",
+  "lookOverride": {
+    "_comment": "The most light sources in the menu and every one of them a blown highlight on wet ground, so halation is open furthest here, level with Tokyo. Saturation above the base because the square IS its colour -- red and blue and white panels -- with only a small warm push, since the billboards are cooler than sodium. Grain near the top of the menu: a dark scene shot on a consumer camcorder at night was mostly grain.",
+    "grade": {
+      "cbRedMid": 0.05,
+      "cbBlueMid": -0.04,
+      "saturation": 0.88
+    },
+    "optics": {
+      "bloomStrength": 0.58
+    },
+    "tape": {
+      "grainStrength": 25
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "Traffic on all sides at once, heard in the middle of a square: louder and wider-band than a side street, with the quick shallow swell of cabs pulling away from a light in waves, and a short echo off the buildings that wall the square in on three sides.",
+        "amplitude": 0.34,
+        "color": "brown",
+        "highpass": 200,
+        "lowpass": 900,
+        "volume": 0.22,
+        "swellHz": 0.3,
+        "swellDepth": 0.35,
+        "echoDelayMs": 110,
+        "echoDecay": 0.3
+      }
+    }
+  }
+}

@@ -47,6 +47,10 @@ services:
       - .env.web
     volumes:
       - data:/data
+      # The owner's tapes, produced on the box by scripts/tapedeck/showcase.mjs
+      # into a directory OUTSIDE the repository, read-only, web only. Neither
+      # the worker nor caddy has any reason to read a face on disk.
+      - /opt/timestamp/showcase:/showcase:ro
     healthcheck:
       # node is the only runtime in the image; curl and wget are not installed.
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((r)=>r.json()).then((b)=>process.exit(b.ok?0:1)).catch(()=>process.exit(1))"]

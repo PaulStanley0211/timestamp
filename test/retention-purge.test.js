@@ -398,6 +398,75 @@ test('purgeJobMedia reports a deletion it could not perform, rather than countin
   assert.equal(result.filesDeleted, 7, 'eight files, one refused');
 });
 
+/** A directory that cannot be LISTED is not a directory that is empty. The
+ *  existing test injects a refusing `rmSync`; this one refuses one level up,
+ *  at `readdirSync`, which is the read every deletion here starts from. Before
+ *  it, an EACCES on `input/` produced `errors: []`, `photosDeleted: 0` and a
+ *  200 telling a person their photograph was gone. */
+test('purgeJobMedia reports a directory it could not list, rather than treating it as empty', () => {
+  const root = tmpRoot();
+  const { paths } = seedJob(root, { ageDays: 0 });
+
+  const refused = {
+    ...fs,
+    readdirSync(dir, opts) {
+      if (String(dir) === paths.input) {
+        const err = new Error(`EACCES: permission denied, scandir '${dir}'`); err.code = 'EACCES'; throw err;
+      }
+      return fs.readdirSync(dir, opts);
+    },
+  };
+
+  const result = purgeJobMedia(paths, { fsImpl: refused });
+
+  assert.equal(result.photosDeleted, 0, 'nothing under input/ was touched');
+  assert.ok(fs.existsSync(`${paths.input}/photo.jpg`), 'and the photograph really is still there');
+  const listing = result.errors.filter((e) => e.path === paths.input);
+  assert.equal(listing.length, 1, `the unlistable directory is reported once: ${JSON.stringify(result.errors)}`);
+  assert.equal(listing[0].code, 'EACCES');
+  // The rest of the job was still purged: one unreadable directory does not
+  // excuse the stills, the segments and the tape.
+  assert.equal(fs.existsSync(paths.video), false, 'the tape was still deleted');
+  assert.equal(fs.existsSync(`${paths.stills}/still-01.png`), false, 'the stills were still deleted');
+});
+
+test('a directory that is simply absent is still the goal state, not an error', () => {
+  const root = tmpRoot();
+  const { paths } = seedJob(root, { ageDays: 0 });
+  fs.rmSync(paths.input, { recursive: true, force: true });
+
+  const result = purgeJobMedia(paths);
+
+  assert.deepEqual(result.errors, [], 'ENOENT is the one code that means "already gone"');
+  assert.equal(result.photosDeleted, 0);
+});
+
+test('the retention sweep names a photo directory it could not list, instead of skipping it in silence', () => {
+  const root = tmpRoot();
+  const { jobId, paths } = seedJob(root, { ageDays: 10 });
+
+  const refused = {
+    ...fs,
+    readdirSync(dir, opts) {
+      if (String(dir) === paths.input) {
+        const err = new Error(`EIO: i/o error, scandir '${dir}'`); err.code = 'EIO'; throw err;
+      }
+      return fs.readdirSync(dir, opts);
+    },
+  };
+
+  const result = sweepRetention({
+    root, retention: { photoDays: 7, jobDays: 30 }, nowImpl: NOW, dryRun: false, fsImpl: refused,
+  });
+
+  assert.equal(result.photosDeleted, 0);
+  assert.ok(fs.existsSync(`${paths.input}/photo.jpg`), 'the photograph is still there');
+  const mine = result.errors.filter((e) => e.jobId === jobId);
+  assert.equal(mine.length, 1, `the sweep must say so: ${JSON.stringify(result.errors)}`);
+  assert.equal(mine[0].code, 'EIO');
+  assert.equal(mine[0].action, 'photo');
+});
+
 test('a clean purge reports no errors, so the field is a signal rather than noise', () => {
   const root = tmpRoot();
   const { paths } = seedJob(root, { ageDays: 0 });

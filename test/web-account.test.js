@@ -115,6 +115,16 @@ test('GET /account shows the signed-in email, the export link, and a deletion fo
   assert.match(html, /name="csrf" value="/, 'the deletion form must carry the anti-forgery pair');
 });
 
+test('GET /account translates the balance into tapes, from the same price the order form charges', async (t) => {
+  // The sentence is derived from the cheapest offered size, which the server
+  // reads off the same seam that prices an order -- so a repriced tape moves
+  // this sentence by itself, and a page with no price says only the count.
+  const s = await startSignedIn(t);
+  const html = await (await getPage(`${s.base}/account`, s.cookie)).text();
+  assert.match(html, /\d+ credits left\. (Enough for \d+ more tapes? at \d+p|Not enough for another tape at \d+p)\./,
+    'the balance is not translated into tapes');
+});
+
 test('the signed-in nav gains an Account link; the signed-out nav does not', async (t) => {
   const s = await startSignedIn(t);
   const signedIn = await (await getPage(`${s.base}/`, s.cookie)).text();

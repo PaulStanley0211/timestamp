@@ -1,0 +1,54 @@
+{
+  "_comment": "The second famous place (2026-09-04, section 60I), and the darkest scene in the menu now that the car park has gone. It was written as a lantern-lit back street; the owner asked for the city as everybody knows it, and the card (assets/places/tokyo-night.jpg) is a wide crossing at night under lit signboards, empty, with a vending machine, a phone box and a bicycle on the corner. This preset describes that card. The rule every famous place follows here survives one layer down: the tape prompt forbids readable characters and brand logos, so the signboards are lit panels on the tape rather than words.",
+  "id": "tokyo-night",
+  "label": "Tokyo, at night",
+  "climate": "mild",
+  "timeOfDay": "night",
+  "prompt": {
+    "_comment": "Two light sources that do not match -- the cold white of the signboards from above and the warm shopfronts at ground level -- is the same trick the kitchen preset plays with a bulb and a window, and it is what makes a night street read as real rather than lit for a shoot. The wet asphalt is doing the work a second light would: every sign appears twice.",
+    "scene": "a wide crossing in Tokyo at night, the buildings around it faced with lit signboards and one big glowing screen, white crosswalk stripes across empty wet asphalt, a lit drinks vending machine and a phone box on the corner, a bicycle with a front basket leaning on a pole, a tangle of overhead lines above the traffic light",
+    "light": "the signboards and the screen are the main source, cold white with red and pink spilling down the fronts, warm light from the shopfronts at ground level, the sky above gone to black",
+    "lens": "wide from the kerb across the crossing, the far corner going soft behind the signs, every light drawing a hard point, a little barrel bend at the edges",
+    "framing": "chest-up on the kerb beside the vending machine, the crossing and the lit corner behind",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "waiting at the light with one hand resting on the bicycle's handlebar, half turned back at being called",
+    "eraProps": "a flip phone with a dangling charm, a lit drinks vending machine, a phone box with a folding door, a clear plastic umbrella hooked on a bicycle handlebar, a folded paper map"
+  },
+  "negatives": [
+    "signboards with readable characters",
+    "brand logos",
+    "modern LED screens",
+    "smartphone",
+    "crowds",
+    "daylight"
+  ],
+  "motionHint": "the signboards flicker on and off in turn, a taxi crosses the far side of the crossing, and the wet asphalt holds and loses each light as it moves",
+  "lookOverride": {
+    "_comment": "Lit signboards are cooler than paper lanterns, so the warm push is smaller than the first draft of this preset carried, and halation is open nearly as far as Times Square: every sign and the vending machine's front are blown highlights on wet ground. The most grain in the menu, because the scene is dark without being flat.",
+    "grade": {
+      "cbRedMid": 0.05,
+      "cbBlueMid": -0.04,
+      "saturation": 0.86
+    },
+    "optics": {
+      "bloomStrength": 0.56
+    },
+    "tape": {
+      "grainStrength": 26
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "A city at night heard from a kerb: the hum of the vending machine and distant traffic as one low bed, a slow shallow swell for the taxi the motionHint sends across, and a short echo because the fronts around a crossing are close. Quieter than the car park was -- the crossing in the card is empty, and the point of the picture is that nothing much is happening under all that light.",
+        "amplitude": 0.24,
+        "color": "brown",
+        "highpass": 200,
+        "lowpass": 1400,
+        "volume": 0.16,
+        "swellHz": 0.2,
+        "swellDepth": 0.35,
+        "echoDelayMs": 120,
+        "echoDecay": 0.3
+      }
+    }
+  }
+}

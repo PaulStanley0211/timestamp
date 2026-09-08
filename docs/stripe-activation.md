@@ -121,9 +121,11 @@ Activation does not make anything buyable. In order:
 2. **Paste the live ids** into `config/credits.json`, commit, deploy.
 3. **`STRIPE_SECRET_KEY`** on the server becomes the live key.
 4. **A new webhook endpoint** on the live account →
-   `https://timestamptapes.com/api/stripe/webhook`, event
-   `checkout.session.completed`; its signing secret becomes
-   `STRIPE_WEBHOOK_SECRET`.
+   `https://timestamptapes.com/api/stripe/webhook`, events
+   `checkout.session.completed` AND `checkout.session.async_payment_succeeded`
+   (Managed Payments controls the payment methods and may offer one that
+   settles later; its money arrives on the second event); its signing secret
+   becomes `STRIPE_WEBHOOK_SECRET`.
 5. **Only a live-mode event grants credits** — that is deliberate (CLAUDE.md
    §28 item 1), so a test event against the live endpoint moves nothing and
    that is not a fault.

@@ -1,13 +1,15 @@
 {
-  "_comment": "The word 'winter' is allowed here and the schema deliberately does not ban season words: 'padded winter jacket' is a garment category, not a claim about the weather in the frame. The claim about weather lives in climate below, where a machine can read it. Ban the season word and you force an author to describe the same garment worse.",
+  "_comment": "The word 'winter' is allowed here and the schema deliberately does not ban season words: 'padded winter jacket' is a garment category, not a claim about the weather in the frame. The claim about weather lives in climate below, where a machine can read it. Ban the season word and you force an author to describe the same garment worse. REWORDED 2026-09-05 AND THE REASON IS THE FACE. This read 'a fur-trimmed hood and elasticated cuffs, zipped to the chin over a knitted scarf' -- a hood, a raised collar and a scarf, which between them are the only things this whole menu put in front of the subject's face. The uploaded photograph is the identity anchor and the entire product is that it looks like you; a garment that covers the jaw is competing with the one thing being sold. Zipped to the chest over a jumper keeps the same cold-weather reading with nothing across the face.",
   "id": "winterjacke",
-  "label": "Padded winter jacket",
+  "label": "Padded jacket",
   "climate": ["cold", "cool"],
-  "wardrobe": "a quilted padded jacket in deep blue with a fur-trimmed hood and elasticated cuffs, zipped to the chin over a knitted scarf",
+  "wardrobe": "a quilted padded jacket in deep blue with elasticated cuffs, zipped to the chest over a plain knitted jumper and stonewashed straight-leg jeans",
   "negatives": [
     "modern puffer jacket",
     "reflective panels",
     "brand logo",
-    "technical shell"
+    "technical shell",
+    "hood raised over the head",
+    "collar or scarf across the chin"
   ]
 }

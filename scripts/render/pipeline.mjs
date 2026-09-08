@@ -82,7 +82,7 @@ import { buildAudioFilter, clampAudio } from '../audio/bed.mjs';
 import {
   muxedArgs, joinGraphs, fileLoudnessArgs, parseIntegratedLufs, lufsVerdict,
 } from '../audio/mix.mjs';
-import { composeStillPrompt, composeMotionPrompt, composeReferencePrompt, DEFAULT_ERA } from '../compose/prompt.mjs';
+import { composeStillPrompt, composeMotionPrompt, composeReferencePrompt, DEFAULT_ERA, DEFAULT_ARC } from '../compose/prompt.mjs';
 import { deriveSeed } from '../compose/seed.mjs';
 import { loadCatalog, getPlace, getOutfit, checkCompatibility } from '../catalog/catalog.mjs';
 import { resolveFont } from '../preflight/doctor.mjs';
@@ -268,6 +268,11 @@ const STATIC = Object.freeze({
   /** No image classifier exists in this repo. `moderateJob` records a warning
    *  saying so rather than a silent pass; see safety/moderate.mjs. */
   imageModerateImpl: null,
+  /** No face detector either, by default. `faceGate` then runs the permissive
+   *  check it has always run and records `confidence: 'unverified'`, so a tape
+   *  made with this unset says truthfully that no face was ever verified.
+   *  `safety/face-detect-aws.mjs` is the implementation; worker-cli builds it. */
+  faceDetectImpl: null,
 });
 
 function makeResolver(overrides = {}) {
@@ -531,7 +536,7 @@ async function stepIntake(ctx) {
   }
 
   const photo = await ingestPhoto(staged, `${paths.input}/photo.jpg`);
-  const gate = await faceGate(photo.path);
+  const gate = await faceGate(photo.path, { detectImpl: await dep('faceDetectImpl') });
   if (!gate.ok) {
     throw new PipelineError(
       `the face gate refused ${slash(photo.path)}: ${gate.reason} (impl ${gate.impl})`,
@@ -556,7 +561,22 @@ async function stepIntake(ctx) {
     photo: { ...job.input.photo, rotated: photo.rotated, stripped: photo.stripped },
     // Recorded by name so that every job rendered before a real detector exists
     // says honestly, in its own manifest, that no face was ever verified.
-    faceGate: { ok: gate.ok, reason: gate.reason, confidence: gate.confidence, impl: gate.impl },
+    // `faces` and `largestFaceFraction` are absent on the permissive gate and
+    // present once a detector is configured. Named here rather than spread,
+    // because a spread would carry whatever a future detector decides to
+    // return -- but named means a field a detector adds and this line does not
+    // know about reads back undefined for ever, which is `entriesOf` in
+    // credits.mjs and cost an hour once already.
+    faceGate: {
+      ok: gate.ok,
+      reason: gate.reason,
+      confidence: gate.confidence,
+      impl: gate.impl,
+      ...(gate.faces === undefined ? {} : { faces: gate.faces }),
+      ...(gate.largestFaceFraction === undefined
+        ? {}
+        : { largestFaceFraction: gate.largestFaceFraction }),
+    },
     place: null,
   };
 
@@ -776,6 +796,11 @@ async function stepCompose(ctx) {
       place, outfit, era: DEFAULT_ERA,
       placePhoto: Boolean(job.input.place.photoPath),
       seconds: segments.reduce((n, seg) => n + seg.seconds, 0),
+      // The arc rides the input like `direct` does -- the manifest is the only
+      // channel to the worker -- and is frozen into this prompt here, so a
+      // resume sends what the manifest describes. Absent means the composer's
+      // default, which is what every web order gets.
+      arc: job.input.arc ?? DEFAULT_ARC,
     })
     : null;
   const stillPrompt = direct
@@ -1014,11 +1039,82 @@ async function stepSelect(ctx) {
 
 /** 7. animate -- PAID, once per segment, each started from the previous
  *  segment's final frame. */
+/**
+ * The frozen segment plan, checked against the plan this image derives.
+ *
+ * THE MANIFEST IS THE WORKER'S ONLY TRUST ANCHOR AND IT LIVES ON A VOLUME THE
+ * WEB PROCESS CAN WRITE. The secrets are split per container (§51E) so that a
+ * compromise of the internet-facing process does not hand over the render
+ * budget -- but the worker reads its instructions from `/data`, which both
+ * processes share as the same uid. `loadJob` checks a schema version and an
+ * id; `deepFreeze` protects the copy in memory, not the file. The direct-mode
+ * guard in `stepCompose` is the only bound on how many paid calls a job
+ * makes, and a resumed job skips compose. So a manifest with compose marked
+ * done and `resolved.segments` padded to N entries was N paid calls, made in
+ * sequence, with no owner record needed and nothing between the file and
+ * the bill.
+ *
+ * The check is a RE-DERIVATION rather than a read. `planSegments` is run
+ * again from the config shipped inside the image -- `ctx.imageCfg`, never
+ * `job.resolved.cfg`, which is the same volume -- and the frozen plan must
+ * agree on the count, on every segment's length, on the total, and on direct
+ * mode being exactly one call. It runs before the loop, so a disagreement
+ * costs nothing. The frozen segment's `size` is deliberately NOT compared:
+ * the raster is what the customer ordered and paid for, it is bounded by the
+ * provider's own table, and re-deriving it here would reopen the §26 shape
+ * where the animate step second-guesses what compose froze.
+ *
+ * A resumed job that was frozen honestly passes this in every mode, because
+ * the same function produced both plans from the same numbers.
+ */
+function assertFrozenPlan({ job, provider, imageCfg, segmentMode }) {
+  const frozen = Array.isArray(job.resolved?.segments) ? job.resolved.segments : [];
+  const expected = planSegments({
+    cfg: imageCfg, capabilities: provider.capabilities, jobId: job.jobId, mode: segmentMode,
+    size: frozen[0]?.size ?? null,
+  });
+  const contract = imageCfg.durationSeconds;
+  const frozenSeconds = frozen.reduce((n, s) => n + (Number.isFinite(s?.seconds) ? s.seconds : 0), 0);
+  const problems = [];
+  if (frozen.length !== expected.length) {
+    problems.push(`${frozen.length} segments on the manifest against ${expected.length} planned`);
+  }
+  if (frozenSeconds !== contract) {
+    problems.push(`${frozenSeconds}s on the manifest against the ${contract}s contract`);
+  }
+  for (let i = 0; i < Math.min(frozen.length, expected.length); i += 1) {
+    if (frozen[i]?.index !== expected[i].index || frozen[i]?.seconds !== expected[i].seconds) {
+      problems.push(`segment ${i + 1} is ${frozen[i]?.seconds}s (index ${frozen[i]?.index}) against ${expected[i].seconds}s (index ${expected[i].index})`);
+      break;
+    }
+  }
+  if (job.input.direct === true && frozen.length !== 1) {
+    problems.push(`direct mode is one call and the manifest holds ${frozen.length}`);
+  }
+  if (problems.length === 0) return;
+  throw new PipelineError(
+    `the frozen segment plan does not match the plan this build derives: ${problems.join('; ')}. `
+    + 'A manifest is read from a volume the web process can write, so the paid step re-derives the plan '
+    + 'from the config shipped with the code before it spends, and refuses disagreement rather than '
+    + 'trusting the file. Nothing was submitted.',
+    {
+      code: 'PLAN_MISMATCH',
+      step: 'animate',
+      detail: { frozen: frozen.length, expected: expected.length, frozenSeconds, contract },
+    },
+  );
+}
+
 async function stepAnimate(ctx) {
-  const { job, paths, provider, cfg, dep, log, wasRunning } = ctx;
+  const { job, paths, provider, cfg, dep, log, wasRunning, imageCfg, segmentMode } = ctx;
   const r = job.resolved;
   const runFfmpegImpl = await dep('runFfmpeg');
   const step = job.steps.find((s) => s.name === 'animate');
+
+  // Before anything else in this step, and before the intent records that
+  // make a paid call resumable: a plan the image does not agree with is not
+  // one to resume.
+  assertFrozenPlan({ job, provider, imageCfg: imageCfg ?? cfg, segmentMode });
 
   // DIRECT MODE HAS NO SELECTION, and that is the whole point of it. The
   // references are the intake photographs themselves: the face always, and the
@@ -1737,6 +1833,12 @@ export async function runPipeline(job, {
 
     const ctx = {
       job, paths, root: job.root ?? root, cfg: job.resolved?.cfg ?? renderCfg, baseLook,
+      // `cfg` above is the FROZEN config when a job has one, which is right for
+      // reproducing a render and wrong for deciding how many paid calls to
+      // make: the frozen copy lives on the same volume as the manifest. This
+      // is the config the running code was shipped with, and it is what the
+      // paid step checks the frozen plan against before it spends.
+      imageCfg: renderCfg,
       provider, dep, log, sources, stopAfter, stillIndex, signal, segmentMode,
       stillModelOverride, videoModelOverride, allowUnverifiedModel,
       catalog, wasRunning, step: name, emit, checkCancelled,
@@ -1933,6 +2035,7 @@ export async function dryRun({
         place, outfit, era: DEFAULT_ERA,
         placePhoto: Boolean(input.place.photoPath),
         seconds: segments.reduce((n, seg) => n + seg.seconds, 0),
+        arc: input.arc ?? DEFAULT_ARC,
       })
       : null,
     calls,

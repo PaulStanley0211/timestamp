@@ -332,6 +332,39 @@ test('with no isClaimed answer the deletion fails closed, like the careless call
   assert.ok(loadAccount({ root, accountId: account.accountId }));
 });
 
+/** An ownership index that cannot be LISTED is not one that is empty. Before
+ *  this test, an EACCES on `out/owners/<accountId>` read as "no jobs": the
+ *  upstream identity was deleted, zero jobs were purged, and the account
+ *  record went -- leaving job directories full of faces under an owner that
+ *  no longer existed, which neither the sweep nor a person could ever trace
+ *  back. A read that fails for any reason but absence refuses the whole
+ *  deletion before step 1, so nothing has happened and the retry is clean. */
+test('an ownership index that cannot be listed refuses the deletion before anything is touched', async (t) => {
+  const root = makeRoot(t);
+  const account = await signUp(root, { email: 'unlistable@example.com', supabaseUserId: 'uuid-unlistable-1' });
+  const job = seedOwnedJob(root, account.accountId);
+  const supabase = fakeSupabase(null);
+  const ownersDir = `${root}/out/owners/${account.accountId}`;
+  const fsImpl = {
+    ...fs,
+    readdirSync(dir, opts) {
+      if (String(dir).split(path.sep).join('/') === ownersDir) {
+        const err = new Error(`EACCES: permission denied, scandir '${dir}'`); err.code = 'EACCES'; throw err;
+      }
+      return fs.readdirSync(dir, opts);
+    },
+  };
+
+  await assert.rejects(
+    () => deleteAccountEverywhere({ root, accountId: account.accountId, api, supabase, isClaimed: () => false, fsImpl }),
+    (err) => err.code === 'OWNERS_UNREADABLE' && /EACCES/.test(err.message),
+  );
+  assert.equal(supabase.calls.length, 0, 'the upstream identity must survive a deletion that could not see the jobs');
+  assert.ok(loadAccount({ root, accountId: account.accountId }), 'the account record is untouched');
+  assert.ok(fs.existsSync(jobPaths(root, job.jobId).dir), 'the job is untouched');
+  assert.ok(fs.existsSync(`${jobPaths(root, job.jobId).input}`), 'and so is its photograph');
+});
+
 test('an account with no upstream identity deletes locally and never asks Supabase', async (t) => {
   const root = makeRoot(t);
   const account = await signUp(root, { email: 'local@example.com' });

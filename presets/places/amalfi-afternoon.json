@@ -1,0 +1,52 @@
+{
+  "_comment": "The third famous place (2026-09-04, section 60I), and the one that answers a question the menu could not before: a WARM beach. The out-of-season beach is deliberately a grey October walk, so 'a beach' typed into the box used to lose all its dressing to the neutral skeleton (the climate contradicted the only beach we had). This is the summer one -- pastel houses up a cliff, striped umbrellas, boats on the stones -- and the shoreline is the landmark, not a sign: the whole coast reads as itself from the stacked houses alone.",
+  "id": "amalfi-afternoon",
+  "label": "The Amalfi coast, afternoon",
+  "climate": "warm",
+  "timeOfDay": "afternoon",
+  "prompt": {
+    "_comment": "Hard sun off water is the brightest light in the menu and the houses are meant to blow out -- that is what a consumer camcorder did with a white wall in the sun, and asking for detail in them would ask for the wrong camera. The shade under the umbrellas and inside the arches is what keeps the frame from being one flat glare.",
+    "scene": "a small harbour on the Amalfi coast in the afternoon, pastel houses stacked up the cliff behind it, a pebble beach with rows of striped umbrellas and wooden loungers, wooden fishing boats pulled up on the stones, lemon trees along a terrace wall, the sea flat and deep blue",
+    "light": "hard afternoon sun coming off the water, the white houses almost blown out, deep shadow under the umbrellas and inside the arches, the sea throwing moving light onto the hulls",
+    "lens": "wide with a lot of sea and cliff in it, the near boats sharp and the cliff going soft, the far houses shimmering a little in the heat",
+    "framing": "waist-up on the harbour wall, the stacked houses and the beach behind",
+    "_moment": "What is HAPPENING, not what is in frame. A brief with no action in it is a portrait brief, and the model answers it with a portrait -- squared to the camera, arms hanging, waiting. Somebody caught halfway through something ordinary is what a real snapshot looks like.",
+    "moment": "leaning back against the warm harbour wall, one hand up against the glare, just turning at the sound of the camera",
+    "eraProps": "a scooter with a chrome mirror, a paper cone of fried fish, a disposable camera with a wind-on wheel, a paper cup of gelato with a flat wooden spoon"
+  },
+  "negatives": [
+    "modern yachts",
+    "smartphone",
+    "crowds",
+    "aerial view",
+    "swimming pool",
+    "sunset"
+  ],
+  "motionHint": "the umbrellas lift and settle in the breeze off the sea, the boats rock against the stones, and the light off the water crawls over the hulls and the cliff",
+  "lookOverride": {
+    "_comment": "The most colour in the menu -- pastel walls, striped canvas, a deep blue sea -- so saturation sits above the base rather than below it, with only a small warm push because the light is already warm. Halation open for the sun off the water and the blown white walls. The least grain, level with the out-of-season beach: a bright flat scene shows every grain it is given.",
+    "grade": {
+      "cbRedMid": 0.04,
+      "cbBlueMid": -0.03,
+      "saturation": 0.9
+    },
+    "optics": {
+      "bloomStrength": 0.5
+    },
+    "tape": {
+      "grainStrength": 15
+    },
+    "audio": {
+      "ambience": {
+        "_comment": "Small waves on pebbles inside a harbour, with a light onshore breeze. The same surf-and-wind shape as the out-of-season beach, but a little faster and shallower: sheltered water inside a harbour wall does not roll the way an open beach does, and the lowpass is a touch higher because pebbles hiss where sand does not.",
+        "amplitude": 0.3,
+        "color": "brown",
+        "highpass": 200,
+        "lowpass": 1100,
+        "volume": 0.19,
+        "swellHz": 0.2,
+        "swellDepth": 0.55
+      }
+    }
+  }
+}

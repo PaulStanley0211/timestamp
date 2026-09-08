@@ -73,14 +73,30 @@ import {
   JobError,
 } from '../render/job.mjs';
 import { purgeJobMedia } from '../render/purge.mjs';
-import { loadCatalog } from '../catalog/catalog.mjs';
-import { CONSENT_TEXT, recordConsent } from '../safety/consent.mjs';
+import { loadCatalog, RETIRED_OUTFIT_LABELS, RETIRED_PLACE_LABELS } from '../catalog/catalog.mjs';
+import { CONSENT_TEXT, RETENTION_DEFAULTS, recordConsent } from '../safety/consent.mjs';
 import { LIMITS } from '../intake/photo.mjs';
 import { runFfprobe } from '../ffmpeg/run.mjs';
 
 /** The repo root, for the assets served off disk. Derived from this module's
  *  own location rather than from cwd, so `npm run web` from anywhere finds them. */
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..').split(path.sep).join('/');
+
+/**
+ * The bed's loudness target, read from the look config so the pricing page
+ * states the number the renderer asserts rather than a typed one.
+ *
+ * SEARCHED FOR RATHER THAN ADDRESSED BY PATH: the audio block has moved inside
+ * that file before, and a page that silently stops stating a fact is a worse
+ * failure than one that states it from the wrong key. Null when the config
+ * carries no target at all, and the row is then simply absent.
+ */
+const TARGET_LUFS = (function find(o) {
+  if (!o || typeof o !== 'object') return null;
+  if (Number.isFinite(o.targetLufs)) return o.targetLufs;
+  for (const v of Object.values(o)) { const r = find(v); if (r !== null) return r; }
+  return null;
+}(JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config', 'look', 'base.json'), 'utf8'))));
 
 import { matchRoute, isPublicRoute } from './router.mjs';
 import { boundaryFromContentType, parseMultipart, fileSink, MultipartError } from './multipart.mjs';
@@ -145,12 +161,53 @@ const STILL_FILE_RE = /^still-(\d+)\.(png|jpe?g|webp)$/i;
  *  and the extension is always exactly one of the two named here. */
 const PLACE_MEDIA_RE = /^([A-Za-z0-9-]{1,64})\.(jpg|mp4)$/;
 
+/** The landing page's before/after pair, as a lookup rather than a pattern.
+ *  Which place is being compared lives on disk, not here: swapping it -- for a
+ *  different place, or for a person and their tape -- is replacing two files. */
+const LANDING_IMAGES = Object.freeze({
+  'photo.jpg': 'photo.jpg',
+  'tape.jpg': 'tape.jpg',
+});
+
+/**
+ * THE SHOWCASE: the owner's own tapes, served from a directory OUTSIDE the
+ * repository. Three tapes and four stills carry a real face; the repository
+ * is public and its history is permanent, so none of them is committed.
+ * TIMESTAMP_SHOWCASE_DIR names the directory; an allow-listed name under it
+ * is served through sendFile like a place photograph, and any other name --
+ * or any name whose file is absent -- is a 404. There is no listing.
+ *
+ * The captions live here, beside the names they describe: a file regenerated
+ * from a different tape is a caption to change in the same edit.
+ */
+export const SHOWCASE_FILES = Object.freeze({
+  'hero-16x9.mp4': 'video/mp4', 'hero-16x9.jpg': 'image/jpeg',
+  'tape-9x16.mp4': 'video/mp4', 'tape-9x16.jpg': 'image/jpeg',
+  'tape-4x3.mp4': 'video/mp4', 'tape-4x3.jpg': 'image/jpeg',
+  'sticker-1.jpg': 'image/jpeg', 'sticker-2.jpg': 'image/jpeg',
+  'sticker-3.jpg': 'image/jpeg', 'sticker-4.jpg': 'image/jpeg',
+});
+export const SHOWCASE_SLOTS = Object.freeze({
+  hero: { base: 'hero-16x9', caption: 'Times Square · 2003 · 16:9 · made from one photograph' },
+  tall: { base: 'tape-9x16', caption: 'Times Square · 2003 · 9:16' },
+  fourThree: { base: 'tape-4x3', caption: 'The space centre · 2003 · 4:3' },
+});
+
+/** The web fonts, as a lookup. Which files exist is decided in assets/fonts/;
+ *  this is only the set of names the route will answer to. */
+const FONT_FILES = Object.freeze({
+  'anton.woff2': ['anton.woff2', 'font/woff2'],
+  'anton.ttf': ['anton.ttf', 'font/ttf'],
+  'inter-400.woff2': ['inter-400.woff2', 'font/woff2'],
+  'inter-600.woff2': ['inter-600.woff2', 'font/woff2'],
+});
+
 /** Routes that never look at a session: two static files, an icon, a card image
  *  and the health check. Keeping them out of the auth path means a missing
  *  `scripts/auth/` still serves the stylesheet, and a load balancer still gets
  *  an answer. */
 const NO_SESSION_ROUTES = new Set([
-  'stylesheet', 'font', 'favicon', 'placeImage', 'health', 'robots',
+  'stylesheet', 'font', 'fontFile', 'favicon', 'placeImage', 'showcaseFile', 'robots',
   // STRIPE SENDS NO COOKIE, so resolving a session for it is work that can only
   // fail. Keeping it out of the session path also means a webhook is answered
   // while the sign-in half of the app is degraded -- which matters, because the
@@ -169,6 +226,12 @@ const AUTH_OPTIONAL_ROUTES = new Set([
   'pricingPage', 'homePage',
   // Public prose, but the nav should still say who is signed in.
   'privacyPage', 'termsPage', 'impressumPage',
+  // Public for the uptime monitor, which sends no cookie and gets `ok` and
+  // `degraded`; the full report goes to a session. It used to sit in
+  // NO_SESSION_ROUTES so a degraded accounts module could not take health
+  // down with it -- optional keeps that property (the route answers with
+  // `account: null`) while letting an operator's cookie unlock the detail.
+  'health',
 ]);
 
 /**
@@ -460,6 +523,28 @@ const TAPE_SECONDS = 15;
  * nothing and is already right on the day there is TLS -- deployment must not
  * depend on somebody remembering to add it.
  */
+/**
+ * THE PAGES THIS PRODUCT ASKS TO HAVE INDEXED, and the sentence each one offers
+ * a search result.
+ *
+ * HAND-WRITTEN, NOT DERIVED FROM `ROUTES`. §23's ruling in the other direction:
+ * `renderedPages()` is a hand-written list because a page MISSING from a derived
+ * one is invisible to every check that reads it -- here the danger is the
+ * opposite, a page PRESENT on it that should never have been published, so
+ * deriving from the route table is exactly how `/account` or a job url reaches
+ * Google. A page joins this list because somebody decided it should.
+ *
+ * Every entry is asserted reachable with no session by test/web-api.test.js,
+ * which walks this list against a running server rather than trusting it.
+ */
+const PUBLIC_PAGES = Object.freeze([
+  { path: '/', description: 'Upload one photograph and get back fifteen seconds that look like a camcorder tape from 2003 — warm, grainy, and shot somewhere you choose.' },
+  { path: '/pricing', description: 'What a tape costs, in credits and in plain words. A free tape with a new account, no card, and no subscription.' },
+  { path: '/privacy', description: 'What happens to your photograph, who else ever sees it, and when it is deleted.' },
+  { path: '/terms', description: 'The deal in plain words: what you get, what it costs, and how cancelling and refunds work.' },
+  { path: '/impressum', description: 'Legal notice under section 5 DDG: who operates Timestamp and how to reach them.' },
+]);
+
 const BASE_SECURITY_HEADERS = Object.freeze({
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
@@ -873,6 +958,17 @@ export function createServer({
    */
   publicUrl = process.env.TIMESTAMP_PUBLIC_URL || null,
   assetsRoot = `${REPO_ROOT}/assets`,
+  /**
+   * Where the owner's own showcase tapes live -- OUTSIDE the repository,
+   * because a face is in them and the repository is public. Null is the
+   * state every test runs in and the state a fresh clone boots in: the
+   * landing falls back to a place photograph in each slot.
+   *
+   * Checked once, at construction, against the filesystem as it stood then --
+   * a file copied in after boot is invisible until the next restart, and a
+   * deploy already is one.
+   */
+  showcaseDir = process.env.TIMESTAMP_SHOWCASE_DIR || null,
   nowImpl = () => new Date(),
   logImpl = (line) => process.stderr.write(`${line}\n`),
   /**
@@ -895,6 +991,24 @@ export function createServer({
   }
 
   const auths = sessions ?? createSessions({ root, auth, trustProxy });
+
+  // Checked once, at construction. The runbook copies the files before
+  // `docker compose up`, and a restart is what a deploy already is.
+  const showcasePresent = new Set(showcaseDir
+    ? Object.keys(SHOWCASE_FILES).filter((name) => { try { return fs.statSync(path.join(showcaseDir, name)).isFile(); } catch { return false; } })
+    : []);
+  function showcaseFor() {
+    const url = (name) => (showcasePresent.has(name) ? `/showcase/${name}` : null);
+    const slot = ({ base, caption }) => (url(`${base}.mp4`) && url(`${base}.jpg`)
+      ? { video: url(`${base}.mp4`), poster: url(`${base}.jpg`), caption }
+      : null);
+    return {
+      hero: slot(SHOWCASE_SLOTS.hero),
+      tall: slot(SHOWCASE_SLOTS.tall),
+      fourThree: slot(SHOWCASE_SLOTS.fourThree),
+      stickers: [1, 2, 3, 4].map((n) => url(`sticker-${n}.jpg`)).filter(Boolean),
+    };
+  }
 
   /**
    * Whose request this is.
@@ -1513,6 +1627,9 @@ export function createServer({
         // The shape is what decides whether the raster above is PAL or merely
         // shares its line rate, so the page needs it alongside the numbers.
         aspect: job.input?.aspect ?? null,
+        // And the size, because the status page lists the order as where,
+        // wearing and frame, and the frame is the shape AND the size.
+        resolution: job.input?.resolution ?? null,
       },
       selection: job.selection,
       createdAt: job.createdAt,
@@ -1526,14 +1643,17 @@ export function createServer({
   }
 
   /** A preset id is not a label. The manifest stores the id, which is what the
-   *  pipeline needs; the page shows what the person actually picked. Free text
-   *  has no entry and falls through as itself. */
+   *  pipeline needs; the page shows what the person actually picked. A place
+   *  that has since left the menu keeps the label it had when the tape was
+   *  made (RETIRED_PLACE_LABELS), and so does an outfit
+   *  (RETIRED_OUTFIT_LABELS). Free text has no entry and falls through as
+   *  itself. */
   function labelsOf(job) {
     const place = job.input?.place?.value ?? null;
     const outfit = job.input?.outfit?.value ?? null;
     return {
-      place: cards.places.find((p) => p.id === place)?.label ?? place,
-      outfit: cards.outfits.find((o) => o.id === outfit)?.label ?? outfit,
+      place: cards.places.find((p) => p.id === place)?.label ?? RETIRED_PLACE_LABELS[place] ?? place,
+      outfit: cards.outfits.find((o) => o.id === outfit)?.label ?? RETIRED_OUTFIT_LABELS[outfit] ?? outfit,
     };
   }
 
@@ -1687,6 +1807,16 @@ export function createServer({
     return rows;
   }
 
+  /** The least expensive offered size, at the default shape -- what the
+   *  account page measures a balance against. Null when nothing is on offer,
+   *  so the page states the count alone rather than against a guess. */
+  async function cheapestTape() {
+    const offered = (await resolutionRows()).filter((r) => r.available && Number(r.credits) > 0);
+    if (!offered.length) return null;
+    const least = offered.reduce((a, b) => (Number(b.credits) < Number(a.credits) ? b : a));
+    return { id: least.id, credits: Number(least.credits) };
+  }
+
   /**
    * Which option starts selected.
    *
@@ -1733,6 +1863,28 @@ export function createServer({
     const address = server.address();
     const bound = address && typeof address === 'object' ? address.port : port;
     return `http://${host}:${bound}`;
+  }
+
+  /**
+   * The head tags a search result and a shared link are built from.
+   *
+   * BUILT FROM `publicBase()` FOR THE SAME REASON THE STRIPE RETURN URL IS --
+   * configuration and this server's own socket, never the `Host` header, which
+   * is whatever the client typed. A canonical url taken from a header is a
+   * canonical url an attacker chooses.
+   *
+   * The image is the showcase hero -- a real frame from a real tape -- and it is
+   * OMITTED ENTIRELY when no showcase is configured on this box, rather than
+   * pointing a scraper at a url that 404s. An og:image that does not resolve
+   * renders as an empty card and nothing anywhere goes red.
+   */
+  function pageMeta(pathname) {
+    const base = publicBase();
+    return {
+      description: PUBLIC_PAGES.find((p) => p.path === pathname)?.description ?? null,
+      canonical: `${base}${pathname}`,
+      image: showcasePresent.has('hero-16x9.jpg') ? `${base}/showcase/hero-16x9.jpg` : null,
+    };
   }
 
   /**
@@ -1783,17 +1935,75 @@ export function createServer({
    */
   async function landingPricing() {
     try {
-      const [rows, packs] = await Promise.all([resolutionRows(), packRows()]);
+      const [rows, packs, facts] = await Promise.all([resolutionRows(), packRows(), publicFacts()]);
       const offered = (rows ?? []).filter((r) => r.available && Number.isFinite(r.credits));
       const buyable = (packs ?? []).filter((p) => p.buyable && Number.isFinite(p.priceUSD));
       if (offered.length === 0 || buyable.length === 0) return null;
       const cheapestTape = Math.min(...offered.map((r) => r.credits));
       const pack = buyable.reduce((a, b) => (a.priceUSD <= b.priceUSD ? a : b));
-      return { fromCredits: cheapestTape, packUSD: pack.priceUSD, packCredits: pack.credits };
+      // THE FREE GRANT IS THE PLAN'S OWN NUMBER, not a constant typed on the
+      // page. It has moved four times (16, 42, 21) and every account keeps the
+      // grant that was in force the day it was made, so a landing that states
+      // a different figure from the one a signup actually lands is the §36A
+      // defect in its cheapest form.
+      const freeCredits = (await auths.api()).PLANS?.free?.creditsPerPeriod ?? null;
+      // WHETHER THE SHAPE IS PART OF THE PRICE COMES FROM `publicFacts()`, and
+      // is not recomputed here. It forked from the pricing page's own copy on
+      // 2026-09-06 -- this expression counted every value in a row's
+      // `creditsByAspect`, unfiltered, while the pricing page filtered out
+      // non-finite and zero quotes first, so a row that ever carries one could
+      // make the two public pages state opposite answers to the same FAQ
+      // question. See `publicFacts()`'s own comment for the filter.
+      return {
+        fromCredits: cheapestTape,
+        packUSD: pack.priceUSD,
+        packCredits: pack.credits,
+        freeCredits,
+        sameInEveryShape: facts.sameInEveryShape,
+      };
     } catch (err) {
       logImpl(`[web] the landing price could not be derived: ${err?.message ?? err}`);
       return null;
     }
+  }
+
+  /** The product facts the public pages state, every one read from config or
+   *  a seam. Task 6's pricing page reads the same object. */
+  async function publicFacts() {
+    let qualities = [];
+    let offered = [];
+    try {
+      offered = (await resolutionRows()).filter((r) => r.available);
+      qualities = offered.map((r) => r.id);
+    } catch { qualities = []; offered = []; }
+    return {
+      photoDays: cfg?.retention?.photoDays ?? RETENTION_DEFAULTS.photoDays,
+      jobDays: cfg?.retention?.jobDays ?? RETENTION_DEFAULTS.jobDays,
+      imageProcessor,
+      qualities,
+      shapes: aspectRows().filter((a) => a.available).map((a) => a.id),
+      frames: Math.round((cfg?.durationSeconds ?? 15) * (cfg?.fps ?? 25)),
+      fps: cfg?.fps ?? 25,
+      // THE SHORT EDGE OF THE DELIVERED FILE, which is the one raster this
+      // product controls: every shape holds its short edge, so the delivered
+      // picture is that many lines whichever frame was chosen. The raster the
+      // model is ORDERED at is deliberately not published anywhere -- the
+      // supplier does not always return it.
+      deliveryShortEdge: Math.min(cfg?.delivery?.width ?? 1080, cfg?.delivery?.height ?? 1920),
+      lufs: TARGET_LUFS,
+      // WHETHER THE SHAPE IS PART OF THE PRICE, computed ONCE so `/` and
+      // `/pricing` cannot state different answers to the same FAQ question --
+      // they forked on 2026-09-06 (the pricing page filtered non-finite and
+      // zero quotes out of a row's `creditsByAspect`, `landingPricing()` did
+      // not). Filtered exactly as `tapeCounts` in views-auth.mjs filters the
+      // same field: a shape the pricing refuses has no usable quote, and
+      // counting it as a second price would report a surcharge nobody is
+      // charged. `landingPricing()` reads this field rather than keeping its
+      // own copy; so does the pricing route, through `facts`.
+      sameInEveryShape: offered.every((r) => new Set(
+        Object.values(r.creditsByAspect ?? {}).filter((c) => Number.isFinite(c) && c > 0),
+      ).size <= 1),
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -1996,6 +2206,11 @@ export function createServer({
           places: cards.places,
           pricing: await landingPricing(),
           csrf: token,
+          // Both public facts and neither an account read: which showcase files
+          // exist on this box, and what the config says the product is.
+          showcase: showcaseFor(),
+          facts: await publicFacts(),
+          meta: pageMeta('/'),
         }), setCookie ? { 'Set-Cookie': setCookie } : {});
       }
       const [balance, resolutions, resolution] = await Promise.all([
@@ -2021,6 +2236,27 @@ export function createServer({
     font(req, res) {
       const file = `${assetsRoot}/fonts/tape-osd.ttf`;
       if (!sendFile(req, res, { file, contentType: 'font/ttf', maxAge: 86_400 })) {
+        throw new HttpError(404, 'Not found.', { code: 'NO_FONT' });
+      }
+    },
+
+    /**
+     * The web fonts. A four-entry map rather than a pattern, for placeImage's
+     * reason: the request name is looked up, never validated, so nothing a
+     * caller sends reaches the filesystem even as a rejected candidate. A day,
+     * not a year, for the reason the brand assets give -- these are fixed names.
+     */
+    fontFile(req, res, { params }) {
+      // `Object.hasOwn` rather than a bare lookup, for the reason `showcaseFile`
+      // and the upload sink both give: every object inherits `constructor`,
+      // `toString` and the rest, so a bare lookup answers a name nobody put on
+      // the map with a truthy inherited member -- and the destructuring below
+      // then throws on something that is not a pair, turning a miss into a 500.
+      const name = String(params.file ?? '');
+      const entry = Object.hasOwn(FONT_FILES, name) ? FONT_FILES[name] : null;
+      if (!entry) throw new HttpError(404, 'Not found.', { code: 'NO_FONT' });
+      const [file, contentType] = entry;
+      if (!sendFile(req, res, { file: `${assetsRoot}/fonts/${file}`, contentType, maxAge: 86_400 })) {
         throw new HttpError(404, 'Not found.', { code: 'NO_FONT' });
       }
     },
@@ -2090,6 +2326,49 @@ export function createServer({
       }
     },
 
+    /**
+     * The landing page's before/after pair.
+     *
+     * A TWO-ENTRY MAP RATHER THAN A PATTERN, for `placeImage`'s reason one step
+     * further: there are exactly two files, so the request name is looked up
+     * rather than validated, and nothing a caller sends can reach the
+     * filesystem even as a rejected candidate.
+     *
+     * A DAY, NOT A YEAR. These are fixed names rather than content-hashed ones,
+     * and a year on a fixed name is how a replaced file never arrives -- the
+     * brand assets were set to a year once and a corrected icon sat unfetched
+     * behind it, with no request ever made to reveal the mistake.
+     */
+    landingImage(req, res, { params }) {
+      const file = LANDING_IMAGES[String(params.file ?? '')];
+      if (!file) throw new HttpError(404, 'No such image.', { code: 'NO_LANDING_IMAGE' });
+      if (!sendFile(req, res, {
+        file: `${assetsRoot}/landing/${file}`,
+        contentType: 'image/jpeg',
+        maxAge: 86_400,
+      })) {
+        throw new HttpError(404, 'No such image.', { code: 'NO_LANDING_IMAGE' });
+      }
+    },
+
+    /**
+     * The showcase: an allow-listed name, served from OUTSIDE the repository.
+     *
+     * `Object.hasOwn` rather than a bare lookup -- the same reason `fontFile`
+     * uses it -- so no byte of `params.file` ever becomes a path component,
+     * including via a prototype property name. Absent directory and absent
+     * file answer identically: a 404, because the fallback the page renders
+     * in either case is the same place photograph.
+     */
+    showcaseFile(req, res, { params }) {
+      const name = String(params.file ?? '');
+      const type = Object.hasOwn(SHOWCASE_FILES, name) ? SHOWCASE_FILES[name] : null;
+      if (!type || !showcaseDir) throw new HttpError(404, 'Not found.', { code: 'NO_SHOWCASE' });
+      if (!sendFile(req, res, { file: path.join(showcaseDir, name), contentType: type, maxAge: 86_400, publicCache: true })) {
+        throw new HttpError(404, 'Not found.', { code: 'NO_SHOWCASE' });
+      }
+    },
+
     statusPage(req, res, { params, account }) {
       const job = ownedJob(account, params.id);
       if (job.status === 'done') return redirect(res, `/j/${job.jobId}/result`);
@@ -2110,7 +2389,15 @@ export function createServer({
     resultPage(req, res, { params, account }) {
       const job = ownedJob(account, params.id);
       if (job.status !== 'done') return redirect(res, `/j/${job.jobId}`);
-      return sendHtml(req, res, 200, resultPage({ view: jobView(job), account, labels: labelsOf(job) }));
+      // The rest of the shelf under the tape, never the tape itself, from the
+      // same ownership-indexed read the home page and /videos use.
+      return sendHtml(req, res, 200, resultPage({
+        view: jobView(job),
+        account,
+        labels: labelsOf(job),
+        tapes: shelfFor(account).filter((t) => t.jobId !== job.jobId),
+        retentionDays: cfg?.retention?.jobDays ?? null,
+      }));
     },
 
     // --- accounts --------------------------------------------------------
@@ -2203,8 +2490,14 @@ export function createServer({
      */
     async verifyCode(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'verify', verifyPage)) return undefined;
+      // ORIGIN BEFORE THE LIMITER, on this and on every credential post. A
+      // post that cannot prove it came from this site costs the server
+      // nothing and must not cost the visitor anything either: counted first,
+      // a foreign page could auto-submit a handful of hidden forms from the
+      // visitor's own browser and spend their budget for them -- refused 403
+      // every time, counted every time, and their own next attempt a 429.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'verify');
+      if (refuseOverLimit(req, res, 'verify', verifyPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const code = String(body.code ?? '').trim();
@@ -2335,8 +2628,9 @@ export function createServer({
      */
     async verifyResend(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'verify', verifyPage)) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'verify');
+      if (refuseOverLimit(req, res, 'verify', verifyPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const csrf = String(body.csrf ?? '');
@@ -2388,8 +2682,9 @@ export function createServer({
      */
     async login(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'login', loginPage)) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'login');
+      if (refuseOverLimit(req, res, 'login', loginPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const password = String(body.password ?? '');
@@ -2560,8 +2855,9 @@ export function createServer({
      */
     async reset(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'reset', resetPage)) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'reset');
+      if (refuseOverLimit(req, res, 'reset', resetPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const csrf = String(body.csrf ?? '');
@@ -2641,8 +2937,9 @@ export function createServer({
      */
     async resetComplete(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'verify', resetCompletePage)) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'resetComplete');
+      if (refuseOverLimit(req, res, 'verify', resetCompletePage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const code = String(body.code ?? '').trim();
@@ -2785,8 +3082,9 @@ export function createServer({
      */
     async authGoogle(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'google', loginPage)) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'login');
+      if (refuseOverLimit(req, res, 'google', loginPage)) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const next = safeNext(body.next);
       const csrf = String(body.csrf ?? '');
@@ -2960,8 +3258,9 @@ export function createServer({
 
     async signup(req, res) {
       if (!sb) return identityUnavailable(req, res);
-      if (refuseOverLimit(req, res, 'signup', (opts) => signupPage({ ...opts, consentText }))) return undefined;
+      // Origin first, then the limiter -- see verifyCode for why.
       if (!sameOriginPost(req)) return refuseForgery(req, res, 'signup');
+      if (refuseOverLimit(req, res, 'signup', (opts) => signupPage({ ...opts, consentText }))) return undefined;
       const body = parseSmallBody(req.headers['content-type'], await readBody(req, 4_096));
       const email = String(body.email ?? '').trim();
       const password = String(body.password ?? '');
@@ -3202,7 +3501,7 @@ export function createServer({
       const [{ token, setCookie }, balance] = await Promise.all([
         auths.csrfIssue(req), balanceOf(account),
       ]);
-      return sendHtml(req, res, 200, accountPage({ account, balance, csrf: token }),
+      return sendHtml(req, res, 200, accountPage({ account, balance, csrf: token, cheapest: await cheapestTape() }),
         setCookie ? { 'Set-Cookie': setCookie } : {});
     },
 
@@ -3291,7 +3590,7 @@ export function createServer({
         const headers = setCookie ? { 'Set-Cookie': setCookie } : {};
         if (wantsHtml(req)) {
           return sendHtml(req, res, status,
-            accountPage({ account, balance, csrf: token, error: message }), headers);
+            accountPage({ account, balance, csrf: token, error: message, cheapest: await cheapestTape() }), headers);
         }
         return sendJson(req, res, status, { error: { status, message, code } }, headers);
       };
@@ -3389,6 +3688,7 @@ export function createServer({
         // while `npm run purge` removed the video after `retention.jobDays`.
         // Reading the window from the same config the purge reads means the
         // promise and the deletion cannot drift apart in a later edit.
+        meta: pageMeta('/pricing'),
         retentionDays: cfg?.retention?.jobDays ?? null,
         // WHERE STRIPE SENDS SOMEBODY BACK TO, AND IT GRANTS NOTHING. This is a
         // query parameter on a public page: anybody can type it, so it may
@@ -3396,6 +3696,9 @@ export function createServer({
         // The credits arrive on the webhook, which is a different request with
         // a signature on it.
         checkout: query?.get('checkout') ?? null,
+        // The same object the landing reads, so the two public pages cannot
+        // state different lengths, shapes, qualities or retention windows.
+        facts: await publicFacts(),
       }));
     },
 
@@ -3411,15 +3714,16 @@ export function createServer({
         retention: cfg?.retention ?? {},
         imageProcessor,
         account: account ?? null,
+        meta: pageMeta('/privacy'),
       }));
     },
 
     async termsPage(req, res, { account }) {
-      sendHtml(req, res, 200, termsPage({ entity: legalEntity, account: account ?? null }));
+      sendHtml(req, res, 200, termsPage({ entity: legalEntity, account: account ?? null, meta: pageMeta('/terms') }));
     },
 
     async impressumPage(req, res, { account }) {
-      sendHtml(req, res, 200, impressumPage({ entity: legalEntity, account: account ?? null }));
+      sendHtml(req, res, 200, impressumPage({ entity: legalEntity, account: account ?? null, meta: pageMeta('/impressum') }));
     },
 
     /**
@@ -3567,15 +3871,31 @@ export function createServer({
         return sendJson(req, res, 200, { ok: true, granted: false, ignored: 'testmode' });
       }
 
-      // ONE EVENT, BECAUSE THERE IS ONE PACK. Everything else is acknowledged
-      // so Stripe stops retrying events this product does not act on.
-      if (event.type !== 'checkout.session.completed') {
+      // TWO EVENTS CARRY MONEY, AND BOTH ARE READ THE SAME WAY. A card pays
+      // before `checkout.session.completed` fires; a method that settles
+      // later -- which Managed Payments may offer, since it controls the
+      // method list and refuses `payment_method_types` on the request --
+      // fires `completed` unpaid and then `async_payment_succeeded` when the
+      // money lands. Each is granted on `payment_status`, keyed on its own
+      // event id, so a redelivery of either is a no-op and an unpaid
+      // completion has granted nothing for the later success to double.
+      // Everything else is acknowledged so Stripe stops retrying events this
+      // product does not act on.
+      const PAYMENT_EVENTS = ['checkout.session.completed', 'checkout.session.async_payment_succeeded'];
+      if (!PAYMENT_EVENTS.includes(event.type)) {
         return sendJson(req, res, 200, { ok: true, granted: false, ignored: event.type });
       }
       const session = event.data?.object ?? {};
       if (session.payment_status !== 'paid') {
-        // A completed session that was not paid is a real Stripe event and not
-        // a payment. Acknowledged, and nothing granted.
+        // A completed session that is not yet paid is a real Stripe event and
+        // not a payment: a delayed method has been chosen and the money is
+        // still on its way. Acknowledged, nothing granted -- and SAID, because
+        // a 200 is the one answer Stripe never retries and never lists. The
+        // line names the event and the session so both can be found in the
+        // Dashboard if the success event never arrives.
+        logImpl(`[web] stripe event ${event.id}: session ${session.id ?? 'unknown'} ${event.type} UNPAID `
+          + `(payment_status ${JSON.stringify(session.payment_status ?? null)}) -- nothing granted; `
+          + 'the money arrives on checkout.session.async_payment_succeeded, which grants it');
         return sendJson(req, res, 200, { ok: true, granted: false, ignored: 'unpaid' });
       }
 
@@ -3644,9 +3964,40 @@ export function createServer({
      * to search engines must not open the artefacts with it -- a tape is
      * somebody's face, and `/j/<id>` urls are unguessable rather than secret.
      */
+    /**
+     * The sitemap, and the ONE thing worth knowing about it: it is a list of
+     * urls this product ASKS to have indexed, so the risk it carries is not a
+     * missing page but a present one. `PUBLIC_PAGES` is hand-written for that
+     * reason and a test walks every entry against a running server with no
+     * session, so an entry that 303s to /login fails rather than ships.
+     *
+     * 404 WHILE INDEXING IS CLOSED, matching `robots.txt`'s two halves: a
+     * sitemap served under `Disallow: /` invites a crawler to index a site
+     * every other signal is telling it to leave alone.
+     */
+    async sitemap(req, res) {
+      if (!indexable) throw new HttpError(404, 'Not found.', { code: 'NO_SITEMAP' });
+      const base = publicBase();
+      const urls = PUBLIC_PAGES.map((p) => `  <url><loc>${base}${p.path}</loc></url>`).join('\n');
+      const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+      res.writeHead(200, {
+        'Content-Type': 'application/xml; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body),
+        'Cache-Control': 'no-store',
+        ...BASE_SECURITY_HEADERS,
+      });
+      res.end(body);
+    },
+
     async robots(req, res) {
+      // THE `Sitemap:` LINE IS HOW A CRAWLER THAT HOLDS NO CONSOLE FINDS THE
+      // FILE. Submitting the sitemap in Search Console tells Google and nobody
+      // else; this line tells everyone, and it outlives the account that did the
+      // submitting. It is gated with the sitemap itself, for the sitemap's own
+      // reason: a `Sitemap:` line under `Disallow: /` hands a crawler the single
+      // url that lists everything the rest of the file is refusing it.
       const body = indexable
-        ? 'User-agent: *\nDisallow: /j/\nDisallow: /api/\nDisallow: /account\n'
+        ? `User-agent: *\nDisallow: /j/\nDisallow: /api/\nDisallow: /account\nSitemap: ${publicBase()}/sitemap.xml\n`
         : 'User-agent: *\nDisallow: /\n';
       res.writeHead(200, {
         'Content-Type': 'text/plain; charset=utf-8',
@@ -3659,15 +4010,34 @@ export function createServer({
 
     // --- API -------------------------------------------------------------
 
-    async health(req, res) {
+    async health(req, res, { account = null } = {}) {
       const ffmpeg = await ffmpegHealth();
       const { stats, lastSeen } = queueHealth();
       const disk = diskHealth();
 
-      sendJson(req, res, 200, {
-        // `disk.low !== true` and not `!disk.low`, deliberately: an unreadable
-        // figure (low: null) must not take ok down while orders still land.
-        ok: ffmpeg.available && stats !== null && disk.low !== true,
+      // `disk.low !== true` and not `!disk.low`, deliberately: an unreadable
+      // figure (low: null) must not take ok down while orders still land.
+      const degraded = [
+        ...(ffmpeg.available ? [] : ['ffmpeg']),
+        ...(stats !== null ? [] : ['queue']),
+        ...(disk.low === true ? ['disk'] : []),
+      ];
+      const ok = degraded.length === 0;
+
+      // TWO ANSWERS FROM ONE ENDPOINT. The route is public because the uptime
+      // monitor has no session, and it keys on the literal `"ok":true` and
+      // nothing more -- so `ok` is the first key and `degraded` names the
+      // failing part, which is what an alert needs and all it needs. The rest
+      // -- the exact ffprobe build, disk bytes, queue counts, which provider
+      // is wired -- is an operator's report, and a build string is also the
+      // first thing anyone targeting the upload decoder would ask for. It is
+      // answered to a session and to nobody else.
+      if (!account) {
+        return sendJson(req, res, 200, { ok, degraded });
+      }
+      return sendJson(req, res, 200, {
+        ok,
+        degraded,
         ffmpeg,
         queue: stats,
         worker: { lastSeen, inFlight: stats?.claimed ?? null },
@@ -3806,7 +4176,20 @@ export function createServer({
         const placeText = cleanText(firstFilled(fields.place, fields.placeText), 'place', {
           required: placePhoto === null,
         });
-        const outfitText = cleanText(firstFilled(fields.outfit, fields.outfitText), 'outfit', { required: true });
+        // THE TYPED GARMENT WINS, AND IT IS THE OPPOSITE OF `place` ABOVE.
+        // The asymmetry is deliberate and it follows from step 2 having a
+        // default (2026-09-05). A radio group cannot be cleared without
+        // JavaScript, so once a card is checked on load the browser posts one
+        // on EVERY order; read the card first and `outfitText` could never win
+        // for anybody, which is a live-looking control that does nothing --
+        // section 49's dead own-place card, one panel up. Step 3 does not have
+        // this problem because `pl-own` is a real way to un-choose a place.
+        //
+        // It also carries more weight than it used to: since the menu became
+        // five garments that go on anybody, this box is the only way to order
+        // one that does not, a dress included. Typing is the single available
+        // way to say "none of these", so it is read as meaning exactly that.
+        const outfitText = cleanText(firstFilled(fields.outfitText, fields.outfit), 'outfit', { required: true });
         refuseStillCount(fields.stillCount);
 
         const placeId = placeText ? presetLookup.place.get(placeText.toLowerCase()) ?? null : null;
@@ -3988,7 +4371,8 @@ export function createServer({
       // Found by scanning the directory and comparing parsed numbers, so no part
       // of the request ever becomes a path component.
       const still = stillsOf(job.jobId).find((s) => s.index === wanted);
-      if (!still || !sendFile(req, res, { file: still.file, maxAge: 3600 })) {
+      // `noStore`: a generated face, never kept by the browser past this view.
+      if (!still || !sendFile(req, res, { file: still.file, noStore: true })) {
         throw new HttpError(404, 'No such still.', { code: 'NO_STILL' });
       }
     },
@@ -4079,7 +4463,9 @@ export function createServer({
       if (!sendFile(req, res, {
         file: jobPaths(root, job.jobId).video,
         contentType: 'video/mp4',
-        maxAge: 3600,
+        // A person's own tape, never kept by the browser past this view -- on
+        // a shared machine `private, max-age` replays it after sign-out.
+        noStore: true,
         download: asAttachment ? `timestamp-${job.jobId}.mp4` : null,
       })) {
         throw new HttpError(404, 'This job has no video yet.', { code: 'NO_VIDEO' });
@@ -4088,7 +4474,7 @@ export function createServer({
 
     getPoster(req, res, { params, account }) {
       const job = ownedJob(account, params.id);
-      if (!sendFile(req, res, { file: jobPaths(root, job.jobId).poster, contentType: 'image/jpeg', maxAge: 3600 })) {
+      if (!sendFile(req, res, { file: jobPaths(root, job.jobId).poster, contentType: 'image/jpeg', noStore: true })) {
         throw new HttpError(404, 'This job has no poster yet.', { code: 'NO_POSTER' });
       }
     },
@@ -4378,7 +4764,13 @@ export function createServer({
       // Everything else is ours, and the message may contain an absolute path,
       // a manifest fragment or a provider request id. It goes to the log; the
       // caller gets a sentence.
-      logImpl(`[web] ${req.method} ${req.url} -> 500 ${err?.stack ?? err}`);
+      //
+      // THE PATHNAME, NEVER THE QUERY STRING. `/verify?email=` carries an
+      // address and `/auth/callback?code=&state=` a live sign-in code, and
+      // this is the one place a request is logged in full -- on the failure
+      // nobody planned for, which is exactly when the line gets read by
+      // somebody who should not be holding either.
+      logImpl(`[web] ${req.method} ${String(req.url ?? '').split('?')[0]} -> 500 ${err?.stack ?? err}`);
       fail(req, res, 500, 'Something went wrong at our end.', null);
     }
   }
@@ -4400,6 +4792,9 @@ export function createServer({
     /** The menu the cards are rendered from, so a test can assert the page is
      *  built out of `presets/` rather than out of a second copy. */
     cards,
+    /** The showcase slots, resolved against the filesystem at construction --
+     *  see `showcaseFor` above. */
+    showcase: showcaseFor,
     get port() {
       const address = server.address();
       return address && typeof address === 'object' ? address.port : null;

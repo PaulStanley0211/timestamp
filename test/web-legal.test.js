@@ -519,6 +519,29 @@ test('with no classifier configured, the page still says fal and nobody else', (
     'unconfigured, the photograph really does go to one processor and the page should say so');
 });
 
+test('the privacy page states the three facts that were true and unsaid', () => {
+  // Each of these was already true of the running system and absent from the
+  // page. Art. 13 asks for recipients, retention and the countries data goes
+  // to; a page that names fal and says nothing about where fal is, or that
+  // promises deletion while nightly backups keep the record for a fortnight,
+  // answers less than it knows.
+  const html = privacyPage({ entity: ENTITY, retention: { photoDays: 7, jobDays: 30 } });
+
+  // 1. Deleted accounts persist in the nightly backup for a bounded time, and
+  //    the backup never holds photographs or videos. The number is the
+  //    runbook's cron `--keep`, stated here so the two cannot drift unnoticed.
+  assert.match(html, /backup/i, 'the nightly backup is disclosed');
+  assert.match(html, /14 days/, 'and how long a deleted record can survive in it');
+  assert.match(html, /never (contain|hold|include)s?\s+(your\s+)?photograph/i, 'and that it carries no image');
+
+  // 2. fal.ai is outside the EU and keeps what it receives under its own terms.
+  assert.match(html, /fal\.ai[^.]*outside the (EU|European Union)/i, 'where the generation provider is');
+  assert.match(html, /fal\.ai[^.]*own privacy policy/i, 'and whose retention rules apply there');
+
+  // 3. The client address is forwarded to the sign-in provider.
+  assert.match(html, /IP address[^.]*Supabase/i, 'the address forwarded on sign-in is disclosed');
+});
+
 test('a configured classifier is named, and "nobody else" stays true because the list grew', () => {
   // THE CLAIM IS NOT THE PROBLEM, THE LIST IS. "and to nobody else" is a
   // promise worth keeping and it is exactly as true with two processors as
@@ -542,6 +565,31 @@ test('a configured classifier is named, and "nobody else" stays true because the
   // question -- GDPR Art. 13 asks for the purpose, not just the recipient.
   assert.match(html, /illegal or abusive/i,
     'the page names a processor without saying what it does with the photograph');
+
+  // AND THE SECOND PURPOSE, added 2026-09-07 with the face gate's detector.
+  // The same credentials, the same service and the same photograph now also
+  // answer "is there a face in this", and a purpose statement that names only
+  // the first is incomplete in exactly the way the comment above forbids.
+  // NOT a bare /face/ -- the SVG filter layout() emits contains `surfaceScale`,
+  // which matches it, and the first version of this assertion passed on that.
+  assert.match(html, /shows a face/i,
+    'the processor also checks the photograph for a face, and the page does not say so');
+});
+
+test('the FAQ tells a customer the same thing the privacy page does', async () => {
+  // TWO PLACES SAY THIS, and on 2026-09-07 one of them was updated and the
+  // other was not -- caught only because the privacy test went red while the
+  // FAQ, which nothing pinned, would have kept the old half-true sentence.
+  // A customer who reads the FAQ and never opens /privacy is owed the same
+  // disclosure, so the purposes are asserted here rather than the wording.
+  const { faqItems } = await import('../scripts/web/views.mjs');
+  const answers = faqItems({ imageProcessor: 'Amazon Web Services (Rekognition), Frankfurt' })
+    .map((i) => `${i.q} ${i.a}`).join(' | ');
+
+  assert.match(answers, /Amazon Web Services \(Rekognition\), Frankfurt/,
+    'the FAQ names the generation provider but not the processor');
+  assert.match(answers, /illegal or abusive/i, 'the FAQ omits the moderation purpose');
+  assert.match(answers, /shows a face/i, 'the FAQ omits the face-check purpose');
 });
 
 test('the disclosed processor is escaped like every other operator-supplied value', () => {

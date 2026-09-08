@@ -93,7 +93,7 @@ function unpricedBilling({ fetchImpl, envImpl }) {
   };
 }
 
-async function withApp(run, { billing, nowImpl } = {}) {
+async function withApp(run, { billing, nowImpl, logImpl = () => {} } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-billing-'));
   const app = createServer({
     root,
@@ -103,7 +103,7 @@ async function withApp(run, { billing, nowImpl } = {}) {
     billing,
     publicUrl: 'https://timestamp.example',
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
-    logImpl: () => {},
+    logImpl,
     ...(nowImpl ? { nowImpl } : {}),
   });
   const port = await app.listen();
@@ -380,14 +380,79 @@ test('two different events grant twice', async () => {
 });
 
 test('an unpaid session grants nothing and is not retried', async () => {
+  const lines = [];
   await withApp(async ({ base, root }) => {
     const account = await makeAccount(root);
     const body = completedSession({ accountId: account.accountId, paymentStatus: 'unpaid' });
+    const event = JSON.parse(body);
 
     const res = await deliver(base, body, { signature: stripeSignature(body) });
     assert.equal(res.status, 200, 'a non-2xx would make Stripe retry an event we do not want');
     assert.equal((await res.json()).granted, false);
     assert.deepEqual(await paymentRows(root, account.accountId), []);
+    // A 200 that grants nothing is the one outcome Stripe will never retry and
+    // never list, so the log line is the only witness that a completed session
+    // arrived without its money. It names the event and the session so the
+    // operator can find both in the Dashboard.
+    const witness = lines.filter((l) => /unpaid/i.test(l));
+    assert.equal(witness.length, 1, `expected one unpaid line, got ${JSON.stringify(lines)}`);
+    assert.match(witness[0], new RegExp(event.id));
+    assert.match(witness[0], new RegExp(event.data.object.id));
+  }, { billing: configuredBilling(), logImpl: (l) => lines.push(String(l)) });
+});
+
+/**
+ * A DELAYED PAYMENT METHOD PAYS LATER, ON ITS OWN EVENT. Managed Payments
+ * controls which methods a customer sees and refuses `payment_method_types`
+ * on the request, so a method that settles later -- a bank debit, a voucher
+ * -- can be offered: `completed` then arrives UNPAID, and the money follows
+ * on `checkout.session.async_payment_succeeded`. That event grants exactly as
+ * a paid completion does, keyed on its own event id, so a redelivery of it is
+ * a no-op and the earlier unpaid completion granted nothing to double.
+ */
+test('a delayed payment that succeeds later grants the pack once, on its own event', async () => {
+  await withApp(async ({ base, root }) => {
+    const account = await makeAccount(root);
+    const opening = (await balanceOf(root, account.accountId)).credits;
+
+    const pending = completedSession({ id: 'evt_completed_unpaid', accountId: account.accountId, paymentStatus: 'unpaid' });
+    const first = await deliver(base, pending, { signature: stripeSignature(pending) });
+    assert.equal(first.status, 200);
+    assert.equal((await first.json()).granted, false, 'an unpaid completion granted');
+    assert.equal(await creditsGained(root, account.accountId, opening), 0);
+
+    const paid = completedSession({
+      id: 'evt_async_paid', accountId: account.accountId, paymentStatus: 'paid',
+      type: 'checkout.session.async_payment_succeeded',
+    });
+    const second = await deliver(base, paid, { signature: stripeSignature(paid) });
+    assert.equal(second.status, 200);
+    assert.deepEqual(await second.json(), { ok: true, granted: true, credits: PACK.credits });
+    assert.equal(await creditsGained(root, account.accountId, opening), PACK.credits,
+      'the money arrived and nothing was granted');
+
+    const again = await deliver(base, paid, { signature: stripeSignature(paid) });
+    assert.equal(again.status, 200);
+    assert.equal((await again.json()).granted, false, 'a redelivered success granted twice');
+    assert.equal(await creditsGained(root, account.accountId, opening), PACK.credits);
+    const rows = await paymentRows(root, account.accountId);
+    assert.equal(rows.length, 1, 'the ledger grew more than once for one payment');
+    assert.equal(rows[0].ref, 'evt_async_paid', 'the success event is the idempotency key');
+  }, { billing: configuredBilling() });
+});
+
+test('a delayed payment that fails grants nothing and is not retried', async () => {
+  await withApp(async ({ base, root }) => {
+    const account = await makeAccount(root);
+    const opening = (await balanceOf(root, account.accountId)).credits;
+    const failed = completedSession({
+      id: 'evt_async_failed', accountId: account.accountId, paymentStatus: 'unpaid',
+      type: 'checkout.session.async_payment_failed',
+    });
+    const res = await deliver(base, failed, { signature: stripeSignature(failed) });
+    assert.equal(res.status, 200, 'a non-2xx would make Stripe retry an event that changes nothing');
+    assert.equal((await res.json()).granted, false);
+    assert.equal(await creditsGained(root, account.accountId, opening), 0);
   }, { billing: configuredBilling() });
 });
 

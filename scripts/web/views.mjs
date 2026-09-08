@@ -56,25 +56,16 @@
  */
 
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 
 import { STEPS } from '../render/job.mjs';
 
 /**
- * The wordmark, read once at module load rather than on every render.
+ * THE WORDMARK IS NOT INLINED HERE ANY MORE EITHER (2026-09-06). It was a drawn
+ * Cormorant Garamond with a head-switch tear through it, read from a drawn SVG
+ * under `assets/brand/` at this point, because neither the face nor the tear
+ * could be expressed as live text. This world sets the word in the display
+ * face, which ships, so the mark is the word.
  *
- * It lives in `assets/brand/` and not in this file because the same paths are
- * rasterised into the favicon and the social card -- one source, or the tab
- * icon and the header drift apart the first time either is touched. Read
- * eagerly and deliberately unguarded: a missing wordmark is a broken build, and
- * a build that boots and serves a header with a hole in it is worse than one
- * that refuses to start.
- */
-const WORDMARK_SVG = fs
-  .readFileSync(new URL('../../assets/brand/wordmark-inline.svg', import.meta.url), 'utf8')
-  .trim();
-
-/**
  * THE MONOGRAM IS NOT INLINED HERE ANY MORE. Until 2026-08-28 the masthead drew
  * `Ts` beside the word, and `assets/brand/monogram-inline.svg` was read in at
  * this point. Paul removed it on sight: two marks saying the same thing, and
@@ -87,6 +78,7 @@ const WORDMARK_SVG = fs
  * blank the tab icon.
  */
 import { placeSlug, outfitSlug, qualitySlug, aspectSlug } from './static.mjs';
+import { DEFAULT_OUTFIT_ID } from '../catalog/catalog.mjs';
 
 // ---------------------------------------------------------------------------
 // escaping
@@ -198,8 +190,17 @@ export function phaseIndexOf(step) {
 /** What each shape is FOR, in the words somebody choosing would use. The list
  *  of shapes itself comes from config/render.json -- only the human label for
  *  one lives here, the same division the resolution rows already follow. */
+/* ONE WORD EACH, AND THE 4:3 LABEL IS WHY. `.panel--commit` caps at 640px, so
+ * the frame row has 590px whatever the viewport is, and the three cards plus
+ * their two gaps measured 601.1px -- eleven pixels over, on every screen, so
+ * 9:16 wrapped underneath at 375px and at 2560px alike. "The camcorder shape"
+ * was 124.6px of that against "Widescreen" at 67.7 and "Phone" at 36, and the
+ * hint paragraph below the row already explains all three in full, so the long
+ * one was the only one paying rent twice. At one word each the row fits with
+ * about 50px to spare and the three read as the parallel set they always were.
+ */
 const ASPECT_DETAIL = Object.freeze({
-  '4:3': 'The camcorder shape',
+  '4:3': 'Camcorder',
   '16:9': 'Widescreen',
   '9:16': 'Phone',
 });
@@ -212,6 +213,41 @@ const STATUS_COPY = Object.freeze({
   failed: 'Stopped',
   cancelled: 'Cancelled',
 });
+
+/** The heading's second half: "The balcony, being filmed". Lower case because
+ *  it follows the place and a comma, and in the same order as STATUS_COPY so a
+ *  status added to one is visibly missing from the other. */
+const HEADLINE_COPY = Object.freeze({
+  queued: 'waiting for a machine',
+  pending: 'waiting for a machine',
+  running: 'being filmed',
+  'awaiting-selection': 'waiting for you',
+  done: 'finished',
+  failed: 'stopped',
+  cancelled: 'cancelled',
+});
+
+/** What a phase row says about itself. REC is the record light's own word. */
+const PHASE_STATE_COPY = Object.freeze({
+  done: 'Done',
+  running: 'REC',
+  pending: 'Not yet',
+  stopped: 'Stopped',
+});
+
+/**
+ * Where one phase stands, given which phase the job is in and how the job is.
+ * A phase before the current one is done and one after it is still to come;
+ * the current one is recording -- unless the job has stopped, in which case it
+ * stopped THERE and nothing on the page records. The poller carries the same
+ * four lines, so the first paint and every repaint agree.
+ */
+function phaseState(i, idx, status) {
+  if (status === 'done') return 'done';
+  if (i < idx) return 'done';
+  if (i > idx) return 'pending';
+  return status === 'failed' || status === 'cancelled' ? 'stopped' : 'running';
+}
 
 // ---------------------------------------------------------------------------
 // the inline scripts, as named constants, because the policy names them
@@ -238,6 +274,9 @@ const HOME_SCRIPT = `
 (function () {
   var photo = document.getElementById('photo');
   var name = document.getElementById('photo-name');
+  // Null when the page is refusing the order outright: homePage renders that
+  // refusal as a plain paragraph with no id, on purpose, so nothing here can
+  // blank a reason that a photo does not answer. Every write to it below is guarded.
   var reason = document.getElementById('reason');
   var record = document.getElementById('record');
 
@@ -257,7 +296,14 @@ const HOME_SCRIPT = `
   }
 
   if (!photo || !record) return;
-  if (!record.disabled) { record.disabled = true; }
+  // THE PAGE'S OWN VERDICT IS READ FIRST, AND IT IS FINAL. homePage renders the
+  // button disabled when the balance cannot afford the cheapest tape; that is
+  // the server's refusal and no photo lifts it. It has to be read BEFORE the
+  // line after it, which disables an enabled button until a photo is chosen --
+  // once that has run the two states are indistinguishable, and the change
+  // handler used to re-enable both.
+  var refused = record.disabled;
+  if (!refused) { record.disabled = true; }
 
   var picked = document.getElementById('picked');
   var thumb = document.getElementById('photo-thumb');
@@ -287,14 +333,17 @@ const HOME_SCRIPT = `
     if (thumb) thumb.removeAttribute('src');
     if (picked) picked.hidden = true;
     record.disabled = true;
-    reason.textContent = 'Upload a photo first';
+    if (reason) { reason.textContent = 'Upload a photo first'; }
     photo.focus();
   }
 
   photo.addEventListener('change', function () {
     var file = photo.files && photo.files[0];
-    if (file) { show(file); record.disabled = false; reason.textContent = ''; }
-    else { forget(); }
+    if (file) {
+      show(file);
+      if (!refused) { record.disabled = false; }
+      if (reason) { reason.textContent = ''; }
+    } else { forget(); }
   });
 
   if (clear) clear.addEventListener('click', forget);
@@ -309,12 +358,14 @@ const STATUS_SCRIPT = `
   var root = document.getElementById('status');
   var id = root.dataset.job;
   var words = ${jsonInScript(STATUS_COPY)};
+  var heads = ${jsonInScript(HEADLINE_COPY)};
+  var states = ${jsonInScript(PHASE_STATE_COPY)};
   var phases = ${jsonInScript(PHASES)};
 
   // The same grouping the server rendered, from the same constant, so the
   // first paint and every repaint after it agree. An unknown step answers 0
   // for the reason phaseIndexOf gives: early work by definition, and a
-  // negative index would paint the bar as finished.
+  // negative index would paint the list as finished.
   function phaseIndexOf(step) {
     for (var i = 0; i < phases.length; i++) {
       if (phases[i].steps.indexOf(step) !== -1) return i;
@@ -322,25 +373,35 @@ const STATUS_SCRIPT = `
     return 0;
   }
 
+  // The same rule the server rendered with -- see phaseState in views.mjs.
+  function phaseState(i, idx, status) {
+    if (status === 'done') return 'done';
+    if (i < idx) return 'done';
+    if (i > idx) return 'pending';
+    return (status === 'failed' || status === 'cancelled') ? 'stopped' : 'running';
+  }
+
   function paint(v) {
     var idx = phaseIndexOf(v.step);
-    var p = phases[idx];
-    document.getElementById('headline').textContent = p.title;
-    document.getElementById('subline').textContent = p.note;
+    document.getElementById('headstate').textContent = heads[v.status] || v.status;
     document.getElementById('statusword').textContent = words[v.status] || v.status;
 
     document.getElementById('counter').firstChild.nodeValue =
       (idx + 1) + ' of ' + phases.length + ' \\u00b7 ';
 
-    // THE RECORD LIGHT STOPS WITH THE JOB. It is server-rendered only while
-    // running, so a job that fails mid-poll would otherwise keep blinking at
-    // somebody whose tape has already died.
-    var rec = document.querySelector('.reclight');
-    if (rec && v.status !== 'running' && v.status !== 'pending') rec.remove();
-
-    var segs = document.querySelectorAll('#bar .seg');
-    for (var i = 0; i < segs.length; i++) {
-      segs[i].className = 'seg seg-' + (i < idx ? 'done' : i === idx ? 'running' : 'pending');
+    // THE RECORD LIGHT STOPS WITH THE JOB. It sits on the phase being filmed
+    // and on nothing else, so a job that fails mid-poll stops blinking on the
+    // next paint rather than at somebody whose tape has already died.
+    // textContent only, so nothing here can become markup.
+    var prows = document.querySelectorAll('#phases .phase');
+    for (var i = 0; i < prows.length; i++) {
+      var state = phaseState(i, idx, v.status);
+      prows[i].className = 'phase phase-' + state;
+      var cell = prows[i].querySelector('.phase-state');
+      if (!cell) continue;
+      cell.className = 'phase-state' + (state === 'running' ? ' reclight' : '');
+      var word = cell.querySelector('.word');
+      if (word) word.textContent = states[state] || state;
     }
 
     var rows = document.querySelectorAll('#steps .step');
@@ -395,46 +456,56 @@ const STATUS_SCRIPT = `
  * that 404s, a play() the browser refuses -- each leaves the still layer
  * underneath exactly as it is today. The video is never a requirement, and
  * nothing above this line has to know it exists.
+ *
+ * AND THE SHOWCASE TAPES RIDE THE SAME THREE GATES, because they are the same
+ * decision. A finished tape playing in the hero is a moving picture on a page
+ * a stranger did not ask for one on, and it is several megabytes rather than
+ * one -- so reduced motion, save-data and a codec the browser will not decode
+ * each stop it for exactly the reasons they stop the loop. Their poster is in
+ * the markup and their source is only here, so every one of those exits leaves
+ * a still frame of the tape standing rather than an empty box. That is why the
+ * gates moved ahead of the `.bgv` lookup: the hero plays on a page that has no
+ * loop element at all, and checking the loop first would have made the tape
+ * depend on a background that is not its business.
  */
 const BG_SCRIPT = `
 (function () {
-  var video = document.querySelector('.bgv');
-  if (!video || !video.canPlayType || !video.canPlayType('video/mp4')) return;
+  var probe = document.createElement('video');
+  if (!probe.canPlayType || !probe.canPlayType('video/mp4')) return;
 
-  // A full-bleed moving picture is the largest animation this page could make,
-  // so it is the first thing a request for reduced motion should cost.
+  // A moving picture is the largest animation this page could make, so it is
+  // the first thing a request for reduced motion should cost.
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
   if (reduce && reduce.matches) return;
 
-  // And on a metered connection a decorative 155kB is not worth spending.
+  // And on a metered connection a decorative megabyte is not worth spending.
   var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
   if (conn && conn.saveData) return;
 
+  // THE SHOWCASE TAPES. The poster is in the markup and the source is only
+  // here, so no script, reduced motion, save-data, an unplayable codec or a
+  // missing file each leave the poster standing.
+  var tapes = document.querySelectorAll('video[data-src]');
+  for (var t = 0; t < tapes.length; t += 1) {
+    (function (v) {
+      v.src = v.getAttribute('data-src');
+      var p = v.play();
+      if (p && p.catch) p.catch(function () { /* autoplay refused; the poster stands */ });
+    }(tapes[t]));
+  }
+
+  var video = document.querySelector('.bgv');
+  if (!video) return;
   var bgs = video.parentNode;
   var current = null;
 
-  // TWO STATES, NOT ONE, AND THE DIFFERENCE IS A VISIBLE BUG.
-  //
-  // "is-live" means video works on this page. It decides the per-place scrim
-  // and the plate under the panels, and once it is true it STAYS true across
-  // every subsequent choice -- because those two are properties of the page's
-  // ground, not of which clip happens to be decoding this second.
-  //
-  // "is-showing" means this particular clip has a frame to paint, and it comes
-  // off for the moment between choosing a place and its loop decoding. The
-  // video fades out over the still it was cut from, which is the same
-  // photograph, so the swap reads as a cross-fade.
-  //
-  // Driving both from one class is what the first version did, and picking a
-  // place threw the scrim back to full strength and changed every panel's
-  // corner radius for as long as the next file took to load -- the whole
-  // chrome flinching once per click.
+  // "is-live" means video works on this page and decides the per-place scrim;
+  // "is-showing" means this clip has a frame to paint. Two classes, because
+  // driving both from one made the scrim flinch on every click.
   function show(id) {
     if (id === current) return;
     current = id;
     bgs.classList.remove('is-showing');
-    // The own-place card carries an empty value: there is no loop for a place
-    // nobody has described yet, so the ground comes back.
     if (!id) { video.removeAttribute('src'); video.load(); return; }
     video.src = '/places/' + encodeURIComponent(id) + '.mp4';
     var started = video.play();
@@ -450,15 +521,10 @@ const BG_SCRIPT = `
     bgs.classList.remove('is-live');
   });
 
-  // TWO NAMES, ONE MECHANIC. The signed-in page posts its choice as "place";
-  // the landing names its radios "lplace" precisely so a landing choice can
-  // never be submitted as a real order. Both drive the same background.
   var SELECTOR = 'input[name="place"]:checked, input[name="lplace"]:checked';
-
   document.addEventListener('change', function (e) {
     if (e.target && (e.target.name === 'place' || e.target.name === 'lplace')) show(e.target.value);
   });
-
   var checked = document.querySelector(SELECTOR);
   if (checked) show(checked.value);
 }());
@@ -503,8 +569,51 @@ const SIGNIN_SCRIPT = `
 }());
 `;
 
+/**
+ * The before/after wipe, and the whole of what scripting adds to it.
+ *
+ * THE CONTROL IS CREATED HERE RATHER THAN SHIPPED IN THE MARKUP, and that is
+ * the same ruling BG_SCRIPT's <video> carries: a range input in the HTML would
+ * move its own thumb with no JavaScript while the picture behind it stayed
+ * still -- a control that visibly does nothing, which is exactly section 49D's
+ * dead own-place card. With no script the figure is a fixed 50/50 composite of
+ * two real photographs with a divider down the middle: a legitimate
+ * before-and-after, just not a draggable one.
+ *
+ * WHY A NATIVE RANGE AND NOT A DRAG HANDLER ON THE FIGURE. A range gives the
+ * keyboard, touch, and the accessibility tree for free, and pointer-down
+ * anywhere along its track jumps the thumb there and begins a drag -- so the
+ * gesture is the one a hand-rolled mousedown/mousemove pair would have given,
+ * without competing with page scroll on a phone and without announcing itself
+ * to a screen reader as a slider that arrow keys then refuse to move. Section
+ * 16 spent a session putting focus indicators on nineteen controls; shipping a
+ * <div role="slider"> here would be walking that back.
+ */
+const WIPE_SCRIPT = `
+(function () {
+  var fig = document.querySelector('figure.wipe');
+  if (!fig) return;
+
+  var range = document.createElement('input');
+  range.type = 'range';
+  range.min = '0';
+  range.max = '100';
+  range.step = '0.1';
+  range.value = '50';
+  range.className = 'wipe-range';
+  range.setAttribute('aria-label', 'Wipe between the photograph and the tape');
+
+  range.addEventListener('input', function () {
+    fig.style.setProperty('--wipe', range.value + '%');
+  });
+
+  fig.appendChild(range);
+  fig.classList.add('wipe--live');
+}());
+`;
+
 export const INLINE_SCRIPT_HASHES = Object.freeze(
-  [HOME_SCRIPT, STATUS_SCRIPT, BG_SCRIPT, SIGNIN_SCRIPT]
+  [HOME_SCRIPT, STATUS_SCRIPT, BG_SCRIPT, SIGNIN_SCRIPT, WIPE_SCRIPT]
     .map((s) => crypto.createHash('sha256').update(s, 'utf8').digest('base64')),
 );
 
@@ -599,33 +708,144 @@ export function stampDate(jobId) {
   return m ? `${m[3]}.${m[2]}.${m[1]}` : '';
 }
 
-/** The wordmark: the product's own typeface, with the dot a camcorder blinks
- *  while it is recording. Not an illustration, and not an icon pack. */
+import { RETENTION_DEFAULTS } from '../safety/consent.mjs';
+
+/**
+ * The two textures, defined once per page and applied from the sheet by id.
+ * style-src 'self' refuses inline style attributes and inline <style> blocks,
+ * so a filter has to live in markup and be named from the stylesheet; an
+ * <svg> of zero size is the one place that is both allowed and shared. The
+ * numbers are the ones chosen on the mockups on 2026-09-06.
+ */
+export function svgFilters() {
+  return `<svg class="vh-svg" width="0" height="0" aria-hidden="true" focusable="false">
+  <filter id="speckle" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" stitchTiles="stitch"></feTurbulence>
+    <feColorMatrix type="saturate" values="0"></feColorMatrix>
+    <feComponentTransfer><feFuncA type="linear" slope="0.55"></feFuncA></feComponentTransfer>
+  </filter>
+  <filter id="paper" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="5" seed="3" stitchTiles="stitch" result="n"></feTurbulence>
+    <feDiffuseLighting in="n" lighting-color="#ffffff" surfaceScale="4" diffuseConstant="1.1" result="l"><feDistantLight azimuth="50" elevation="58"></feDistantLight></feDiffuseLighting>
+    <feComponentTransfer in="l"><feFuncR type="gamma" exponent="0.9"></feFuncR><feFuncG type="gamma" exponent="0.9"></feFuncG><feFuncB type="gamma" exponent="0.9"></feFuncB></feComponentTransfer>
+  </filter>
+</svg>`;
+}
+
+/** Native details rows. No script: the browser opens and closes them, the
+ *  keyboard works, and the glyph is a CSS pseudo-element switched on [open]. */
+export function faq(items) {
+  return `<section class="faq" aria-labelledby="faq-t">
+  <h2 class="faq-t" id="faq-t">Questions</h2>
+  ${items.map(({ q, a }) => `<details class="faq-row"><summary>${h(q)}<span class="faq-glyph" aria-hidden="true"></span></summary><p>${h(a)}</p></details>`).join('\n  ')}
+</section>`;
+}
+
+/**
+ * The six questions, with every number handed in. The processors list is the
+ * same derivation /privacy uses, so an added classifier appears here the day
+ * it appears there. `sameInEveryShape` is read off the pricing rows rather
+ * than assumed: it was false until 2026-09-05.
+ */
+export function faqItems({
+  freeCredits = null,
+  photoDays = RETENTION_DEFAULTS.photoDays, jobDays = RETENTION_DEFAULTS.jobDays,
+  imageProcessor = null, qualities = [], shapes = [], sameInEveryShape = true,
+} = {}) {
+  const list = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+  const free = freeCredits ? `A new account comes with ${freeCredits} credits, which is one tape at 480p in any shape, and there is no card to enter.` : 'A new account comes with enough credits for one tape, and there is no card to enter.';
+  // No pack price here: the landing prices nothing in dollars (spec §8); the
+  // pricing page carries the packs.
+  const packs = ' After that, credits come in packs; the pricing page says what they cost.';
+  // The processor sentence mirrors /privacy word for word, so an added
+  // classifier appears here the day it appears there.
+  // TWO PURPOSES, NOT ONE. The same credentials and the same service answer
+  // both questions about the same photograph -- is this abusive, and does it
+  // show a face -- and Art. 13 asks for the purpose rather than only the
+  // recipient. A sentence naming a processor and half of what it does is the
+  // §52B failure with a smaller radius: true, and incomplete.
+  const classifier = imageProcessor ? `, and to ${imageProcessor}, which checks it for illegal or abusive content and confirms it shows a face, before anything is generated` : '';
+  return [
+    { q: 'Is it free?', a: `To start, yes. ${free}${packs}` },
+    { q: 'What happens to my photograph?', a: `It is sent to fal.ai, the AI provider that generates the tape${classifier}, and to nobody else. Location and camera data are stripped the moment it arrives. It is deleted after ${photoDays} days and the finished tape after ${jobDays} days, and you can delete either sooner from your account page.` },
+    { q: 'How long does a tape take?', a: 'A few minutes. The status page shows the three phases as they happen, and the tape is still there if you close the tab and come back.' },
+    { q: 'Does it look real?', a: 'The picture is generated by a model; the tape is built in ffmpeg. Grain, chroma bleed, the head-switch band and the date stamp go on the way a 2003 camcorder put them there, and nothing about the look is asked of the model. Every file is marked as AI-generated in its metadata.' },
+    { q: 'Which shapes and qualities?', a: `${list(shapes)} at ${list(qualities)}. The file is the shape you choose, edge to edge in the wide shapes, and ${sameInEveryShape ? 'a tape costs the same in every shape' : 'the shape is part of the price, which the order form shows before you press Record'}.` },
+    { q: 'Can I delete everything?', a: 'Yes. Your account page deletes the account, the photograph, the tapes and the credit history together, immediately. Export first if you want a copy.' },
+  ];
+}
+
+/** The three fact cards, in the markup a quotation would use so real quotes
+ *  can drop into the same three cards later without a layout change. */
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+/** 7 -> "seven", 15 -> "fifteen"; anything else falls back to digits. Copy is
+ *  derived from config, and config counts in digits. */
+export function inWords(n) { return NUMBER_WORDS[n] ?? String(n); }
+
+export function factCards({ frames = 375, fps = 25, shapes = [], photoDays = RETENTION_DEFAULTS.photoDays, jobDays = RETENTION_DEFAULTS.jobDays } = {}) {
+  const seconds = frames / fps;
+  const cards = [
+    ['fact--lime', `Exactly ${Number.isInteger(seconds) ? inWords(seconds) : seconds.toFixed(2)} seconds.`, `${frames} frames at ${fps} a second, PAL, because a 2003 tape was.`],
+    ['fact--white', 'The shape you choose.', `${shapes.join(', ')}. The file is the shape; nothing is matted into a phone frame that did not ask for one.`],
+    ['fact--white', `Deleted after ${photoDays} days.`, `The photograph. The tape after ${jobDays}. You can ask for either sooner.`],
+  ];
+  return `<section class="facts3" aria-label="Three facts">
+  ${cards.map(([cls, head, body]) => `<figure class="fact ${cls}"><blockquote><p>${h(head)}</p></blockquote><figcaption>${h(body)}</figcaption></figure>`).join('\n  ')}
+</section>`;
+}
+
+/** "43 credits left. Enough for 2 more tapes at 480p." -- one function, two pages. */
+export function balanceSentence({ credits, cheapest = null } = {}) {
+  const n = Number(credits);
+  if (!Number.isFinite(n)) return '';
+  const per = Number(cheapest?.credits);
+  if (!cheapest || !Number.isFinite(per) || per <= 0) return `${n} credits left.`;
+  const k = Math.floor(n / per);
+  const tail = k === 0 ? ` Not enough for another tape at ${cheapest.id}.` : ` Enough for ${k} more ${k === 1 ? 'tape' : 'tapes'} at ${cheapest.id}.`;
+  return `${n} credits left.${tail}`;
+}
+
+/**
+ * The footer, on every page. Two link columns, the giant word (decoration,
+ * and it says so), the retention promise from the same defaults the consent
+ * text is written against (a test holds them equal to config/render.json),
+ * and the fine print naming the three faces and their licence.
+ */
+export function siteFooter({ account = null } = {}) {
+  const product = [
+    [account ? '/' : '/signup', 'Make a tape'], ['/#places', 'Places'], ['/pricing', 'Pricing'],
+    ...(account ? [['/videos', 'My videos']] : []),
+  ];
+  const legal = [['/privacy', 'Privacy'], ['/terms', 'Terms'], ['/impressum', 'Legal notice'], ['mailto:support@timestamptapes.com', 'support@timestamptapes.com']];
+  const col = (title, links) => `<div class="foot-col"><p class="foot-h">${title}</p><ul>${links.map(([href, text]) => `<li><a class="quiet" href="${h(href)}">${h(text)}</a></li>`).join('')}</ul></div>`;
+  return `<footer class="foot">
+  <div class="foot-cols">${col('Product', product)}${col('Legal', legal)}</div>
+  <p class="foot-mark" aria-hidden="true">Timestamp.</p>
+  <p class="fine">Your photo is deleted after ${RETENTION_DEFAULTS.photoDays} days and the video after ${RETENTION_DEFAULTS.jobDays} days. You can ask for either sooner.</p>
+  <p class="fine">&copy; 2026 Timestamp. Every tape is AI-generated and its file says so. Set in Anton and Inter; the date stamp is VT323 by Peter Hull. All three under the SIL Open Font Licence 1.1.</p>
+</footer>`;
+}
+
+/** The wordmark: the word, with the record light a camcorder carries beside
+ *  its lens. Not an illustration, and not an icon pack. */
 function wordmark() {
-  // INLINE, NOT AN <img>. The letterforms are `currentColor`, so the mark
-  // takes the ground it is placed on without a second file per theme -- and
-  // the record light keeps blinking, which it could not do inside an <img>
-  // that the CSP would also have to allow.
+  // LIVE TEXT IN THE DISPLAY FACE, so the accessible name is the word itself
+  // and no hidden span has to be kept in step with a picture.
   //
-  // The drawn letters carry no text, so the accessible name is the `<span>`:
-  // `aria-label` on the link would work too, but a visually-hidden span
-  // survives a stylesheet that fails to load, which is when a person most
-  // needs to know what they are looking at.
+  // THE RECORD LIGHT IS THE ONE THING BESIDE IT WEARING RED, and it is a
+  // <span> the stylesheet paints by class rather than anything that carries
+  // its own style: style-src self drops an inline style attribute and an
+  // inline <style> block alike, wherever either appears, silently and totally.
+  // IT DOES NOT BLINK (2026-09-07): the blink is the status page's, on the
+  // phase being filmed, and it means "recording" there because it is nowhere
+  // else. See the .rec comment in static.mjs.
   //
   // ONE MARK, NOT TWO. A monogram drawing `Ts` used to sit ahead of the word
   // inside this same anchor. It went on 2026-08-28: it spelled the first two
   // letters of the word standing next to it, so the lockup said the same thing
-  // twice, and at 30px against the drawn wordmark it read as the plainer of the
-  // two. The word can carry the masthead alone; the mark still carries the
+  // twice. The word carries the masthead alone; the mark still carries the
   // browser tab, where there is no room for a word.
-  //
-  // DO NOT REINSTATE IT WITHOUT READING THE STYLESHEET. Its old rules are gone
-  // with it, and they were not decoration: `.wordmark`'s gap and negative
-  // margin existed to cancel the padding baked into the monogram's tile, and it
-  // was held back to 60% opacity (45% over a photograph) so that a 30px mark
-  // would not out-shout the 3.2px record light, which is the one thing in this
-  // chrome allowed to wear the accent. See DESIGN.md.
-  return `<a class="wordmark" href="/">${WORDMARK_SVG}<span class="vh">Timestamp</span></a>`;
+  return `<a class="wordmark" href="/">Timestamp<span class="rec" aria-hidden="true"></span></a>`;
 }
 
 /**
@@ -731,6 +951,41 @@ function nav({ account = null, balance = null } = {}) {
  * needs them to be siblings. Everything else on the page is inside `.wrap`.
  */
 /**
+ * The tags a search result and a shared link are built from.
+ *
+ * OPT-IN, AND THAT IS THE WHOLE SAFETY PROPERTY. `layout` is shared by every
+ * page in this product, so a page that passes no `meta` emits none of this and
+ * is byte-identical to what it rendered before -- which is what keeps a gated
+ * page from advertising a canonical url, and what stops a deploy with no
+ * showcase configured pointing a scraper at an image that 404s. There is a test
+ * for both halves.
+ *
+ * BOTH VOCABULARIES, because they are read by different scrapers and the
+ * fallback between them is not reliable enough to pick one: Open Graph is what
+ * Facebook, WhatsApp, Slack, Discord, LinkedIn and iMessage read, and
+ * `twitter:card` is what decides the SHAPE of the card rather than its content.
+ *
+ * THE LARGE CARD ONLY WHEN THERE IS AN IMAGE TO FILL IT. Declaring
+ * `summary_large_image` with no `og:image` renders the link as a blank slab,
+ * which is worse than the small card it would otherwise have had.
+ */
+function headMeta(title, meta) {
+  if (!meta) return '';
+  const { description = null, canonical = null, image = null } = meta;
+  const out = [];
+  if (description) out.push(`<meta name="description" content="${h(description)}">`);
+  if (canonical) out.push(`<link rel="canonical" href="${h(canonical)}">`);
+  out.push('<meta property="og:type" content="website">');
+  out.push('<meta property="og:site_name" content="Timestamp">');
+  out.push(`<meta property="og:title" content="${h(title)}">`);
+  if (description) out.push(`<meta property="og:description" content="${h(description)}">`);
+  if (canonical) out.push(`<meta property="og:url" content="${h(canonical)}">`);
+  if (image) out.push(`<meta property="og:image" content="${h(image)}">`);
+  out.push(`<meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">`);
+  return `${out.join('\n')}\n`;
+}
+
+/**
  * WHY THREE ICON LINKS AND NOT ONE. The SVG is what a current browser paints
  * and the only one that stays sharp at every size. `/favicon.ico` is what the
  * rest request without being told -- it is served whether it is linked or not,
@@ -748,33 +1003,32 @@ export function layout({
   account = null,
   balance = null,
   chrome = true,
+  masthead = true,
+  meta = null,
 }) {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="${bodyClass === 'is-landing' ? 'dark' : 'light'}">
+<meta name="color-scheme" content="dark">
 <title>${h(title)}</title>
-<link rel="stylesheet" href="/styles.css">
+${headMeta(title, meta)}<link rel="stylesheet" href="/styles.css">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
 <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/icon-180.png">
 ${refreshSeconds ? `<noscript><meta http-equiv="refresh" content="${Number(refreshSeconds)}"></noscript>` : ''}
 </head>
 <body class="${h(bodyClass)}">
+${svgFilters()}
 ${preBody}
 <div class="wrap ${h(wrapClass)}">
-<header class="masthead">
+${masthead ? `<header class="masthead">
   ${wordmark()}
   ${chrome ? nav({ account, balance }) : ''}
-</header>
+</header>` : ''}
 ${body}
-<footer class="foot">
-  <p>Your photo is deleted after 7 days and the video after 30. You can ask for either sooner.</p>
-  <p class="fine">Date-stamp lettering is VT323 by Peter Hull, under the SIL Open Font Licence 1.1.</p>
-  <p class="fine"><a class="quiet" href="/privacy">Privacy</a> &middot; <a class="quiet" href="/terms">Terms</a> &middot; <a class="quiet" href="/impressum">Legal notice</a></p>
-</footer>
+${siteFooter({ account })}
 </div>
 </body>
 </html>
@@ -871,7 +1125,8 @@ function stepHead(n, name, subtitle) {
  * the sentence -- and it is several times the size of everything else.
  */
 /**
- * The page a stranger sees, in the world DESIGN.md calls STRUCK.
+ * The page a stranger sees. Its world is the one DESIGN.md describes: lime on
+ * near-black, Anton for every heading, outlined cards on a flat dark ground.
  *
  * WHY THE PLACE LIST IS A REAL CONTROL AND NOT A PICTURE OF ONE. The world's
  * central idea is that every possible value is already present, unlit, and one
@@ -900,139 +1155,187 @@ function stepHead(n, name, subtitle) {
  * Omitted, the line is not rendered -- so a caller that cannot price (a test
  * fake, a degraded config) shows no price rather than a wrong one.
  */
-export function landingPage({ places = [], account = null, pricing = null, csrf = '' } = {}) {
-  const first = places[0]?.id ?? null;
+// inWords() is Task 3's, beside factCards(); only the capitaliser is new here.
+const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
-  // Hoisted so `#id:checked ~ .wrap` can reach the stack and the veils. Fixed
-  // rather than absolute, for the same reason as the signed-in page: an input
-  // at document offset -1 makes every click scroll the page to the top.
+/**
+ * The landing (2026-09-06): the eight slots of the reference, filled with this
+ * product's own content. The nav sits inside the lime hero, so layout() is
+ * told not to draw the masthead. Every number on the page arrives in `pricing`
+ * or `facts`; nothing is typed here except the sentence the product is about.
+ *
+ * THE SHOWCASE IS OPTIONAL AND THE PAGE IS COMPLETE WITHOUT IT. Each tape slot
+ * takes a place photograph captioned with that place's own name when its file
+ * is absent -- never the tape's caption, which would then be untrue -- and the
+ * manifesto renders without stickers. That is the state every test runs in.
+ */
+export function landingPage({
+  places = [], account = null, pricing = null, csrf = '',
+  showcase = null, facts = {}, meta = null,
+} = {}) {
+  const first = places[0] ?? null;
+  const second = places[1] ?? first;
+  const third = places[2] ?? second;
+  // `sameInEveryShape` COMES OFF `facts`, NEVER OFF `pricing`. Both public
+  // pages answer the same FAQ question and `publicFacts()` computes the answer
+  // once, with the finite-and-positive filter. `pricing` is null whenever
+  // `landingPricing()` cannot answer honestly -- no offered rows, no BUYABLE
+  // pack, or a seam that threw -- and reading a money fact off a nullable
+  // object means the landing states the DEFAULT whenever nothing is on sale,
+  // which is the state a fresh Stripe account boots in. The pricing page has
+  // no such fallback, so the two pages disagreed there. `facts` is the same
+  // object on both pages and is never null.
+  const { photoDays = RETENTION_DEFAULTS.photoDays, jobDays = RETENTION_DEFAULTS.jobDays, imageProcessor = null,
+    qualities = [], shapes = [], frames = 375, fps = 25, sameInEveryShape = true } = facts;
+
+  // The hoisted radios stay siblings of .wrap so the generated rules can
+  // reach both the rail and the ground; the ground itself lives in the band.
   const hooks = places.map((p) => (
-    `<input class="lstate" type="radio" name="lplace" id="${h(placeSlug(p.id))}" value="${h(p.id)}"${p.id === first ? ' checked' : ''}>`
+    `<input class="lstate" type="radio" name="lplace" id="${h(placeSlug(p.id))}" value="${h(p.id)}"${p.id === first?.id ? ' checked' : ''}>`
   )).join('\n');
 
-  // The gauze belongs to `layout` now -- every page gets it, which is what
-  // DESIGN.md means by "runs past every edge". The bloom stays: it is this
-  // page's own light, not the world's mesh.
   // THE SAME GROUND AS THE SIGNED-IN PAGE, AND DELIBERATELY THE SAME IDS. The
-  // stylesheet generates one set of `#pl-<id>:checked ~ ...` rules from the
-  // catalog; because the landing's radios carry those same ids, every one of
-  // them -- the still layer, the cross-fade, the per-place scrim -- reaches
+  // stylesheet generates one set of `#pl-<id>:checked ~ .wrap ...` rules from
+  // the catalog; because the landing's radios carry those same ids, every one
+  // of them -- the still layer, the cross-fade, the per-place scrim -- reaches
   // this page for nothing. Only the radios' NAME differs (lplace, so a landing
   // choice cannot be posted as a real order), and the script matches on both.
-  const backgrounds = places
-    .map((p) => `<div class="bg bg--${h(placeSlug(p.id))}"></div>`)
-    .join('\n');
-
-  const preBody = `${hooks}
-<div class="bgs" aria-hidden="true">
-${backgrounds}
-<video class="bgv" muted playsinline loop preload="none"></video>
-</div>
-<div class="scrim" aria-hidden="true"></div>
-<div class="bloom" aria-hidden="true"></div>`;
-
-  const stack = places.map((p, i) => `
+  const layers = places.map((p) => `<div class="bg bg--${h(placeSlug(p.id))}"></div>`).join('\n');
+  const rail = places.map((p, i) => `
       <li><label class="lopt lopt--${h(placeSlug(p.id))}" for="${h(placeSlug(p.id))}"><span class="lidx">${String(i + 1).padStart(2, '0')}</span>${h(p.label)}</label></li>`).join('');
 
-  const osds = places.map((p) => `
-      <span class="losd losd--${h(placeSlug(p.id))}" aria-hidden="true">${h(p.timeOfDay || '')}</span>`).join('');
+  // A tape slot: the showcase file when present, a place photograph when not.
+  const tapeSlot = (slot, kind, place) => {
+    const figure = kind === 'hero' ? 'hero-tape' : 'demo-tape';
+    if (slot) {
+      return `<figure class="${figure}"><video class="tape-media tape-media--${kind}" muted playsinline loop preload="none" poster="${h(slot.poster)}" data-src="${h(slot.video)}"></video><figcaption class="tape-cap">${h(slot.caption)}</figcaption></figure>`;
+    }
+    if (!place) return '';
+    return `<figure class="${figure}"><img class="tape-media tape-media--${kind}" src="/places/${h(place.id)}.jpg" alt="${h(place.label)}" loading="lazy" decoding="async"><figcaption class="tape-cap">${h(place.label)}</figcaption></figure>`;
+  };
+  const sticker = (i) => (showcase?.stickers?.[i]
+    ? `<img class="sticker sticker--${i + 1}" src="${h(showcase.stickers[i])}" alt="" loading="lazy" decoding="async">`
+    : '');
+
+  const seconds = Math.round(frames / fps);
+  const ticks = [1, 2, 3, 4, 5].map((k) => `00:${String(Math.round((k * seconds) / 5)).padStart(2, '0')}`);
+  const free = pricing?.freeCredits
+    ? `<p class="hero-fine">${h(`${pricing.freeCredits} free credits with a new account. One tape, no card.`)}</p>`
+    : '';
 
   const body = `
-<main class="landing">
-
-  <section class="strike">
-    <div class="lmenu">
-      <h1 class="hero-line">One photograph.<span class="lit">Fifteen seconds</span>of 2003.</h1>
-      <p class="hero-sub">Every place here is somewhere ordinary, and every one is
-      already present, unlit. Strike one and it is the afternoon you are standing in.</p>
-
-      <ul class="lrail">${stack}
-      </ul>
-      <p class="strike-hint">Strike one</p>
-
-      ${/* ONE CALL TO ACTION, AND THE SECOND ONE WAS A DUPLICATE RATHER THAN A
-           CHOICE. "I have an account" pointed at /login, and the signed-out
-           masthead six lines up in nav() already carries a "Sign in" link to
-           the same place -- so the hero was asking the visitor to choose
-           between doing the thing and doing a thing the chrome already offers.
-           Two calls to action of near-equal weight is the clearest slop tell
-           there is: it reads as a page that could not decide what it wanted,
-           and it halves the emphasis on the one that matters. Nothing is lost
-           by deleting it, which is why it goes rather than getting quieter. */''}
-      <p class="hero-do">
-        <a class="cta" href="/signup">Make a tape &rarr;</a>
-      </p>
-      ${pricing ? `<p class="hero-price">From ${h(String(pricing.fromCredits))} credits a tape.
-      ${h(String(pricing.packCredits))} credits is $${h(String(pricing.packUSD))}, and tax is added at checkout.
-      <a class="linky" href="/pricing">What a tape costs</a></p>` : ''}
+<header class="lime hero">
+  <nav class="hero-nav" aria-label="Primary">
+    ${wordmark()}
+    <div class="hero-links">
+      <a href="#places">Places</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/login" data-signin>Sign in</a>
     </div>
-  </section>
-
-  ${/* THE READ-OUT MOVED OUT OF THE PANEL AND ONTO THE PICTURE, which is where
-       a camcorder actually put it. It used to sit in the corner of the 4:3 veil
-       that framed the place; that veil is gone, because the place is now behind
-       the whole page and showing the same photograph twice at two sizes and two
-       crops is one picture too many. Kept inside .wrap so the generated
-       "#pl-x:checked ~ .wrap .losd--x" rules still reach it. */''}
-  <div class="losds" aria-hidden="true">${osds}
+    <a class="navpill" href="/signup">Make a tape</a>
+  </nav>
+  <div class="hero-body">
+    <h1 class="hero-line">One photograph. Fifteen seconds of 2003.</h1>
+    <p class="hero-sub">Upload one photo of your face, choose a place and an outfit, and get back a tape that looks like it was found in a drawer.</p>
+    <a class="hero-cta" href="/signup">Make a tape</a>
+    ${free}
   </div>
+  <div class="ruler" aria-hidden="true"><span>REC</span>${ticks.map((t) => `<span>${t}</span>`).join('')}</div>
+</header>
+${tapeSlot(showcase?.hero ?? null, 'hero', first)}
 
-  <section class="how">
-    ${/* THIS WAS THREE EQUAL COLUMNS AND IT WAS THE ONLY TEMPLATED THING ON THE
-         PAGE. §33's design review named it: a three-column 1fr grid of
-         number + heading + one line is the canonical AI-generated landing
-         layout, and it was "the only section on that page that reads
-         templated". The COPY was never the problem -- "chroma bleed, grain, the
-         head-switch band, transport jitter, the date burnt into the corner" is
-         the most specific writing on the site. So the words are untouched and
-         the shape is gone.
+<section class="manifesto inner">
+  ${/* NO NUMBER IN THIS SENTENCE, AND IT IS A RULE RATHER THAN A PREFERENCE.
+       The hero two blocks up already says "Fifteen seconds of 2003", so the
+       year was printed twice on one screen, and the second one was in the
+       largest type the site owns. It was also the only fixed year the product
+       promises: `deriveStamp` picks each tape's burnt-in date from its own
+       seed across 1999-2005, and real tapes on this disk read 1999, 2001,
+       2002, 2004 and 2005. The line says the thing the number was standing in
+       for instead -- you were never there, and the tape is old anyway. */''}
+  <p class="manifesto-line"><span class="lit">You,</span> somewhere you have ${sticker(0)} <span class="lit">never been,</span> on a tape ${sticker(1)} that was <span class="lit">always</span> ${sticker(2)} in the drawer. ${sticker(3)}</p>
+</section>
 
-         TEXTURE LEADS because it is the only one of the three that is ours.
-         Content is what any generator does; consent is what any careful company
-         does; the tape chain is the product. Giving all three the same weight
-         said they were equally interesting, which is exactly the flatness that
-         reads as machine-made.
+<section class="how2 inner">
+  <article class="card how-card">
+    <h2 class="card-t">The grade</h2>
+    ${/* THE GRADE, SHOWN RATHER THAN CLAIMED.
+         The paragraph below says "grain, the date stamp, the matte", and prose
+         is the weakest possible way to make a claim about how something looks.
+         Both halves are the SAME photograph -- assets/places/<id>.jpg -- and
+         the right one is that file through buildVideoFilter, the function the
+         renderer itself calls. So this is not an illustration of the product,
+         it is the product's own output on a picture the visitor can see the
+         source of.
 
-         AND THE NUMBERS ARE GONE, which matters more than it looks. 01/02/03
-         promised a SEQUENCE, and these are not steps -- they are three facts
-         about one thing. Numbering them was the page pretending to be a
-         process, and a false sequence is its own small dishonesty. */''}
-    <div class="how-lead">
-      <h2 class="how-t">Texture</h2>
-      <p class="how-d">Chroma bleed, grain, the head-switch band, transport jitter, the
-      date burnt into the corner. All of it deterministic, none of it asked of a model.</p>
-    </div>
-    <div class="how-rest">
-      <div>
-        <h3 class="how-t how-t--sm">Content</h3>
-        <p class="how-d">A plausible person, a plausible place, an outfit, and motion that
-        goes nowhere in particular. Your photograph is the only authority on the face.</p>
+         WHY IT SHOWS A PLACE AND NOT A PERSON, TODAY. The stronger version of
+         this is somebody's photograph beside their own tape -- that is the
+         actual proposition, and this one risks reading as "we apply a VHS
+         filter", which is the commodity. It is a place because a place pair is
+         already committed, licence-clean and faceless, and because publishing
+         a real face here is a consent decision rather than a design one. The
+         hero above is where a real tape answers that, from outside the repo.
+         Swapping this pair is replacing assets/landing/photo.jpg and tape.jpg;
+         no markup or CSS knows the difference.
+
+         THE CONTROL IS NOT HERE ON PURPOSE. See WIPE_SCRIPT. */''}
+    <figure class="wipe">
+      <img class="wipe-under" src="/landing/tape.jpg" alt="Times Square at night as a 2003 camcorder tape: softened, grain over everything, colour bleeding off the neon." width="1024" height="576" decoding="async">
+      <div class="wipe-clip">
+        <img src="/landing/photo.jpg" alt="Times Square at night, photographed sharp and clean." width="1024" height="576" decoding="async">
       </div>
-      <div>
-        <h3 class="how-t how-t--sm">Consent</h3>
-        <p class="how-d">Location and camera data stripped the moment your photograph
-        arrives. The photograph is deleted after seven days, the tape after thirty.</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="plain">
+      <div class="wipe-line" aria-hidden="true"><span class="wipe-grip"><svg viewBox="0 0 24 16" width="24" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 4 8l5 5"></path><path d="M15 3l5 5-5 5"></path></svg></span></div>
+      <figcaption class="wipe-cap"><span>Photograph</span><span>Tape</span></figcaption>
+    </figure>
     ${/* The sentence that used to close this paragraph promised "You approve a
-         still before any video is made, so a likeness you do not recognise costs
-         you nothing." It was true of the still path and false from the day the
-         web app went direct (server.mjs sets direct: true for a paid provider,
-         and the still-count control is gone) -- a refund-shaped promise on the
-         page that sells, which the product had stopped honouring. Deleted
-         rather than reworded: whether a customer gets anything back for a
-         likeness they do not recognise is a REFUND POLICY, and inventing one in
-         marketing copy is how the first claim got here. test/web-static.test.js
-         sweeps every page for it coming back. */''}
-    <p>It is not a filter. The picture is generated, then run through a real tape chain
-    in ffmpeg &mdash; the grain goes on before the upscale, the date stamp degrades with
-    the image, and the frame is matted the way a camcorder frame actually sat.</p>
-  </section>
+         still before any video is made, so a likeness you do not recognise
+         costs you nothing." It was true of the still path and false from the
+         day the web app went direct (server.mjs sets direct: true for a paid
+         provider, and the still-count control is gone) -- a refund-shaped
+         promise on the page that sells, which the product had stopped
+         honouring. Deleted rather than reworded: whether a customer gets
+         anything back for a likeness they do not recognise is a REFUND POLICY,
+         and inventing one in marketing copy is how the first claim got here.
+         test/web-static.test.js sweeps every page for it coming back. */''}
+    <p class="card-d">It is not a filter. The picture is generated, then run through a real tape chain in ffmpeg: the grain goes on before the upscale, the date stamp degrades with the image, and the frame is matted the way a camcorder frame actually sat. Drag the line.</p>
+  </article>
+  <article class="card how-card">
+    <h2 class="card-t">Your own place</h2>
+    <div class="own-pair">${second ? `<img src="/places/${h(second.id)}.jpg" alt="${h(second.label)}" loading="lazy" decoding="async">` : ''}<img src="/landing/tape.jpg" alt="A place, as a tape frame." loading="lazy" decoding="async"></div>
+    <p class="card-d">${places.length ? `${capital(inWords(places.length))} places are on the menu, and yours can be the next: ` : 'Your own place can be the one: '}upload a photograph of your garden, your kitchen or the street you grew up on, and the tape is set there.</p>
+  </article>
+</section>
 
-</main>
+<section class="band" id="places">
+  <div class="bgs" aria-hidden="true">
+${layers}
+<video class="bgv" muted playsinline loop preload="none"></video>
+  </div>
+  <div class="scrim" aria-hidden="true"></div>
+  <div class="inner band-in">
+    <h2 class="band-t">${h(places.length ? `${capital(inWords(places.length))} places, or your own.` : 'Your own place.')}</h2>
+    <ul class="lrail">${rail}
+    </ul>
+    <p class="band-hint">Pick one and the picture behind it changes. On the order form you can upload your own instead.</p>
+  </div>
+</section>
+
+<div class="inner">
+${factCards({ frames, fps, shapes, photoDays, jobDays })}
+</div>
+
+<section class="demo inner">
+  <h2 class="demo-t">Any shape. Any place.</h2>
+  <div class="demo-tapes">
+    ${tapeSlot(showcase?.tall ?? null, 'tall', second)}
+    ${tapeSlot(showcase?.fourThree ?? null, 'four', third)}
+  </div>
+  <a class="hero-cta demo-cta" href="/signup">Make a tape</a>
+</section>
+
+<div class="inner">
+${faq(faqItems({ freeCredits: pricing?.freeCredits ?? null, photoDays, jobDays, imageProcessor, qualities, shapes, sameInEveryShape }))}
+</div>
 
   ${/* SIGNING IN HAPPENS HERE, NOT ON ANOTHER PAGE. A returning visitor was
        being sent away from the only page that sells to type a password on a
@@ -1092,15 +1395,18 @@ ${backgrounds}
   </dialog>
 
 <script>${BG_SCRIPT}</script>
-<script>${SIGNIN_SCRIPT}</script>`;
+<script>${SIGNIN_SCRIPT}</script>
+<script>${WIPE_SCRIPT}</script>`;
 
   return layout({
-    title: 'Timestamp — one photo, fifteen seconds, 2003',
+    title: 'Timestamp — one photograph, fifteen seconds of 2003',
     body,
-    preBody,
-    bodyClass: 'is-landing',
+    preBody: hooks,
+    bodyClass: 'page-landing',
     account,
-    chrome: true,
+    chrome: false,
+    masthead: false,
+    meta,
   });
 }
 
@@ -1124,9 +1430,34 @@ export function homePage({
   const chosen = offered.some((r) => r.id === resolution) ? resolution : (offered[0]?.id ?? null);
   // The radios, hoisted out of the form. `form="tape"` is what puts them back
   // into the submission; the CSS needs them here.
+  // STEP 2 OPENS ON AN OUTFIT (2026-09-05). Until today this group was the only
+  // one on the page with nothing checked, while the server required an outfit --
+  // so pressing Record without scrolling through step 2 earned a 400, after the
+  // upload was already spent, over the one choice that changes neither the price
+  // nor the length of the tape.
+  //
+  // NAMED, WITH A FALLBACK TO THE FIRST CARD. `DEFAULT_OUTFIT_ID` is the plain
+  // t-shirt and jeans; if it ever leaves the menu the first outfit takes the
+  // job, because SOMETHING has to be checked or this reverts to the defect
+  // above. What must never happen is two, which is why the flag is computed per
+  // card from one resolved id rather than written into a preset file.
+  const defaultOutfit = outfits.some((o) => o.id === DEFAULT_OUTFIT_ID)
+    ? DEFAULT_OUTFIT_ID
+    : (outfits[0]?.id ?? null);
+  // AND IT LEADS THE STEP. The catalog sorts by id, which put the chosen card
+  // fourth of five and into the second row of the grid -- four cards to read
+  // before the one already ticked. Section 43 settled this when the own-place
+  // card went to the front of the place rail: what leads a step is what that
+  // step is telling you, and step 2 is telling you that you need not choose.
+  // The radios are reordered with the cards, because the cards are labels and
+  // the radios are what a keyboard actually walks.
+  const orderedOutfits = [
+    ...outfits.filter((o) => o.id === defaultOutfit),
+    ...outfits.filter((o) => o.id !== defaultOutfit),
+  ];
   const hooks = [
-    ...outfits.map((o) => (
-      `<input class="statehook" type="radio" form="tape" name="outfit" id="${h(outfitSlug(o.id))}" value="${h(o.id)}">`
+    ...orderedOutfits.map((o) => (
+      `<input class="statehook" type="radio" form="tape" name="outfit" id="${h(outfitSlug(o.id))}" value="${h(o.id)}"${o.id === defaultOutfit ? ' checked' : ''}>`
     )),
     ...places.map((p) => (
       `<input class="statehook" type="radio" form="tape" name="place" id="${h(placeSlug(p.id))}" value="${h(p.id)}">`
@@ -1179,7 +1510,7 @@ export function homePage({
   // ground does not cost a single interaction.
   const preBody = hooks;
 
-  const lookCards = outfits.map((o) => `
+  const lookCards = orderedOutfits.map((o) => `
     <label class="lookcard lookcard--${h(outfitSlug(o.id))}" for="${h(outfitSlug(o.id))}">
       <span class="tick" aria-hidden="true"></span>
       <span class="name">${h(o.label)}</span>
@@ -1360,18 +1691,50 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
     </div>
   </section>
 
-  <section class="panel panel--choice">
+  <section class="panel panel--choice" id="look">
     ${stepHead(2, 'The look', 'Only what is on the body — the place carries everything else.')}
     <div class="looks">${lookCards}</div>
-    <details class="aside">
-      <summary>Or describe what you are wearing</summary>
-      <p class="hint">Used only when no card above is chosen.</p>
+    ${/* THE BOX IS OUT OF ITS DISCLOSURE (2026-09-05), and that is what makes a
+         five-card menu honest rather than narrow.
+
+         The cards are five garments that go on anybody -- no dress, no skirt,
+         nothing cut for one gender -- so that nobody is ever asked which list
+         they belong in and nobody opens this step to find a single option
+         written for them. `test/catalog.test.js` pins that as a rule rather
+         than a preference. The cost of that decision is that a garment which IS
+         gendered is no longer a card, and the whole answer to that cost is this
+         box: it takes any garment at all, a sundress and a sari and a suit
+         included. Behind a <summary> it could not do that job. Section 43 fixed
+         the identical shape one step down and wrote the rule -- a signpost to
+         the back of the room is still the back of the room.
+
+         AND THE TEXT BEATS THE CARD, WHICH IS THE OPPOSITE OF STEP 3. Worth
+         stating because the asymmetry looks like an oversight and is not. On
+         step 3 a card can be un-chosen: `pl-own` exists, it is checked on load,
+         and it is the way out of a radio group, so there the card can safely
+         win. Step 2 now opens with a card already selected and has no such
+         escape hatch -- a radio group cannot be cleared without JavaScript. So
+         if the card won here, filling this box would do nothing at all, which
+         is section 49's dead control exactly: a label pointing at an
+         already-selected radio, passing every markup test ever written. Typing
+         is therefore read as the only available way to say "none of these". */''}
+    <div class="aside">
+      <p class="hint">Or describe what you are wearing — anything you type here is
+      used instead of the card above.</p>
       <input type="text" name="outfitText" maxlength="200" autocomplete="off" spellcheck="false"
-             placeholder="a green anorak" value="${h(values.outfit)}">
-    </details>
+             aria-label="Describe what you are wearing"
+             ${/* THE PLACEHOLDER NAMES SOMETHING THAT IS NOT A CARD, on purpose.
+                  It read "a green anorak" until 2026-09-05, which since the
+                  padded jacket exists was a hint to type a garment already on
+                  the menu -- it demonstrated the box without demonstrating the
+                  point of it. A dress is the example that carries the whole
+                  design: the cards are five garments that go on anybody, and
+                  this is where everything else lives. */''}
+             placeholder="a cotton summer dress" value="${h(values.outfit)}">
+    </div>
   </section>
 
-  <section class="panel panel--choice">
+  <section class="panel panel--choice" id="place">
     ${stepHead(3, 'The place', 'Your own place beats any description of one. Start there.')}
 
     ${/* STEP 3 LEADS WITH YOUR OWN PLACE (2026-08-30).
@@ -1476,12 +1839,6 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
     not this row. What changes is how much detail exists before the tape, and the tape
     works at 576 lines on its short edge, so above that there is nothing left to keep.</p>
 
-    <dl class="facts">
-      <dt>Length</dt><dd>15 SEC</dd>
-      <dt>Estimated cost</dt><dd>${costLines}</dd>
-      <dt>Credits</dt><dd>${h(`${balance.credits} CR`)}</dd>
-    </dl>
-
     <label class="check">
       <input type="checkbox" id="consent" name="consent" value="yes" required>
       <span class="consent-text">${
@@ -1493,7 +1850,21 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
 }</span>
     </label>
 
+    ${''/* THE PRICE STANDS BESIDE THE BUTTON (2026-09-07, spec section 6: "the
+          Record button lime with the price beside it"). The three facts and the
+          button used to stack with the consent between them, so the number a
+          person was agreeing to sat two blocks above the thing that spent it.
+          One row now: agree, then read the price, then press -- and on a phone
+          the row stacks with the price above the button. The facts keep their
+          words; tests elsewhere read them. */}
+    <div class="commit-foot">
+    <dl class="facts">
+      <dt>Length</dt><dd>15 SEC</dd>
+      <dt>Estimated cost</dt><dd>${costLines}</dd>
+      <dt>Credits</dt><dd>${h(`${balance.credits} CR`)}</dd>
+    </dl>
     <button type="submit" class="record" id="record"${brokeEntirely ? ' disabled' : ''}>&#10685; Record the tape</button>
+    </div>
     ${brokeEntirely
     ? `<p class="reason">${h(`Not enough credits — the cheapest tape costs ~${cheapest} CR and you have ${balance.credits} CR.`)}</p>`
     : `<p class="reason" id="reason">Upload a photo first</p>${
@@ -1629,21 +2000,24 @@ function videoTile(tape) {
  * account's tape cannot appear here.
  */
 export function videosPage({ account = null, balance = null, tapes = [], retentionDays = null } = {}) {
+  // THE SHELF ON THE PAPER (2026-09-04, from the design prototype): a readout
+  // label, the heading at page-title size, two sentences, and the tiles. No
+  // panel -- the home page's archive strip is boxed because it sits inside a
+  // form; here the shelf is the page.
   const body = `
-<main>
-  <section class="panel panel--archive">
-    <h1 class="app-h1">My videos</h1>
-    <p class="lede">Every tape you have made. Press play to watch one here, or download it.</p>
-    <p class="hint">${h(Number.isFinite(retentionDays) && retentionDays > 0
-    ? `Every recording stays on the shelf for ${retentionDays} days.`
+<main class="videos">
+  <p class="eyebrow eyebrow--osd">The shelf</p>
+  <h1 class="headline">My videos</h1>
+  <p class="sub">Every tape you have made. Press play to watch one here, or download it.</p>
+  <p class="hint">${h(Number.isFinite(retentionDays) && retentionDays > 0
+    ? `Finished tapes are kept for ${retentionDays} days. Download the ones you want to keep.`
     : 'Every finished recording lands here.')}</p>
 
-    ${tapes.length ? `<div class="shelf">${tapes.map(videoTile).join('')}</div>` : `
-    <div class="empty">
-      <p class="title">No videos yet</p>
-      <p>Make your first tape and it lands here &mdash; <a class="linky" href="/">start one</a>.</p>
-    </div>`}
-  </section>
+  ${tapes.length ? `<div class="shelf">${tapes.map(videoTile).join('')}</div>` : `
+  <div class="empty">
+    <p class="title">No videos yet</p>
+    <p>Make your first tape and it lands here &mdash; <a class="linky" href="/">start one</a>.</p>
+  </div>`}
 </main>
 `;
   return layout({ title: 'My videos', body, bodyClass: 'page-videos', account, balance });
@@ -1682,39 +2056,49 @@ export function statusPage({ view, account = null, labels = {} }) {
   // step-by-step bar: the page counts phases now, and the per-step statuses
   // are read straight off `view.steps` where the detail list renders them.
   const phaseIdx = phaseIndexOf(view.step);
-  const phase = PHASES[phaseIdx];
+
+  /**
+   * THE HEADING IS THE PLACE AND WHAT IS HAPPENING TO IT (2026-09-04, from the
+   * design prototype): "The balcony, being filmed". It used to be the phase
+   * title, which read as a build-log line where the name of somebody's tape
+   * should be; the phase titles live in the list now. The second half follows
+   * the job's status and the poller repaints it. A job with no place name --
+   * a photograph of a place with no caption -- gets the state alone.
+   */
+  const where = labels.place ?? view.input?.place ?? null;
+  const headstate = HEADLINE_COPY[view.status] ?? view.status;
+  const heading = where
+    ? `<span class="where">${h(where)}</span>, <span id="headstate">${h(headstate)}</span>`
+    : `<span id="headstate">${h(headstate.charAt(0).toUpperCase() + headstate.slice(1))}</span>`;
+
+  /**
+   * THE FRAME IS THE SHAPE AND THE SIZE, read off the job's own input, and a
+   * job that froze neither gets no row rather than a printed default.
+   */
+  const frame = [view.input?.aspect, view.input?.resolution].filter(Boolean).join(', ');
+
+  const phaseRow = (p, i) => {
+    const state = phaseState(i, phaseIdx, view.status);
+    return `<li class="phase phase-${state}">
+      <span class="phase-state${state === 'running' ? ' reclight' : ''}"><span class="dot" aria-hidden="true"></span><span class="word">${h(PHASE_STATE_COPY[state])}</span></span>
+      <span class="phase-body"><span class="phase-title">${h(p.title)}</span><span class="phase-note">${h(p.note)}</span></span>
+      <span class="phase-n">${h(String(i + 1).padStart(2, '0'))}</span>
+    </li>`;
+  };
 
   const body = `
-<main data-job="${h(view.jobId)}" data-status="${h(view.status)}" id="status">
-  <section class="panel">
+<main class="status" data-job="${h(view.jobId)}" data-status="${h(view.status)}" id="status">
   <p class="stamp">${h(view.jobId)}</p>
-
-  ${/* THE RECORD LIGHT, ON THE ONE SCREEN IN THE PRODUCT THAT IS LITERALLY A
-       RECORDING IN PROGRESS. `--rec` has been a token since the mark landed
-       and appeared nowhere but the chrome. It is rendered only while the job
-       is actually running: a blinking REC over a finished or failed job is a
-       lie about what the machine is doing, and there is a test for it. The
-       blink honours prefers-reduced-motion in the stylesheet. */''}
-  ${view.status === 'running' || view.status === 'pending'
-    ? '<p class="reclight"><span class="dot" aria-hidden="true"></span>REC</p>'
-    : `<p class="eyebrow">${h(STATUS_COPY[view.status] ?? view.status)}</p>`}
-  <h1 class="headline" id="headline">${h(phase.title)}</h1>
-  <p class="sub" id="subline">${h(phase.note)}</p>
-
-  ${/* THREE SEGMENTS, ONE PER PHASE. This was one segment per pipeline step,
-       which spent four of its eleven on work that finishes in milliseconds and
-       two on the calls that take minutes -- a bar that moves fastest exactly
-       where the waiting is not. */''}
-  <ol class="bar" id="bar" aria-label="Progress">
-    ${PHASES.map((p, i) => `<li class="seg seg-${i < phaseIdx ? 'done' : i === phaseIdx ? 'running' : 'pending'}" title="${h(p.title)}"></li>`).join('')}
-  </ol>
-  <p class="counter" id="counter">${h(`${phaseIdx + 1} of ${PHASES.length}`)} &middot; <span id="statusword">${h(STATUS_COPY[view.status] ?? view.status)}</span></p>
+  <p class="eyebrow">Your tape</p>
+  <h1 class="headline" id="headline">${heading}</h1>
 
   ${/* THE MOST USEFUL SENTENCE ON A PAGE NOBODY WANTS TO SIT ON. The job is a
        queue entry and a worker claims it, so closing the browser changes
        nothing -- but the page never said so, and the honest reading of a live
-       progress bar is "stay here". Static, so the poller never touches it. */''}
-  <p class="hint">You can close this page and come back &mdash; the tape carries on without you.</p>
+       progress page is "stay here". Static, so the poller never touches it. */''}
+  <p class="sub">A few minutes, most of them in the middle phase. You can close this page and
+  come back &mdash; the tape carries on without you.</p>
+  <p class="hint">Fifteen seconds of tape, 375 frames.</p>
 
   ${''/* Both surfaces ALWAYS exist, hidden while empty: the poller repaints
         them, and a job that fails MID-POLL would otherwise never show its
@@ -1722,7 +2106,19 @@ export function statusPage({ view, account = null, labels = {} }) {
         already customer copy -- jobView ships the authored userMessage or one
         generic sentence, never the operator's exception text. */}
   <p class="alert" role="alert" id="alert"${view.error ? '' : ' hidden'}>${h(view.error?.message ?? '')}</p>
-  <p class="hint creditnote" id="creditnote"${view.creditNote ? '' : ' hidden'}>${h(view.creditNote ?? '')}</p>
+
+  ${/* THREE ROWS, ONE PER PHASE, EACH SAYING WHERE IT STANDS. This was a bar
+       of three segments, and before that one segment per pipeline step, which
+       spent four of its eleven on work that finishes in milliseconds and two
+       on the calls that take minutes. A row can say what is happening; a bar
+       can only say how far. THE RECORD LIGHT sits on the phase being filmed --
+       the one screen in the product that is literally a recording in progress
+       -- and on nothing else, so a finished or failed job never blinks. The
+       blink honours prefers-reduced-motion in the stylesheet. */''}
+  <p class="counter" id="counter">${h(`${phaseIdx + 1} of ${PHASES.length}`)} &middot; <span id="statusword">${h(STATUS_COPY[view.status] ?? view.status)}</span></p>
+  <ol class="phases" id="phases" aria-label="Progress">
+    ${PHASES.map(phaseRow).join('\n    ')}
+  </ol>
 
   ${/* THE ELEVEN, ONE LINE AWAY. Native <details>, so this costs no script and
        no fourth inline hash -- `script-src` names the shipped scripts by hash
@@ -1736,17 +2132,23 @@ export function statusPage({ view, account = null, labels = {} }) {
     </ol>
   </details>
 
-  <p class="inputs">
-    <span class="k">Where</span> <span class="v">${h(labels.place ?? view.input.place)}</span><br>
-    <span class="k">Wearing</span> <span class="v">${h(labels.outfit ?? view.input.outfit)}</span>
-  </p>
+  <p class="eyebrow">This tape</p>
+  <dl class="inputs">
+    <dt>Where</dt>
+    <dd>${h(labels.place ?? view.input?.place ?? '')}</dd>
+    <dt>Wearing</dt>
+    <dd>${h(labels.outfit ?? view.input?.outfit ?? '')}</dd>
+    ${frame ? `<dt>Frame</dt>
+    <dd>${h(frame)}</dd>` : ''}
+  </dl>
+
+  <p class="hint creditnote" id="creditnote"${view.creditNote ? '' : ' hidden'}>${h(view.creditNote ?? '')}</p>
 
   <p class="actions">
     <button type="button" class="quiet" id="cancel">Cancel this one</button>
     <a class="quiet" href="/">Back to the shelf</a>
   </p>
   <noscript><p class="hint">This page reloads every five seconds.</p></noscript>
-  </section>
 </main>
 
 <script>${STATUS_SCRIPT}</script>
@@ -1803,7 +2205,7 @@ export function selectPage({ view, stills, account = null }) {
 // the result
 // ---------------------------------------------------------------------------
 
-export function resultPage({ view, account = null, labels = {} }) {
+export function resultPage({ view, account = null, labels = {}, tapes = [], retentionDays = null }) {
   // Assembled as text and escaped once, rather than stitched out of escaped
   // fragments with raw entities between them -- that pattern is where a
   // double-escape or a missed escape hides.
@@ -1845,58 +2247,97 @@ export function resultPage({ view, account = null, labels = {} }) {
     ? `${Math.round(Number(seconds))} seconds`
     : null;
   const labelSub = [labels.outfit ?? view.input?.outfit ?? null, runtime].filter(Boolean).join(' · ');
+  const place = labels.place ?? view.input?.place ?? null;
+
+  /**
+   * THE WINDOW THE WORDS PROMISE IS THE ONE THE PURGE ENFORCES, read from the
+   * config `scripts/render/purge-cli.mjs` deletes by, and threaded in rather
+   * than written here. A page that was not told the window promises nothing
+   * about it.
+   */
+  const keep = Number.isFinite(retentionDays) && retentionDays > 0
+    ? `The file is yours to download and keep; this copy stays on the shelf for ${retentionDays} days.`
+    : 'The file is yours to download and keep.';
+  const finished = runtime ? `${runtime.charAt(0).toUpperCase()}${runtime.slice(1)}, finished.` : 'Finished.';
+
+  // The rest of the shelf, never the tape on screen. The server filters it
+  // too; this is the page refusing to list a tape under itself whatever it
+  // was handed.
+  const earlier = tapes.filter((t) => t.jobId !== view.jobId);
+
   const body = `
-<main>
-  <section class="panel">
-  <p class="stamp">${h(view.jobId)}</p>
+<main class="result">
+  ${/* THE TAPE BESIDE THE WORDS (2026-09-04, from the design prototype). The
+       picture and its label are one column; the place, the sentence, the
+       download and the file's facts are the other. On a phone the columns
+       stack and the tape still comes first. */''}
+  <div class="result-grid">
+    <div class="result-tape">
+      <div class="player">
+        <video controls playsinline preload="metadata"
+               poster="/api/jobs/${h(view.jobId)}/poster"
+               src="/api/jobs/${h(view.jobId)}/video"></video>
+      </div>
 
-  ${/* THE PICTURE OPENS THE PAGE. There was an eyebrow and an <h1> saying
-       "Here it is" above this, which captioned something already on the
-       screen -- the clearest kind of filler. The naming that heading was
-       doing badly is done properly by the label below, which is also where
-       the date went. */''}
-  <div class="player">
-    <video controls playsinline preload="metadata"
-           poster="/api/jobs/${h(view.jobId)}/poster"
-           src="/api/jobs/${h(view.jobId)}/video"></video>
+      ${/* THE LABEL IS THE OBJECT THIS PRODUCT IMITATES. A cassette carries a
+           label saying where and when, and so does this: place, then outfit
+           and runtime, then the date in the accent. It is a fill rather than a
+           box, so DESIGN.md's no-borders rule is untouched. The human labels,
+           never the preset ids: this is the most-read line on the page and
+           therefore the worst place to leak `schrebergarten-august` at
+           somebody. */''}
+      <p class="label">
+        <span class="lname">${h(place ?? '')}</span>
+        <span class="lsub">${h(labelSub)}</span>
+        <span class="ldate">${h(stampDate(view.jobId))}</span>
+      </p>
+    </div>
+
+    <div class="result-words">
+      <p class="stamp">${h(view.jobId)}</p>
+      <p class="eyebrow">Your tape</p>
+      ${/* THE HEADING IS THE PLACE, which names the tape rather than
+           captioning the picture -- "Here it is" was the caption, and it is
+           gone. */''}
+      ${place ? `<h1 class="headline">${h(place)}</h1>` : ''}
+      <p class="sub">${h(finished)} ${h(keep)}</p>
+
+      <p class="actions">
+        ${/* Both halves on purpose: the download attribute is what a
+             same-origin click uses, and ?download=1 makes the server send
+             Content-Disposition, so the file still arrives named correctly
+             when the attribute is ignored (right-click save-as, an in-app
+             browser, a copied link).
+
+             IT COMES BEFORE THE FINE PRINT. It is the reason the page exists,
+             and the last thing on the payoff page must be the tape and not a
+             disclaimer. There is deliberately NO share link: a tape is
+             somebody's face behind their own session, and no public route to
+             one exists. */''}
+        <a class="go" href="/api/jobs/${h(view.jobId)}/video?download=1" download="timestamp-${h(view.jobId)}.mp4">Download</a>
+        <a class="quiet" href="/">Make another</a>
+      </p>
+
+      ${/* THE FILE'S OWN FACTS, labelled as such: a frame count and a raster
+           are what the tape physically is, and under their own label they read
+           as a readout rather than as a caption on the picture. `metaLineOf`
+           in the tests reads `class="meta"` exactly. */''}
+      <p class="eyebrow eyebrow--osd">The file</p>
+      <p class="meta">${h(metaLine)}</p>
+
+      ${/* EU AI Act Art. 50: the disclosure lives on the page where a person
+           meets the content, not only in file metadata a browser never shows.
+           The file-side half is the provenance tags in scripts/audio/mix.mjs.
+           It stays VISIBLE and it stays on this page. */''}
+      <p class="fine">Made with AI &mdash; a generative model built this scene from your photograph. It did not happen.</p>
+    </div>
   </div>
-
-  ${/* THE LABEL IS THE OBJECT THIS PRODUCT IMITATES. A cassette carries a
-       label saying where and when, and so does this: place, then outfit and
-       runtime, then the date in the accent. It replaces the old eyebrow, the
-       old headline and the two-row Where/Wearing table with one element that
-       carries all of it -- and it is a fill rather than a box, so DESIGN.md's
-       no-borders rule is untouched. The human labels, never the preset ids:
-       this is the most-read line on the page and therefore the worst place to
-       leak `schrebergarten-august` at somebody. */''}
-  <p class="label">
-    <span class="lname">${h(labels.place ?? view.input.place)}</span>
-    <span class="lsub">${h(labelSub)}</span>
-    <span class="ldate">${h(stampDate(view.jobId))}</span>
-  </p>
-
-  <p class="actions">
-    ${/* Both halves on purpose: the download attribute is what a same-origin
-         click uses, and ?download=1 makes the server send Content-Disposition,
-         so the file still arrives named correctly when the attribute is ignored
-         (right-click save-as, an in-app browser, a copied link).
-
-         IT COMES BEFORE THE FINE PRINT NOW. It is the reason the page exists
-         and it used to sit last, underneath the Art. 50 sentence, so the final
-         thing on the payoff page was a disclaimer rather than the tape. */''}
-    <a class="go" href="/api/jobs/${h(view.jobId)}/video?download=1" download="timestamp-${h(view.jobId)}.mp4">Download</a>
-    <a class="quiet" href="/">Make another</a>
-  </p>
-
-  <p class="meta">${h(metaLine)}</p>
-
-  ${/* EU AI Act Art. 50: the disclosure lives on the page where a person
-       meets the content, not only in file metadata a browser never shows.
-       The file-side half is the provenance tags in scripts/audio/mix.mjs.
-       It stays VISIBLE and it stays on this page -- moving the download above
-       it changes the order and nothing else. */''}
-  <p class="fine">Made with AI &mdash; a generative model built this scene from your photograph. It did not happen.</p>
-  </section>
+  ${earlier.length ? `
+  <section class="earlier">
+    <p class="eyebrow eyebrow--osd">Earlier tapes</p>
+    <p class="sub">The rest of your shelf. Press one to watch it.</p>
+    <div class="shelf">${earlier.map(shelfTile).join('')}</div>
+  </section>` : ''}
 </main>
 `;
   return layout({ title: 'Timestamp - finished', body, bodyClass: 'page-result', account });
@@ -1937,10 +2378,11 @@ export function privacyPage({
   // this exists so that switching moderation on cannot leave the page lying.
   imageProcessor = null,
   account = null,
+  meta = null,
 }) {
   const body = `
 <main>
-  <section class="panel">
+  <section class="legal">
   <p class="eyebrow">Privacy</p>
   <h1 class="headline">Your photo, and what happens to it</h1>
 
@@ -1973,17 +2415,21 @@ export function privacyPage({
        recipient with no stated purpose answers the wrong question. */''}
   <p class="sub">Your photograph is sent to fal.ai, the AI provider that generates the
   video${imageProcessor
-    ? `, and to ${h(imageProcessor)}, which checks it for illegal or abusive content before
-  anything is generated`
-    : ''}, and to nobody else. Sign-in runs through Supabase; payments through Stripe, on
-  Stripe's own pages; the six-digit sign-up codes are delivered by Resend. The application
-  and its files run on Hetzner servers in Germany.</p>
+    ? `, and to ${h(imageProcessor)}, which checks it for illegal or abusive content and
+  confirms it shows a face, before anything is generated`
+    : ''}, and to nobody else. fal.ai runs on its own infrastructure outside the EU and keeps
+  what it receives under its own privacy policy. Sign-in runs through Supabase; when you sign
+  in or sign up, your IP address is passed to Supabase, which uses it to limit abuse. Payments
+  run through Stripe, on Stripe's own pages; the six-digit sign-up codes are delivered by
+  Resend. The application and its files run on Hetzner servers in Germany.</p>
 
   <h2 class="eyebrow legal-h">How long we keep it</h2>
   <p class="sub">Your photo is deleted after ${h(retention.photoDays)} days and the finished
   video after ${h(retention.jobDays)} days &mdash; the same promise the consent text makes,
   enforced by an automatic sweep. You can delete either sooner, along with your whole
-  account, at any time.</p>
+  account, at any time. A nightly backup of account records, which never includes your
+  photographs or videos, is kept for 14 days, so a deleted account can survive in it for up
+  to 14 days before it is gone everywhere.</p>
 
   <h2 class="eyebrow legal-h">Your rights</h2>
   <p class="sub">Everything is on <a class="linky" href="/account">your account page</a>:
@@ -1998,13 +2444,13 @@ export function privacyPage({
   </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - privacy', body, bodyClass: 'page-legal', account });
+  return layout({ title: 'Timestamp - privacy', body, bodyClass: 'page-legal', account, meta });
 }
 
-export function termsPage({ entity = null, account = null }) {
+export function termsPage({ entity = null, account = null, meta = null }) {
   const body = `
 <main>
-  <section class="panel">
+  <section class="legal">
   <p class="eyebrow">Terms</p>
   <h1 class="headline">The deal, in plain words</h1>
 
@@ -2044,7 +2490,7 @@ export function termsPage({ entity = null, account = null }) {
   </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - terms', body, bodyClass: 'page-legal', account });
+  return layout({ title: 'Timestamp - terms', body, bodyClass: 'page-legal', account, meta });
 }
 
 /**
@@ -2061,10 +2507,10 @@ export function termsPage({ entity = null, account = null }) {
  * `.env` and not from the committed config: for a sole trader that address is
  * usually a home address, and this repository is public.
  */
-export function impressumPage({ entity = null, account = null }) {
+export function impressumPage({ entity = null, account = null, meta = null }) {
   const body = `
 <main>
-  <section class="panel">
+  <section class="legal">
   <p class="eyebrow">Legal notice (Impressum)</p>
   <h1 class="headline">Information required under &sect; 5 DDG</h1>
   ${operatorBlock(entity, { heading: 'Operator' })}
@@ -2073,7 +2519,7 @@ export function impressumPage({ entity = null, account = null }) {
   </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - legal notice', body, bodyClass: 'page-legal', account });
+  return layout({ title: 'Timestamp - legal notice', body, bodyClass: 'page-legal', account, meta });
 }
 
 // ---------------------------------------------------------------------------

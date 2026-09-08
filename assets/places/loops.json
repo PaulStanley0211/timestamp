@@ -1,30 +1,34 @@
 {
-  "_comment": "Mean luma of each loop, 0-255, averaged over every frame. The page derives its per-place scrim from this. Regenerate with: node scripts/tapedeck/place-loops.mjs",
+  "_comment": "Per loop: yavg is the mean luma 0-255 averaged over every frame; yhigh is the highlight -- the brightest luma any frame shows after a 2px blur. The page solves each place's scrim from both: 8:1 for the band's ink on the mean, 4.5:1 on the highlight. Regenerate with: node scripts/tapedeck/place-loops.mjs (cuts and measures) or --measure (measures the loops on disk, cuts nothing)",
   "raster": "1024x576",
   "loops": {
-    "autobahn-raststaette": {
-      "yavg": 69
-    },
-    "balkon-waesche": {
-      "yavg": 143.9
-    },
-    "hallenbad-nachmittag": {
-      "yavg": 144.3
+    "amalfi-afternoon": {
+      "yavg": 160.3,
+      "yhigh": 232
     },
     "kuechentisch-fruehstueck": {
-      "yavg": 100.6
+      "yavg": 100.6,
+      "yhigh": 224
     },
-    "ostsee-strand": {
-      "yavg": 164.9
-    },
-    "plattenbau-treppenhaus": {
-      "yavg": 109.4
+    "new-york-times-square": {
+      "yavg": 90.9,
+      "yhigh": 233
     },
     "schrebergarten-august": {
-      "yavg": 92.7
+      "yavg": 92.7,
+      "yhigh": 220
+    },
+    "space-centre": {
+      "yavg": 131.2,
+      "yhigh": 238
+    },
+    "tokyo-night": {
+      "yavg": 91.8,
+      "yhigh": 230
     },
     "wohnzimmer-abend": {
-      "yavg": 49.1
+      "yavg": 49.1,
+      "yhigh": 216
     }
   }
 }

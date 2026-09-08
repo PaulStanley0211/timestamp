@@ -271,7 +271,7 @@ function signIn(auth, { email, password }) {
   return `${SESSION_COOKIE}=${auth.signCookie(sessionId, auth.sessionSecret())}`;
 }
 
-async function withServer(run, { queue = fakeQueue(), credits = 5_000, provider = 'fixture' } = {}) {
+async function withServer(run, { queue = fakeQueue(), credits = 5_000, provider = 'fixture', extra = {} } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
   const auth = fakeAuth();
   auth.createAccount({ email: 'a@example.com', password: 'correct horse battery', plan: 'archive', credits });
@@ -285,6 +285,7 @@ async function withServer(run, { queue = fakeQueue(), credits = 5_000, provider 
     auth,
     provider,
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
+    ...extra,
   });
   const port = await app.listen();
   const base = `http://127.0.0.1:${port}`;
@@ -359,7 +360,7 @@ const goodParts = (extra = []) => ([
 
 /** Build a job straight through the model, to put the server in front of a state
  *  a worker would have produced, and hand it to an account. */
-function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a t-shirt', result = null, owner = null, aspect = null } = {}) {
+function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a t-shirt', result = null, owner = null, aspect = null, resolution = null } = {}) {
   const job = createJob({
     root,
     input: {
@@ -367,6 +368,7 @@ function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a 
       place: { kind: 'text', value: place },
       outfit: { kind: 'text', value: outfit },
       ...(aspect ? { aspect } : {}),
+      ...(resolution ? { resolution } : {}),
       stillCount: 3,
       consent: { granted: true, at: new Date().toISOString(), text: 'the wording' },
     },
@@ -387,7 +389,7 @@ function seedJob(app, root, { status = 'queued', place = 'a beach', outfit = 'a 
 // the home page -- the redesign
 // ---------------------------------------------------------------------------
 
-test('GET / renders the fourteen presets as cards, from the preset files', async () => {
+test('GET / renders the twelve presets as cards, from the preset files', async () => {
   await withServer(async ({ base, cookieA, app }) => {
     const res = await get(base, '/', cookieA);
     assert.equal(res.status, 200);
@@ -398,20 +400,31 @@ test('GET / renders the fourteen presets as cards, from the preset files', async
     // -- Ostsee, Autobahn, Schrebergarten -- on a product that is not for
     // Germany. The photographs and the ids are unchanged; only what a person
     // reads moved, to plain names that describe a memory rather than a country.
+    // FOUR BECAME FAMOUS PLACES 2026-09-04, the owner's call: the stairwell,
+    // the car park, the swimming pool and the balcony went, and Times Square,
+    // Tokyo, the Amalfi coast and a space centre came. The next morning the
+    // out-of-season beach went too, in Amalfi's favour: three ordinary places
+    // stay beside the four famous ones, seven in all.
+    assert.ok(!html.includes('The beach, out of season'), 'the retired beach is still on the menu');
     for (const label of [
-      'The garden, in summer', 'The car park, at dusk', 'The balcony',
-      'The swimming pool', 'The kitchen table', 'The beach, out of season',
-      'The stairwell', 'The living room, evening',
-      'Half-zip fleece', 'Checked shirt and jeans', 'Cotton summer dress',
-      'Knitted cardigan', 'Tracksuit jacket', 'Padded winter jacket',
+      'The garden, in summer', 'Times Square, at night', 'Tokyo, at night',
+      'The Amalfi coast, afternoon', 'The kitchen table',
+      'The space centre', 'The living room, evening',
+      // THE MENU BECAME FIVE UNISEX GARMENTS 2026-09-05, the owner's call:
+      // the outfits "should combine both genders". The summer dress was the
+      // only single-gender card and the cardigan the fussiest, and both came
+      // off; a plain t-shirt and jeans came on as the default step 2 opens
+      // with. Anyone wanting a dress still types one into the box beneath.
+      'T-shirt and jeans', 'Checked shirt and jeans', 'Zip-up fleece',
+      'Tracksuit', 'Padded jacket',
     ]) {
       assert.ok(html.includes(label), `${label} is missing from the page`);
     }
 
     // Rendered FROM the catalog, not from a second copy of the menu: every id
     // the server loaded has a radio, and the count matches.
-    assert.equal(app.cards.places.length, 8);
-    assert.equal(app.cards.outfits.length, 6);
+    assert.equal(app.cards.places.length, 7);
+    assert.equal(app.cards.outfits.length, 5);
     for (const p of app.cards.places) {
       assert.ok(html.includes(`id="pl-${p.id}"`), `no card for place ${p.id}`);
     }
@@ -530,6 +543,72 @@ test('the page opens on "your own place", so the presets are examples rather tha
       assert.doesNotMatch(html, new RegExp(`id="pl-${p.id}"[^>]*\\bchecked\\b`),
         `preset ${p.id} is checked on load`);
     }
+  });
+});
+
+test('step 2 opens on a simple outfit, so nobody is stopped at the look', async () => {
+  // THE OUTFIT WAS THE ONE REQUIRED CHOICE WITH NO DEFAULT (fixed 2026-09-05,
+  // section 65). Place, resolution and frame have all been checked on load for
+  // months; the outfit radios were the only group with nothing selected, while
+  // `cleanText(..., 'outfit', { required: true })` refused a post without one.
+  // So a person who uploaded a photo, picked a place and pressed Record without
+  // scrolling through step 2 got a 400 -- after spending the upload, on the
+  // choice that changes neither the price nor the length of the tape.
+  await withServer(async ({ base, cookieA, app }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+
+    assert.match(html, /id="of-tshirt-jeans"[^>]*\bchecked\b/,
+      'step 2 opens with nothing chosen, so an order that skips it is refused');
+
+    // Exactly one, for the reason the place group already documents: a second
+    // `checked` in a radio group makes the default whichever the browser
+    // happened to parse last.
+    for (const o of app.cards.outfits.filter((o) => o.id !== 'tshirt-jeans')) {
+      assert.doesNotMatch(html, new RegExp(`id="of-${o.id}"[^>]*\\bchecked\\b`),
+        `outfit ${o.id} is also checked on load`);
+    }
+  });
+});
+
+test('the outfit the page opens on is the first card, not the fourth', async () => {
+  // Presets are keyed by id and the catalog sorts by id, so the default landed
+  // fourth of five -- fleecepulli, hemd-jeans, trainingsjacke, tshirt-jeans --
+  // and the one card already chosen sat in the second row of the grid, after
+  // four the eye reads first. Found by looking at the rendered page; every
+  // assertion about the default passed while it was buried there.
+  //
+  // Section 43 settled the principle one step down when the own-place card
+  // went to the front of the place rail: what leads a step is what that step
+  // is telling you to do, and here the instruction is "you need not choose".
+  //
+  // THE TAB ORDER MOVES WITH IT. The visible cards are labels; the focusable
+  // controls are the hoisted radios, in their own order. Reordering only the
+  // cards would leave somebody tabbing through step 2 in an order that does
+  // not match what they are reading.
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    const cards = [...html.matchAll(/class="lookcard lookcard--of-([a-z0-9-]+)"/g)].map((m) => m[1]);
+    const hooks = [...html.matchAll(/name="outfit" id="of-([a-z0-9-]+)"/g)].map((m) => m[1]);
+    assert.equal(cards[0], 'tshirt-jeans', 'the chosen outfit is not the first card in the step');
+    assert.equal(hooks[0], 'tshirt-jeans', 'the cards were reordered and the tab order was not');
+    assert.deepEqual(cards, hooks, 'the reading order and the tab order disagree');
+    assert.equal(cards.length, 5);
+  });
+});
+
+test('the "describe it yourself" box is visible, not folded into a disclosure', async () => {
+  // Section 43 fixed exactly this shape on the place step and named the rule:
+  // a signpost to the back of the room is still the back of the room. The
+  // outfit escape hatch had the same defect -- a collapsed <details> at the
+  // bottom of the panel -- and promoting it is what makes a five-card unisex
+  // menu honest. Anybody whose garment is not on the cards, which after
+  // 2026-09-05 includes anyone who wants a dress, has to be able to SEE that
+  // they can ask for it.
+  await withServer(async ({ base, cookieA }) => {
+    const html = await (await get(base, '/', cookieA)).text();
+    const step2 = html.slice(html.indexOf('id="look"'), html.indexOf('id="place"'));
+    assert.ok(step2.includes('name="outfitText"'), 'the free-text box left step 2 entirely');
+    assert.ok(!step2.includes('<details'), 'the free-text box is still folded away behind a summary');
   });
 });
 
@@ -661,7 +740,7 @@ test('a preset card and an uploaded place photo contradict each other, and are r
     const res = await post(base, '/api/jobs', multipart([
       { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
       { name: 'placePhoto', filename: 'garden.png', type: 'image/png', body: fakePhoto(20_000, 'g') },
-      { name: 'place', body: 'ostsee-strand' },
+      { name: 'place', body: 'amalfi-afternoon' },
       { name: 'outfit', body: 'winterjacke' },
       { name: 'consent', body: 'yes' },
     ]), cookieA);
@@ -907,38 +986,19 @@ test('the shelf is empty until there is something on it, and then it is not', as
   });
 });
 
-test('the wordmark is the drawn mark, named, and carries no style of its own', async () => {
+test('the wordmark is live text in the display face, with the record light beside it', async () => {
   await withServer(async ({ base, cookieA }) => {
     const html = await (await get(base, '/', cookieA)).text();
-    assert.ok(html.includes('class="wordmark"'));
-
-    // THE OLD RULE HERE WAS THE OPPOSITE, AND IT WAS DELIBERATELY REVERSED
-    // (2026-08-27). This asserted `!wordmark.includes('<svg')` -- "the wordmark
-    // itself must be lettering, not a drawn logo" -- which was the right rule
-    // while the mark was the word TIMESTAMP set in the tape's own OSD face.
-    // The identity now uses Cormorant Garamond Italic with a head-switch tear
-    // through it, and neither the face nor the tear can be expressed as live
-    // text: the face is not shipped, and the tear is a clipped displacement.
-    // See DESIGN.md, "The brand identity". The rule below is what replaces it.
     const from = html.indexOf('class="wordmark"');
+    assert.ok(from > -1, 'the wordmark link is gone');
     const wordmark = html.slice(from, html.indexOf('</a>', from));
-    assert.ok(wordmark.includes('<svg'), 'sliced the wrong element, or the mark is gone');
-
-    // A PICTURE HAS NO TEXT, so something must say what it is. It used to be
-    // the literal word; a screen reader now finds nothing without this.
-    assert.ok(/<span class="vh">Timestamp<\/span>/.test(wordmark)
-      || /aria-label="Timestamp"/.test(wordmark),
-      'the wordmark is a picture with no accessible name');
-
-    // AND THE ONE THAT FAILS SILENTLY IN PRODUCTION AND NOWHERE ELSE. This
-    // server sends `style-src 'self'`, which blocks an inline <style> wherever
-    // it appears -- inside an inlined SVG included. A generated mark that
-    // carries its own <style> renders fine in every test that reads the markup
-    // and loses its animation in every real browser, with no error anywhere.
-    // The record light is animated from the stylesheet by its class instead.
-    assert.ok(!wordmark.includes('<style'),
-      'the inlined mark carries a <style> the CSP will silently drop');
+    // LIVE TEXT, NOT A PICTURE (2026-09-06). The drawn Cormorant mark belonged
+    // to the paper world. This world sets the word in Anton, so the accessible
+    // name is the word itself and nothing is inlined that the CSP could drop.
+    assert.ok(!wordmark.includes('<svg'), 'the wordmark is still the drawn mark');
+    assert.match(wordmark, />Timestamp</, 'the wordmark does not read as the word');
     assert.ok(wordmark.includes('class="rec"'), 'the record light lost the class the stylesheet animates');
+    assert.ok(!wordmark.includes('<style'), 'the mark carries a <style> the CSP will silently drop');
   });
 });
 
@@ -963,12 +1023,10 @@ test('the masthead draws the word alone -- no monogram beside it', async () => {
 
     assert.ok(!lockup.includes('class="mg"'), 'the monogram is back in the lockup');
     assert.ok(!/id="ts-mg-/.test(html), 'the monogram is inlined somewhere on the page');
-    assert.ok(lockup.includes('id="ts-wm-'), 'the wordmark itself went missing with it');
+    assert.ok(lockup.includes('>Timestamp<'), 'the wordmark itself went missing with it');
 
-    // ONE LINK, ONE NAME. The drawn letters carry no text, so the accessible
-    // name is the visually-hidden span -- which must survive the mark going.
-    assert.ok(/<span class="vh">Timestamp<\/span>/.test(lockup),
-      'the lockup lost the only thing that gives it an accessible name');
+    // ONE LINK, ONE NAME. The word is live text now, so the anchor's own text
+    // is the accessible name and no hidden span stands in for it.
 
     // Ids stay unique. With one mark a collision is no longer possible between
     // marks, but the assertion costs nothing and the page may inline more SVG.
@@ -987,8 +1045,13 @@ test('the masthead draws the word alone -- no monogram beside it', async () => {
     assert.ok(wordmarkRule, 'no rule lays out the wordmark at all');
     assert.ok(!/margin-left/.test(wordmarkRule[1]),
       'the monogram tile\'s negative margin outlived the tile');
-    assert.ok(!/\bgap\b/.test(wordmarkRule[1]),
-      'the lockup still spaces two children and there is only one');
+    // THE `gap` ASSERTION THAT SAT HERE IS GONE (2026-09-06) AND ITS PREMISE
+    // IS WHY. It read "the lockup still spaces two children and there is only
+    // one" -- true while the anchor held a single drawn mark. The word is live
+    // text now with the record light beside it, so the lockup has two children
+    // again and the gap between them is specified rather than left over. What
+    // that assertion actually guarded -- spacing surviving the box it was
+    // cancelling -- is the margin-left check above, which still binds.
   });
 });
 
@@ -1021,7 +1084,10 @@ test('every place has an image URL and a gradient underneath it in one declarati
       const rule = new RegExp(`\\.thumb--pl-${p.id}\\{background-image:url\\('/places/${p.id}\\.jpg'\\), linear-gradient\\(`);
       assert.ok(rule.test(css), `no image+gradient rule for ${p.id}`);
       assert.ok(css.includes(`.bg--pl-${p.id}{background-image:`), `no background layer for ${p.id}`);
-      assert.ok(css.includes(`#pl-${p.id}:checked~.bgs .bg--pl-${p.id}{opacity:1;}`),
+      // Through .wrap since 2026-09-06: the landing's photograph is a BAND in
+      // the document rather than a layer fixed to the viewport, so the ground
+      // is inside .wrap on both pages that have one.
+      assert.ok(css.includes(`#pl-${p.id}:checked~.wrap .bgs .bg--pl-${p.id}{opacity:1;}`),
         `${p.id} does not cross-fade the background when selected`);
     }
     // The cost line switches on BOTH radios, with no script involved -- the
@@ -1035,16 +1101,18 @@ test('every place has an image URL and a gradient underneath it in one declarati
     // bug: it would match whatever the frame row says and quote one number.
     assert.ok(!/\.cost--q-\d+p\{/.test(css),
       'a cost rule keyed on the tier alone quotes one price for every shape');
-    // CHANGED 2026-08-24 with the STRUCK world. This asserted the selected card
-    // gained `border-color:var(--accent)`. DESIGN.md forbids borders outright --
-    // grouping is depth and gauze density, never a line -- so selection is now
-    // expressed as a strike: the ghost comes to full opacity and its name burns
-    // cathode orange. The rule this test protects did not move: the selection is
-    // still carried entirely by CSS with no script involved.
-    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p{opacity:1;}'),
-      'the selected quality card must be struck by CSS alone');
-    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p .name{color:var(--accent);'),
-      'and the strike must be visible as colour, not only as opacity');
+    // CHANGED TWICE, AND THE RULE THIS TEST PROTECTS DID NOT MOVE EITHER TIME:
+    // the selection is carried entirely by CSS with no script involved. In 2026-08-24
+    // it asserted the selected card gained a border colour; the STRUCK world
+    // forbade borders outright, so it became a strike -- the ghost coming to full
+    // opacity with its name in the accent. On 2026-09-07 the lime world gave every
+    // option card an outline at full strength and made CHOSEN a FILL: the card's
+    // background and border become lime and its text takes the ink solved for
+    // lime. That is spec §6's grammar and the pricing page's already.
+    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p{background:var(--lime);border-color:var(--lime);}'),
+      'the selected quality card must fill lime by CSS alone');
+    assert.ok(css.includes('#q-480p:checked~.wrap .qualitycard--q-480p .name,#q-480p:checked~.wrap .qualitycard--q-480p .cr,#q-480p:checked~.wrap .qualitycard--q-480p .flag{color:var(--on-lime);}'),
+      'and its text must take the ink solved for lime, or the chosen card is unreadable');
     assert.ok(!css.includes('#q-1080p:checked'), 'a deferred resolution gets no selection rule');
 
     // The cross-fade is a CSS transition, not a script -- which is why it works
@@ -1056,7 +1124,11 @@ test('every place has an image URL and a gradient underneath it in one declarati
     assert.ok(reduced, 'there is no prefers-reduced-motion block');
     assert.match(reduced[1], /\.bg \{[^}]*animation: none/, 'reduced motion must stop the drift');
     assert.match(reduced[1], /\.bg \{[^}]*transition: none/, 'reduced motion must stop the cross-fade');
-    assert.match(reduced[1], /\.rec \{[^}]*animation: none/, 'reduced motion must stop the blinking dot');
+    // The wordmark's dot used to be asserted here too ("reduced motion must
+    // stop the blinking dot"). It stopped blinking for everybody on 2026-09-07,
+    // so there is nothing for reduced motion to stop and a rule saying so would
+    // be dead CSS; web-static pins the stillness and browser-smoke reads it off
+    // the real cascade.
   });
 });
 
@@ -1093,12 +1165,12 @@ test('a missing place photograph is a 404 and never a path the client chose', as
 test('a real place photograph is served when it is there', async () => {
   const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
   fs.mkdirSync(`${assets}/places`, { recursive: true });
-  fs.writeFileSync(`${assets}/places/ostsee-strand.jpg`, Buffer.from('not really a jpeg'));
+  fs.writeFileSync(`${assets}/places/amalfi-afternoon.jpg`, Buffer.from('not really a jpeg'));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
   const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), assetsRoot: assets });
   const port = await app.listen();
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/places/ostsee-strand.jpg`);
+    const res = await fetch(`http://127.0.0.1:${port}/places/amalfi-afternoon.jpg`);
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type'), 'image/jpeg');
     assert.equal(await res.text(), 'not really a jpeg');
@@ -1109,15 +1181,131 @@ test('a real place photograph is served when it is there', async () => {
   }
 });
 
-test('a place LOOP is served, and only for an id the catalog knows', async () => {
+/**
+ * The before/after pair on the landing page.
+ *
+ * TWO FIXED NAMES AND AN ALLOW-LIST, NOT A PATTERN. `placeImage` resolves its
+ * id by membership in the catalog precisely so no byte of the request is ever
+ * concatenated into a path; there are exactly two files here, so the same
+ * property comes for free from a two-entry map. Swapping which photograph the
+ * landing compares is replacing two files on disk -- no route change, and
+ * nothing new for a traversal attempt to aim at.
+ *
+ * PUBLIC, BECAUSE THE PAGE IS. The landing is what a signed-out stranger
+ * arrives at; a comparison whose halves 401 would be two broken images above
+ * the fold for every visitor who has not signed in -- which is all of them.
+ */
+test('the landing before/after pair is served, and to somebody who is not signed in', async () => {
   const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
-  fs.mkdirSync(`${assets}/places`, { recursive: true });
-  fs.writeFileSync(`${assets}/places/ostsee-strand.mp4`, Buffer.from('not really an mp4'));
+  fs.mkdirSync(`${assets}/landing`, { recursive: true });
+  fs.writeFileSync(`${assets}/landing/photo.jpg`, Buffer.from('the source photograph'));
+  fs.writeFileSync(`${assets}/landing/tape.jpg`, Buffer.from('the graded frame'));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
   const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), assetsRoot: assets });
   const port = await app.listen();
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/places/ostsee-strand.mp4`);
+    for (const [file, body] of [['photo.jpg', 'the source photograph'], ['tape.jpg', 'the graded frame']]) {
+      // No cookie on this fetch, deliberately -- that is the assertion.
+      const res = await fetch(`http://127.0.0.1:${port}/landing/${file}`);
+      assert.equal(res.status, 200, `/landing/${file} is not reachable signed out`);
+      assert.equal(res.headers.get('content-type'), 'image/jpeg');
+      assert.equal(await res.text(), body);
+    }
+
+    // Anything not in the map is a 404 before the filesystem is consulted.
+    for (const target of ['/landing/nope.jpg', '/landing/..%2f..%2fpackage.json', '/landing/photo.png']) {
+      const res = await fetch(`http://127.0.0.1:${port}${target}`);
+      assert.ok(res.status === 404 || res.status === 400,
+        `${target} answered ${res.status}, which is neither a refusal nor a miss`);
+    }
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(assets, { recursive: true, force: true });
+  }
+});
+
+test('the four web fonts are served public, by name, with a day of cache, and nothing else under /fonts/ is', async () => {
+  await withServer(async ({ base }) => {
+    for (const [file, type] of [
+      ['anton.woff2', 'font/woff2'], ['anton.ttf', 'font/ttf'],
+      ['inter-400.woff2', 'font/woff2'], ['inter-600.woff2', 'font/woff2'],
+    ]) {
+      // No cookie, deliberately: a stylesheet that loads while signed out must
+      // be able to load its faces while signed out.
+      const res = await fetch(`${base}/fonts/${file}`);
+      assert.equal(res.status, 200, `/fonts/${file} answered ${res.status}`);
+      assert.equal(res.headers.get('content-type'), type);
+      assert.match(res.headers.get('cache-control') ?? '', /max-age=86400/, 'a font is revalidated daily, like the brand assets');
+      assert.ok((await res.arrayBuffer()).byteLength > 0);
+    }
+    // `constructor` and `toString` are the interesting misses: they are not on
+    // the map and they are on every object's prototype, so a bare lookup finds
+    // an inherited member, calls it truthy and then destructures something that
+    // is not a pair. The answer to a name nobody put on the list is a miss.
+    for (const target of ['/fonts/nope.woff2', '/fonts/..%2f..%2fpackage.json', '/fonts/OFL-anton.txt', '/fonts/tape-osd.ttf',
+      '/fonts/constructor', '/fonts/toString', '/fonts/__proto__']) {
+      const res = await fetch(`${base}${target}`);
+      assert.ok(res.status === 404 || res.status === 400, `${target} answered ${res.status}, which is neither a refusal nor a miss`);
+    }
+  });
+});
+
+test('the showcase serves an allow-listed name public, with range support and a day of shared cache, and nothing else', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-showcase-'));
+  fs.copyFileSync(new URL('./fixtures/showcase/tiny.mp4', import.meta.url), path.join(dir, 'hero-16x9.mp4'));
+  fs.copyFileSync(new URL('./fixtures/showcase/tiny.jpg', import.meta.url), path.join(dir, 'hero-16x9.jpg'));
+  fs.writeFileSync(path.join(dir, 'secret.txt'), 'not on the list');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), showcaseDir: dir });
+  const port = await app.listen();
+  try {
+    const video = await fetch(`http://127.0.0.1:${port}/showcase/hero-16x9.mp4`, { headers: { range: 'bytes=0-99' } });
+    assert.equal(video.status, 206, 'a range request is what a <video> element sends');
+    assert.equal(video.headers.get('content-type'), 'video/mp4');
+    assert.match(video.headers.get('content-range') ?? '', /^bytes 0-99\//);
+    assert.equal(video.headers.get('cache-control'), 'public, max-age=86400', 'the showcase is nobody\'s face to hide and everybody\'s to cache');
+    assert.equal(video.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(video.headers.get('x-robots-tag'), 'noindex, nofollow');
+
+    const poster = await fetch(`http://127.0.0.1:${port}/showcase/hero-16x9.jpg`);
+    assert.equal(poster.status, 200);
+    assert.equal(poster.headers.get('content-type'), 'image/jpeg');
+
+    for (const target of ['/showcase/secret.txt', '/showcase/tape-9x16.mp4', '/showcase/..%2fsecret.txt', '/showcase/hero-16x9.MP4']) {
+      const res = await fetch(`http://127.0.0.1:${port}${target}`);
+      assert.ok(res.status === 404 || res.status === 400, `${target} answered ${res.status}: a name off the list, or on it but absent, is a miss`);
+    }
+
+    const s = app.showcase();
+    assert.deepEqual(s.hero, { video: '/showcase/hero-16x9.mp4', poster: '/showcase/hero-16x9.jpg', caption: s.hero.caption });
+    assert.equal(s.tall, null, 'a slot whose files are absent is null, never a broken url');
+    assert.equal(s.fourThree, null);
+    assert.deepEqual(s.stickers, []);
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('with no showcase directory every name is a 404 and every slot is null', async () => {
+  await withServer(async ({ base, app }) => {
+    const res = await fetch(`${base}/showcase/hero-16x9.mp4`);
+    assert.equal(res.status, 404);
+    assert.deepEqual(app.showcase(), { hero: null, tall: null, fourThree: null, stickers: [] });
+  });
+});
+
+test('a place LOOP is served, and only for an id the catalog knows', async () => {
+  const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-assets-'));
+  fs.mkdirSync(`${assets}/places`, { recursive: true });
+  fs.writeFileSync(`${assets}/places/amalfi-afternoon.mp4`, Buffer.from('not really an mp4'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(), assetsRoot: assets });
+  const port = await app.listen();
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/places/amalfi-afternoon.mp4`);
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type'), 'video/mp4');
 
@@ -1128,8 +1316,8 @@ test('a place LOOP is served, and only for an id the catalog knows', async () =>
     // These reach the handler and are refused there, by name.
     for (const target of [
       '/places/nope.mp4',            // not in the catalog
-      '/places/ostsee-strand.mp4.mp4', // a second suffix cannot join the id
-      '/places/ostsee-strand.webm',  // an extension this route does not serve
+      '/places/amalfi-afternoon.mp4.mp4', // a second suffix cannot join the id
+      '/places/amalfi-afternoon.webm',  // an extension this route does not serve
     ]) {
       assert.equal((await fetch(`http://127.0.0.1:${port}${target}`)).status, 404, target);
     }
@@ -1175,21 +1363,29 @@ test('the moving background is one element, and the page is finished without it'
     assert.ok(/\sloop/.test(video), 'the loop is six seconds long and is meant to repeat');
 
     // The still layers are the fallback and must survive. One per place.
-    assert.ok(/class="bg bg--pl-ostsee-strand"/.test(bgs), 'the still fallback layer is gone');
+    assert.ok(/class="bg bg--pl-amalfi-afternoon"/.test(bgs), 'the still fallback layer is gone');
 
     // TWO STATES, AND COLLAPSING THEM INTO ONE IS A REGRESSION WITH A LOOK.
-    // The ground -- the per-place scrim and the plate under the panels -- keys
-    // off "is-live", which stays true once video has worked here. Only the
-    // video's own opacity keys off "is-showing", which drops for the moment
-    // between choosing a place and its loop decoding. Drive both from one
-    // class and every click throws the scrim back to full strength and changes
-    // each panel's corner radius until the next file loads. Measured in a
-    // browser before this split existed; it flinched once per click.
+    // Only the video's own opacity keys off "is-showing", which drops for the
+    // moment between choosing a place and its loop decoding. The scrim used to
+    // key off "is-live", which stays true once video has worked here; driving
+    // it from "is-showing" instead threw it back to full strength on every
+    // click until the next file loaded. Measured in a browser before the split
+    // existed; it flinched once per click.
+    // SINCE 2026-09-07 THE SCRIM KEYS ON THE RADIO ALONE, and that keeps the
+    // property for free: a rule that never mentions "is-showing" cannot
+    // flinch. What moved is the no-video visitor, who used to get a typed
+    // default and now gets the same solve -- the still under a loop is darker
+    // than the loop on the mean and blurred harder, so the solve covers it.
     const css = await (await fetch(`${base}/styles.css`)).text();
     assert.ok(/\.bgs\.is-showing\s+\.bgv\s*\{[^}]*opacity/.test(css),
       'the video should reveal on is-showing');
-    assert.ok(/:checked~\.bgs\.is-live~\.scrim\{opacity:/.test(css),
-      'the per-place scrim should hold on is-live, not blink with each swap');
+    assert.ok(/:checked~\.wrap \.scrim\{opacity:/.test(css),
+      'the per-place scrim should key on the radio');
+    assert.ok(!/is-showing[^{]*\.scrim/.test(css),
+      'the per-place scrim keys on is-showing and will blink with each swap');
+    assert.ok(!/is-live[^{]*\.scrim/.test(css),
+      'the per-place scrim still waits for the loop; the no-video visitor is left on the default');
     assert.ok(!/is-playing/.test(css), 'the old single-state class is still in the sheet');
 
     // THE PLATE UNDER THE PANELS WAS THE THIRD THING is-live HELD, and its
@@ -1209,6 +1405,49 @@ test('the moving background is one element, and the page is finished without it'
       'the signed-in page still carries a background video');
     assert.ok(!/class="bgs"/.test(home), 'the signed-in page still carries the full-bleed ground');
     assert.ok(!/class="scrim"/.test(home), 'the signed-in page still carries the scrim');
+  });
+});
+
+/**
+ * THE ONE THING THIS PRODUCT CAN SHOW THAT A COMPETITOR CANNOT IS THE GRADE.
+ * Anyone can call a video model; the tape chain in `scripts/tapedeck/` is the
+ * half that is ours. The landing states it in prose -- "chroma bleed, grain,
+ * the head-switch band" -- and prose is the weakest way to make a claim about
+ * how something looks. The wipe is the same claim as a picture.
+ *
+ * WHY BOTH HALVES ARE IN THE MARKUP AND THE CONTROL IS NOT. Section 30's rule
+ * for the background loop applies here unchanged: every exit returns to the
+ * page that already worked. The clip is a CSS custom property with a static
+ * default, so a browser with no JavaScript -- or one that refused the script
+ * under the CSP -- gets a fixed split of two real photographs with a divider
+ * down the middle, which is a legitimate before-and-after rather than a dead
+ * control. The script's only job is to make that split draggable.
+ */
+test('the landing shows the grade as a before and after, and is finished without the script', async () => {
+  await withServer(async ({ base }) => {
+    const html = await (await get(base, '/')).text();
+
+    const figure = html.slice(html.indexOf('<figure class="wipe"'), html.indexOf('</figure>', html.indexOf('<figure class="wipe"')));
+    assert.ok(figure.length > 0, 'the landing carries no before/after figure at all');
+
+    // BOTH PHOTOGRAPHS SHIP IN THE MARKUP. If either were script-inserted the
+    // no-JS state would be one picture and an unexplained gap.
+    assert.match(figure, /src="\/landing\/photo\.jpg"/,
+      'the source photograph is not in the markup');
+    assert.match(figure, /src="\/landing\/tape\.jpg"/,
+      'the graded frame is not in the markup');
+
+    // Both are content, not decoration -- a reader who cannot see them still
+    // needs to be told what the comparison is between.
+    const alts = [...figure.matchAll(/alt="([^"]*)"/g)].map((m) => m[1]);
+    assert.equal(alts.length, 2, 'both halves must carry alt text');
+    for (const alt of alts) assert.ok(alt.trim().length > 0, 'an empty alt on a load-bearing image');
+
+    // THE CONTROL IS THE SCRIPT'S, AND ONLY THE SCRIPT'S. A range input in the
+    // markup would move its own thumb with no JavaScript while the picture
+    // behind it stayed put -- a control that visibly does nothing, which is
+    // section 49D's dead own-place card in a second place.
+    assert.ok(!/<input/.test(figure), 'the slider input must be created by the script, never shipped inert');
   });
 });
 
@@ -1253,6 +1492,36 @@ test('POST /api/jobs is 201 immediately, and the bytes land intact', async () =>
 
     // The pointer went on the board, once, after the manifest existed.
     assert.deepEqual(queue.calls.enqueued, [body.jobId]);
+  });
+});
+
+test('typing an outfit beats the card, because the card can no longer be un-chosen', async () => {
+  // THE CONTROL THE DEFAULT WOULD OTHERWISE HAVE KILLED (2026-09-05).
+  //
+  // Step 2 now opens with a card already selected, and a radio group cannot be
+  // cleared without JavaScript -- so a browser posts BOTH `outfit` and, if the
+  // person typed one, `outfitText`, on every single order. Under the old
+  // `firstFilled(fields.outfit, fields.outfitText)` the card would win every
+  // time and the free-text box would do nothing at all, for anybody, ever.
+  // That is section 49's dead own-place card exactly: a live-looking control
+  // pointing at an already-selected radio, passing every markup assertion in
+  // the suite. It matters more here than it did there, because after the menu
+  // became five unisex garments this box is the ONLY way to order a dress.
+  //
+  // So typing is read as the one available way to say "none of these".
+  await withServer(async ({ base, root, cookieA }) => {
+    const res = await post(base, '/api/jobs', multipart([
+      { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
+      { name: 'place', body: 'schrebergarten-august' },
+      // Exactly what a browser sends: the default card, plus a typed garment.
+      { name: 'outfit', body: 'tshirt-jeans' },
+      { name: 'outfitText', body: 'a long floral summer dress' },
+      { name: 'consent', body: 'yes' },
+    ]), cookieA);
+    assert.equal(res.status, 201);
+    const job = loadJob({ root, jobId: (await res.json()).jobId });
+    assert.equal(job.input.outfit.kind, 'text');
+    assert.equal(job.input.outfit.value, 'a long floral summer dress');
   });
 });
 
@@ -1426,12 +1695,152 @@ test('the quoted price matches the charge for every shape, not just 4:3', async 
       }
     }
 
-    // And the wide price must be genuinely different from the 4:3 one, so the
-    // assertion above cannot pass because every shape quotes the same number.
-    const square = await app.sessions.cost({ resolution: '480p', seconds: 15, aspect: '4:3' });
-    const wide = await app.sessions.cost({ resolution: '480p', seconds: 15, aspect: '9:16' });
-    assert.notEqual(square, wide, 'a wide shape costs 4/3 and must quote differently');
+    // THE ANTI-VACUITY GUARD HAD TO CHANGE, AND NOT BECAUSE IT WAS WEAKENED.
+    //
+    // It used to assert that a wide shape quotes a DIFFERENT number from 4:3,
+    // which was both true and the only thing stopping the loop above passing
+    // against a page that printed one number for everything. The frame-shape
+    // surcharge went on 2026-09-05 -- Wan bills seconds at a flat tier rate
+    // with no pixel term, so every shape genuinely costs the same now -- and an
+    // assertion that the numbers differ would fail on correct code.
+    //
+    // TWO THINGS REPLACE IT, and between them the loop still cannot pass by
+    // printing one number for everything:
+    //   the TIERS must still quote differently from each other, and
+    //   the page must still carry one quote span PER SHAPE, which is the
+    //   machinery that lets a shape move the price at all. The numbers
+    //   coincide today; if a future supplier bills by pixels again, that
+    //   machinery is what the new multiplier flows through, and deleting it
+    //   because "every shape costs the same" is the regression this guards.
+    const cheap = await app.sessions.cost({ resolution: '480p', seconds: 15, aspect: '4:3' });
+    const dear = await app.sessions.cost({ resolution: '720p', seconds: 15, aspect: '4:3' });
+    assert.notEqual(cheap, dear, 'both tiers quote the same number, so the loop above proves nothing');
+
+    for (const slug of ['a-4x3', 'a-16x9', 'a-9x16']) {
+      assert.match(html, new RegExp(`class="cr cr--${slug}"`),
+        `no per-shape quote for ${slug}: the page can no longer express a shape that costs more`);
+    }
   });
+});
+
+/**
+ * `/` AND `/pricing` MUST AGREE ON WHETHER THE SHAPE IS PART OF THE PRICE.
+ *
+ * Both public pages answer the same FAQ question ("Which shapes and
+ * qualities?") from the same underlying rows, and until now each page did the
+ * arithmetic itself: the landing's `landingPricing()` counted every value in a
+ * row's `creditsByAspect`, and the pricing page's own local computation
+ * filtered out non-finite and zero quotes first. A row that ever carries one
+ * -- a shape the pricing refuses, or an older seam -- is exactly where those
+ * two answers can diverge, on a money question.
+ *
+ * The real `aspects` config prices every shape the same today (2026-09-05),
+ * so nothing in `config/credits.json` alone can produce a non-finite or zero
+ * quote; `creditCost` is overridden directly to force one, on one aspect of
+ * one resolution only, so the OTHER resolution's row is untouched and still
+ * proves the filter rather than a coincidence.
+ */
+test('the landing and the pricing page agree on whether the shape is part of the price', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const auth = fakeAuth();
+  const realCreditCost = auth.creditCost.bind(auth);
+  // A forced ZERO, not a throw: `resolutions()` in session-middleware.mjs
+  // catches UNKNOWN_ASPECT/RESOLUTION_UNAVAILABLE and simply omits the key,
+  // which a Set-of-values comparison never sees either way. What the two
+  // computations disagree about is a quote that IS present and is zero (or
+  // non-finite) -- so the fixture must return a real value, not throw one.
+  auth.creditCost = (opts = {}) => {
+    if (opts.resolution === '480p' && opts.aspect === '9:16') return 0;
+    return realCreditCost(opts);
+  };
+  const app = createServer({ root, cfg: CFG, queue: fakeQueue(), port: 0, auth });
+  const port = await app.listen();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const landing = await (await get(base, '/', null)).text();
+    const pricing = await (await get(base, '/pricing', null)).text();
+
+    const shapeSentence = (html) => {
+      const m = /Which shapes and qualities\?[\s\S]*?<p>([^<]*)<\/p>/.exec(html);
+      assert.ok(m, 'no "Which shapes and qualities?" answer on the page');
+      return m[1];
+    };
+    const landingSentence = shapeSentence(landing);
+    const pricingSentence = shapeSentence(pricing);
+    assert.equal(landingSentence, pricingSentence,
+      `the landing and /pricing disagree on the shape sentence:\n  /        : ${landingSentence}\n  /pricing : ${pricingSentence}`);
+
+    // Pin the actual answer too, so this cannot pass by both pages agreeing on
+    // the WRONG one: the forced zero must be filtered out before the compare,
+    // exactly as the real config's finite, equal quotes would read today.
+    assert.match(landingSentence, /a tape costs the same in every shape/,
+      'the filter did not survive the forced zero quote');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * THE SAME AGREEMENT, IN THE STATE A NEW STRIPE ACCOUNT BOOTS IN.
+ *
+ * The test above forces a zero quote and proves the filter; it exercises only
+ * the path where `landingPricing()` ANSWERS. That function returns null
+ * whenever it cannot answer honestly -- no offered rows, no BUYABLE pack, or a
+ * seam that threw -- and "no buyable pack" is not a hypothetical: a pack whose
+ * `stripePriceId` is null is the designed pre-launch state of this config, and
+ * it is what an operator has on the day they create a fresh Stripe account and
+ * have not pasted the new Price ids in yet.
+ *
+ * With the landing reading the shape fact off that nullable object, `/` fell
+ * back to "costs the same" while `/pricing` -- which reads `facts` and is
+ * unaffected by whether anything is on sale -- said the opposite. The shape
+ * fact comes from `facts` on BOTH pages now, and `facts` is computed once.
+ *
+ * The fixture is the mirror of the one above: a real, finite, DIFFERING quote
+ * on one aspect (so the honest answer is "the shape is part of the price"),
+ * and packs that carry no Price id (so the price sentence has nothing to say).
+ */
+test('the landing and the pricing page still agree on the shape when no pack is buyable', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const auth = fakeAuth();
+  const realCreditCost = auth.creditCost.bind(auth);
+  // A real surcharge, not a zero: this one must SURVIVE the finite-and-positive
+  // filter, so both pages owe the reader "the shape is part of the price".
+  auth.creditCost = (opts = {}) => {
+    const base = realCreditCost(opts);
+    return opts.resolution === '480p' && opts.aspect === '9:16' ? base * 2 : base;
+  };
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth,
+    // Available, and not buyable: exactly `config/credits.json`'s own
+    // `stripePriceId: null` state, which `packRows` maps to `buyable: false`.
+    billing: { async packs() { return [{ id: 'starter', label: 'Starter', priceUSD: 12, credits: 92, available: true, stripePriceId: null }]; } },
+  });
+  const port = await app.listen();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const landing = await (await get(base, '/', null)).text();
+    const pricing = await (await get(base, '/pricing', null)).text();
+
+    const shapeSentence = (html) => {
+      const m = /Which shapes and qualities\?[\s\S]*?<p>([^<]*)<\/p>/.exec(html);
+      assert.ok(m, 'no "Which shapes and qualities?" answer on the page');
+      return m[1];
+    };
+    const landingSentence = shapeSentence(landing);
+    const pricingSentence = shapeSentence(pricing);
+    assert.equal(landingSentence, pricingSentence,
+      `the landing and /pricing disagree on the shape sentence with no pack buyable:\n  /        : ${landingSentence}\n  /pricing : ${pricingSentence}`);
+
+    // And pin the answer, so the two cannot agree on the wrong one: the forced
+    // surcharge is finite and positive, so it is a genuine second price.
+    assert.match(landingSentence, /the shape is part of the price/,
+      'a real per-shape surcharge did not reach the sentence');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 /**
@@ -1586,6 +1995,80 @@ test('the status page keeps its alert and credit-note surfaces for the poller', 
   });
 });
 
+test('the result page lists the shelf\'s other finished tapes, and not the one on screen', async () => {
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    const shown = seedJob(app, root, { status: 'done', owner: accountA, place: 'the garden' });
+    const other = seedJob(app, root, { status: 'done', owner: accountA, place: 'the car park' });
+    const html = await (await get(base, `/j/${shown.jobId}/result`, cookieA)).text();
+
+    assert.ok(html.includes('Earlier tapes'), 'the rest of the shelf is missing');
+    const earlier = html.slice(html.indexOf('Earlier tapes'));
+    assert.ok(earlier.includes('the car park'), 'the other tape is not on the shelf below');
+    assert.ok(earlier.includes(`/j/${other.jobId}/result`), 'and it does not link through');
+    assert.ok(!earlier.includes(`/j/${shown.jobId}/result`), 'the tape on screen is listed under itself');
+
+    // The window the words promise is the one the purge enforces, read from
+    // the same config -- 30 days in config/render.json.
+    assert.match(html, /stays on the shelf for 30 days/, 'the retention window did not reach the page');
+  });
+});
+
+test('a tape made in a retired place keeps its old label on the shelf, not its id', async () => {
+  // Four presets were replaced on 2026-09-04 (section 60I). A manifest stores
+  // the preset ID, `labelsOf` translates it through the loaded catalog, and a
+  // preset that is no longer in the catalog fell through as itself -- so a
+  // tape somebody made in the car park last week would have captioned as
+  // `autobahn-raststaette` the day the menu changed. The retired labels stay
+  // known, exactly as they read when the tape was made.
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    seedJob(app, root, { status: 'done', owner: accountA, place: 'autobahn-raststaette' });
+    seedJob(app, root, { status: 'done', owner: accountA, place: 'plattenbau-treppenhaus' });
+    seedJob(app, root, { status: 'done', owner: accountA, place: 'ostsee-strand' });
+    const html = await (await get(base, '/videos', cookieA)).text();
+    assert.ok(html.includes('<span class="what">The car park, at dusk</span>'), 'the retired car park is not captioned by its old label');
+    assert.ok(html.includes('<span class="what">The stairwell</span>'), 'the retired stairwell is not captioned by its old label');
+    assert.ok(html.includes('<span class="what">The beach, out of season</span>'), 'the retired beach is not captioned by its old label');
+    assert.ok(!html.includes('<span class="what">autobahn-raststaette</span>'), 'the id leaked onto the shelf as a caption');
+  });
+});
+
+test('a tape made in a retired outfit keeps its old label, not its id', async () => {
+  // The same courtesy places got on 2026-09-04, owed to outfits from the day
+  // the menu became five unisex garments (2026-09-05, section 65). The summer
+  // dress and the cardigan came off the cards; `labelsOf` translated the outfit
+  // id through the loaded catalog and nothing else, so a tape somebody ordered
+  // in the dress would have said `sommerkleid` on its own status page.
+  //
+  // THE STATUS PAGE AND NOT THE SHELF, because the shelf caption is the place
+  // -- the outfit appears in the order block, under "wearing".
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA, outfit: 'sommerkleid' });
+    const html = await (await get(base, `/j/${job.jobId}`, cookieA)).text();
+    assert.ok(html.includes('Cotton summer dress'), 'the retired dress is not captioned by its old label');
+    assert.ok(!html.includes('sommerkleid'), 'the id leaked onto the page as a caption');
+  });
+});
+
+test('the job view carries the frame it was ordered in, shape and size', async () => {
+  // The status page lists the order as where / wearing / frame, and the frame
+  // is the shape AND the size. The view exposed the shape already; the size
+  // was on the manifest and never projected, so the page could not say
+  // "9:16, 480p" without reading the manifest itself.
+  await withServer(async ({ base, root, app, cookieA, accountA }) => {
+    const job = seedJob(app, root, { status: 'running', owner: accountA, aspect: '9:16', resolution: '480p' });
+    const res = await fetch(`${base}/api/jobs/${job.jobId}`, { headers: { cookie: cookieA, accept: 'application/json' } });
+    assert.equal(res.status, 200);
+    const view = await res.json();
+    assert.equal(view.input.aspect, '9:16');
+    assert.equal(view.input.resolution, '480p');
+
+    // A job that froze no size says null, not a default the page would print.
+    const bare = seedJob(app, root, { status: 'running', owner: accountA });
+    const bareView = await (await fetch(`${base}/api/jobs/${bare.jobId}`, { headers: { cookie: cookieA, accept: 'application/json' } })).json();
+    assert.equal(bareView.input.resolution, null);
+  });
+});
+
 test('a web job is direct exactly when its provider spends money', async () => {
   // Four choices and a tape: on the paid provider the still stage does not
   // exist, so the job must say `direct` in the only channel the worker reads
@@ -1633,13 +2116,13 @@ test('a card beats the describe-it box when somebody fills in both', async () =>
   await withServer(async ({ base, root, cookieA }) => {
     const res = await post(base, '/api/jobs', multipart([
       { name: 'photo', filename: 'me.png', type: 'image/png', body: fakePhoto() },
-      { name: 'place', body: 'ostsee-strand' },
+      { name: 'place', body: 'amalfi-afternoon' },
       { name: 'placeText', body: 'somewhere else entirely' },
       { name: 'outfit', body: 'fleecepulli' },
       { name: 'consent', body: 'yes' },
     ]), cookieA);
     const job = loadJob({ root, jobId: (await res.json()).jobId });
-    assert.equal(job.input.place.value, 'ostsee-strand', 'the card the person clicked wins');
+    assert.equal(job.input.place.value, 'amalfi-afternoon', 'the card the person clicked wins');
   });
 });
 
@@ -1879,8 +2362,17 @@ test('pages declare a content security policy and refuse to be sniffed', async (
 test('the only scripts a page may run are the ones it ships, named by hash', async () => {
   await withServer(async ({ base, root, app, accountA, cookieA }) => {
     const job = seedJob(app, root, { owner: accountA });
-    for (const target of ['/', `/j/${job.jobId}`]) {
-      const res = await get(base, target, cookieA);
+    // `/` SIGNED OUT IS A DIFFERENT PAGE, AND IT WAS NEVER CHECKED HERE.
+    // Every target below was fetched with a cookie, so `/` was always the
+    // signed-in app page -- and BG_SCRIPT, SIGNIN_SCRIPT and WIPE_SCRIPT are
+    // landing-only (§31 stopped emitting the background script on the signed-in
+    // page). Three of this product's five inline scripts were invisible to the
+    // one test whose whole subject is that a shipped script is named by hash.
+    // The browser smoke test catches a missing hash too, but it self-skips on a
+    // machine with no Chromium, so on that machine the refusal would have
+    // shipped silently.
+    for (const [target, cookie] of [['/', cookieA], ['/', null], [`/j/${job.jobId}`, cookieA]]) {
+      const res = await get(base, target, cookie);
       const csp = res.headers.get('content-security-policy') ?? '';
       assert.ok(!/script-src[^;]*'unsafe-inline'/.test(csp),
         `${target} admits every inline script, including an injected one`);
@@ -2179,6 +2671,37 @@ test('the result page says the tape is AI-generated', async () => {
 // media
 // ---------------------------------------------------------------------------
 
+test('a tape, its poster and a still are never cached, because the next person at the browser may not own them', async () => {
+  // `private, max-age=3600` keeps the file out of shared caches and still
+  // lets the BROWSER keep it: on a shared machine the tape and the poster
+  // replay from cache after sign-out, and `private` does nothing about that.
+  // A face is not worth a cache hit. The place photographs and the brand
+  // assets stay cacheable -- they are nobody's.
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA });
+    const paths = jobPaths(root, job.jobId);
+    fs.writeFileSync(paths.video, crypto.randomBytes(500));
+    fs.writeFileSync(paths.poster, crypto.randomBytes(500));
+    fs.mkdirSync(paths.stills, { recursive: true });
+    fs.writeFileSync(path.join(paths.stills, 'still-01.png'), crypto.randomBytes(500));
+
+    for (const url of [
+      `/api/jobs/${job.jobId}/video`,
+      `/api/jobs/${job.jobId}/poster`,
+      `/api/jobs/${job.jobId}/stills/1`,
+    ]) {
+      const res = await get(base, url, cookieA);
+      assert.equal(res.status, 200, `${url} -> ${res.status}`);
+      assert.equal(res.headers.get('cache-control'), 'no-store', `${url} is cacheable: ${res.headers.get('cache-control')}`);
+      await res.arrayBuffer();
+    }
+    const place = await get(base, '/places/amalfi-afternoon.jpg', cookieA);
+    assert.equal(place.status, 200);
+    assert.match(place.headers.get('cache-control') ?? '', /max-age=\d+/, 'a place photograph is still cacheable');
+    await place.arrayBuffer();
+  });
+});
+
 test('the video is range-request capable', async () => {
   await withServer(async ({ base, root, app, accountA, cookieA }) => {
     const job = seedJob(app, root, { status: 'done', owner: accountA });
@@ -2332,16 +2855,54 @@ test('an expired lease is not a claim', async () => {
 // health and the edges
 // ---------------------------------------------------------------------------
 
-test('GET /api/health reports ffmpeg, the queue and the worker, without a session', async () => {
+test('GET /api/health answers ok and what is degraded without a session, and nothing else', async () => {
+  // The endpoint is public because the uptime monitor has no session, and it
+  // keys on `"ok":true` and nothing more. The rest of the report -- the exact
+  // ffprobe build, disk bytes, queue counts, which provider is wired -- is
+  // useful to an operator and to somebody targeting the upload decoder, so it
+  // is answered to a session and to nobody else. `ok` stays the first key,
+  // because that is the literal string the monitor searches for.
   await withServer(async ({ base }) => {
     const res = await fetch(`${base}/api/health`);
     assert.equal(res.status, 200);
+    const text = await res.text();
+    assert.ok(text.startsWith('{"ok":true'), `the monitor keys on the leading "ok": ${text.slice(0, 40)}`);
+    const body = JSON.parse(text);
+    assert.deepEqual(Object.keys(body).sort(), ['degraded', 'ok']);
+    assert.deepEqual(body.degraded, []);
+  });
+});
+
+test('GET /api/health reports ffmpeg, the queue, the worker and the disk to a signed-in caller', async () => {
+  await withServer(async ({ base, cookieA }) => {
+    const res = await get(base, '/api/health', cookieA);
+    assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.ok, true);
+    assert.deepEqual(body.degraded, []);
     assert.equal(body.ffmpeg.available, true);
     assert.deepEqual(Object.keys(body.queue).sort(), ['claimed', 'done', 'failed', 'pending']);
     assert.ok('lastSeen' in body.worker);
+    assert.ok('low' in body.disk);
   });
+});
+
+test('GET /api/health names what is degraded without a session, so the monitor alert says why', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const app = createServer({
+    root, cfg: CFG, queue: fakeQueue(), port: 0, auth: fakeAuth(),
+    ffprobeImpl: async () => { throw Object.assign(new Error('spawn ffprobe ENOENT'), { code: 'ENOENT' }); },
+  });
+  const port = await app.listen();
+  try {
+    const body = await fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.json());
+    assert.equal(body.ok, false);
+    assert.deepEqual(body.degraded, ['ffmpeg']);
+    assert.equal('ffmpeg' in body, false, 'the failure is named, the build and the error code are not');
+  } finally {
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a job ordered at a wide shape is charged the wide price', async () => {
@@ -2466,8 +3027,8 @@ test('a burst on the public health endpoint reads the queue once, and reads it a
     const hit = () => fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.json());
 
     const first = await hit();
-    assert.deepEqual(Object.keys(first.queue).sort(), ['claimed', 'done', 'failed', 'pending'],
-      'the cached payload must still be the real shape');
+    assert.deepEqual(Object.keys(first).sort(), ['degraded', 'ok'],
+      'the cached payload must still be the real (anonymous) shape');
 
     for (let i = 0; i < 9; i += 1) await hit();
     assert.equal(queue.calls.statted, 1,
@@ -2486,20 +3047,30 @@ test('a burst on the public health endpoint reads the queue once, and reads it a
   }
 });
 
+/** A signed-in cookie on a fake auth the test built itself: the full health
+ *  report is answered to a session, and these tests read the full report. */
+function operatorCookie(auth) {
+  auth.createAccount({ email: 'ops@example.com', password: 'an operator password', plan: 'archive', credits: 0 });
+  return signIn(auth, { email: 'ops@example.com', password: 'an operator password' });
+}
+
 test('health says so honestly when ffmpeg is missing', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const auth = fakeAuth();
   const app = createServer({
     root,
     cfg: CFG,
     queue: fakeQueue(),
     port: 0,
-    auth: fakeAuth(),
+    auth,
     ffprobeImpl: async () => { const e = new Error('nope'); e.code = 'ENOENT'; throw e; },
   });
   const port = await app.listen();
   try {
-    const body = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
+    const cookie = operatorCookie(auth);
+    const body = await (await fetch(`http://127.0.0.1:${port}/api/health`, { headers: { cookie } })).json();
     assert.equal(body.ok, false);
+    assert.deepEqual(body.degraded, ['ffmpeg']);
     assert.equal(body.ffmpeg.available, false);
   } finally {
     await app.close();
@@ -2512,8 +3083,8 @@ test('health reports the disk, because the disk is where every balance lives', a
   // one root; a full disk is the one infrastructure failure this deployment
   // can see coming, and the uptime monitor watching /api/health is the only
   // thing that will be looking.
-  await withServer(async ({ base }) => {
-    const body = await (await fetch(`${base}/api/health`)).json();
+  await withServer(async ({ base, cookieA }) => {
+    const body = await (await get(base, '/api/health', cookieA)).json();
     assert.ok(Number.isFinite(body.disk?.availableBytes) && body.disk.availableBytes > 0,
       `health carries no usable disk figure: ${JSON.stringify(body.disk)}`);
     assert.ok(Number.isFinite(body.disk?.totalBytes) && body.disk.totalBytes >= body.disk.availableBytes);
@@ -2525,12 +3096,13 @@ test('low disk flips ok, and the disk is read on the cache window, not per hit',
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
   let statted = 0;
   let now = new Date('2026-08-28T12:00:00Z');
+  const auth = fakeAuth();
   const app = createServer({
     root,
     cfg: CFG,
     queue: fakeQueue(),
     port: 0,
-    auth: fakeAuth(),
+    auth,
     nowImpl: () => now,
     // 512 MiB free of 40 GB: under any sane floor -- a single render writes
     // ~65 MB and the accounts must never hit ENOSPC mid-ledger-append.
@@ -2538,10 +3110,12 @@ test('low disk flips ok, and the disk is read on the cache window, not per hit',
   });
   const port = await app.listen();
   try {
-    const hit = () => fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.json());
+    const cookie = operatorCookie(auth);
+    const hit = () => fetch(`http://127.0.0.1:${port}/api/health`, { headers: { cookie } }).then((r) => r.json());
     const body = await hit();
     assert.equal(body.disk.low, true, `512 MiB free must read as low: ${JSON.stringify(body.disk)}`);
     assert.equal(body.ok, false, 'low disk must page the uptime monitor -- ok stays true only while orders can land');
+    assert.deepEqual(body.degraded, ['disk'], 'and the anonymous half of the answer names the disk');
     assert.equal(body.disk.availableBytes, 131_072 * 4096);
 
     // Same rule as ffmpeg and the queue beside it: an unauthenticated
@@ -2562,17 +3136,19 @@ test('an unreadable disk figure is reported, not fatal and not low', async () =>
   // "the disk is full" -- paging on it would make health cry wolf on any
   // platform quirk, and the boy who cried wolf is how real pages get ignored.
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
+  const auth = fakeAuth();
   const app = createServer({
     root,
     cfg: CFG,
     queue: fakeQueue(),
     port: 0,
-    auth: fakeAuth(),
+    auth,
     statfsImpl: () => { const e = new Error('nope'); e.code = 'ENOSYS'; throw e; },
   });
   const port = await app.listen();
   try {
-    const body = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
+    const cookie = operatorCookie(auth);
+    const body = await (await fetch(`http://127.0.0.1:${port}/api/health`, { headers: { cookie } })).json();
     assert.equal(body.disk.low, null);
     assert.equal(body.disk.error, 'ENOSYS');
     assert.equal(body.ok, true, 'an unreadable statfs must not take ok down while everything else works');
@@ -2817,5 +3393,115 @@ test('a tile is cropped to its own tape shape, not to the shape 4:3 tapes happen
     assert.ok(tallRatio, `the stylesheet gives .frame--${tallClass} no aspect-ratio, so the class is decorative`);
     assert.notEqual(wideRatio, tallRatio,
       `landscape and portrait tiles are both ${wideRatio} -- the shape reached the markup and not the crop`);
+  });
+});
+
+/**
+ * THE SITEMAP (2026-09-08). The site was opened to search engines on 2026-09-08
+ * (§76) and had nothing to submit: no sitemap route existed. These two tests are
+ * the whole contract, and the second is the one that matters -- a sitemap is a
+ * list of urls this product ASKS to have indexed, so the danger is not a missing
+ * page but a present one that should never have been on it.
+ */
+
+test('the sitemap lists the public pages as absolute urls, and every one of them is public', async () => {
+  // A HAND-WRITTEN LIST, NOT ONE DERIVED FROM THE ROUTE TABLE, and the reason is
+  // §23's: `renderedPages()` is hand-written because a page missing from a
+  // derived list is invisible to every check that reads it. Here the risk runs
+  // the other way -- deriving from the routes is how `/account` or a job url
+  // ends up published to Google -- so the list is explicit and this test walks
+  // it against the running server rather than trusting it.
+  await withServer(async ({ base }) => {
+    const res = await get(base, '/sitemap.xml');
+    assert.equal(res.status, 200, 'no sitemap to submit');
+    assert.match(res.headers.get('content-type') ?? '', /application\/xml/, 'a sitemap is xml');
+
+    const xml = await res.text();
+    const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+    assert.ok(locs.length >= 5, `a sitemap with ${locs.length} entries is not describing this site`);
+
+    for (const loc of locs) {
+      // ABSOLUTE, because a <loc> is required to be, and a relative one is
+      // silently dropped by every crawler that reads it.
+      assert.match(loc, /^https?:\/\//, `not an absolute url: ${loc}`);
+      const { pathname } = new URL(loc);
+
+      // THE ASSERTION THIS FILE EXISTS FOR. Not "the list looks right" but "every
+      // url on it is one a stranger can actually open" -- a sitemap entry that
+      // 303s to /login is a page asking to be indexed behind a door.
+      const hit = await get(base, pathname);
+      assert.equal(hit.status, 200, `${pathname} is on the sitemap and answers ${hit.status} to a visitor with no session`);
+
+      // THE DESCRIPTION IS THE ONLY PROSE HERE A CUSTOMER READS BEFORE THEY
+      // ARRIVE -- it is the line Google prints under the title -- and it is
+      // written in a file whose every other sentence uses "--" for an em dash,
+      // because comments in this codebase avoid the character. That habit
+      // reached the landing page's description and shipped, printing a literal
+      // double hyphen in the search result. Nothing renders it as a dash.
+      const desc = /<meta name="description" content="([^"]*)">/.exec(await hit.text());
+      assert.ok(desc, `${pathname} is on the sitemap with no description, so the snippet is Google's guess`);
+      assert.ok(!desc[1].includes('--'), `${pathname}'s description prints a literal "--": ${desc[1]}`);
+    }
+
+    // And the paths that must never appear, named individually so a failure says
+    // which one leaked rather than that "something" did.
+    for (const forbidden of ['/account', '/videos', '/j/', '/api/', '/onboarding', '/login']) {
+      assert.ok(
+        !locs.some((l) => new URL(l).pathname.startsWith(forbidden)),
+        `${forbidden} is on the sitemap; it is gated, or it is somebody's face`,
+      );
+    }
+  }, { extra: { indexable: true, publicUrl: 'https://timestamptapes.test' } });
+});
+
+test('there is no sitemap while the site is closed to search engines', async () => {
+  // The same reasoning `robots.txt` already carries: the two halves must agree.
+  // A sitemap served under `Disallow: /` invites a crawler to index a site that
+  // every other signal is telling it to leave alone.
+  await withServer(async ({ base }) => {
+    assert.equal((await get(base, '/sitemap.xml')).status, 404, 'a closed site is publishing a sitemap');
+  });
+});
+
+/**
+ * SITEMAP DISCOVERY (2026-09-08). Submitting the sitemap in Search Console tells
+ * GOOGLE, and tells nobody else -- Bing and DuckDuckGo have no console this
+ * operator holds, so without this line they never learn the file exists. It is
+ * also the half that outlives a console: a submission belongs to an account and
+ * can be lost with one, and a line served by the site itself cannot.
+ */
+
+test('robots.txt points at the sitemap, and the url it names is the one that serves', async () => {
+  await withServer(async ({ base }) => {
+    const robots = await get(base, '/robots.txt');
+    assert.equal(robots.status, 200);
+    const line = /^Sitemap:\s*(\S+)\s*$/m.exec(await robots.text());
+    assert.ok(line, 'robots.txt names no sitemap, so a crawler with no console never finds one');
+
+    // ABSOLUTE, because the sitemap protocol requires it of this line in
+    // particular and every crawler drops a relative one -- the same rule the
+    // <loc> entries above carry, for the same reason.
+    const url = line[1];
+    assert.match(url, /^https?:\/\//, `not an absolute url: ${url}`);
+
+    // THE ASSERTION THIS TEST EXISTS FOR: not "a line is present" but "the url on
+    // it is the one that serves". A `Sitemap:` line naming a path that 404s is
+    // worse than no line at all -- it is a promise a crawler acts on, and the
+    // typo that makes it false is invisible in the file that carries it.
+    const hit = await get(base, new URL(url).pathname);
+    assert.equal(hit.status, 200, `robots.txt names ${url}, which answers ${hit.status}`);
+    assert.match(hit.headers.get('content-type') ?? '', /application\/xml/,
+      `robots.txt names ${url}, which is not a sitemap`);
+  }, { extra: { indexable: true, publicUrl: 'https://timestamptapes.test' } });
+});
+
+test('a site closed to search engines advertises no sitemap', async () => {
+  // The closed half of the rule above, and the one `/sitemap.xml`'s own 404
+  // already carries: a `Sitemap:` line under `Disallow: /` hands a crawler the
+  // single url that lists everything the rest of the file is telling it to
+  // leave alone.
+  await withServer(async ({ base }) => {
+    const body = await (await get(base, '/robots.txt')).text();
+    assert.ok(!/^Sitemap:/m.test(body), 'a closed site is advertising its sitemap');
   });
 });
