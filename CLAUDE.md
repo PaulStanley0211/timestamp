@@ -9,6 +9,10 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-09-08) — THE SITE IS OPEN TO SEARCH ENGINES NOW (§76), AND `faceGate` STILL HAS NO EYES ON THE LIVE SITE (§74). READ §76, THEN §75 AND §74, THEN §73H, §72 AND §71.
 
+**THE BOX RUNS `5ca4b7f`.** `noindex` was lifted on 2026-09-08 at the owner's word (§76)
+and the site was then given the sitemap and the card tags it needed to be worth finding
+(§76E, deployed and verified from outside).
+
 **`noindex` WAS LIFTED ON 2026-09-08 AT THE OWNER'S WORD — §76.** One line,
 `TIMESTAMP_INDEXABLE=1`, in `/opt/timestamp/.env.web` plus a web restart. No
 code, no commit, no deploy: the box is still on `3ded568`. **Every "the site is
@@ -10539,7 +10543,8 @@ check that never arrives.
 
 ### 76. THE SITE IS OPEN TO SEARCH ENGINES (2026-09-08)
 
-**No code changed, nothing was committed and nothing was deployed.** One line,
+**No code changed, nothing was committed and nothing was deployed _for the flag itself_ —
+but the same day it exposed work that did deploy; see §76E.** One line,
 `TIMESTAMP_INDEXABLE=1`, appended to `/opt/timestamp/.env.web` on the box, then
 `docker compose up -d web`. The box is still on `3ded568`; Caddy and the worker
 were not touched. **To reverse it:**
@@ -10670,6 +10675,68 @@ exactly the coupling its own comment warns about. Fixed costs are one CPX22 at
 Unspent credits never expire (`expiryDays: null`), so realised margin runs higher than
 the table through breakage. **Nothing was edited** — what a customer pays is the
 owner's decision and the stale comment is recorded here rather than rewritten under him.
+
+---
+
+#### E — THE SITE WAS THEN MADE FIT TO BE FOUND, AND THAT DID DEPLOY (`13698ad`, `5ca4b7f`)
+
+**§76's opening line — "nothing was deployed" — describes the flag and stopped being
+true the same day.** The box ran `3ded568` for a day and now runs **`5ca4b7f`**, through
+two rebuilds.
+
+Opening the site revealed that its head carried a title and nothing else: **no sitemap to
+submit, no description so Google would write the snippet itself, no canonical url, and no
+card tags at all** — so every link posted anywhere rendered as a bare grey url, on a
+product whose entire pitch is a moving picture of somebody.
+
+- **`GET /sitemap.xml`** lists the five public pages as absolute urls and **404s while
+  indexing is closed**, matching the two halves `robots.txt` already keeps in agreement.
+- **The head gained** a description, a canonical url built from `publicBase()` — never
+  from the `Host` header, for the reason the Stripe return url already carries — and the
+  Open Graph and Twitter vocabularies both, because different scrapers read different
+  ones. The image is the showcase hero, a real frame from a real tape that was already
+  public and already paid for.
+- **All of it is OPT-IN** through a `meta` argument defaulting to nothing, so every page
+  that does not ask for it renders exactly the bytes it rendered before. That is the
+  safety property, and two tests hold it.
+
+**`PUBLIC_PAGES` IS HAND-WRITTEN AND THAT IS THE POINT.** §23's ruling runs the other way
+for `renderedPages()` — a page MISSING from a derived list is invisible to every check
+that reads it — but a sitemap is a list of urls this product ASKS to have indexed, so the
+danger is a page PRESENT on it that should never have been published, and deriving from
+the route table is exactly how `/account` or a job url reaches Google. **The test does not
+read the list; it walks every entry against a running server with no session** and fails on
+anything that does not answer 200. Sabotage-verified: adding `/account` fails with
+*"/account is on the sitemap and answers 401 to a visitor with no session"*.
+
+Five sabotages in all, each restored from a copy: the gated path, the indexable guard
+removed, the urls made relative, `og:image` emitted unconditionally, and the large card
+claimed with no image to fill it. Suite **2203 / 2200 / 0 / 3**, guards 7/7 counted.
+
+**Verified from outside after each swap:** health `{"ok":true,"degraded":[]}`; the sitemap
+200 `application/xml` with all five urls fetched anonymously at 200; the `og:image` url
+resolving 200 `image/jpeg`; the `X-Robots-Tag` still absent; `/j/<a real tape>` still 303;
+zero FATAL; **and the CSP header byte-identical to the copy taken before the first deploy**
+— no inline script changed, so no hash moved.
+
+**THE COPY DEFECT THIS SHIPPED AND THEN FIXED IS THE ONE WORTH KEEPING (`5ca4b7f`).** The
+description went live reading *"a camcorder tape from 2003 -- warm, grainy"*. **A literal
+double hyphen, in the only prose a stranger reads before they arrive.** It was written in a
+file whose every other sentence spells an em dash that way, because comments in this
+codebase avoid the character — and a comment can, while a rendered description cannot.
+Nothing turns it into a dash on the way out. The guard binds on the RENDERED page rather
+than on the constant: the sitemap test already fetches every public page, so it now reads
+each description back and refuses `--`, naming the page and quoting the sentence. Watched
+failing against the copy that was live at that moment. The fix was verified as bytes
+(`e2 80 94`) rather than by eye.
+
+**A FLAKE FOUND IN PASSING, AND IT IS NOT A PRODUCT DEFECT.**
+`test/job-model.test.js:127` draws 200 job ids inside one simulated second and asserts all
+200 are distinct. A job id's random part is six hex characters — 16,777,216 values — so by
+the birthday bound that test fails about **one run in 840**, which is roughly one red in
+210 CI runs across four legs. It failed once here and passed five re-runs. **The id space
+is fine for the product** (jobs are not created 200 a second); it is the test that
+exaggerates the draw. Left alone rather than weakened, and flagged separately.
 
 ---
 
