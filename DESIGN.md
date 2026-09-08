@@ -253,7 +253,22 @@ Struck (`#070A11`, cathode `#FF8A1E`, the gauze, the bloom, the ghost rail on
 a photograph) and the cream album page (`#FAF7F2`, oxide `#A8342A`, the
 no-borders rule, the drawn Cormorant wordmark with the head-switch tear) are
 replaced. The brand-guidelines PDF of September 2026 describes the cream world
-and is not committed. **The browser icon (`Ts` knocked out of an oxide tile,
-`assets/brand/icon*.png`, `favicon.ico`, `icon.svg`) is the last artefact of
-the cream world still shipping**; regenerating it in this world is a separate
-decision for the owner, because a changed favicon reads as a different site.
+and is not committed.
+
+**The browser icon came into this world on 2026-09-08, at the owner's word.**
+The `Ts` is knocked out of a `--lime` tile in the `--on-lime` ink, across
+`icon.svg`, `favicon.ico` and the three PNGs. `test/web-brand.test.js` reads
+both values out of the stylesheet rather than repeating them, so the mark
+cannot drift from the palette, and it decodes every raster -- recolouring the
+vector and forgetting the four rasters is the whole failure mode, and it is
+silent. The letterforms are unchanged: still Cormorant Garamond Italic, still
+the head-switch tear, because the rasters were **recoloured pixel by pixel
+rather than re-rendered** (`assets/brand/README.md` has the method and the
+measured residual). Redrawing the letters in Anton is a further step and has
+not been taken.
+
+**Four brand files remain in the cream world's colours and no route serves any
+of them**: `wordmark.svg`, `wordmark-inline.svg`, `monogram.svg`,
+`monogram-inline.svg`. The masthead is live Anton text, so nothing reaches
+them. They are the last cream-world artefacts in the repository, and what
+happens to them is the owner's call.

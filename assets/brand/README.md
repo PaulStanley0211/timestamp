@@ -9,7 +9,7 @@ is why they look the way they do.
 | `wordmark.svg` | The same mark as a **file** — an `<img>`, a README, a press kit. Self-contained: an SVG loaded as an image cannot see the page's stylesheet, so this one carries its own animation. |
 | `monogram.svg` | The `Ts`, bare, on transparent, `currentColor`. |
 | `monogram-inline.svg` | The same mark prepared for the masthead lockup: **no `width`/`height`** so CSS sizes it, `class="mg"` for the stylesheet, and `aria-hidden` because it draws the letters the word beside it already spells — named, it is announced as a second "Timestamp" before the first. Generated from `monogram.svg`; do not hand-edit. |
-| `icon.svg` | The `Ts` knocked out of an oxide tile. What the browser tab paints. |
+| `icon.svg` | The `Ts` knocked out of a **lime** tile (`--lime`, letters in `--on-lime`). What the browser tab paints. Recoloured from the cream world's oxide on 2026-09-08; `test/web-brand.test.js` reads both values out of the stylesheet, so the mark cannot drift from the palette. |
 | `favicon.ico` | 16/32/48 in one file, so the browser picks rather than downscaling badly. |
 | `icon-180.png` | apple-touch-icon. The one with **no fallback** — unlinked, iOS screenshots the page instead. |
 | `icon-192.png`, `icon-512.png` | Android / PWA sizes. |
@@ -55,6 +55,30 @@ beneath the cut to displace, so the tear vanishes and the mark is a plain serif
 The consequence for the masthead lockup is that you may align the baselines or
 the tears, never both. The baselines win — see `.wordmark .mg` in
 `scripts/web/static.mjs`, which carries the measured numbers.
+
+## Recolouring, which is not regenerating
+
+The 2026-09-08 move to lime **recoloured** the rasters rather than re-rendering
+them, and the reason is in the paragraph below about the tear: it is floored at
+one *final* pixel, so a fresh downsample is exactly where it goes missing.
+
+Every pixel in these files is a blend of precisely two colours, so the old blend
+factor is recoverable — project the pixel onto the tile→ink axis, then re-emit
+the same factor between the new pair. Identical antialiasing, new endpoints,
+alpha untouched. Off-axis residual was ≤ 10.6/255 on every opaque pixel; the
+732 pixels above that all sit at alpha < 64, which is the rounded corner.
+
+**Do not build the ICO from a file the same run has just overwritten.** Reading
+`icon-512.png` back after saving it remaps an already-lime image against the
+oxide endpoints a second time — not a no-op, it lands the tile at ~62% and
+every entry comes out olive. Caught by the raster assertion in
+`test/web-brand.test.js`, which is what that assertion is for.
+
+**Four files here are NOT served by anything and are still in the cream world's
+colours**: `wordmark.svg`, `wordmark-inline.svg`, `monogram.svg`,
+`monogram-inline.svg`. The masthead became live Anton text (§70), so no route
+reaches them; they are press-kit assets and what happens to them is a decision,
+not a defect. The brand test sweeps only what the server actually serves.
 
 ## Regenerating
 
