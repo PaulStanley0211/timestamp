@@ -7,9 +7,27 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-08, night) — READ §78 FIRST, THEN §77. THE SITE IS LIVE, INDEXABLE AND FIT TO SHARE; THE TWO THINGS BETWEEN IT AND AN AUDIENCE ARE AN AWS SIGNATURE AND ONE NUMBER IN A CONFIG FILE. THEN §76, §75 AND §74.
+## START HERE (2026-09-08, night) — READ §81 FIRST, THEN §80 AND §79. **BOTH LAUNCH GATES ARE SHUT AND NOTHING BLOCKS A LAUNCH ANY MORE.** THEN §78, §77, §76, §75 AND §74.
 
-**THE BOX RUNS `226b1d3`** — §79, one line so a crawler with no console can find the
+**THE BOX RUNS `7d9ca52`** — §81. **The face and content checks are LIVE** (the worker's
+own banner says `intake face detector: AWS Rekognition`), and **`freeTape.globalCeiling`
+is 500 with 3 spent, so 497 remain.** Every line below this one about "the AWS signature",
+"the gate before strangers", `faceGate` having no eyes, or a ceiling of 100 is HISTORY.
+
+**THERE WAS NEVER AN AGREEMENT TO SIGN — §81A.** Six sections of this file carried "sign
+the AWS agreement" as a blocker with lead time. AWS's GDPR DPA is incorporated into the
+standard Service Terms automatically. The item was *open an account*, and it took fifteen
+minutes. **A week of "blocked on paperwork" was blocked on nobody reading what the
+paperwork was.**
+
+**AND THE GATE WAS PROVED IN BOTH DIRECTIONS BEFORE IT WENT NEAR THE BOX (§81B)** — a real
+face passes, a people-free place photograph is refused `no-face`. Local first was the only
+safe order: the detector THROWS on failure and `stepIntake` runs first, so a wrong
+credential on the box fails EVERY render at step one. **All three `AWS_*` vars must be set
+in ONE edit** or the worker refuses to boot (§81C).
+
+**§79 and earlier: the box previously ran `226b1d3`** — one line so a crawler with no
+console can find the
 sitemap, deployed and byte-verified. Before it, `f21cb93`: the owner's first batch of page-by-page live-review notes,
 built and deployed on 2026-09-08 night (§78). Four notes: the frame row on one line, the
 date tiles gone, a manifesto sentence with no number in it, and the tab icon into lime.
@@ -23,18 +41,22 @@ silently whenever the owner's ISP re-assigns his address (§75B, exactly as pred
 every page 200, the CSP header byte-identical, because the OLD containers keep serving.
 **Compare actual bytes, not status codes.**
 
-**THE NUMBER, BECAUSE NOBODY WOULD FIND IT: `freeTape.globalCeiling` IS 100 LIFETIME AND
-SIX ARE SPENT.** Ninety-four free tapes remain, forever — about $70. A successful Reddit
-or Product Hunt post exhausts that in an hour, and **everyone after visitor ~95 opens an
-account with zero credits and a payment page, having never seen a tape work.** Nothing
-errors. It is one edit, it is the owner's, and **it is the marketing budget expressed as
-tapes.** §77A.
+**~~THE NUMBER, BECAUSE NOBODY WOULD FIND IT~~ — SET AND DEPLOYED, §81E.**
+`freeTape.globalCeiling` is **500** (~$375 at $0.75 a tape) and the record says **3 spent,
+497 left**. It was 100 with six believed spent, which was about $70 — a successful post
+exhausts that in an hour, and everyone after visitor ~95 then opens an account with zero
+credits and a payment page having never seen a tape work, with nothing erroring. **Three
+different numbers were in circulation for how many were spent and only
+`/data/out/accounts/_free-tapes.json` was right; `accounts-cli.mjs plans` reports 0 used
+and values the ceiling at "~$1050", both wrong, §81E.**
 
-**AND `faceGate` STILL HAS NO EYES ON THE LIVE SITE (§74).** Nothing checks what an
-uploaded photograph is OF — a wristwatch produced a complete, fully verified tape of a
-person who does not exist. The detector and §52's classifier are both built, tested and
-switched off behind ONE AWS agreement plus one `.env` line. **That is the gate before
-strangers, and posting anywhere is what brings strangers.**
+**~~AND `faceGate` STILL HAS NO EYES ON THE LIVE SITE~~ — IT HAS EYES, §81.** Both
+Rekognition checks are live on the box and the worker's banner names them. §74A's
+wristwatch — which produced a complete, fully verified tape of a person who does not exist
+— is now refused at step 2 of 11, before any money. **What is still unproven is one real
+upload through the live gate**: the wiring is covered by the suite and the banner, the
+detector by a direct call, and only an end-to-end web order (one free tape plus $0.75)
+proves the whole path.
 
 **THE PLATFORM RESEARCH IS DONE — §77B — AND MOST OF THE OWNER'S FIFTY-PLATFORM LIST IS
 THE WRONG CATEGORY.** Five are worth real effort (Reddit, Product Hunt, Hacker News, and
@@ -11304,6 +11326,133 @@ sentinel render painted no glyph ... the probe is blind"; a clip 40 px narrow --
   `--disable-renderer-backgrounding` and friends gave 3/3 against 2/3 at n=3,
   with the evaluate tail unchanged (2842 ms against 2505 ms). That is noise, not
   a finding; do not re-add them on the strength of it.
+
+---
+
+### 81. BOTH LAUNCH GATES ARE SHUT (2026-09-08, night)
+
+**No code changed for the face gate and nothing was committed for it.** It is an AWS
+account, three lines in `.env.worker` and one in `.env.common`, exactly as §52 and §74
+designed the seam. The ceiling was one config line, `7d9ca52`, deployed. **Everything
+this file says about "the AWS signature", "the gate before strangers" and `faceGate`
+having no eyes is now history.**
+
+#### A — THERE WAS NEVER AN AGREEMENT TO SIGN
+
+This file has carried "sign the AWS agreement" as a blocker since 2026-09-01 — §52B,
+§57D item 6, §61E, §74, §77F, §78G — and it reads as paperwork with lead time. **It is
+not.** AWS's GDPR Data Processing Addendum is incorporated into the standard AWS Service
+Terms and applies automatically to every customer; there is nothing to countersign. The
+item was only ever *open an account*, which took the owner about fifteen minutes.
+
+**A week of "this is blocked on paperwork" was blocked on nobody having read what the
+paperwork was.** Checked against AWS's own GDPR documentation before telling him.
+
+#### B — PROVED IN BOTH DIRECTIONS, LOCALLY, BEFORE IT WENT NEAR THE BOX
+
+**Local first was not caution, it was the only safe order.** The detector THROWS on a
+service failure and `stepIntake` runs first, so a wrong credential set straight onto the
+box would have failed EVERY render at step one — the whole product down, not degraded.
+
+Two live calls from this machine, about $0.002:
+
+| Photograph | Verdict |
+|---|---|
+| `assets/test-photos/face.jpg` (a real person) | `ok:true`, `faces:1`, `largestFaceFraction:0.334`, `confidence:"verified"` |
+| `assets/places/amalfi-afternoon.jpg` (deliberately people-free) | **`ok:false`, `reason:"no-face"`, `faces:0`** |
+
+**THE SECOND ROW IS THE TEST.** §74A's wristwatch passed eleven steps and produced a
+finished, fully verified tape of a person who does not exist; a detector that says yes to
+everything is the gate that already existed. The probe copies of the owner's face were
+deleted afterwards.
+
+**The 6.4 MB source is over the 5 MB inline cap**, so the probe scaled it the way intake
+does — fit inside 2048 on the long edge, never upscale (§8, BUG 4) — which also makes it
+the size production actually sends. 254 KB.
+
+#### C — Where the values live, and the trap in setting them
+
+The §51E split holds: the three `AWS_*` keys in **`.env.worker`**, and
+`TIMESTAMP_IMAGE_PROCESSOR` in **`.env.common`**, because web renders that line on
+`/privacy` and the worker checks it exists.
+
+**ALL THREE AWS VARIABLES MUST BE SET IN ONE EDIT.** `awsFaceDetectorFromEnv` throws
+`half-configured` on one or two of them — "two of three would silently leave photographs
+unchecked" — so adding `AWS_REGION` on its own **stops the worker booting**. That was
+nearly done here: the plan was to add the non-secret lines first and let the owner paste
+only the secrets, and reading the guard is what caught it.
+
+IAM: user `timestamp-image-check`, console access disabled, one inline policy allowing
+exactly `rekognition:DetectFaces` and `rekognition:DetectModerationLabels`, `Resource: "*"`
+(the Detect APIs on raw bytes take no resource-level permission). Region `eu-central-1`,
+so the photograph stays in Frankfurt — the same jurisdiction as the box `/privacy` already
+names.
+
+**THE AWS ACCOUNT IS ON THE PAID PLAN DELIBERATELY.** The free plan's own small print says
+that after six months or when the credits run out *"your account closes automatically"* —
+and a closed account means the detector throws, which means every render fails at step
+one, six months from now, on a day nobody is thinking about AWS. Both plans carry the same
+$200 of credits, so it cost nothing to avoid. That is §68's silent backup and §78E's
+silent deploy in a third costume: the thing that expires quietly is worse than the thing
+that costs a dollar.
+
+#### D — The disclosure rewrote itself, and the promise survived
+
+Read off the live page after the restart, not reasoned about. `/privacy` now says the
+photograph goes to the video provider **"and to Amazon Web Services (Rekognition),
+Frankfurt, which checks it for illegal or abusive content and confirms it shows a face,
+before anything is generated, and to nobody else."**
+
+**"Nobody else" is still there**, because §54D made the list derived rather than the claim
+deletable — the list grew, the promise did not shrink. Both purposes are named, which is
+§74C's fix earning itself. And the worker refuses to start with AWS keys and no
+declaration, so this could not have been switched on silently.
+
+Verified from outside: health `{"ok":true,"degraded":[]}`, six public pages 200, `/videos`
+still 303, zero FATAL, worker banner reading `moderation image classifier: AWS
+Rekognition` / `intake face detector: AWS Rekognition`.
+
+#### E — The ceiling, and three different numbers for one fact
+
+`freeTape.globalCeiling` is **500** (`7d9ca52`), set by the owner as a marketing budget:
+at $0.75 a tape, about **$375**. It was 100 with the comment beside it still pricing a tape
+at Seedance's $2.07 — so the file claimed $207 of exposure for something that was really
+about $70, and the supplier had changed six days earlier. The comment was corrected with
+the number.
+
+**Proved by reading the config INSIDE the running container** — 100 before the swap, 500
+after — because §78E is one day old and a deploy that never ran looks identical from
+outside.
+
+**HOW MANY ARE SPENT HAD THREE ANSWERS AND ONLY ONE WAS RIGHT.** §77A said six;
+`accounts-cli.mjs plans` printed "0 of 500 used"; `/data/out/accounts/_free-tapes.json`
+says **`granted: 3`**, and it is the record the code actually writes. **497 remain.** The
+six was a count of ACCOUNTS — the earliest predate the ceiling and never reserved against
+it — and the zero is a bug: run inside the container the CLI resolves its root to
+`/app/out`, which does not exist, because the data is on the `/data` volume. **That same
+report also values the ceiling at "~$1050"**, from the stale $2.07. Two wrong numbers in
+one screen of the tool whose whole job is reporting this.
+
+**`resolutions.480p.estimatedUSDPer15s` IS STILL 2.0727 AND WAS DELIBERATELY NOT TOUCHED.**
+It feeds `creditCost`, so it sets what a customer pays — §55D's open item, the owner's
+call, and not a tidy-up. Worth knowing before he takes it: correcting it to $0.75 would
+let a 21-credit grant buy about 2.6 tapes instead of 1, which multiplies what this ceiling
+really costs rather than reducing it.
+
+#### F — What is actually left
+
+**Nothing gates a launch any more.** The owner has a Reddit account maturing (a month;
+§77B's order stands), Search Console submitted and indexing requested, both gates shut.
+
+**The research that changed the plan:** the demonstrated audience for AI-made nostalgia
+video is on **Instagram, TikTok and YouTube**, not Reddit — accounts built on exactly this
+are taking 600,000 likes a video — and those platforms need no account age, no karma and
+no moderator's permission. §61A's Reels/Shorts/TikTok plan was right and now has numbers
+behind it. Reddit stays worth having; it is no longer the fast shot.
+
+**Still unproven: no real upload has gone through the live gate.** The wiring is covered by
+the suite and by the banner, the detector by direct call. An end-to-end web order costs one
+free tape plus $0.75 and is the only thing that proves the whole path.
 
 ---
 
