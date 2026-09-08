@@ -1816,14 +1816,35 @@ test('every word in the landing band clears the floor against the pixels painted
   // sheet: style-src 'self' refuses an inline <style> element outright and a
   // hash cannot rescue one, but insertRule is not an inline style. Two frames
   // are awaited so the compositor has painted before the capture is asked for.
-  const capture = async (rule) => {
+  //
+  // THE CAPTURE IS CLIPPED TO THE BAND, AND THAT IS A BUDGET RATHER THAN A
+  // TIDY-UP. The band is about a third of the viewport at both widths, so a
+  // full-viewport capture spends two thirds of its pixels on ground this sweep
+  // never reads -- measured 2026-09-08, 56 captures come to 24.5 MB of base64
+  // and 16.3 s of the test's wall clock on an IDLE machine. Under full-suite
+  // load one of them exceeded the 15 s CDP budget and failed the run, and so
+  // did the deleteRule probe behind it, because the renderer is still
+  // rasterising when the next call arrives. CLAUDE.md §4: a margin narrower
+  // than machine variance measures the machine, and the answer is to take work
+  // OUT of the window rather than widen it. Clipped, the same 56 captures are
+  // 11.9 MB and 11.3 s, and every pixel this sweep reads is byte-identical.
+  //
+  // §73F LEFT `clip`'s TWO COORDINATE STORIES ALONE; THIS RESOLVES THEM BY
+  // MEASUREMENT. The story is the DOCUMENT's: a clip at the band's VIEWPORT y
+  // returns a flat rectangle of the page's top (1,260 bytes, which is what the
+  // screenshot script for the owner hit), while one at y + scrollY matched the
+  // region of a full capture it replaces on every sampled pixel, all 56 times.
+  // So the clip's origin is the band's viewport origin plus the scroll, and
+  // the two assertions below plus "painted no glyph" are what catch a browser
+  // that ever tells the other story.
+  const capture = async (rule, clip) => {
     const idx = await run(`(async () => {
       const sh = [...document.styleSheets].find((x) => x.href && x.href.endsWith('/styles.css'));
       const i = sh.insertRule(${JSON.stringify(rule)}, sh.cssRules.length);
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       return i;
     })()`);
-    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png', clip });
     await run(`(() => {
       const sh = [...document.styleSheets].find((x) => x.href && x.href.endsWith('/styles.css'));
       sh.deleteRule(${idx});
@@ -1919,20 +1940,41 @@ test('every word in the landing band clears the floor against the pixels painted
               });
             }
             return {
-              band: { left: b.left, top: b.top, width: b.width, height: b.height, fits: b.top >= -0.5 && b.bottom <= innerHeight + 0.5 },
+              // scrollX/scrollY turn the band's viewport origin into the
+              // document origin a clip is measured in; nothing else uses them.
+              band: { left: b.left, top: b.top, width: b.width, height: b.height, scrollX: window.scrollX, scrollY: window.scrollY, fits: b.top >= -0.5 && b.bottom <= innerHeight + 0.5 },
               rail: { left: rr.left - b.left, fadeAt: rr.right - fade - b.left },
               words,
             };
           })()`);
           assert.ok(g.band.fits, `at ${viewport.width}px the band (${g.band.height}px tall at y=${g.band.top}) does not fit the viewport, so a viewport capture cannot hold it`);
 
-          const mask = await capture(SENTINEL);
-          const ground = await capture(KNOCKOUT);
-          // CSS px and PNG px agree because visit() emulates at scale 1; a
-          // capture wider than the viewport would put every rect on the
-          // wrong pixels and fail further down as "painted no glyph".
-          assert.equal(mask.width, viewport.width, `at ${viewport.width}px the capture is ${mask.width}px wide -- the device scale factor is not 1`);
+          // The clip's origin is the band's rounded VIEWPORT origin carried
+          // into document space by the scroll, so PNG (0,0) is band (0,0) and
+          // a word's band-relative rect is already its rect in the capture.
           const ox = Math.round(g.band.left); const oy = Math.round(g.band.top);
+          const clip = {
+            x: ox + g.band.scrollX,
+            y: oy + g.band.scrollY,
+            width: Math.round(g.band.width),
+            height: Math.round(g.band.height),
+            scale: 1,
+          };
+          const mask = await capture(SENTINEL, clip);
+          const ground = await capture(KNOCKOUT, clip);
+          // THE CAPTURE IS MEASURED AGAINST THE BAND, NOT AGAINST THE CLIP.
+          // Comparing it to the clip is tautological -- a clip 40px too narrow
+          // still yields a capture that matches it, and the sabotage that
+          // proved that passed in silence. Against the band's own rounded box
+          // both faults are caught: a clip that does not cover the band, and a
+          // device scale factor other than 1 (which doubles both numbers).
+          // CSS px and PNG px agree because visit() emulates at scale 1 and
+          // the clip asks for scale 1.
+          const bw = Math.round(g.band.width); const bh = Math.round(g.band.height);
+          for (const [name, shot] of [['sentinel', mask], ['ground', ground]]) {
+            assert.equal(shot.width, bw, `at ${viewport.width}px the ${name} capture is ${shot.width}px wide against a band ${bw}px wide -- the clip does not cover the band, or the device scale factor is not 1`);
+            assert.equal(shot.height, bh, `at ${viewport.width}px the ${name} capture is ${shot.height}px tall against a band ${bh}px tall -- the clip does not cover the band, or the device scale factor is not 1`);
+          }
           for (const w of g.words) {
             assert.ok(w.color, `"${w.text}" (${w.cls}) has an unparseable colour`);
             // 4.5:1 for every word. The title alone takes WCAG's large-text
@@ -1951,7 +1993,8 @@ test('every word in the landing band clears the floor against the pixels painted
               const left = w.inRail ? Math.max(r.left, g.rail.left) : r.left;
               const right = w.inRail ? Math.min(r.right, g.rail.fadeAt) : r.right;
               if (right - left < 8) continue;
-              const rect = { left: left + ox, top: r.top + oy, right: right + ox, bottom: r.bottom + oy };
+              // Band-relative already: the capture starts at the band's origin.
+              const rect = { left, top: r.top, right, bottom: r.bottom };
               const { glyphs, worst, where } = worstContrast({ mask, ground, rect, color: w.color, opacity: w.opacity });
               assert.ok(glyphs > 0, `at ${viewport.width}px (${state}, ${slug}): the sentinel render painted no glyph for "${w.text}" (${w.cls}) -- the probe is blind`);
               // Infinity < need is false, so a rect with strokes and nothing
