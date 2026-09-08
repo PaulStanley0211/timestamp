@@ -538,7 +538,7 @@ const TAPE_SECONDS = 15;
  * which walks this list against a running server rather than trusting it.
  */
 const PUBLIC_PAGES = Object.freeze([
-  { path: '/', description: 'Upload one photograph and get back fifteen seconds that look like a camcorder tape from 2003 -- warm, grainy, and shot somewhere you choose.' },
+  { path: '/', description: 'Upload one photograph and get back fifteen seconds that look like a camcorder tape from 2003 — warm, grainy, and shot somewhere you choose.' },
   { path: '/pricing', description: 'What a tape costs, in credits and in plain words. A free tape with a new account, no card, and no subscription.' },
   { path: '/privacy', description: 'What happens to your photograph, who else ever sees it, and when it is deleted.' },
   { path: '/terms', description: 'The deal in plain words: what you get, what it costs, and how cancelling and refunds work.' },

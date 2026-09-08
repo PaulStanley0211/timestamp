@@ -3431,6 +3431,16 @@ test('the sitemap lists the public pages as absolute urls, and every one of them
       // 303s to /login is a page asking to be indexed behind a door.
       const hit = await get(base, pathname);
       assert.equal(hit.status, 200, `${pathname} is on the sitemap and answers ${hit.status} to a visitor with no session`);
+
+      // THE DESCRIPTION IS THE ONLY PROSE HERE A CUSTOMER READS BEFORE THEY
+      // ARRIVE -- it is the line Google prints under the title -- and it is
+      // written in a file whose every other sentence uses "--" for an em dash,
+      // because comments in this codebase avoid the character. That habit
+      // reached the landing page's description and shipped, printing a literal
+      // double hyphen in the search result. Nothing renders it as a dash.
+      const desc = /<meta name="description" content="([^"]*)">/.exec(await hit.text());
+      assert.ok(desc, `${pathname} is on the sitemap with no description, so the snippet is Google's guess`);
+      assert.ok(!desc[1].includes('--'), `${pathname}'s description prints a literal "--": ${desc[1]}`);
     }
 
     // And the paths that must never appear, named individually so a failure says
