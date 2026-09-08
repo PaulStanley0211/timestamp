@@ -10201,8 +10201,10 @@ the cover minimum independently when it re-samples the same function, and
 `BG_SCRIPT` still sets it under a comment saying it drives the scrim (Minor
 4) -- a `views.mjs` edit moves a CSP hash and wants its own deploy, so it
 waits for the next script change; the 10-second in-page wait for a loop
-frame is the class §4 warns about and is where to look if the sweep ever
-flakes on CI (12); the sweep is the band's only contrast guard and self-skips
+frame was named the class §4 warns about and where to look if the sweep ever
+flaked on CI (12) -- **it flaked, and that was the wrong place: §80A measured
+the wait never being spent, and the cost was the size of the captures**; the
+sweep is the band's only contrast guard and self-skips
 without Chromium, as the whole file does (both CI images have Chrome, §38C);
 and `build/sabotage/` copies are scratch (13).
 
@@ -11192,6 +11194,116 @@ beside the new `01.sh`–`07.sh`), so the loop ran 14 files and printed 14 PASS 
 seven of which proved nothing about the current `guards.yml`. **§49H's count assertion is
 the only thing that caught it**, which is exactly what it is for: a harness failure reads
 as a pass. Wipe the directory before extracting, and assert the count is 7.
+
+---
+
+### 80. THE BAND SWEEP FLAKED UNDER LOAD, AND THE PREDICTION POINTED AT THE WRONG THING (2026-09-08, night)
+
+**One commit, `3900380`, test-first, three sabotages each restored from a copy
+and re-checked with `cmp`. Suite 2207 / 2204 pass / 0 fail / 3 skipped, guards
+7/7 counted.** §73D's sweep -- the only guard in this repository that measures
+text contrast against real pixels -- failed under full `npm test` with
+`got no answer in 15000ms`. It passes alone every time, which is §4's signature.
+
+#### A -- §73J ITEM 12 CALLED THIS FLAKE AND NAMED THE WRONG CAUSE
+
+That item said the 10-second in-page wait for a loop frame "is the class §4
+warns about and is where to look if the sweep ever flakes on CI". **It is not
+the cause, and three measurements say so:**
+
+- With every CDP call timed, **no `Runtime.evaluate` exceeded 200 ms** on an
+  idle machine -- including the ones that had the whole 10 s available. The
+  loop frame decodes in milliseconds; the wait is never spent.
+- **The still state never waits at all.** It already returns after two animation
+  frames; only the 14 live runs per sweep can reach the loop.
+- The two calls actually observed timing out were `Page.captureScreenshot` (a
+  full `npm test`) and **the `deleteRule` probe** (under load), and that probe
+  contains no in-page wait of any kind.
+
+**The window's content is pixels, not waiting.** The band is about a third of
+the viewport at both widths, so a full-viewport capture encodes, ships and
+inflates two thirds of a picture the sweep never reads: **56 captures, 24.5 MB
+of base64, 16.3 s of an idle machine's clock.** And the cost does not end when
+the response lands -- the renderer is still rasterising when the next call
+arrives, which is why a trivial `deleteRule` behind a capture blows the same
+budget. That is the answer to why two unrelated-looking calls fail the same way.
+
+#### B -- The fix, measured rather than argued
+
+The capture is clipped to the band. **Alternating arms under one steady 40-hog
+load, four rounds each so drift cannot favour either:**
+
+| `Page.captureScreenshot` | p50 | p90 | p99 | max | total |
+|---|---|---|---|---|---|
+| full viewport | 338 | 924 | 1870 | **4905 ms** | 104.1 s |
+| clipped to the band | 171 | 440 | 707 | **873 ms** | 52.6 s |
+
+**The tail is what a fixed budget meets, and it moved 5.6x further from it.**
+The sweep is 14.8 s -> 11.2 s idle. §4's ruling was taken as written -- the
+budget is untouched at 15 s, no retry was added, and the work left the window.
+
+**WHAT THIS DOES NOT PROVE.** Both observed failures were beyond 15,000 ms while
+the worst sample in either arm here was 4,905 ms, so a rare stall exists that
+neither distribution captures. Halving the work halves its exposure; it cannot
+be shown to have removed it. If it recurs, the next lever is the SENTINEL
+capture, which needs the glyph positions and not the photograph behind them --
+hiding the loop there would take the video decode and the blur out of half the
+frames, and §80C's evidence method is how to prove it safe.
+
+#### C -- §73F's TWO COORDINATE STORIES, RESOLVED, AND HOW "NOTHING MOVED" WAS PROVED
+
+**The story is the DOCUMENT's.** A clip at the band's viewport `y` returns a
+flat rectangle of the page's top -- 1,260 bytes, which is exactly what the
+screenshot script for the owner hit -- while one at `y + scrollY` matched the
+region of a full capture it replaces on every sampled pixel, all 56 times.
+
+**`TIMESTAMP_BAND_EVIDENCE` IS THE INSTRUMENT THAT SETTLES A CHANGE TO THIS
+SWEEP, AND IT NEEDS ITS CONTROL.** Diffing pristine against clipped showed
+**38 of 254 ratios differing, max delta 2.31** -- which reads as a broken change
+until the control is run. **Two runs of the UNCHANGED code differ on 31 runs
+with a WIDER spread, 3.46.** In every comparison, every difference is `live` and
+**not one is `still`**: the loop's grain is fresh each frame, exactly as the
+docstring says, so the 127 still-state runs are deterministic and are the real
+control. All 127 are byte-identical before and after, and **the tightest margin
+is 1.207 (5.43:1) in all four runs.**
+
+**The live half's noise, characterised for whoever diffs this next:** deltas
+reach 3.46 but land on runs sitting at 7:1 and above; runs within 1.5x of their
+floor move by at most **0.44**, against the binding run's 0.93 of margin. The
+floor is roughly twice its own noise where it binds.
+
+#### D -- THE FIRST VERSION OF THE SIZE ASSERTION WAS TAUTOLOGICAL
+
+It compared the capture to the CLIP. A clip 40 px too narrow yields a capture
+that matches it, so **that sabotage passed in silence.** Re-pointed at the
+band's own rounded box -- which is re-derived rather than read off the clip --
+it fails with "335px wide against a band 375px wide". §36F and §60F in a third
+costume: a test can be green while the thing it names is wrong, and the sabotage
+is the only reason anybody finds out.
+
+**The sabotage record, in order:** the viewport coordinate story -- red, "the
+sentinel render painted no glyph ... the probe is blind"; a clip 40 px narrow --
+**green**, then red on the re-pointed assertion; a clip 40 px down the document
+-- red on painted no glyph. Each restored from a copy and confirmed with `cmp`.
+
+#### E -- Things that will bite
+
+- **THE BACKTICK TRAP FIRED AGAIN**, in a comment inside the geometry probe's
+  template literal, while its author was reading the warning about it. `node
+  --check` caught it in seconds. Still the most repeated mistake here.
+- **A 5-PX-SAMPLED PIXEL COMPARISON IS NOT A PROOF OF IDENTITY.** The clip probe
+  reported `match 1.000` on all 56 captures and the evidence diff still moved 38
+  ratios. Sample the thing the test actually asserts, not the pixels underneath.
+- **AN A/B UNDER SYNTHETIC LOAD MUST ALTERNATE.** Machine drift over twenty
+  minutes is larger than the effect; running all of one arm and then all of the
+  other would have measured the afternoon.
+- **PASS/FAIL COUNTS ARE THE WEAKEST EVIDENCE AVAILABLE HERE.** A ~1-in-4 flake
+  needs many runs to move a proportion, and 0/4 versus 0/4 says nothing. The
+  distribution of the dominant call is the measurement; read the tail.
+- **Anti-backgrounding Chrome flags were tried and DISCARDED.**
+  `--disable-renderer-backgrounding` and friends gave 3/3 against 2/3 at n=3,
+  with the evaluate tail unchanged (2842 ms against 2505 ms). That is noise, not
+  a finding; do not re-add them on the strength of it.
 
 ---
 
