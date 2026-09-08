@@ -42,6 +42,7 @@ import {
 import {
   creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, videosPage, errorPage,
   privacyPage, termsPage, impressumPage, faq, siteFooter, balanceSentence,
+  layout,
 } from '../scripts/web/views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
@@ -2643,4 +2644,72 @@ test('the payoff page frames the tape in the card outline and heads it at the pa
   // must stay whatever the interface is painted.
   assert.match(player[1], /background:\s*#0B0A09/i, "the player's ground is not the tape's matte");
   assert.match(css, /\.result-words \.headline\s*\{[^}]*font-size:\s*var\(--t-7\)/, 'the result heading is not at the page-title size');
+});
+
+/**
+ * WHAT A SEARCH RESULT AND A LINK PREVIEW ARE BUILT FROM (2026-09-08). Until
+ * today the head carried a title and nothing else, so Google had to invent the
+ * snippet and every shared link -- X, Reddit, WhatsApp, Discord, Slack -- rendered
+ * as a bare grey url. On a product whose entire pitch is a moving picture of you,
+ * that is the cheapest marketing there is, unclaimed.
+ */
+
+test('a public page carries the description, the canonical url and the card a shared link is drawn from', () => {
+  const html = landingPage({
+    places: PLACES_FIXTURE,
+    account: null,
+    meta: {
+      description: 'Fifteen seconds that look like a camcorder tape from 2003.',
+      canonical: 'https://timestamptapes.test/',
+      image: 'https://timestamptapes.test/showcase/hero-16x9.jpg',
+    },
+  });
+
+  const head = /<head>([\s\S]*?)<\/head>/.exec(html);
+  assert.ok(head, 'no head');
+
+  assert.match(head[1], /<meta name="description" content="Fifteen seconds[^"]*">/, 'no description, so Google writes the snippet');
+  assert.match(head[1], /<link rel="canonical" href="https:\/\/timestamptapes\.test\/">/, 'no canonical url');
+
+  // OG AND TWITTER BOTH, because they are read by different scrapers and the
+  // fallback between them is not reliable enough to pick one.
+  for (const [property, value] of [
+    ['og:type', 'website'],
+    ['og:title', 'Timestamp — one photograph, fifteen seconds of 2003'],
+    ['og:url', 'https://timestamptapes.test/'],
+    ['og:image', 'https://timestamptapes.test/showcase/hero-16x9.jpg'],
+  ]) {
+    assert.ok(
+      head[1].includes(`<meta property="${property}" content="${value}">`),
+      `${property} is missing or wrong -- a shared link will not show it`,
+    );
+  }
+  assert.match(head[1], /<meta property="og:description" content="Fifteen seconds/, 'og:description is missing');
+
+  // THE LARGE CARD ONLY WHEN THERE IS AN IMAGE TO FILL IT. Declaring
+  // summary_large_image with no image gets the link rendered as a blank slab,
+  // which is worse than the small card it would otherwise have had.
+  assert.match(head[1], /<meta name="twitter:card" content="summary_large_image">/, 'the card is not the large one');
+});
+
+test('a page given no metadata emits none of it, and an absent image does not claim a large card', () => {
+  // THE HALF THAT PROTECTS EVERY OTHER PAGE. `layout` is shared by every page in
+  // the product, so the change had to be opt-in: a gated page must not start
+  // advertising a canonical url, and a deploy with no showcase configured must
+  // not point a scraper at an image that 404s. Both are asserted here because
+  // both are silent failures -- a broken og:image renders as an empty card and
+  // nothing anywhere goes red.
+  const bare = layout({ title: 'T', body: '<p>x</p>' });
+  for (const absent of ['og:image', 'og:title', 'og:url', 'canonical', 'name="description"', 'twitter:card']) {
+    assert.ok(!bare.includes(absent), `a page that asked for no metadata emitted ${absent}`);
+  }
+
+  const noImage = layout({
+    title: 'T',
+    body: '<p>x</p>',
+    meta: { description: 'd', canonical: 'https://timestamptapes.test/pricing' },
+  });
+  assert.ok(!noImage.includes('og:image'), 'og:image was emitted with no image to point at');
+  assert.match(noImage, /<meta name="twitter:card" content="summary">/, 'a card with no image must be the small one');
+  assert.match(noImage, /<link rel="canonical" href="https:\/\/timestamptapes\.test\/pricing">/, 'the canonical url went missing');
 });

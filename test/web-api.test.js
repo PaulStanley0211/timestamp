@@ -271,7 +271,7 @@ function signIn(auth, { email, password }) {
   return `${SESSION_COOKIE}=${auth.signCookie(sessionId, auth.sessionSecret())}`;
 }
 
-async function withServer(run, { queue = fakeQueue(), credits = 5_000, provider = 'fixture' } = {}) {
+async function withServer(run, { queue = fakeQueue(), credits = 5_000, provider = 'fixture', extra = {} } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-web-'));
   const auth = fakeAuth();
   auth.createAccount({ email: 'a@example.com', password: 'correct horse battery', plan: 'archive', credits });
@@ -285,6 +285,7 @@ async function withServer(run, { queue = fakeQueue(), credits = 5_000, provider 
     auth,
     provider,
     ffprobeImpl: async () => 'ffprobe version 7.1 stubbed',
+    ...extra,
   });
   const port = await app.listen();
   const base = `http://127.0.0.1:${port}`;
@@ -3392,5 +3393,62 @@ test('a tile is cropped to its own tape shape, not to the shape 4:3 tapes happen
     assert.ok(tallRatio, `the stylesheet gives .frame--${tallClass} no aspect-ratio, so the class is decorative`);
     assert.notEqual(wideRatio, tallRatio,
       `landscape and portrait tiles are both ${wideRatio} -- the shape reached the markup and not the crop`);
+  });
+});
+
+/**
+ * THE SITEMAP (2026-09-08). The site was opened to search engines on 2026-09-08
+ * (§76) and had nothing to submit: no sitemap route existed. These two tests are
+ * the whole contract, and the second is the one that matters -- a sitemap is a
+ * list of urls this product ASKS to have indexed, so the danger is not a missing
+ * page but a present one that should never have been on it.
+ */
+
+test('the sitemap lists the public pages as absolute urls, and every one of them is public', async () => {
+  // A HAND-WRITTEN LIST, NOT ONE DERIVED FROM THE ROUTE TABLE, and the reason is
+  // §23's: `renderedPages()` is hand-written because a page missing from a
+  // derived list is invisible to every check that reads it. Here the risk runs
+  // the other way -- deriving from the routes is how `/account` or a job url
+  // ends up published to Google -- so the list is explicit and this test walks
+  // it against the running server rather than trusting it.
+  await withServer(async ({ base }) => {
+    const res = await get(base, '/sitemap.xml');
+    assert.equal(res.status, 200, 'no sitemap to submit');
+    assert.match(res.headers.get('content-type') ?? '', /application\/xml/, 'a sitemap is xml');
+
+    const xml = await res.text();
+    const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+    assert.ok(locs.length >= 5, `a sitemap with ${locs.length} entries is not describing this site`);
+
+    for (const loc of locs) {
+      // ABSOLUTE, because a <loc> is required to be, and a relative one is
+      // silently dropped by every crawler that reads it.
+      assert.match(loc, /^https?:\/\//, `not an absolute url: ${loc}`);
+      const { pathname } = new URL(loc);
+
+      // THE ASSERTION THIS FILE EXISTS FOR. Not "the list looks right" but "every
+      // url on it is one a stranger can actually open" -- a sitemap entry that
+      // 303s to /login is a page asking to be indexed behind a door.
+      const hit = await get(base, pathname);
+      assert.equal(hit.status, 200, `${pathname} is on the sitemap and answers ${hit.status} to a visitor with no session`);
+    }
+
+    // And the paths that must never appear, named individually so a failure says
+    // which one leaked rather than that "something" did.
+    for (const forbidden of ['/account', '/videos', '/j/', '/api/', '/onboarding', '/login']) {
+      assert.ok(
+        !locs.some((l) => new URL(l).pathname.startsWith(forbidden)),
+        `${forbidden} is on the sitemap; it is gated, or it is somebody's face`,
+      );
+    }
+  }, { extra: { indexable: true, publicUrl: 'https://timestamptapes.test' } });
+});
+
+test('there is no sitemap while the site is closed to search engines', async () => {
+  // The same reasoning `robots.txt` already carries: the two halves must agree.
+  // A sitemap served under `Disallow: /` invites a crawler to index a site that
+  // every other signal is telling it to leave alone.
+  await withServer(async ({ base }) => {
+    assert.equal((await get(base, '/sitemap.xml')).status, 404, 'a closed site is publishing a sitemap');
   });
 });

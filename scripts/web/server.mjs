@@ -523,6 +523,28 @@ const TAPE_SECONDS = 15;
  * nothing and is already right on the day there is TLS -- deployment must not
  * depend on somebody remembering to add it.
  */
+/**
+ * THE PAGES THIS PRODUCT ASKS TO HAVE INDEXED, and the sentence each one offers
+ * a search result.
+ *
+ * HAND-WRITTEN, NOT DERIVED FROM `ROUTES`. §23's ruling in the other direction:
+ * `renderedPages()` is a hand-written list because a page MISSING from a derived
+ * one is invisible to every check that reads it -- here the danger is the
+ * opposite, a page PRESENT on it that should never have been published, so
+ * deriving from the route table is exactly how `/account` or a job url reaches
+ * Google. A page joins this list because somebody decided it should.
+ *
+ * Every entry is asserted reachable with no session by test/web-api.test.js,
+ * which walks this list against a running server rather than trusting it.
+ */
+const PUBLIC_PAGES = Object.freeze([
+  { path: '/', description: 'Upload one photograph and get back fifteen seconds that look like a camcorder tape from 2003 -- warm, grainy, and shot somewhere you choose.' },
+  { path: '/pricing', description: 'What a tape costs, in credits and in plain words. A free tape with a new account, no card, and no subscription.' },
+  { path: '/privacy', description: 'What happens to your photograph, who else ever sees it, and when it is deleted.' },
+  { path: '/terms', description: 'The deal in plain words: what you get, what it costs, and how cancelling and refunds work.' },
+  { path: '/impressum', description: 'Legal notice under section 5 DDG: who operates Timestamp and how to reach them.' },
+]);
+
 const BASE_SECURITY_HEADERS = Object.freeze({
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
@@ -1844,6 +1866,28 @@ export function createServer({
   }
 
   /**
+   * The head tags a search result and a shared link are built from.
+   *
+   * BUILT FROM `publicBase()` FOR THE SAME REASON THE STRIPE RETURN URL IS --
+   * configuration and this server's own socket, never the `Host` header, which
+   * is whatever the client typed. A canonical url taken from a header is a
+   * canonical url an attacker chooses.
+   *
+   * The image is the showcase hero -- a real frame from a real tape -- and it is
+   * OMITTED ENTIRELY when no showcase is configured on this box, rather than
+   * pointing a scraper at a url that 404s. An og:image that does not resolve
+   * renders as an empty card and nothing anywhere goes red.
+   */
+  function pageMeta(pathname) {
+    const base = publicBase();
+    return {
+      description: PUBLIC_PAGES.find((p) => p.path === pathname)?.description ?? null,
+      canonical: `${base}${pathname}`,
+      image: showcasePresent.has('hero-16x9.jpg') ? `${base}/showcase/hero-16x9.jpg` : null,
+    };
+  }
+
+  /**
    * The packs, for the page. Degrades to nothing rather than taking the page
    * down, for the same reason the plans do: `/pricing` is public prose and a
    * module that will not load is not a reason to 503 it.
@@ -2166,6 +2210,7 @@ export function createServer({
           // exist on this box, and what the config says the product is.
           showcase: showcaseFor(),
           facts: await publicFacts(),
+          meta: pageMeta('/'),
         }), setCookie ? { 'Set-Cookie': setCookie } : {});
       }
       const [balance, resolutions, resolution] = await Promise.all([
@@ -3643,6 +3688,7 @@ export function createServer({
         // while `npm run purge` removed the video after `retention.jobDays`.
         // Reading the window from the same config the purge reads means the
         // promise and the deletion cannot drift apart in a later edit.
+        meta: pageMeta('/pricing'),
         retentionDays: cfg?.retention?.jobDays ?? null,
         // WHERE STRIPE SENDS SOMEBODY BACK TO, AND IT GRANTS NOTHING. This is a
         // query parameter on a public page: anybody can type it, so it may
@@ -3668,15 +3714,16 @@ export function createServer({
         retention: cfg?.retention ?? {},
         imageProcessor,
         account: account ?? null,
+        meta: pageMeta('/privacy'),
       }));
     },
 
     async termsPage(req, res, { account }) {
-      sendHtml(req, res, 200, termsPage({ entity: legalEntity, account: account ?? null }));
+      sendHtml(req, res, 200, termsPage({ entity: legalEntity, account: account ?? null, meta: pageMeta('/terms') }));
     },
 
     async impressumPage(req, res, { account }) {
-      sendHtml(req, res, 200, impressumPage({ entity: legalEntity, account: account ?? null }));
+      sendHtml(req, res, 200, impressumPage({ entity: legalEntity, account: account ?? null, meta: pageMeta('/impressum') }));
     },
 
     /**
@@ -3917,6 +3964,31 @@ export function createServer({
      * to search engines must not open the artefacts with it -- a tape is
      * somebody's face, and `/j/<id>` urls are unguessable rather than secret.
      */
+    /**
+     * The sitemap, and the ONE thing worth knowing about it: it is a list of
+     * urls this product ASKS to have indexed, so the risk it carries is not a
+     * missing page but a present one. `PUBLIC_PAGES` is hand-written for that
+     * reason and a test walks every entry against a running server with no
+     * session, so an entry that 303s to /login fails rather than ships.
+     *
+     * 404 WHILE INDEXING IS CLOSED, matching `robots.txt`'s two halves: a
+     * sitemap served under `Disallow: /` invites a crawler to index a site
+     * every other signal is telling it to leave alone.
+     */
+    async sitemap(req, res) {
+      if (!indexable) throw new HttpError(404, 'Not found.', { code: 'NO_SITEMAP' });
+      const base = publicBase();
+      const urls = PUBLIC_PAGES.map((p) => `  <url><loc>${base}${p.path}</loc></url>`).join('\n');
+      const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+      res.writeHead(200, {
+        'Content-Type': 'application/xml; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body),
+        'Cache-Control': 'no-store',
+        ...BASE_SECURITY_HEADERS,
+      });
+      res.end(body);
+    },
+
     async robots(req, res) {
       const body = indexable
         ? 'User-agent: *\nDisallow: /j/\nDisallow: /api/\nDisallow: /account\n'

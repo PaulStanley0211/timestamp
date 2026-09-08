@@ -942,6 +942,41 @@ function nav({ account = null, balance = null } = {}) {
  * needs them to be siblings. Everything else on the page is inside `.wrap`.
  */
 /**
+ * The tags a search result and a shared link are built from.
+ *
+ * OPT-IN, AND THAT IS THE WHOLE SAFETY PROPERTY. `layout` is shared by every
+ * page in this product, so a page that passes no `meta` emits none of this and
+ * is byte-identical to what it rendered before -- which is what keeps a gated
+ * page from advertising a canonical url, and what stops a deploy with no
+ * showcase configured pointing a scraper at an image that 404s. There is a test
+ * for both halves.
+ *
+ * BOTH VOCABULARIES, because they are read by different scrapers and the
+ * fallback between them is not reliable enough to pick one: Open Graph is what
+ * Facebook, WhatsApp, Slack, Discord, LinkedIn and iMessage read, and
+ * `twitter:card` is what decides the SHAPE of the card rather than its content.
+ *
+ * THE LARGE CARD ONLY WHEN THERE IS AN IMAGE TO FILL IT. Declaring
+ * `summary_large_image` with no `og:image` renders the link as a blank slab,
+ * which is worse than the small card it would otherwise have had.
+ */
+function headMeta(title, meta) {
+  if (!meta) return '';
+  const { description = null, canonical = null, image = null } = meta;
+  const out = [];
+  if (description) out.push(`<meta name="description" content="${h(description)}">`);
+  if (canonical) out.push(`<link rel="canonical" href="${h(canonical)}">`);
+  out.push('<meta property="og:type" content="website">');
+  out.push('<meta property="og:site_name" content="Timestamp">');
+  out.push(`<meta property="og:title" content="${h(title)}">`);
+  if (description) out.push(`<meta property="og:description" content="${h(description)}">`);
+  if (canonical) out.push(`<meta property="og:url" content="${h(canonical)}">`);
+  if (image) out.push(`<meta property="og:image" content="${h(image)}">`);
+  out.push(`<meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">`);
+  return `${out.join('\n')}\n`;
+}
+
+/**
  * WHY THREE ICON LINKS AND NOT ONE. The SVG is what a current browser paints
  * and the only one that stays sharp at every size. `/favicon.ico` is what the
  * rest request without being told -- it is served whether it is linked or not,
@@ -960,6 +995,7 @@ export function layout({
   balance = null,
   chrome = true,
   masthead = true,
+  meta = null,
 }) {
   return `<!doctype html>
 <html lang="en">
@@ -968,7 +1004,7 @@ export function layout({
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>${h(title)}</title>
-<link rel="stylesheet" href="/styles.css">
+${headMeta(title, meta)}<link rel="stylesheet" href="/styles.css">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
 <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/icon-180.png">
@@ -1126,7 +1162,7 @@ const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
  */
 export function landingPage({
   places = [], account = null, pricing = null, csrf = '',
-  showcase = null, facts = {},
+  showcase = null, facts = {}, meta = null,
 } = {}) {
   const first = places[0] ?? null;
   const second = places[1] ?? first;
@@ -1354,6 +1390,7 @@ ${faq(faqItems({ freeCredits: pricing?.freeCredits ?? null, photoDays, jobDays, 
     account,
     chrome: false,
     masthead: false,
+    meta,
   });
 }
 
@@ -2325,6 +2362,7 @@ export function privacyPage({
   // this exists so that switching moderation on cannot leave the page lying.
   imageProcessor = null,
   account = null,
+  meta = null,
 }) {
   const body = `
 <main>
@@ -2390,10 +2428,10 @@ export function privacyPage({
   </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - privacy', body, bodyClass: 'page-legal', account });
+  return layout({ title: 'Timestamp - privacy', body, bodyClass: 'page-legal', account, meta });
 }
 
-export function termsPage({ entity = null, account = null }) {
+export function termsPage({ entity = null, account = null, meta = null }) {
   const body = `
 <main>
   <section class="legal">
@@ -2436,7 +2474,7 @@ export function termsPage({ entity = null, account = null }) {
   </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - terms', body, bodyClass: 'page-legal', account });
+  return layout({ title: 'Timestamp - terms', body, bodyClass: 'page-legal', account, meta });
 }
 
 /**
@@ -2453,7 +2491,7 @@ export function termsPage({ entity = null, account = null }) {
  * `.env` and not from the committed config: for a sole trader that address is
  * usually a home address, and this repository is public.
  */
-export function impressumPage({ entity = null, account = null }) {
+export function impressumPage({ entity = null, account = null, meta = null }) {
   const body = `
 <main>
   <section class="legal">
@@ -2465,7 +2503,7 @@ export function impressumPage({ entity = null, account = null }) {
   </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - legal notice', body, bodyClass: 'page-legal', account });
+  return layout({ title: 'Timestamp - legal notice', body, bodyClass: 'page-legal', account, meta });
 }
 
 // ---------------------------------------------------------------------------

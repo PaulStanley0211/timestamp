@@ -544,7 +544,7 @@ export function identityUnavailablePage() {
  */
 export function pricingPage({
   plans = [], resolutions = [], packs = [], currentPlan = null, account = null,
-  balance = null, checkout = null, retentionDays = null, facts = {},
+  balance = null, checkout = null, retentionDays = null, facts = {}, meta = null,
 } = {}) {
   const offered = resolutions.filter((r) => r.available && r.credits > 0);
   // Every number the prose states, handed in by the server from config or from
@@ -823,7 +823,7 @@ export function pricingPage({
   </section>
 </main>
 `;
-  return layout({ title: 'Timestamp - pricing', body, bodyClass: 'page-pricing', account, balance });
+  return layout({ title: 'Timestamp - pricing', body, bodyClass: 'page-pricing', account, balance, meta });
 }
 
 /**

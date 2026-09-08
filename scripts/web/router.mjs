@@ -88,6 +88,11 @@ export const ROUTES = Object.freeze([
   // and session-free like the stylesheet; see `indexable` in server.mjs for
   // why the default refuses everything.
   { method: 'GET', pattern: '/robots.txt', name: 'robots' },
+  // The list of pages this product ASKS to have indexed. Served only while
+  // indexing is open, for the reason the two halves of `robots.txt` already
+  // give: a sitemap under `Disallow: /` invites a crawler to index a site
+  // every other signal is telling it to leave alone.
+  { method: 'GET', pattern: '/sitemap.xml', name: 'sitemap' },
 
   // --- where a new account first lands (spec §10, task 12) ----------------
   // BEHIND A SESSION, unlike everything else in this block: every route that
@@ -227,7 +232,7 @@ export const PUBLIC_ROUTES = Object.freeze(new Set([
   'privacyPage', 'termsPage', 'impressumPage',
   // A crawler holds no session, and a robots.txt that answered 303 to /login
   // would be read as "no rules" -- the opposite of what it is for.
-  'robots',
+  'robots', 'sitemap',
   // PUBLIC SINCE 2026-08-21, AND IT IS THE ONE ENTRY HERE THAT SERVES TWO
   // DIFFERENT PAGES. `/` used to 303 a signed-out visitor to `/login`, which
   // made the entire product a password box: there was nowhere to say what this
