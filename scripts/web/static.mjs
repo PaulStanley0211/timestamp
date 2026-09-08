@@ -2491,7 +2491,15 @@ details[open] > summary .faq-glyph::before { content: '−'; }
    band buys a horizontal scrollbar. */
 body.page-landing { padding: 0 0 var(--s-8); }
 .page-landing .wrap { max-width: none; }
-.page-landing .inner { max-width: 76rem; margin: 0 auto; padding: 0 1.15rem; }
+/* GUTTERS ONLY, AND padding-inline RATHER THAN THE SHORTHAND IS THE WHOLE
+   POINT. This rule is two classes and every section it wraps is one, so
+   'padding: 0 1.15rem' here beat .manifesto, .how2 and .demo on
+   specificity and reset all three to zero top and bottom -- 192px of designed
+   rhythm gone, and no source order could have rescued it. Measured on the
+   running page: the manifesto sentence sat 0.0px from the cards under it,
+   which is what the owner reported as "there is no spacing". The column owns
+   the gutters; a section owns its own vertical space. */
+.page-landing .inner { max-width: 76rem; margin: 0 auto; padding-inline: 1.15rem; }
 .page-landing .foot { max-width: 76rem; margin: var(--s-8) auto 0; padding: 0 1.15rem; }
 
 /* THE ANODE GAUZE IS DELETED, and it resolved a contradiction DESIGN.md had
@@ -2736,9 +2744,7 @@ body.page-landing { padding: 0 0 var(--s-8); }
 .facts3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-5); padding: var(--s-8) 0; }
 @media (max-width: 48rem) { .facts3 { grid-template-columns: 1fr; } }
 
-/* THE DEMO: the two other shapes standing on the ground, the button, and the
-   flip counter in the tape's own readout face -- one of the three places it
-   is allowed in the chrome. Static digits; nothing animates. */
+/* THE DEMO: the two other shapes standing on the ground, and the button. */
 .demo { text-align: center; padding: 0 1.15rem var(--s-8); }
 .demo-t { font-family: var(--display); text-transform: uppercase; font-size: var(--t-8); line-height: 0.92; letter-spacing: 0; font-weight: 400; margin: 0 0 var(--s-6); color: var(--ink); }
 .demo-tapes { display: grid; grid-template-columns: minmax(0, 9fr) minmax(0, 16fr); gap: var(--s-5); align-items: end; max-width: 56rem; margin: 0 auto var(--s-6); text-align: left; }
@@ -2760,28 +2766,21 @@ body.page-landing { padding: 0 0 var(--s-8); }
    rather than recolouring the label to something that would fail against it. */
 .demo-cta { display: block; width: max-content; margin: 0 auto; background: var(--lime); color: var(--on-lime); }
 .demo-cta:hover { color: var(--on-lime); filter: brightness(1.06); }
-.flip { display: inline-flex; gap: 0.3em; font-family: var(--osd); font-size: var(--t-8); color: var(--ink); margin: var(--s-6) auto 0; letter-spacing: 0.04em; }
-.flip span { display: inline-block; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 0.1em 0.3em; min-width: 1.1em; line-height: 1.1; }
-.flip .gap { background: none; border: 0; min-width: 0.3em; padding: 0; }
-/* THE COUNTER IS TEN FIXED BOXES IN A ROW THAT CANNOT WRAP, so its width is
-   arithmetic rather than taste: eight digits at 1.1em plus eleven gaps of
-   0.3em is 12.1em, whatever the em happens to be. At the display size that is
-   484px, and the smallest width this product tests at is 320. Measured on the
-   running page before this rule existed: 182px of horizontal scroll, and it
-   was the ONLY thing on the landing escaping its clip. Wrapping was the other
-   way out and is worse -- a date broken across two lines reads as damage --
-   so the em comes down instead.
+/* THE FLIP COUNTER IS GONE, RULE AND MARKUP TOGETHER (2026-09-08). Ten boxed
+   digits reading a single date sat under the demo button; the owner asked for
+   it out as unnecessary, and it was -- the date it printed was one of seven a
+   tape can carry, it repeated the year the hero already states, and it put a
+   second bright object directly beneath the only button in the section.
 
-   AND IT COMES DOWN TWO STEPS RATHER THAN ONE, which is the measurement worth
-   keeping. One step lands the row at 283px inside 283px of column: it fits,
-   and it fits with nothing to spare, so the moment the readout face is not
-   the one paint uses -- the swap before a self-hosted font arrives, or a
-   machine that refuses it -- the digits widen and the page scrolls sideways
-   again. A margin of zero is not a margin. Two steps leaves about a fifth of
-   the column free, which is enough to absorb the fallback metrics. */
+   IT IS DELETED RATHER THAN HIDDEN, which is this file's standing rule: a rule
+   that matches nothing is one tidy-up away from being switched back on, and
+   the grain plate is the precedent. With it goes the two-step font-size climb
+   down in the narrow query, which existed only to stop those ten fixed boxes
+   scrolling a 320px screen sideways. If a readout counter ever comes back,
+   that measurement is in git history at this commit and is worth re-reading
+   before anybody re-derives it. */
 @media (max-width: 48rem) {
   .demo-tapes { grid-template-columns: 1fr; }
-  .flip { font-size: var(--t-3); }
 }
 
 /* A QUERY CONTAINER FOR ITS OWN WIDTH, so the giant word below can size off

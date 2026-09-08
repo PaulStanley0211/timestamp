@@ -693,6 +693,96 @@ test('the selection mark sits at the left of its card, in every row', { skip }, 
     `the place badge (left edge ${probe.place.badge.left}px) sits on the right half of its card (${probe.place.card.left}px to ${probe.place.card.right}px)`);
 });
 
+test('the landing sections stand apart, on the pixels rather than in the sheet', { skip }, async () => {
+  // THE OWNER SAW THE MANIFESTO SENTENCE TOUCHING THE TWO CARDS UNDER IT
+  // (2026-09-08). The gap measured 0.0px against the 64px `.manifesto` asks
+  // for, because `.page-landing .inner` is two classes and its `padding`
+  // shorthand outranked every one-class section rule on the page.
+  //
+  // THE SHEET GUARD IN web-static CANNOT SEE THIS and that is why both exist:
+  // it pins the shape of one rule, and a later rule of higher specificity
+  // would sail past it exactly as this one sailed past `.manifesto`. What a
+  // reader actually meets is the distance between two painted boxes.
+  // BOTH ENDS ARE CONTENT, NEVER A SECTION BOX. A section's own padding lives
+  // INSIDE its box, so `.how2` to `.band` reads 0px whether the rhythm is
+  // there or not -- the padding is under the section's own bottom edge. The
+  // cards and the sentence are what a reader actually sees the distance
+  // between, so those are what is measured.
+  const pairs = [
+    ['the manifesto sentence', '.manifesto-line', 'the two cards below it', '.how-card'],
+    ['the last of the two cards', '.how2 .how-card:last-of-type', 'the place band', '.band'],
+  ];
+  // SIGNED OUT, OR `/` IS THE ORDER FORM AND NONE OF THIS EXISTS. The browser
+  // session is shared across this whole file, so a test that signed in earlier
+  // leaves the cookie behind and `/` renders `homePage`. Passing in isolation
+  // and failing in the suite is the tell, and it is what happened here.
+  const s = await session();
+  await s.signOut();
+  for (const viewport of [LAPTOP, PHONE]) {
+    const page = await visit('/', viewport);
+    assert.deepEqual(page.errors, [], page.errors.join('; '));
+    const probe = await page.evaluate(`(() => {
+      const bottom = (sel) => { const e = document.querySelector(sel); return e && e.getBoundingClientRect().bottom; };
+      const top = (sel) => { const e = document.querySelector(sel); return e && e.getBoundingClientRect().top; };
+      return ${JSON.stringify(pairs)}.map(([aName, a, bName, b]) => ({
+        aName, bName, found: bottom(a) !== null && top(b) !== null, gap: top(b) - bottom(a),
+      }));
+    })()`);
+    for (const r of probe) {
+      assert.ok(r.found, `${r.aName} or ${r.bName} is not on the landing page at all`);
+      assert.ok(r.gap >= 32,
+        `at ${viewport.width}px ${r.aName} and ${r.bName} are ${r.gap.toFixed(1)}px apart -- they read as one block`);
+    }
+  }
+});
+
+test('the frame row stays on one line wherever its panel is at full width', { skip }, async () => {
+  // THE OWNER SAW 9:16 SITTING UNDER 4:3 AND 16:9 ON A LAPTOP (2026-09-08) and
+  // asked for the three shapes in a straight line. It was not a narrow-screen
+  // wrap: `.panel--commit` is capped at 640px, so the row has 590px of usable
+  // width at EVERY viewport above the cap, and the three cards plus their two
+  // gaps measured 601.1px -- over by 11.1px, at 375px and at 2560px alike.
+  //
+  // What pushed it over was one label. "The camcorder shape" is 124.6px at the
+  // label size against "Widescreen" at 67.7 and "Phone" at 36, and it is also
+  // the one the hint paragraph below already explains in full. The three read
+  // as a parallel set of single words now, and the row has ~50px to spare.
+  //
+  // MEASURED ON THE PAINTED BOXES, because the wrap is arithmetic no markup
+  // assertion can see: every card is present and correct in the HTML whether
+  // the row is one line or three. The tops are what say which.
+  const s = await session();
+  await s.signIn();
+  for (const viewport of [LAPTOP, { width: 1024, height: 800, mobile: false }]) {
+    const page = await visit('/', viewport);
+    assert.deepEqual(page.errors, [], page.errors.join('; '));
+    const probe = await page.evaluate(`(() => {
+      const row = document.querySelector('.frames');
+      const cards = [...row.children];
+      const tops = cards.map((c) => Math.round(c.getBoundingClientRect().top));
+      const style = getComputedStyle(row);
+      const gap = parseFloat(style.columnGap) || 0;
+      const content = cards.reduce((n, c) => n + c.getBoundingClientRect().width, 0) + gap * (cards.length - 1);
+      return {
+        cards: cards.length,
+        lines: [...new Set(tops)].length,
+        available: row.getBoundingClientRect().width,
+        content,
+        labels: cards.map((c) => (c.querySelector('.detail') || c.querySelector('.flag') || { textContent: '' }).textContent),
+      };
+    })()`);
+    // Anti-vacuity: a row that lost its cards has one line trivially.
+    assert.ok(probe.cards >= 3, `the frame row has ${probe.cards} cards, so "one line" proves nothing`);
+    assert.equal(probe.lines, 1,
+      `at ${viewport.width}px the ${probe.cards} frame cards sit on ${probe.lines} lines -- `
+      + `${probe.content.toFixed(1)}px of cards and gaps in ${probe.available.toFixed(1)}px of row `
+      + `(labels: ${probe.labels.join(' / ')})`);
+    assert.ok(probe.available - probe.content >= 24,
+      `at ${viewport.width}px the row fits with only ${(probe.available - probe.content).toFixed(1)}px to spare, `
+      + 'which a font fallback would swallow');
+  }
+});
+
 test('the archive label sits in its gutter and never runs into the heading', { skip }, async () => {
   // THE OWNER SAW "ARCHIVE" PRINTED THROUGH "Your tapes" (2026-09-04). The
   // archive header borrows the step header's grid, whose gutter is a fixed

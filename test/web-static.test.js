@@ -1058,10 +1058,29 @@ test('the landing asks six questions, states three facts as quotations, reads a 
   assert.equal((html.match(/<figure class="fact /g) ?? []).length, 3, 'three fact cards');
   assert.match(html, /<figure class="fact fact--lime"><blockquote><p>Exactly fifteen seconds\.<\/p><\/blockquote><figcaption>375 frames at 25 a second, PAL/);
   assert.match(html, /<figure class="fact fact--white"><blockquote><p>Deleted after 7 days\.<\/p>/);
-  assert.match(html, /<p class="flip" aria-label="14 08 2003">/, 'the flip counter does not read the date the product is named for');
+  // THE FLIP COUNTER IS GONE, MARKUP AND RULE TOGETHER (2026-09-08, the
+  // owner: "just remove that, it's unnecessary"). Ten boxed digits spelling a
+  // date sat between the demo button and the questions, saying nothing the
+  // page had not already said and pulling the eye off the button above it.
+  // The RULE is asserted absent as well as the element, because a rule that
+  // matches nothing is exactly how dead markup gets switched back on.
+  assert.doesNotMatch(html, /class="flip"/, 'the flip counter survives on the page');
+  assert.doesNotMatch(createStylesheet({ places: PLACES_FIXTURE, outfits: [] }).css, /\.flip\b/,
+    'the flip counter rule survives its element');
   assert.equal((html.match(/class="foot-mark"/g) ?? []).length, 1, 'the giant word appears once');
   assert.match(html, /run through a real tape chain/, 'the grade card lost the sentence the still-approval sweep anchors on');
-  assert.match(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), /You, somewhere in 2003, on a tape that looks found in a drawer\./, 'the manifesto sentence is broken by its stickers');
+  // THE MANIFESTO SENTENCE CARRIES NO NUMBER (2026-09-08, the owner's call).
+  // The hero above it already says "Fifteen seconds of 2003" and every tape's
+  // burnt-in date is derived from its own seed anyway -- real tapes on this
+  // disk read 1999, 2001, 2002, 2004 and 2005 -- so a second, fixed year in
+  // the largest type on the page was the one place the site over-promised a
+  // single year. The rule is the guard; the words are the owner's to move.
+  const sentence = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.match(sentence, /You, somewhere you have never been, on a tape that was always in the drawer\./,
+    'the manifesto sentence is broken by its stickers');
+  const line = /<p class="manifesto-line">(.*?)<\/p>/s.exec(html);
+  assert.ok(line, 'the manifesto line is gone');
+  assert.doesNotMatch(line[1].replace(/<[^>]+>/g, ' '), /[0-9]/, 'the manifesto line names a number again');
   // With a classifier declared the FAQ names it, the way /privacy does.
   const two = landingPage({ places: PLACES_FIXTURE, account: null, facts: { imageProcessor: 'Amazon Web Services (Rekognition), Frankfurt' } });
   assert.match(two, /and to Amazon Web Services \(Rekognition\), Frankfurt, which checks it/);
@@ -1104,6 +1123,40 @@ test('the hero is set in the display face at the hero size', () => {
   assert.match(hero[1], /font-size:\s*var\(--t-hero\)/, 'the hero is not at the hero size');
   assert.match(hero[1], /text-transform:\s*uppercase/, 'display is always uppercase');
   assert.doesNotMatch(hero[1], /var\(--(osd|sans)\)/, 'the hero is still in a body or readout face');
+});
+
+test("the landing's column sets its gutters and never its sections' vertical rhythm", () => {
+  // THE OWNER SAW THE MANIFESTO LINE PRINTED HARD AGAINST THE TWO CARDS BELOW
+  // IT (2026-09-08) -- "there is no spacing". Measured on the running page,
+  // the gap between the sentence and the cards was 0.0px against the 64px
+  // `.manifesto` asks for.
+  //
+  // The cause is one shorthand and a specificity the sections cannot outrank.
+  // `.page-landing .inner` is two classes; `.manifesto`, `.how2` and `.demo`
+  // are one each, so `padding: 0 1.15rem` on the column won every time and
+  // reset the top and bottom of all three to zero -- 192px of designed rhythm,
+  // gone, on the page that sells. Source order could never have saved them.
+  //
+  // THE GUARD IS THE RULE, NOT THE NUMBERS: the column owns the gutters and a
+  // section owns its own vertical space. A shorthand here takes both.
+  const css = createStylesheet({ places: PLACES_FIXTURE, outfits: [] }).css;
+  const rule = /\.page-landing \.inner\s*\{([^}]*)\}/.exec(css);
+  assert.ok(rule, 'the landing has no column rule at all');
+  assert.doesNotMatch(rule[1], /(^|[;\s])padding\s*:/,
+    "the landing column sets `padding` as a shorthand, which resets every section top and bottom to zero");
+  assert.doesNotMatch(rule[1], /padding-(top|bottom|block)/,
+    'the landing column sets vertical padding, which its sections cannot outrank');
+  assert.match(rule[1], /padding-inline\s*:/, 'the landing column stopped setting its gutters');
+
+  // And the sections it wraps still ASK for their rhythm, so the guard above is
+  // protecting something rather than describing an empty page.
+  for (const sel of ['.manifesto', '.how2', '.demo']) {
+    const at = css.indexOf(`${sel} {`);
+    const own = at === -1 ? null : css.slice(at, css.indexOf('}', at));
+    assert.ok(own, `${sel} has no rule of its own`);
+    assert.match(own, /padding[^;]*var\(--s-\d\)/,
+      `${sel} no longer asks for any vertical rhythm, so the column rule above guards nothing`);
+  }
 });
 
 test('no selection mark is pinned to the right of its card', () => {

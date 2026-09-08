@@ -190,8 +190,17 @@ export function phaseIndexOf(step) {
 /** What each shape is FOR, in the words somebody choosing would use. The list
  *  of shapes itself comes from config/render.json -- only the human label for
  *  one lives here, the same division the resolution rows already follow. */
+/* ONE WORD EACH, AND THE 4:3 LABEL IS WHY. `.panel--commit` caps at 640px, so
+ * the frame row has 590px whatever the viewport is, and the three cards plus
+ * their two gaps measured 601.1px -- eleven pixels over, on every screen, so
+ * 9:16 wrapped underneath at 375px and at 2560px alike. "The camcorder shape"
+ * was 124.6px of that against "Widescreen" at 67.7 and "Phone" at 36, and the
+ * hint paragraph below the row already explains all three in full, so the long
+ * one was the only one paying rent twice. At one word each the row fits with
+ * about 50px to spare and the three read as the parallel set they always were.
+ */
 const ASPECT_DETAIL = Object.freeze({
-  '4:3': 'The camcorder shape',
+  '4:3': 'Camcorder',
   '16:9': 'Widescreen',
   '9:16': 'Phone',
 });
@@ -1236,7 +1245,15 @@ export function landingPage({
 ${tapeSlot(showcase?.hero ?? null, 'hero', first)}
 
 <section class="manifesto inner">
-  <p class="manifesto-line"><span class="lit">You,</span> somewhere ${sticker(0)} <span class="lit">in 2003,</span> on a tape ${sticker(1)} that looks <span class="lit">found</span> ${sticker(2)} in a drawer. ${sticker(3)}</p>
+  ${/* NO NUMBER IN THIS SENTENCE, AND IT IS A RULE RATHER THAN A PREFERENCE.
+       The hero two blocks up already says "Fifteen seconds of 2003", so the
+       year was printed twice on one screen, and the second one was in the
+       largest type the site owns. It was also the only fixed year the product
+       promises: `deriveStamp` picks each tape's burnt-in date from its own
+       seed across 1999-2005, and real tapes on this disk read 1999, 2001,
+       2002, 2004 and 2005. The line says the thing the number was standing in
+       for instead -- you were never there, and the tape is old anyway. */''}
+  <p class="manifesto-line"><span class="lit">You,</span> somewhere you have ${sticker(0)} <span class="lit">never been,</span> on a tape ${sticker(1)} that was <span class="lit">always</span> ${sticker(2)} in the drawer. ${sticker(3)}</p>
 </section>
 
 <section class="how2 inner">
@@ -1314,7 +1331,6 @@ ${factCards({ frames, fps, shapes, photoDays, jobDays })}
     ${tapeSlot(showcase?.fourThree ?? null, 'four', third)}
   </div>
   <a class="hero-cta demo-cta" href="/signup">Make a tape</a>
-  <p class="flip" aria-label="14 08 2003"><span>1</span><span>4</span><span class="gap"></span><span>0</span><span>8</span><span class="gap"></span><span>2</span><span>0</span><span>0</span><span>3</span></p>
 </section>
 
 <div class="inner">
