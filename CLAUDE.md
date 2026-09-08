@@ -9,7 +9,8 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-09-08, night) — READ §78 FIRST, THEN §77. THE SITE IS LIVE, INDEXABLE AND FIT TO SHARE; THE TWO THINGS BETWEEN IT AND AN AUDIENCE ARE AN AWS SIGNATURE AND ONE NUMBER IN A CONFIG FILE. THEN §76, §75 AND §74.
 
-**THE BOX RUNS `f21cb93`** — the owner's first batch of page-by-page live-review notes,
+**THE BOX RUNS `226b1d3`** — §79, one line so a crawler with no console can find the
+sitemap, deployed and byte-verified. Before it, `f21cb93`: the owner's first batch of page-by-page live-review notes,
 built and deployed on 2026-09-08 night (§78). Four notes: the frame row on one line, the
 date tiles gone, a manifesto sentence with no number in it, and the tab icon into lime.
 **Two of the four were real defects rather than the cosmetic asks they looked like** — the
@@ -11148,6 +11149,49 @@ cream-world brand files.
 
 **AGENT-BUILDABLE AND UNGATED:** the result page telling somebody their tape's date
 (§77C), and the band-sweep flake above. Nothing else.
+
+---
+
+### 79. THE SITEMAP CAN BE FOUND WITHOUT A CONSOLE (2026-09-08, later)
+
+**2207 -> 2209 tests / 2206 pass / 0 fail / 3 skipped.** One commit, `226b1d3`,
+test-first, both halves sabotage-verified and restored from a copy, seven guards run
+verbatim and COUNTED 7/7 (the commit-message guard re-run AFTER the commit so the message
+was scanned). **Pushed and DEPLOYED; local, `origin/supabase-identity-slice` and the box
+are all at `226b1d3`.**
+
+`robots.txt` now carries `Sitemap: https://timestamptapes.com/sitemap.xml`.
+
+**THE SITEMAP SHIPPED ON 2026-09-08 (§76E) WITH NOTHING POINTING AT IT.** Submitting it in
+Search Console tells GOOGLE and tells nobody else — Bing and DuckDuckGo have no console
+this operator holds, so until this line they had no way to learn the file existed. It is
+also the half that outlives a console: a submission belongs to an account and can be lost
+with one; a line the site serves cannot.
+
+**Gated with the sitemap itself, for the sitemap's own reason** — a `Sitemap:` line under
+`Disallow: /` hands a crawler the single url that lists everything the rest of the file is
+refusing it. Closed, `robots.txt` names nothing; open, it names the ABSOLUTE url, which is
+what the sitemap protocol requires of this line in particular and which every crawler drops
+if it is relative.
+
+**THE TEST ASSERTS THE URL THAT IS NAMED IS THE URL THAT SERVES**, not that a line is
+present. A `Sitemap:` line pointing at a path that 404s is worse than no line — it is a
+promise a crawler acts on, and the typo that makes it false is invisible in the file that
+carries it. Sabotages: an ungated line turned the closed test red; naming `/sitemap`
+instead of `/sitemap.xml` turned the open one red at *"which answers 404"*.
+
+**Verified from outside by COMPARING BYTES, not status codes** (§78E, one day old and
+already earning it): `robots.txt` went 63 → 111 bytes, so the new code is demonstrably
+serving; the CSP header is byte-identical (no inline script moved, as expected — only
+`server.mjs`'s robots handler changed); health `{"ok":true,"degraded":[]}`; the named url
+answers 200 `application/xml`; the six public pages 200; `/videos` and `/account` still 303.
+
+**A STALE SCRATCH DIRECTORY MADE THE GUARD RUN REPORT FOURTEEN PASSES.** `build/guards/`
+still held an earlier session's extraction under a different naming scheme (`0.sh`–`6.sh`
+beside the new `01.sh`–`07.sh`), so the loop ran 14 files and printed 14 PASS lines —
+seven of which proved nothing about the current `guards.yml`. **§49H's count assertion is
+the only thing that caught it**, which is exactly what it is for: a harness failure reads
+as a pass. Wipe the directory before extracting, and assert the count is 7.
 
 ---
 
