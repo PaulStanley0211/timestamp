@@ -3990,8 +3990,14 @@ export function createServer({
     },
 
     async robots(req, res) {
+      // THE `Sitemap:` LINE IS HOW A CRAWLER THAT HOLDS NO CONSOLE FINDS THE
+      // FILE. Submitting the sitemap in Search Console tells Google and nobody
+      // else; this line tells everyone, and it outlives the account that did the
+      // submitting. It is gated with the sitemap itself, for the sitemap's own
+      // reason: a `Sitemap:` line under `Disallow: /` hands a crawler the single
+      // url that lists everything the rest of the file is refusing it.
       const body = indexable
-        ? 'User-agent: *\nDisallow: /j/\nDisallow: /api/\nDisallow: /account\n'
+        ? `User-agent: *\nDisallow: /j/\nDisallow: /api/\nDisallow: /account\nSitemap: ${publicBase()}/sitemap.xml\n`
         : 'User-agent: *\nDisallow: /\n';
       res.writeHead(200, {
         'Content-Type': 'text/plain; charset=utf-8',

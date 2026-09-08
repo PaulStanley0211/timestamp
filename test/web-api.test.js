@@ -3462,3 +3462,46 @@ test('there is no sitemap while the site is closed to search engines', async () 
     assert.equal((await get(base, '/sitemap.xml')).status, 404, 'a closed site is publishing a sitemap');
   });
 });
+
+/**
+ * SITEMAP DISCOVERY (2026-09-08). Submitting the sitemap in Search Console tells
+ * GOOGLE, and tells nobody else -- Bing and DuckDuckGo have no console this
+ * operator holds, so without this line they never learn the file exists. It is
+ * also the half that outlives a console: a submission belongs to an account and
+ * can be lost with one, and a line served by the site itself cannot.
+ */
+
+test('robots.txt points at the sitemap, and the url it names is the one that serves', async () => {
+  await withServer(async ({ base }) => {
+    const robots = await get(base, '/robots.txt');
+    assert.equal(robots.status, 200);
+    const line = /^Sitemap:\s*(\S+)\s*$/m.exec(await robots.text());
+    assert.ok(line, 'robots.txt names no sitemap, so a crawler with no console never finds one');
+
+    // ABSOLUTE, because the sitemap protocol requires it of this line in
+    // particular and every crawler drops a relative one -- the same rule the
+    // <loc> entries above carry, for the same reason.
+    const url = line[1];
+    assert.match(url, /^https?:\/\//, `not an absolute url: ${url}`);
+
+    // THE ASSERTION THIS TEST EXISTS FOR: not "a line is present" but "the url on
+    // it is the one that serves". A `Sitemap:` line naming a path that 404s is
+    // worse than no line at all -- it is a promise a crawler acts on, and the
+    // typo that makes it false is invisible in the file that carries it.
+    const hit = await get(base, new URL(url).pathname);
+    assert.equal(hit.status, 200, `robots.txt names ${url}, which answers ${hit.status}`);
+    assert.match(hit.headers.get('content-type') ?? '', /application\/xml/,
+      `robots.txt names ${url}, which is not a sitemap`);
+  }, { extra: { indexable: true, publicUrl: 'https://timestamptapes.test' } });
+});
+
+test('a site closed to search engines advertises no sitemap', async () => {
+  // The closed half of the rule above, and the one `/sitemap.xml`'s own 404
+  // already carries: a `Sitemap:` line under `Disallow: /` hands a crawler the
+  // single url that lists everything the rest of the file is telling it to
+  // leave alone.
+  await withServer(async ({ base }) => {
+    const body = await (await get(base, '/robots.txt')).text();
+    assert.ok(!/^Sitemap:/m.test(body), 'a closed site is advertising its sitemap');
+  });
+});
