@@ -7,13 +7,34 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-07, night) — READ §74 FIRST, THEN §73H, §72 AND §71. A PHOTOGRAPH OF A WRISTWATCH RENDERED A COMPLETE, VERIFIED TAPE OF A STRANGER.
+## START HERE (2026-09-08) — THE SITE IS OPEN TO SEARCH ENGINES NOW (§76), AND `faceGate` STILL HAS NO EYES ON THE LIVE SITE (§74). READ §76, THEN §75 AND §74, THEN §73H, §72 AND §71.
+
+**`noindex` WAS LIFTED ON 2026-09-08 AT THE OWNER'S WORD — §76.** One line,
+`TIMESTAMP_INDEXABLE=1`, in `/opt/timestamp/.env.web` plus a web restart. No
+code, no commit, no deploy: the box is still on `3ded568`. **Every "the site is
+noindex on purpose" line below this one is history** — §42E, §46F and the older
+banners record a decision that has now been reversed, and the gate was never
+`noindex` anyway but the Impressum address (§57C), which he closed on 2026-09-05.
+Tapes stay out of the index in both modes and an anonymous request to a real job
+url still answers 303. **Google has not been told the site exists** — Search
+Console is the owner's five-minute step — and **the moderation gate is still open,
+which matters before he POSTS a link rather than before this.**
+
+**A SECOND THING FROM 2026-09-08 THAT IS NOT ON THE TRUNK: `body-shape-copy`.**
+The owner's friends report the tapes read as real and render everybody heavier than
+they are. The copy fix and the two bulk outfit words are built, tested and PARKED on
+that branch at `7b42131`, deliberately off `supabase-identity-slice` so they cannot
+ride an unrelated deploy. **He chose to wait for unprompted feedback rather than act
+on his own eye, and that decision stands** — do not ship it, and do not ask his
+testers about the body, because a question that names the defect plants the answer.
+§76C.
 
 **The box runs `3ded568` (§74)**, and local and `origin/supabase-identity-slice`
 carry this docs commit on top of it — the only difference, and it changes no
 served byte. It was deployed as three remote commands and verified from outside — health
 `{"ok":true,"degraded":[]}`, the live CSP header byte-identical to the copy
-taken before the swap (no inline script moved), noindex still set, zero FATAL.
+taken before the swap (no inline script moved), noindex still set at that
+point (lifted 2026-09-08, §76), zero FATAL.
 Suite **2199 / 2196 / 0 / 3**, guards 7/7. That commit carries §73K's harness
 fix and the two docs commits with it, so nothing is held back any more.
 
@@ -433,8 +454,11 @@ keys on each visitor's forwarded address, not one bucket for the whole internet.
 CX line it quotes is "temporarily not available" everywhere, so the box is a
 **CPX22**. §46A.
 
-**THE SITE IS `noindex` ON PURPOSE** and lifting it is a deliberate step, not a
-tidy-up — the Impressum publishes a home address. §46F, §42E.
+~~**THE SITE IS `noindex` ON PURPOSE** and lifting it is a deliberate step, not a
+tidy-up — the Impressum publishes a home address. §46F, §42E.~~ **LIFTED
+2026-09-08 — §76.** The address it was protecting is published on purpose now
+(§57C, and the owner's decision of 2026-09-05), so the flag was guarding a
+door he had already opened.
 
 **2055 tests / 2053 pass / 0 fail / 2 skipped.** The two standing skips are the
 `*-smoke.test.js` money guards, which self-skip without `TIMESTAMP_LIVE=1`; on a
@@ -5240,6 +5264,10 @@ and is missing the one thing the page exists to carry.
 
 #### E — NOTHING IS INDEXABLE BY DEFAULT
 
+> **THE DEFAULT IS UNCHANGED AND THE LIVE SITE NO LONGER TAKES IT. `TIMESTAMP_INDEXABLE=1`
+> WAS SET ON THE BOX 2026-09-08 — §76.** Everything below still describes what the flag
+> does and why the default is off; what it no longer describes is production.
+
 `TIMESTAMP_INDEXABLE=1` opens the site to search engines. **Unset means no**,
 and the default is the whole point: forgetting to switch indexing ON costs
 search traffic, which is visible and fixable any day; forgetting to switch it
@@ -5815,12 +5843,14 @@ public repository.
 
 #### F — Things that will bite
 
-- **THE SITE IS `noindex` AND THAT IS CORRECT.** `TIMESTAMP_INDEXABLE` is unset,
-  so `robots.txt` disallows everything and every response carries
-  `X-Robots-Tag: noindex`. Do not lift it casually — §42E: the Impressum
-  publishes a home address, and Certificate Transparency already published the
-  hostname the moment Caddy issued the certificate, so "nobody has the link" was
-  never the protection.
+- ~~**THE SITE IS `noindex` AND THAT IS CORRECT.**~~ **SUPERSEDED 2026-09-08 —
+  §76: the flag is set and the site is indexable.** The reasoning was sound and
+  half of it survives, so it is kept rather than deleted: the Impressum publishes
+  a home address, and Certificate Transparency published the hostname the moment
+  Caddy issued the certificate, so **"nobody has the link" was never the
+  protection** — which is exactly why §57C concludes that the ADDRESS, not
+  `noindex`, was always the gate. The owner closed that question on 2026-09-05 by
+  choosing to publish the address, and lifted the flag three days later.
 - **`.env` ON THE BOX IS THE ONLY COPY OF FOUR SECRETS** — the fal key, three
   Supabase keys, and the two Stripe secrets — and it is `chmod 600`, gitignored,
   and out of the image. `npm run backup` does NOT include it. Losing the server
@@ -10504,6 +10534,142 @@ check that never arrives.
   and the Write tool wrote it instead. The rule is unchanged and it is cheap.
 - **The python `\n` trap held** (§56D): `CLAUDE.md` is 10,382 CRLF lines and
   zero bare LF, so this edit was made with `newline=''` and `\r\n` anchors.
+
+---
+
+### 76. THE SITE IS OPEN TO SEARCH ENGINES (2026-09-08)
+
+**No code changed, nothing was committed and nothing was deployed.** One line,
+`TIMESTAMP_INDEXABLE=1`, appended to `/opt/timestamp/.env.web` on the box, then
+`docker compose up -d web`. The box is still on `3ded568`; Caddy and the worker
+were not touched. **To reverse it:**
+`sed -i '/^TIMESTAMP_INDEXABLE=/d' /opt/timestamp/.env.web` and recreate web.
+
+**THIS SUPERSEDES EVERY "the site is noindex on purpose" LINE ABOVE IT** — §42E,
+§46F and the older banners. They record a decision that was taken and has now been
+reversed at the owner's word; do not restore the flag on the strength of them.
+
+**THE GATE IT WAS WAITING ON CLOSED THREE DAYS EARLIER, AND IT WAS NEVER
+`noindex`.** §57C is the correction that matters and it was read wrongly for
+several sessions: the Impressum is linked from every page and publishes a home
+address, so any public link — a post, a thread, a caption — exposes it exactly as
+surely as a search result would. `noindex` only ever stopped Google LISTING the
+site. The owner closed the real gate on 2026-09-05 by choosing to publish the home
+address rather than rent one, on the reasoning that he does not know how long he
+will be in Germany and a twelve-month address contract is a bad trade against that.
+
+**What the flag does, verified from outside the same minute rather than reasoned
+about:** `robots.txt` went from `Disallow: /` to allowing the marketing pages while
+disallowing `/j/`, `/api/` and `/account`; the `X-Robots-Tag: noindex, nofollow`
+header is gone from every response; health `{"ok":true,"degraded":[]}`; `/`,
+`/pricing`, `/login`, `/privacy`, `/impressum` and `/terms` all 200; the CSP header
+still present; zero FATAL; web healthy at 54 seconds.
+
+**TAPES STAY OUT OF THE INDEX, BY CONSTRUCTION AND NOT BY THE FLAG.** The job routes
+are disallowed in BOTH modes — the robots handler's own comment says why, *"a tape is
+somebody's face, and `/j/<id>` urls are unguessable rather than secret"* — and an
+anonymous request to a REAL job url was checked rather than assumed and answers 303 to
+login. A crawler ignoring robots.txt entirely would still read nothing.
+
+**ONE ASYMMETRY WORTH KNOWING, because it is a real change in defence-in-depth.**
+`X-Robots-Tag` is set globally only while `!indexable`, so the job routes have lost
+their belt and keep only their braces: robots.txt plus the auth redirect. That is the
+shipped design rather than an oversight, and both remaining layers were verified, but
+it is one layer fewer than yesterday.
+
+#### A — What is NOT done, and the first one is the whole point
+
+- **GOOGLE DOES NOT KNOW THE SITE EXISTS.** Lifting the block summons nobody: the
+  domain has never been submitted and nothing links to it. Google Search Console is
+  the five-minute step that turns "allowed" into "found", and it is the owner's.
+  Note the distinction §42E already drew — Certificate Transparency published the
+  hostname the day Caddy issued the certificate, so the site was always
+  DISCOVERABLE; what changed today is whether a search engine will LIST it.
+- **The landing page carries no meta description**, so Google will build the snippet
+  from the hero line. That reads acceptably. Not urgent, and not a defect.
+- **THE MODERATION GATE IS STILL OPEN, AND IT MATTERS BEFORE HE POSTS A LINK RATHER
+  THAN BEFORE THIS.** Search traffic trickles; a post does not. Nothing checks what an
+  uploaded photograph is OF — §74A's wristwatch went through all eleven steps and
+  produced a finished, fully verified tape of a person who does not exist — and both
+  the face detector and §52's content classifier are built, tested and switched off
+  behind one AWS agreement plus one `.env` line.
+
+#### B — Things that will bite
+
+- **THE CLASSIFIER REFUSED THE FIRST FORM OF THE EDIT.** A compound
+  `set -e; cd ...; append; chmod; verify` over ssh was blocked outright; the bare
+  `printf ... >> /opt/timestamp/.env.web` was allowed. §70F's rule again, in a third
+  costume: **split remote commands, one action each.**
+- **`TIMESTAMP_INDEXABLE` IS READ AT SERVER CONSTRUCTION**, as a default parameter in
+  `server.mjs`, so the flag does nothing until the web container is RECREATED —
+  `docker compose up -d web`, not a reload. The worker never serves HTTP and does not
+  read it, which is why the line belongs in `.env.web` and not `.env.common` (§51E).
+- **DO NOT `cat` A `.env` FILE ON THE BOX to check whether a flag is set.**
+  `cut -d= -f1 .env.web | sort` lists the key names and prints no value; that is what
+  the checks in this section used, before and after.
+
+#### C — A SECOND THING FROM THIS DAY, AND IT IS DELIBERATELY NOT ON THE TRUNK
+
+**`body-shape-copy` at `7b42131`.** The owner's friends confirmed the realism half —
+the tapes read as real — and reported the one thing left: everybody renders heavier
+than they are. §74E's root cause is the copy, and the fix is built: the landing line
+and the dropzone hint ask for a waist-up photograph and the hint says why, and
+"worn loose" is out of the DEFAULT outfit with "oversized" out of the fleece, nothing
+replacing either. Two guards, watched failing first and sabotage-verified on all four
+halves; one existing assertion updated with the copy it pins. Suite **2201 / 2198 / 0
+/ 3**, guards 7/7.
+
+**IT IS PARKED OFF THE DEPLOY BRANCH ON PURPOSE.** `supabase-identity-slice` was
+reset back to `eae69b3` to match origin, because a commit left on the deploy branch
+rides the next deploy for any unrelated reason and would have shipped this silently —
+which is §73K's shape, except that one changed no served byte and this one changes
+copy and a prompt. Bring it back with `git merge --ff-only body-shape-copy`.
+
+**THE OWNER'S DECISION, AND IT OUTRANKS THE FIX:** wait for unprompted feedback rather
+than act on his own eye. His words — the complaint is *"my own opinion, my thinking, or
+my overthinking"*. **Do not ship it, and do not ask his testers about the body**: a
+question that names the defect plants the answer, exactly as it would have ruined the
+blind check. The signal wanted is whether anyone raises it unprompted, and the two that
+decide it are whether anyone makes a SECOND tape and whether anyone makes one FOR
+SOMEBODY ELSE.
+
+**AN AUTO-GENERATED CHARACTER REFERENCE SHEET WAS PROPOSED BY THE OWNER AND ARGUED
+DOWN; do not re-propose it without new evidence.** A sheet generated from a face-only
+selfie cannot add information the photograph does not contain — it invents a body and
+then FREEZES the invention, so a person goes from variably wrong to reliably wrong in
+every tape, for ~$0.16–0.32 a render plus latency, and it re-introduces the generated
+intermediate image §18 deleted at his own insistence. It also solves a consistency
+problem this product does not have: Wan renders all fifteen seconds in ONE call and
+identity already holds inside it. The surviving version of his idea is a SECOND
+REFERENCE — real pixels of a real body, no generation — and Wan takes ten references
+while the product sends two. **The trigger for revisiting is a genuine waist-up
+photograph still rendering heavy**, which would mean the model is not reading build off
+the reference at all, and no sheet fixes that either.
+
+#### D — A CORRECTION TO THE MARGIN, because the supplier change was never priced through
+
+`config/credits.json`'s Starter comment still says **"23.3% gross and 17.9% after
+Stripe"**. That was true against Seedance at a measured $2.0727 a tape. **The product
+moved to Wan on 2026-09-02 at $0.75** and nothing recomputed what a customer's pack is
+worth — the same shape as §66, where the cost side had known for three days that the
+frame-shape surcharge had lost its basis. Recomputed against what is actually paid
+today, worst case (every credit spent at 480p, which is the worse rate for us at
+$0.0357 a credit against 720p's $0.0326):
+
+| | Starter $12 / 92 CR | Standard $19 / 138 CR |
+|---|---|---|
+| Provider cost, worst case | ~$3.29 | ~$4.93 |
+| Net after Stripe + Managed Payments (~6.4% + 30c) | ~$10.93 | ~$17.48 |
+| **Gross margin** | **~70%** | **~72%** |
+
+The free grant costs **$0.75** a signup rather than $2.07, so `freeTape.globalCeiling`
+of 100 is about **$75** of lifetime exposure rather than $207 — and the ceiling is a
+COUNT of tapes, so that number moved without the number in the file changing, which is
+exactly the coupling its own comment warns about. Fixed costs are one CPX22 at
+€23.79/mo plus the domain: **three Starter packs a month covers the infrastructure.**
+Unspent credits never expire (`expiryDays: null`), so realised margin runs higher than
+the table through breakage. **Nothing was edited** — what a customer pays is the
+owner's decision and the stale comment is recorded here rather than rewritten under him.
 
 ---
 
