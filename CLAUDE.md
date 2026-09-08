@@ -7,7 +7,32 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-08) — THE SITE IS OPEN TO SEARCH ENGINES NOW (§76), AND `faceGate` STILL HAS NO EYES ON THE LIVE SITE (§74). READ §76, THEN §75 AND §74, THEN §73H, §72 AND §71.
+## START HERE (2026-09-08, evening) — READ §77 FIRST. THE SITE IS LIVE, INDEXABLE AND FIT TO SHARE; THE TWO THINGS BETWEEN IT AND AN AUDIENCE ARE AN AWS SIGNATURE AND ONE NUMBER IN A CONFIG FILE. THEN §76, §75 AND §74.
+
+**THE NUMBER, BECAUSE NOBODY WOULD FIND IT: `freeTape.globalCeiling` IS 100 LIFETIME AND
+SIX ARE SPENT.** Ninety-four free tapes remain, forever — about $70. A successful Reddit
+or Product Hunt post exhausts that in an hour, and **everyone after visitor ~95 opens an
+account with zero credits and a payment page, having never seen a tape work.** Nothing
+errors. It is one edit, it is the owner's, and **it is the marketing budget expressed as
+tapes.** §77A.
+
+**AND `faceGate` STILL HAS NO EYES ON THE LIVE SITE (§74).** Nothing checks what an
+uploaded photograph is OF — a wristwatch produced a complete, fully verified tape of a
+person who does not exist. The detector and §52's classifier are both built, tested and
+switched off behind ONE AWS agreement plus one `.env` line. **That is the gate before
+strangers, and posting anywhere is what brings strangers.**
+
+**THE PLATFORM RESEARCH IS DONE — §77B — AND MOST OF THE OWNER'S FIFTY-PLATFORM LIST IS
+THE WRONG CATEGORY.** Five are worth real effort (Reddit, Product Hunt, Hacker News, and
+the two big AI directories); twelve are B2B software review sites serving business buyers;
+fourteen are near-zero-traffic backlink forms; and **AppSumo and PitchGround are actively
+dangerous** — lifetime deals against a $0.75 per-tape marginal cost is unbounded
+liability. Do not re-research this.
+
+**"WHY 2003?" IS ANSWERED AND THE HEADLINE STAYS — §77C.** It is not 2003: the prompt asks
+for 1999–2005 and each tape's burnt-in date is derived from its own seed, so real tapes on
+this disk read 1999, 2001, 2002, 2003, 2004, 2005. **The customer is never told their
+tape's date, anywhere** — which is the one small thing worth building.
 
 **THE BOX RUNS `5ca4b7f`.** `noindex` was lifted on 2026-09-08 at the owner's word (§76)
 and the site was then given the sitemap and the card tags it needed to be worth finding
@@ -10737,6 +10762,182 @@ the birthday bound that test fails about **one run in 840**, which is roughly on
 210 CI runs across four legs. It failed once here and passed five re-runs. **The id space
 is fine for the product** (jobs are not created 200 a second); it is the test that
 exaggerates the draw. Left alone rather than weakened, and flagged separately.
+
+---
+
+### 77. THE LAUNCH: WHAT IS READY, WHAT IS NOT, AND THE NUMBER THAT WILL RUIN IT (2026-09-08, evening)
+
+**No code changed in this section.** It is the marketing and positioning work of
+2026-09-08, written down so none of it is re-derived. §76 and §76E are the code.
+
+#### A — THE ONE THING TO ACT ON: THE FREE-TAPE CEILING IS £70 AND IT IS THE LAUNCH BUDGET
+
+**`freeTape.globalCeiling` is 100 lifetime tapes across every account that has ever
+existed, and SIX are spent. Ninety-four remain, forever.** At $0.75 a tape that is about
+$70 of runway.
+
+**A SUCCESSFUL POST EXHAUSTS IT IN AN HOUR, AND THE FAILURE IS SILENT AND AWFUL.** Around
+visitor 95 the grant stops. Everyone after that opens an account with **zero credits and a
+payment page, having never seen a tape work** — at the exact moment the product has the
+most attention it will ever have. Nothing errors, nothing is logged as a problem, and the
+config comment already warns that reaching the ceiling "is not an error state to be
+recovered from".
+
+**IT IS ONE EDIT AND IT IS THE OWNER'S**, deliberately (the file says so). The arithmetic
+he needs: 500 free tapes is $375, 1,000 is $750. **The number is the marketing budget
+expressed as tapes, and today it is set to about seventy pounds.** Nothing else on the
+launch list matters if this is not decided first.
+
+#### B — THE PLATFORM RESEARCH IS DONE. DO NOT REPEAT IT.
+
+The owner researched fifty launch platforms and asked which fit. **The filter is category,
+not popularity, and most of the list is wrong for this product** — it is a consumer
+novelty with a per-tape cost, not B2B SaaS.
+
+**WORTH REAL EFFORT — five:** **Reddit** (highest potential, free, and the subreddit choice
+is everything — nostalgia and Y2K communities, NOT r/SideProject, which is makers talking
+to makers; self-promo rules are strictly enforced and bans are permanent); **Product Hunt**
+(right category, but ONE SHOT and needs both gates closed); **Hacker News** (high variance,
+and **the framing decides it** — "AI video app" gets flamed, *"Show HN: I built the VHS
+look in ffmpeg instead of asking the model for it"* is genuinely HN-shaped, and the
+content/texture split plus §56's green-tape bug is the story); **There's An AI For That**
+and **Futurepedia**, the two largest AI-tool directories.
+
+**CHEAP, ONE SITTING, LOW RETURN:** Uneed, Microlaunch, Toolify, Future Tools, AI Tool
+Hunt, Aixploria. **Indie Hackers as a COMMUNITY, not a listing** — a post about what it
+cost to build and what the margins are.
+
+**WRONG BUYER, TWELVE OF THEM, SKIP ALL:** G2, Capterra, Software Advice, GetApp,
+TrustRadius, Crozdesk, SoftwareSuggest, Finances Online, SaaSWorthy — B2B software review
+sites serving business buyers, several requiring verified business-email reviews before
+you rank at all. (Capterra, GetApp and Software Advice are Gartner-owned and share one
+pipeline, so that is one submission, not three.) Clutch and DesignRush are agency
+directories, further off still. SaaS Directory and SaaSHub — this is not SaaS: no
+subscription, no seats, no dashboard.
+
+**NEAR-ZERO TRAFFIC, BACKLINKS ONLY:** BetaList, BetaPage, Launching Next, Startup Buffer,
+Startup Stash, Startup 88, Startup Base, Startup Lister, Startup Ranking, FAVIRD,
+DIR.directory, ProductRant, GrowthList, Submit.co, AlternativeTo (no incumbent to be an
+alternative TO). Fourteen forms that will FEEL like marketing and produce nothing, which is
+the most expensive way to spend a week.
+
+**ACTIVELY BAD, AND THIS IS THE STRONGEST RULING HERE: AppSumo and PitchGround.** Both are
+**lifetime-deal marketplaces**, and this product has a **$0.75 marginal cost per tape**. A
+lifetime deal on a good with per-unit COGS is unbounded liability — one customer paying
+once can render until every sale is a loss. They exist for software with near-zero marginal
+cost. **Do not list here, and correct anyone who suggests it.**
+
+**NOT PLATFORMS:** "build in public" is a practice (in effect, X). Dev.to and HackerNoon are
+publishing sites, useful only if the technical story gets written — and if it is written,
+Hacker News is its better home.
+
+**THE ORDER, and it matters:** gates first, then **Reddit** (free, low stakes, and it tests
+the pitch on strangers BEFORE the single Product Hunt shot is spent), then the AI
+directories while that runs, then Product Hunt once strangers have surfaced whatever they
+surface, then Hacker News last with the engineering framing. **Four platforms done properly
+beat all fifty done quickly.**
+
+#### C — "WHY 2003?" — A FRIEND ASKED, AND THE ANSWER IS THAT IT IS NOT 2003
+
+Unprompted feedback, 2026-09-08: *why 2003, when 2002 and 2004 look the same?* **The
+product agrees with the friend and the copy is a name rather than a limit.**
+
+- `DEFAULT_ERA` is **`'1999 to 2005'`** — every prompt asks for a seven-year window.
+- `deriveStamp` in `burn-in.mjs` picks the burnt-in date **from the job's own seed**:
+  `year = 1999 + (n % 7)`, its own month, day, and an hour drawn from afternoons and
+  evenings only (*"home video was not shot at 4am"*).
+- **Read off the real manifests on this machine:** 08 DEC 1999, 08 AUG 2001, 24 APR 2002,
+  09 NOV 2003, 18 FEB 2004, 12 SEP 2005. Every year in the window turns up.
+
+The window itself is technical and the code states it: the look is **analogue** tape —
+head-switch band, chroma bleed, PAL 720x576 at 25fps — so *"a stamp reading 2011 would
+quietly undermine every other choice in the chain."*
+
+**THE HEADLINE STAYS AND THE PROMISE LINE STAYS. Decided 2026-09-08 after the owner asked
+twice.** A specific year is a memory; a range is a spec sheet. "Fifteen seconds of 2003"
+lands, "fifteen seconds of the early 2000s" is a category. The promise line earns its
+length by being the only place that says what actually happens, and it ends on the best
+phrase on the site. **A tighter version was tested and rejected** — *"One photo, a place,
+an outfit — and a tape that looks like it was found in a drawer"* is punchier and drops the
+instruction, which a first-time visitor needs.
+
+**WHAT THE QUESTION ACTUALLY REVEALED, and it is worth more than the answer: the customer
+is NEVER told their tape's date.** It is burnt into the corner of the video and named
+nowhere in the interface — not on the result page, not in the FAQ. So the loveliest detail
+in the product is invisible unless somebody squints twice. **The recommended change is at
+the result page, not the hero**: tell them what their finished tape is stamped. Ten
+minutes, on the page where somebody is already pleased, and it turns a hidden detail into
+the thing they screenshot. NOT BUILT — the owner has not asked for it.
+
+**The trigger for revisiting the hero: two or three more people asking unprompted.** One is
+curiosity. Three is the copy creating a question at the moment you want a click — and even
+then the fix is one FAQ line, not a vaguer headline.
+
+#### D — "IS THIS A STARTUP OR A TOOL?" — THE FRAMING, SO IT IS NOT RE-ARGUED
+
+The owner asked directly and said he was confused. **The answer given, and it stands:
+confusion is the correct response to the evidence, because the question is not yet
+decidable — there is no data from anyone who is not a friend.**
+
+**The reframe: you do not decide what it is. You decide what you will spend to find out,
+and what result would make you stop** — and the second half is the part people skip, which
+is why founders drift. His own instinct, *"start it as a basic tool and grow it"*, was
+endorsed: most durable businesses were tools people would not stop using.
+
+**The shape of the category, stated honestly:** enormous top-of-funnel (every customer
+leaves with a shareable video of themselves) and brutal retention (how many tapes of
+yourself do you want — two? three?). That does not mean no business; it means **a campaign
+business** rather than a subscription one, with **the gift/occasion use case** as the only
+version with natural repeat demand.
+
+**The two signals that decide it, and they are FREE and already running:** does anyone make
+a **second** tape, and does anyone make one **for somebody else**. One instance of the
+second is worth a hundred signups.
+
+**Defensibility, honestly:** the model is rented and anyone can rent it. What is owned is
+the tape look — the content/texture split, weeks of measured decisions — which is a real
+moat against a lazy competitor and a temporary one against a determined one. **Not
+venture-shaped, and that is not a criticism.**
+
+#### E — SEARCH CONSOLE IS VERIFIED
+
+**Domain property on `timestamptapes.com`, verified by DNS on 2026-09-08.** Confirmed from
+two independent resolvers, and — the thing that gets broken at this step — **the existing
+SPF record survived**, so `support@` still forwards. Both TXT records sit at the apex.
+
+**A Domain property was chosen over URL-prefix on purpose:** it covers www, http, https and
+every subdomain at once, and the owner already runs the DNS at Cloudflare.
+
+**Still owed, and both are his:** *URL Inspection → Request indexing* on the homepage (the
+fastest route in, days rather than weeks), and submitting `sitemap.xml` under Sitemaps now
+that §76E has built one. **Google still does not know the site exists until one of those
+happens** — lifting `noindex` allows listing, it does not summon a crawler.
+
+#### F — Where everything stands at the end of 2026-09-08
+
+| | |
+|---|---|
+| The box | **`5ca4b7f`** — indexable, sitemap, card tags, health `{"ok":true,"degraded":[]}` |
+| local + `origin/supabase-identity-slice` | **`199f73a`** — two docs commits ahead, no served byte |
+| `body-shape-copy` | **`7b42131`**, pushed to origin, off the trunk on purpose (§76C) |
+| Suite | **2203 / 2200 / 0 / 3**, guards 7/7 |
+
+**THE OWNER'S LIST, in the order that matters:**
+
+1. **Sign the AWS agreement.** It gates BOTH the face detector (§74) and §52's moderation,
+   and it is the one thing that must close before strangers arrive.
+2. **Set the free-tape ceiling** (§77A). Ninety-four tapes is not a launch budget.
+3. **Request indexing, submit the sitemap** (§77E).
+4. **Then Reddit**, and only then the rest of §77B's order.
+
+Unchanged and older: read fal's usage page for the 2026-09-02 refusals (it decides whether
+`420bf2b`'s refund rule stays), the Hetzner disk backup toggle, and the realism check
+packet at `out/realism-check/` — **though §77C and the friends' verdict have largely
+overtaken the realism question: the tapes read as real, and the body was the only
+complaint.**
+
+**AGENT-BUILDABLE AND UNGATED:** the result page telling somebody their tape's date
+(§77C). Nothing else, and that one is small.
 
 ---
 
