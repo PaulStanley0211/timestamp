@@ -512,6 +512,37 @@ async function visit(pathname, { width = 1440, height = 900, mobile = false, set
 const PHONE = { width: 375, height: 812, mobile: true };
 const LAPTOP = { width: 1440, height: 900, mobile: false };
 
+/**
+ * Ask for motion, for a test that asserts motion.
+ *
+ * A CI RUNNER IS A MACHINE WITH SETTINGS, AND THIS ONE HAS ITS ANIMATIONS
+ * TURNED OFF. windows-latest ships with "Show animations in Windows" off, so
+ * Chrome there reports prefers-reduced-motion: reduce -- and this product
+ * HONOURS that, by design and with its reasons written down: the hero tape
+ * refuses to play (views.mjs, "the largest animation this page could make, so
+ * it is the first thing a request for reduced motion should cost") and the
+ * record light's blink is animation:none (static.mjs). Both tests were green
+ * on ubuntu and red on windows for exactly that, on their first CI run, and
+ * the PRODUCT was right both times -- what was wrong is a test that inherited
+ * whichever accessibility setting the machine happened to carry.
+ *
+ * CLAUDE.md §4 one costume over: the machine being measured here is a control
+ * panel rather than a clock. So a test that asserts motion asks for it.
+ *
+ * IT RESETS AFTERWARDS, and that is not tidiness. Leaving no-preference set
+ * would hide a genuine reduced-motion regression from every test that runs
+ * after this one -- and those rules are an accessibility promise, so going
+ * quietly blind to them is the expensive failure. t.after runs even when an
+ * assertion throws, which a trailing line would not.
+ */
+async function askForMotion(t) {
+  const { cdp } = await session();
+  t.after(() => cdp.send('Emulation.setEmulatedMedia', { features: [] }));
+  await cdp.send('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+  });
+}
+
 // ---------------------------------------------------------------------------
 // the smoke
 // ---------------------------------------------------------------------------
@@ -541,9 +572,12 @@ test('the landing fits every one of the six widths with nothing off screen', { s
  * allowed it, the browser decoded h264 and the autoplay policy accepted a
  * muted video. Every one of those is a real browser's property.
  */
-test('the hero tape plays muted once the page has loaded, when a showcase file is present', { skip }, async () => {
+test('the hero tape plays muted once the page has loaded, when a showcase file is present', { skip }, async (t) => {
   const s = await session();
   await s.signOut();
+  // Before the navigation: the script reads the preference at load and returns
+  // early under reduce, so asking afterwards would be asking too late.
+  await askForMotion(t);
   const page = await visit('/', LAPTOP, { settleMs: 1500 });
   assert.deepEqual(page.errors, [], page.errors.join('; '));
   const r = await page.evaluate(`(() => {
@@ -1288,9 +1322,10 @@ test('the status page runs its poller under the CSP the server really sends', { 
   assert.match(probes.counter, /of \d+/, 'the step counter is not painted');
 });
 
-test('the record light on the phase being filmed is red and blinking, in a real cascade', { skip }, async () => {
+test('the record light on the phase being filmed is red and blinking, in a real cascade', { skip }, async (t) => {
   const s = await session();
   await s.signIn();
+  await askForMotion(t);
   const page = await visit(`/j/${s.running.jobId}`, PHONE);
   assert.deepEqual(page.errors, [], page.errors.join('; '));
   const r = await page.evaluate(`(() => {
