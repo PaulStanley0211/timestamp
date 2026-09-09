@@ -7,12 +7,30 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-08, night) — READ §81 FIRST, THEN §80 AND §79. **BOTH LAUNCH GATES ARE SHUT AND NOTHING BLOCKS A LAUNCH ANY MORE.** THEN §78, §77, §76, §75 AND §74.
+## START HERE (2026-09-09) — READ §82 FIRST, THEN §81, §80 AND §79. **NOTHING GATES A LAUNCH AND THE GATE HAS NOW BEEN WALKED BY A PERSON.** THEN §78, §77, §76, §75 AND §74.
 
-**THE BOX RUNS `7d9ca52`** — §81. **The face and content checks are LIVE** (the worker's
-own banner says `intake face detector: AWS Rekognition`), and **`freeTape.globalCeiling`
-is 500 with 3 spent, so 497 remain.** Every line below this one about "the AWS signature",
-"the gate before strangers", `faceGate` having no eyes, or a ceiling of 100 is HISTORY.
+**THE BOX RUNS `68645f0`** — §82, and local and `origin/supabase-identity-slice` are on
+it too. **The face and content checks are LIVE** (the worker's own banner says
+`intake face detector: AWS Rekognition`), and **`freeTape.globalCeiling` is 500 with 3
+spent, so 497 remain.** Every line below this one about "the AWS signature", "the gate
+before strangers", `faceGate` having no eyes, or a ceiling of 100 is HISTORY.
+
+**§81F's LAST OPEN LINE IS CLOSED: a real upload has now gone through the live gate, in
+BOTH directions, done by the owner on the running site (§82A).** A photograph of a
+wristwatch — §74A's own image, the one that once produced a complete verified tape of a
+person who does not exist — is refused at phase 1 with *"That photo does not look like a
+photo of a person"*, before any money; a real photograph renders. **Credits are never
+debited for a refusal at intake**, so there is no refund to get wrong on the commonest
+customer mistake there is.
+
+**AND A DEPLOY RAN PERFECTLY AND SHIPPED NOTHING — §82C, READ IT BEFORE THE NEXT ONE.**
+The commit had never been pushed, so `git pull` succeeded and brought only `CLAUDE.md`.
+**The one line that says an image is a no-op is `CACHED [worker 4/6] COPY . .`** — that
+layer's cache key is the content of the repository, so a cached COPY means the image just
+built is byte-identical to the one already running. Everything else in the build output
+reads the same either way. §78E in a third costume, and §82D has the better instrument:
+**compare the live CSP's script-hash set against the locally computed one**, because those
+hashes ARE a fingerprint of `views.mjs`.
 
 **THERE WAS NEVER AN AGREEMENT TO SIGN — §81A.** Six sections of this file carried "sign
 the AWS agreement" as a blocker with lead time. AWS's GDPR DPA is incorporated into the
@@ -11450,9 +11468,225 @@ are taking 600,000 likes a video — and those platforms need no account age, no
 no moderator's permission. §61A's Reels/Shorts/TikTok plan was right and now has numbers
 behind it. Reddit stays worth having; it is no longer the fast shot.
 
-**Still unproven: no real upload has gone through the live gate.** The wiring is covered by
-the suite and by the banner, the detector by direct call. An end-to-end web order costs one
-free tape plus $0.75 and is the only thing that proves the whole path.
+~~**Still unproven: no real upload has gone through the live gate.**~~ **PROVED THE NEXT
+DAY, IN BOTH DIRECTIONS, ON THE LIVE SITE — §82A.** A wristwatch is refused at phase 1
+before any money; a real photograph renders to a finished 9:16 tape. The wiring was
+covered by the suite and by the banner and the detector by a direct call; what was
+missing was a person walking it, and that is what closed it.
+
+### 82. THE GATE WAS WALKED BY A HUMAN, AND A DEPLOY SHIPPED NOTHING (2026-09-09)
+
+**2209 -> 2210 tests / 2207 pass / 0 fail / 3 skipped.** One commit, `68645f0`,
+test-first, both halves sabotage-verified and restored from a copy, all seven
+`guards.yml` steps run verbatim and COUNTED 7/7 before the commit and again after it
+so the message was scanned. **Pushed and DEPLOYED; local, `origin/supabase-identity-slice`
+and the box are all at `68645f0`.** The session was meant to be about marketing and
+became about proving the thing marketing would have sent people at.
+
+#### A -- THE FACE GATE IS PROVED ON THE LIVE SITE, BY A PERSON, IN BOTH DIRECTIONS
+
+**§81F's last open line -- "no real upload has gone through the live gate" -- is
+closed.** The owner walked it himself on the live site, in the order that costs least:
+
+| What went in | What came back |
+|---|---|
+| a photograph of **a wristwatch** | refused at phase 1 of 3, before any money: *"That photo does not look like a photo of a person. Please choose one where a face is clearly visible."* |
+| his own photograph, **9:16 480p**, Amalfi | a finished tape. His verdict: *"it came out very good. I liked it."* |
+
+**THE WRISTWATCH IS THE RIGHT NEGATIVE AND NOT AN ARBITRARY ONE.** It is §74A's own
+image: on 2026-09-07 a photograph of a watch held in a hand went through all eleven
+steps and produced a complete, fully verified 15-second tape of a person who does not
+exist, with every assertion green. That is the exact hole the gate was built to close,
+and it is now closed on the running site rather than in the suite.
+
+**CREDITS ARE NEVER DEBITED FOR A REFUSAL AT INTAKE.** The balance did not dip and
+return -- it never moved. So there is no refund to get wrong on the commonest customer
+mistake there is, which is one fewer thing to watch when strangers arrive.
+
+**WHY THE NEGATIVE TEST WAS WORTH ARGUING FOR, since it was questioned and the answer
+is general:** a gate that passes everything is indistinguishable from a working gate
+when you only ever show it things it should pass. A wrong credential failing open, a
+config line that did not take on the live container, a detector wired into the render
+path but not the web path -- every one of those produces a photo accepted and a tape
+generating. **Only the refusal tells you the difference.** This is §68, §78E and §56 in
+one sentence: the thing reporting health was not measuring health.
+
+#### B -- THE STATUS PAGE TOLD A DEAD TAPE'S OWNER TO COME BACK LATER (`68645f0`)
+
+Found by reading the refusal screen rather than the refusal message. Above the sentence
+explaining that the job had stopped sat two lines rendered unconditionally --
+*"A few minutes... You can close this page and come back, the tape carries on without
+you"* and *"Fifteen seconds of tape, 375 frames"* -- **with a comment on them saying the
+poller never touched them.** So the screen a first-time customer meets after uploading
+the wrong photo told them to go away and wait for a tape that was already dead. Some of
+them close the tab and wait for an email.
+
+Both lines are gated on a new `stillComing(status)` beside `phaseState`, and **they
+exist in every state and hide rather than being rendered conditionally**, because the
+poller has to be able to bring them back: the page is opened while the job runs and left
+open, so a job that dies mid-poll would otherwise keep the promise on screen until a
+manual reload. The alert and the credit note beside them already carry that idiom for
+that reason; this is the third user of it.
+
+**VERIFIED ON THE COMPUTED CASCADE, NOT THE ATTRIBUTE** -- `display: none` on a stopped
+job and `display: block` on a running one, read in a real browser at 375px off
+`build/preview-status-failed.html` and its running twin. §60K's rule: a markup assertion
+cannot see a later rule of equal specificity winning.
+
+**Sabotage record:** removing the two server gates fails the stopped case by name
+(*"a failed tape still tells the customer to wait for it"*); removing the poller block
+fails the mid-poll case (*"the poller cannot hide a wait note it never names"*). Each
+restored from a copy and confirmed with `cmp`. **The test asserts the RUNNING page still
+carries both lines first**, so it cannot pass by the copy being deleted outright -- that
+sentence is the most useful one on the page while a tape is actually coming.
+
+#### C -- A DEPLOY PULLED CLEANLY AND SHIPPED NOTHING, AND THE TELL IS ONE WORD
+
+The commit was made locally, the owner was asked whether to push, and he went straight
+to the deploy. `git pull` succeeded and reported `7d9ca52..65516d5`, **one file changed,
+CLAUDE.md** -- yesterday's docs commit. The build ran, every layer reported, the
+containers restarted, health came back green.
+
+**THE ONE LINE THAT SAYS IT SHIPPED NOTHING IS `CACHED [worker 4/6] COPY . .`.** That
+layer copies the repository into the image; BuildKit caches it on the content of what is
+being copied, so **a cached `COPY . .` means the image just built is byte-identical to
+the one already running.** Everything else in the output looks the same either way --
+the exports, the manifests, the "Built" ticks, the restarted containers.
+
+That is §78E's family in a third costume, and this instance is worth more than the last
+two because the tell is mechanical and unambiguous. On the real deploy the same line
+read `[worker 4/6] COPY . .` at 0.1s with no CACHED, and the two layers after it
+re-ran including the build-time ffmpeg preflight.
+
+#### D -- THE CSP HASH SET IS A DEPLOY VERIFICATION INSTRUMENT, AND IT IS THE BEST ONE THIS FILE HAS
+
+Every deploy in this file has been verified with health, status codes and a byte
+comparison of the CSP header. **The header carries something stronger than its own
+bytes:** `INLINE_SCRIPT_HASHES` is the SHA-256 of each inline script's source, computed
+from the constants at render time, so the hash set IS a fingerprint of `views.mjs`.
+Compare the live set against the locally computed one and an exact match proves the box
+is serving that exact file -- no session, no gated page, no screenshot.
+
+```bash
+node --input-type=module -e "import {INLINE_SCRIPT_HASHES as h} from './scripts/web/views.mjs'; console.log(h.join('\n'))" | sort > build/hashes-local.txt
+curl -sS -D- -o /dev/null https://timestamptapes.com/ | grep -io "content-security-policy:.*" \
+  | tr ' ' '\n' | grep -oE "sha256-[A-Za-z0-9+/=]+" | sed "s/sha256-//" | sort > build/hashes-live.txt
+diff build/hashes-local.txt build/hashes-live.txt && echo IDENTICAL
+```
+
+**It only proves `views.mjs`**, because that is the only file whose content reaches the
+header -- a change confined to `server.mjs` or a preset moves no hash. But `views.mjs` is
+where most user-visible change lives, and a matching set on a deploy that was supposed to
+change a script is decisive. **Note the inversion of the older rule:** §72D, §73H and §78E
+all verified that the CSP header was *byte-identical*, which is right when no script
+changed. When one did, identity with the OLD header is the failure signal.
+
+#### E -- THREE CORRECTIONS TO THIS FILE
+
+1. **§81E's `--root` note sent the next reader to the wrong flag.** It says
+   `accounts-cli.mjs` "resolves its root to `/app/out`, which does not exist", which is
+   true and implies `--root=/data/out`. **It is `--root=/data`.** The CLI appends
+   `out/accounts` itself, so `/data/out` yields `/data/out/out/accounts` and answers
+   `NO_ACCOUNT` for an address that plainly exists. Same trap as `loadJob` taking the
+   REPO root, which this file already records one file over. The `list` subcommand
+   prints the resolved path and is the fastest way to tell a wrong root from a wrong
+   email.
+2. **The `est. cost ~$N of provider spend` line the grant prints is stale in the same
+   way `accounts-cli plans` is.** Granting 42 credits reported `~$5.20` against a real
+   fal spend of about **$1.50** for the two 480p tapes 52 credits buy. It derives from
+   `resolutions.480p.estimatedUSDPer15s`, still Seedance's $2.07 a week after the move
+   to Wan at $0.75. **Do not fix that number without the owner** -- it feeds `creditCost`
+   and therefore what every customer pays.
+3. **§75B's prediction fired.** SSH hung silently, the ISP had reassigned the address,
+   and one rule edit in the Hetzner console fixed it. The diagnostic is unchanged and
+   takes two lines: a full silent timeout is the firewall, an instant refusal is not,
+   and `curl https://api.ipify.org` gives the address to paste.
+
+#### F -- THE OWNER'S SIXTY-SEVEN PLATFORMS, RULED ON
+
+He built a list of launch platforms in a Google Sheet and asked which were worth it. It
+is **67 rows, not the 61 he thought**, and it is a superset of §77B's research, so §77B's
+ruling was applied rather than the work redone. **Do not research this a third time.**
+
+**NINE OF THE 67 ARE DEAD OR BROKEN**, checked by fetching every URL: no DNS at all for
+**AIWore, AllThingsAI, SaasGang and Startup Ranking**; resolving but not serving for
+**ProductRant, StartupLister (404), AI Scout (520), AI Tool Hunt (522) and SaaS AI Tools
+(526, expired certificate)**. Two of those nine were on §77B's own recommended list a week
+earlier. **13% rot is the most useful thing the list says about its own category.**
+
+| Pile | Count |
+|---|---|
+| Worth real effort -- Product Hunt, Hacker News, Reddit, TAAFT, Futurepedia | **5** |
+| Worth one batch afternoon (live AI directories) | ~13 |
+| Small launch platforms | ~5 |
+| Communities to JOIN rather than submit to -- Indie Hackers, Dev.to, HackerNoon | ~4 |
+| Wrong buyer, genuinely zero -- the G2/Capterra/Clutch tier | 13 |
+| Backlink noise | ~13 |
+| **Dangerous** | **5** |
+| Dead or broken | 9 |
+
+**THE DANGEROUS PILE GREW FROM TWO TO FIVE: AppSumo, Dealify, PitchGround, StackSocial and
+SaasGang are all lifetime-deal marketplaces**, and a lifetime deal against a **$0.75
+marginal cost per tape** is unbounded liability -- one customer pays once and renders
+until every sale is a loss. Those platforms exist for software with near-zero marginal
+cost. Refuse all five and give that reason.
+
+**TWO THINGS MATTER MORE THAN THE SORTING, and both are specific to this product.** First,
+all 67 assume discovery by somebody *looking for a tool*; nobody searches for a 2003
+camcorder tape of themselves, and §81F's correction stands -- the demonstrated audience is
+on Reels, Shorts and TikTok, which need no account age and no moderator. Second, **directory
+traffic costs real money here in a way it does not for ordinary software:** an AI directory
+sends people who collect AI tools, they burn a $0.75 free tape and never return, and 200 of
+them is $150 of the 497-tape budget spent on an audience that was never going to buy.
+
+**The honest number is 26 actionable, of which 5 carry the weight** -- and the case FOR the
+long tail is backlinks, not signups, which is worth one afternoon with a blurb written once.
+
+#### G -- Things that will bite
+
+- **A TRAILING `grep -c` WITH ZERO MATCHES EXITS 1, AND MAKES A PASSING SUITE REPORT AS
+  FAILED.** A background `npm test` ending in `grep -c "✖" log` reported exit 1 over a run
+  of **2210 tests, 0 failures**. §68C's `set -e` plus `grep -v` trap, inverted: that one
+  printed a green it had not earned, this one printed a red it had not earned.
+- **`node --test`'s summary lines begin with `ℹ`, not `#`.** A `grep -E "^# (pass|fail)"`
+  over the log finds nothing and reads exactly like a suite that never got to the end.
+  §70G already records that a failure is `✖` rather than `not ok`; this is its other half.
+- **PYTHON'S `print` WRITES CRLF ON WINDOWS, SO A LIST PIPED INTO `while read` CARRIES A
+  CARRIAGE RETURN.** Every one of 67 URLs came back `000` -- a perfect, uniform,
+  entirely fictitious outage. `tr -d '\r'` before the loop, and be suspicious of any
+  result where *everything* failed identically.
+- **A MODULE COPIED OUT OF GIT INTO `build/` CANNOT RESOLVE ITS OWN RELATIVE IMPORTS.**
+  `git show HEAD~1:scripts/web/views.mjs > build/oldv/...` then importing it dies on
+  `ERR_MODULE_NOT_FOUND` for a sibling it expects three directories up. Compare the
+  rendered output or use a worktree; do not relocate a module to diff it.
+- **SSH IS BLOCKED BY THE CLASSIFIER IN SOME SESSIONS**, including a single connection to
+  a known host, so the operator runs the box commands. Earlier sessions deployed from
+  here, so this is per-session rather than a standing rule. Ask rather than working
+  around it.
+- **A `403` FROM G2, CAPTERRA, TRUSTRADIUS OR DESIGNRUSH IS BOT-BLOCKING, NOT A DEAD
+  SITE.** Only `000` with no DNS is dead; `52x` is a Cloudflare origin error and may be
+  transient. Say "not serving today" unless the DNS is gone.
+
+#### H -- What is left
+
+**NOTHING GATES A LAUNCH, and that has been true since yesterday.** What is genuinely
+outstanding is all the owner's and none of it is code: **open the TikTok, Instagram and X
+accounts** (he has only YouTube), then the first batch of tapes. His own plan, agreed
+this session and worth keeping: post one reel a day across every platform. **Three
+amendments were put to him** -- make the batch in one or two sittings rather than grinding
+daily, because week three is where a daily commitment dies; post **the tapes themselves**
+rather than explainers about the tool, because the product outputs the advert already in
+the right shape; and do the content **before** the directory submissions, since those ask
+for screenshots and a demo video anyway.
+
+**The hard constraint on content is faces, not time:** every tape costs $0.75 and needs a
+real person who has consented, so fifteen tapes of the owner is fifteen tapes of the same
+man. Variety comes from the seven places and from friends who have said yes.
+
+**Unchanged and older:** read fal's usage page for the 2026-09-02 refusals (it still
+decides whether `420bf2b`'s refund rule stays), the Hetzner disk backup toggle, and the
+one small buildable thing nobody has asked for -- telling a customer, on the result page,
+what date their tape is stamped with (§77C).
 
 ---
 
