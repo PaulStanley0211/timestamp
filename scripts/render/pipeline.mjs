@@ -734,7 +734,15 @@ async function stepCompose(ctx) {
     seed: seeds.stamp,
     seed2: deriveSeed(job.jobId, 'stamp', 1),
     audioSeed: seeds.audio,
-    osd: { ...deriveStamp(seeds.stamp), enabled: true, fontRelPath: font.path },
+    // THE PLACE GOES IN, so the burnt-in date agrees with the picture it sits
+    // on: an Amalfi afternoon is stamped an afternoon in summer rather than a
+    // January night. See deriveStamp -- a place that declares neither field
+    // constrains nothing and gets what this always did.
+    osd: {
+      ...deriveStamp(seeds.stamp, { timeOfDay: place.timeOfDay, climate: place.climate }),
+      enabled: true,
+      fontRelPath: font.path,
+    },
   });
   const { clamped: audioClamped } = clampAudio(look);
   for (const c of [...clamped, ...audioClamped]) {

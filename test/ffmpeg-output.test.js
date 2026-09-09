@@ -162,6 +162,50 @@ test('the date stamp actually rendered', { skip: skip || (!osd.enabled && 'no fo
   await assertBurnIn(await fullRender(), burnInProbeRegion(osd, delivery, tape));
 });
 
+test('the date stamp is legible over a BRIGHT scene, not just a dark one',
+  { skip: skip || (!osd.enabled && 'no font available') }, async () => {
+    // THE CHECK ABOVE PASSES ON A STAMP NOBODY CAN SEE. assertBurnIn asks for a
+    // peak luma of 150 in the corner, which a sunlit wall answers on its own --
+    // it proves drawtext ran, and says nothing about whether the result can be
+    // read. Measured on a real Amalfi tape 2026-09-09: cream glyphs on pale
+    // stone, and the owner could not find the date at all. On the night places
+    // it had always been perfectly legible, which is why it survived.
+    //
+    // The property is that the glyphs are separated from WHATEVER is behind
+    // them, so it is measured as ink: how much darker the stamp's own box is
+    // than an identical box of the same render with no stamp in it. Cream on
+    // cream leaves no ink at all -- the pre-fix reading was 3.0 of 255.
+    const ground = path.join(outDir, 'bright-ground.mp4');
+    await runFfmpeg(['-hide_banner', '-v', 'error', '-f', 'lavfi',
+      '-i', `color=c=0xE6E0D2:s=${tape.width}x${tape.height}:r=${cfg.fps}:d=1`,
+      '-frames:v', '25', '-y', ground]);
+
+    const stamped = path.join(outDir, 'bright-stamped.mp4');
+    await runFfmpeg(gradeArgs({ input: ground, output: stamped, filterComplex: graph(), cfg }));
+
+    // TIGHT ON THE GLYPHS, not the whole probe box. burnInProbeRegion is sized
+    // for assertBurnIn, which only wants to know drawtext ran, so most of it is
+    // empty margin -- and averaging over that margin dilutes the measurement to
+    // the point where a legible stamp and an invisible one read almost alike.
+    // Measured on the same renders: over the full box the difference between
+    // them is 3.0 against 5.8; over this one it is 4.3 against 10.7.
+    const box = burnInProbeRegion(osd, delivery, tape);
+    const glyphs = {
+      x: box.x + Math.round(box.w * 0.45), y: box.y + Math.round(box.h * 0.15),
+      w: Math.round(box.w * 0.55), h: Math.round(box.h * 0.72),
+    };
+    const inStamp = await regionStats(stamped, glyphs);
+    // The same box at the same height on the other side: same grade, same
+    // grain, no glyphs. That is the ground the stamp has to be read against.
+    const bare = await regionStats(stamped, { ...glyphs, x: Math.round(delivery.width * 0.18) });
+    const ink = bare.YAVG - inStamp.YAVG;
+
+    assert.ok(ink >= 8,
+      `the date stamp leaves ${ink.toFixed(1)} of ink on a bright scene (needs 8): ` +
+      `stamp box YAVG ${inStamp.YAVG.toFixed(1)} against bare ground ${bare.YAVG.toFixed(1)}. ` +
+      'Cream glyphs need a dark edge or they vanish into a sunlit wall.');
+  });
+
 test('the render is bit-identical across five runs (purity)', { skip }, async () => {
   // Five, not two. The gblur-on-short-frames nondeterminism passed a two-run
   // check and then failed six times out of six -- slice-threaded filters vary

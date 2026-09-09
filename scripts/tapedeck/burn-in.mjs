@@ -25,6 +25,49 @@
  */
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+const ALL_MONTHS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+/**
+ * WHY THE STAMP TAKES THE SCENE AND NOT ONLY THE SEED.
+ *
+ * A date stamp that contradicts the picture undoes the picture, and it does it
+ * in the one place a viewer is most likely to look for proof. The Amalfi tape
+ * the owner made on 2026-09-09 was a sunlit afternoon on a warm coast, stamped
+ * `02 JAN 1999  20:33` -- January, after dark. Every element of that stamp was
+ * correct by its own rules and the result was a small lie in the corner of a
+ * product whose entire claim is that the tape looks real.
+ *
+ * These tables are deliberately RANGES rather than fixed values. Pinning the
+ * hour would make every tape of a place share a signature, which is its own
+ * tell; the seed still chooses, it just chooses inside the scene's own day.
+ *
+ * A place with neither field constrains nothing and falls back to what this
+ * function has always done, which is what `npm run look` gets -- it grades an
+ * arbitrary clip with no place behind it at all.
+ */
+const HOURS_BY_TIME_OF_DAY = Object.freeze({
+  'early morning': [6, 9],
+  morning: [8, 11],
+  midday: [11, 14],
+  afternoon: [13, 17],
+  'late afternoon': [15, 18],
+  evening: [18, 21],
+  dusk: [18, 21],
+  night: [19, 23],
+});
+
+/** Afternoons and evenings, which is when home video was actually shot. */
+const DEFAULT_HOURS = [13, 21];
+
+const MONTHS_BY_CLIMATE = Object.freeze({
+  warm: [4, 5, 6, 7, 8],              // May to September
+  mild: [3, 4, 5, 6, 7, 8, 9],        // April to October
+  cool: [2, 3, 4, 8, 9, 10],          // the shoulders: March to May, September to November
+  cold: [10, 11, 0, 1, 2],            // November to March
+  // `indoor` is deliberately absent. A kitchen table looks the same in March
+  // as in October, so constraining it would invent a fact the picture does not
+  // carry -- and it would throw away eleven twelfths of the variety for nothing.
+});
 
 /**
  * Turn a font path into something `fontfile=` will accept.
@@ -64,14 +107,18 @@ export function ffEscapeText(text) {
  * imitating; a stamp reading 2011 would quietly undermine every other choice in
  * the chain.
  */
-export function deriveStamp(seed) {
+export function deriveStamp(seed, scene = {}) {
   const n = Math.abs(Math.trunc(Number(seed) || 0));
   const year = 1999 + (n % 7);
-  const monthIndex = Math.trunc(n / 7) % 12;
+
+  const months = MONTHS_BY_CLIMATE[String(scene.climate ?? '').toLowerCase()] ?? ALL_MONTHS;
+  const monthIndex = months[Math.trunc(n / 7) % months.length];
+
   const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
   const day = 1 + (Math.trunc(n / 84) % daysInMonth);
-  // Evenings and afternoons. Home video was not shot at 4am.
-  const hour = 13 + (Math.trunc(n / 2400) % 9);
+
+  const [from, to] = HOURS_BY_TIME_OF_DAY[String(scene.timeOfDay ?? '').toLowerCase()] ?? DEFAULT_HOURS;
+  const hour = from + (Math.trunc(n / 2400) % (to - from + 1));
   const minute = Math.trunc(n / 17) % 60;
 
   return {
@@ -100,11 +147,26 @@ export function burnInFilters(osd, geometry) {
   const marginY = osd.marginY ?? 28;
   const lineGap = osd.lineGap ?? 24;
 
+  const edge = osd.edgeColor ?? '0x1A1206';
+  const borderWidth = osd.borderWidth ?? 1;
+
   const common = [
     `fontfile=${font}`,
     `fontcolor=${colour}`,
     `fontsize=${size}`,
-    'shadowcolor=0x1A1206',
+    // THE BORDER IS WHAT MAKES THE STAMP READABLE OVER A BRIGHT SCENE, and it
+    // is not the same job as the shadow below it. A one-sided shadow separates
+    // the glyph from the ground on ONE side, which is enough on a dark street
+    // and not enough on pale stone: measured on a real Amalfi tape 2026-09-09,
+    // cream glyphs on sunlit limestone left 3.0 of ink out of 255 and the owner
+    // could not find the date at all. A closed dark edge means the glyph is
+    // read against its own outline whatever is behind it. Real character
+    // generators did exactly this, for exactly this reason.
+    `bordercolor=${edge}`,
+    `borderw=${borderWidth}`,
+    // The shadow stays and still earns its place: it gives the stamp a
+    // direction and a little depth, which a flat outline alone does not.
+    `shadowcolor=${edge}`,
     'shadowx=1',
     'shadowy=1',
   ];
