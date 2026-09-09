@@ -7,10 +7,29 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-09) — READ §82 FIRST, THEN §81, §80 AND §79. **NOTHING GATES A LAUNCH AND THE GATE HAS NOW BEEN WALKED BY A PERSON.** THEN §78, §77, §76, §75 AND §74.
+## START HERE (2026-09-09) — READ §83 FIRST, THEN §82, §81, §80 AND §79. **NOTHING GATES A LAUNCH AND THE GATE HAS NOW BEEN WALKED BY A PERSON.** THEN §78, §77, §76, §75 AND §74.
 
-**THE BOX RUNS `68645f0`** — §82, and local and `origin/supabase-identity-slice` are on
-it too. **The face and content checks are LIVE** (the worker's own banner says
+**THE BOX RUNS `413dd49`** — §83, and local and `origin/supabase-identity-slice` are on
+it too.
+
+**§83 IS THE DATE STAMP, AND IT CARRIES THE MOST USEFUL CORRECTION OF THE WEEK.** The
+owner could not find the burnt-in date on his own tape and he was right twice over: on a
+sunlit scene the cream glyphs left **3.0 of ink out of 255** and could not be read, and
+the date itself said `02 JAN 1999 20:33` on a summer afternoon. Both fixed. **The check
+that existed could not have caught either** — `assertBurnIn` asks for a peak luma of 150
+in the corner, which a sunlit wall answers on its own, so it proves drawtext ran and says
+nothing about whether a person can read the result. That is §56, §64C and §74A in a
+fourth costume.
+
+**AND §82D's DEPLOY INSTRUMENT DOES NOT COVER EVERY CHANGE — §83D.** The CSP hash set
+fingerprints `views.mjs` alone, so on a change to the render pipeline it comes back
+identical whether or not the code shipped. **For anything that touches no served byte,
+the check is the bytes inside the running container** (`docker compose exec -T worker
+grep -c …`), because a check that cannot fail on the change you made is not evidence of
+it.
+
+**Existing tapes keep the old stamp** — a code change fixes only future renders (§64D),
+so the tape he was about to post still carries the unreadable one. **The face and content checks are LIVE** (the worker's own banner says
 `intake face detector: AWS Rekognition`), and **`freeTape.globalCeiling` is 500 with 3
 spent, so 497 remain.** Every line below this one about "the AWS signature", "the gate
 before strangers", `faceGate` having no eyes, or a ceiling of 100 is HISTORY.
@@ -11687,6 +11706,171 @@ man. Variety comes from the seven places and from friends who have said yes.
 decides whether `420bf2b`'s refund rule stays), the Hetzner disk backup toggle, and the
 one small buildable thing nobody has asked for -- telling a customer, on the result page,
 what date their tape is stamped with (§77C).
+
+### 83. THE DATE STAMP COULD NOT BE READ, AND DID NOT AGREE WITH THE PICTURE (2026-09-09, later)
+
+**2210 -> 2215 tests / 2211 pass / 3 skipped.** One commit, `413dd49`, test-first,
+three sabotages each restored from a copy and confirmed with `cmp`, all seven
+`guards.yml` steps run verbatim and COUNTED 7/7 before the commit and again after.
+**Pushed and DEPLOYED; local, `origin/supabase-identity-slice` and the box are all at
+`413dd49`.** The one failure in the full-suite run was the landing band sweep, green in
+isolation -- §80's own residual, and §80B said in as many words that halving the work
+could not be shown to have removed it.
+
+**IT BEGAN AS THE OWNER NOT FINDING THE DATE ON HIS OWN TAPE.** He was asked what the
+burnt-in date read so a caption could match it, looked twice, and said it was not there.
+It was there. Two separate defects had made it so.
+
+#### A -- THE STAMP WAS INVISIBLE ON A BRIGHT SCENE, AND THE MEASUREMENT TOOK FOUR TRIES
+
+His tape is the Amalfi coast at 9:16 -- pale limestone in afternoon sun -- and the stamp
+is cream (`0xF6EAC8`) with a one-pixel shadow. Magnified three times it reads
+`02 JAN 1999  20:33`. At size it does not read at all.
+
+**A ONE-SIDED SHADOW SEPARATES A GLYPH FROM ITS GROUND ON ONE SIDE.** That is enough on a
+dark street and not on sunlit stone, which is why this survived: on the Times Square tape,
+a night scene, the same stamp is perfectly legible. **The night places were doing the work
+the shadow was being credited with.**
+
+**THE METRIC WAS WRONG TWICE BEFORE IT WAS RIGHT, and that is the part worth keeping.**
+
+1. Reading `YMIN`/`YMAX`/`YAVG` over the probe box on the two real tapes gave 206 against
+   156 on the beach and 195 against 103 on Times Square -- suggestive, and not a number a
+   test can hold, because YMAX on a bright scene may be the stone rather than a glyph.
+2. Rendering the stamp through the real look chain over a flat pale ground and comparing
+   the stamp's box against an identical bare box gave **ink = 3.0 of 255** -- the whole
+   defect in one number, and the test was written to it.
+3. **Adding the border moved it to 5.8, and a sweep of border widths 1, 2 and 3 only
+   reached 9.8.** Against a threshold of 10 that reads as "the fix does not work".
+4. **It was the METRIC, not the fix.** `burnInProbeRegion` is sized for `assertBurnIn`,
+   which only wants to know drawtext ran, so most of it is empty margin and averaging over
+   that margin drowns the glyphs. Over a box tight on the text: **4.3 without the border,
+   10.7 with it.** Same renders, same code, one honest number instead of one dilute one.
+
+**AND THE THING THAT ACTUALLY SETTLED THE WIDTH WAS LOOKING AT IT.** Three renders over
+pale stone, cropped to the probe region and stacked into one image: 0 is what the owner
+could not read, 1 is legible and still a camcorder stamp, 2 reads as a modern subtitle.
+**Two rounds of numbers had not chosen between them and one picture did.** `borderw` is 1,
+with `edgeColor` and `borderWidth` both configurable on the osd.
+
+**THE SHADOW STAYS.** It gives the stamp a direction; the border gives it separation. They
+are different jobs and the file now says so.
+
+#### B -- THE CHECK THAT EXISTED COULD NOT HAVE CAUGHT IT, AND THAT IS §56 AGAIN
+
+`assertBurnIn` asks for **peak luma >= 150 in the corner**. Its own error message is about
+`fontfile` failing to resolve, which is the failure it was written for and which it does
+catch. But **a sunlit wall answers 150 on its own**, so on a bright scene it passes whether
+or not a single glyph was drawn -- and it passed on this tape, along with every other
+assertion in `verify`.
+
+That is the same shape as the green tape (§56), the 130 MB tape nobody could watch (§64C)
+and the wristwatch that rendered a stranger (§74A): **the measurements were right and the
+product was wrong.** The new test measures the stamp against an identical box of the same
+render with no glyphs in it, over a deliberately bright ground, and it is the only
+assertion in this repository that can tell a legible stamp from an invisible one.
+
+#### C -- THE DATE CONTRADICTED THE PICTURE, ON EVERY PLACE IN THE CATALOGUE
+
+`02 JAN 1999  20:33` on a sunlit afternoon on a warm coast. January, after dark.
+
+Every element was correct by its own rules: `deriveStamp` took the seed and nothing else,
+picking a month from twelve and an hour from 13..21 -- "afternoons and evenings, which is
+when home video was actually shot". **A rule about home video in general cannot know that
+this particular scene is a beach at three in the afternoon**, and nothing had ever handed
+it the place.
+
+It was not only Amalfi. **The kitchen preset's whole subject is breakfast** and its
+`timeOfDay` is `early morning`; under the old rule it could be stamped at five in the
+afternoon and often was.
+
+`deriveStamp(seed, scene)` now reads the place's own `timeOfDay` and `climate`:
+
+| | |
+|---|---|
+| early morning / midday / afternoon / late afternoon / night | 06-09 / 11-14 / 13-17 / 15-18 / 19-23 |
+| warm / mild / cool / cold | May-Sep / Apr-Oct / the shoulders / Nov-Mar |
+| indoor | **unconstrained, on purpose** |
+
+**RANGES RATHER THAN FIXED VALUES.** Pinning the hour would give every tape of a place one
+signature, which is its own tell; the seed still chooses, inside the scene's own day.
+**`indoor` is deliberately absent from the month table** -- a kitchen table looks the same
+in March as in October, so constraining it would invent a fact the picture does not carry
+and throw away eleven twelfths of the variety for nothing. **A caller with no scene gets
+exactly what it always did**, which is what `npm run look` needs: it grades an arbitrary
+clip with no place behind it.
+
+Checked against the real presets afterwards: Amalfi now stamps June/May/August at
+13:00-14:57, the kitchen 06:00-08:57, Times Square April/October at 19:00-20:57.
+
+**THE WIRING HAS ITS OWN TEST AND IT READS THE CALL SITE.** A unit test of `deriveStamp`
+cannot see a caller that forgot to pass anything, which is the shape this project has
+shipped more often than any other. **Its first version matched the phrase
+`deriveStamp(seed)` inside pipeline.mjs's own doc comment** and went red against correct
+code -- §43E's trap exactly -- so it reads a comment-stripped copy.
+
+#### D -- THE DEPLOY, AND WHY §82D's INSTRUMENT PROVES NOTHING HERE
+
+`COPY . .` with no `CACHED` and the build-time ffmpeg preflight re-ran, so the image is
+genuinely new (§82C). Health `{"ok":true,"degraded":[]}`, both containers recreated with
+**0 restarts** and **0 FATAL**, eight public pages 200, `/videos` and `/account` 303,
+`X-Robots-Tag` still absent.
+
+**THE CSP HEADER CAME BACK BYTE-IDENTICAL, AND THAT IS THE EXPECTED RESULT RATHER THAN
+THE PROOF.** §82D's fingerprint is the SHA-256 of the inline scripts, so it covers
+`views.mjs` and nothing else. This change is in `burn-in.mjs` and `pipeline.mjs`, which
+reach no header, so the hashes would match whether or not the code shipped. **A check that
+cannot fail on the change you made is not evidence of it** -- and reading identity as
+success here is exactly the mistake §78E records in its own costume.
+
+**WHAT PROVED IT IS THE BYTES INSIDE THE RUNNING WORKER**, which is the container that
+actually renders tapes: `borderw` present in `scripts/tapedeck/burn-in.mjs`,
+`HOURS_BY_TIME_OF_DAY` present twice, and `timeOfDay: place.timeOfDay` present in
+`scripts/render/pipeline.mjs`. One `docker compose exec -T worker grep -c`, three numbers,
+no ambiguity. **For any change that does not touch a served byte, that is the check.**
+
+**SSH WORKED FROM HERE THIS SESSION** where it was refused in the one before, which is
+§82G's note confirmed: it is per-session and not a standing rule. The pull, the build and
+the checks still went as three separate remote commands (§70F).
+
+#### E -- Things that will bite
+
+- **THE STAMP IS BOTTOM RIGHT.** Two round trips went on a magnified crop of the
+  bottom-LEFT corner of a real tape, which is grain and nothing else. The layout is in
+  `burnInFilters` -- `x=w-tw-<margin>`, date above time.
+- **A 4:3 TAPE IS MATTED AND A 9:16 TAPE IS NOT, SO THE STAMP SITS AT DIFFERENT HEIGHTS IN
+  THE DELIVERED FRAME.** A crop that works on the owner's 9:16 tape (y≈1700 of 1920)
+  returns black on a 4:3 render, where the picture ends at y≈1365. **Use
+  `burnInProbeRegion(osd, delivery, tape)` rather than a number that worked once.**
+- **TWO SWEEPS AGAINST ONE BUILD DIRECTORY TRUNCATE EACH OTHER'S FILES.** A second run was
+  left going in the background while the first's outputs were being read, and ffmpeg
+  answered `moov atom not found` on a file that had been fine a minute earlier. §4's
+  shared-path race, self-inflicted, and the fix is the same: a fresh directory, or stop the
+  other run first (`TaskStop`).
+- **`open(p).splitlines()` IS AN ATTRIBUTE ERROR**, not a line list -- `.read()` first. It
+  killed a header comparison whose every other check had already printed green, so the
+  command exited 1 on a deploy that was fine.
+- **A FIRST-RUN GREEN ON A STRUCTURAL TEST IS SUSPECT**, and here it was a doc comment
+  supplying the string the test was hunting for. Strip comments when asserting about code
+  shape (§43E), and treat a test that passes immediately as unproven.
+
+#### F -- What is left
+
+**Unchanged from §82H, and none of it is code.** The accounts (TikTok, Instagram, X -- he
+has only YouTube), then the first batch of tapes: batch in one or two sittings rather than
+grinding daily, post the tapes themselves rather than explainers, content before the
+directory submissions. The hard constraint is faces with consent, not time.
+
+**ONE THING THIS SESSION ADDS TO HIS LIST AND IT IS SMALL:** his existing tapes keep the
+old stamp, because a config-and-code change fixes only future renders (§64D's rule). The
+tape he was going to post is one of them. **One more 9:16 order gives him a tape whose date
+is both legible and true to the scene**, and he had 31 credits when this was written.
+
+**Still older and still his:** read fal's usage page for the 2026-09-02 refusals (it decides
+whether `420bf2b`'s refund rule stays), and the Hetzner disk backup toggle. **And the one
+buildable thing nobody has asked for is now worth more than it was**: telling a customer on
+the result page what date their tape carries (§77C) -- the detail is legible now, and the
+customer still has to squint at a corner to find it.
 
 ---
 
