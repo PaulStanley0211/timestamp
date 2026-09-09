@@ -249,6 +249,16 @@ function phaseState(i, idx, status) {
   return status === 'failed' || status === 'cancelled' ? 'stopped' : 'running';
 }
 
+/**
+ * Whether a tape is still on its way. Everything on this page that promises a
+ * customer something in the future is gated on this: a stopped job must not
+ * tell anybody to wait for it. The poller carries the same two words, so the
+ * first paint and every repaint agree -- the same rule phaseState follows.
+ */
+function stillComing(status) {
+  return status !== 'failed' && status !== 'cancelled';
+}
+
 // ---------------------------------------------------------------------------
 // the inline scripts, as named constants, because the policy names them
 // ---------------------------------------------------------------------------
@@ -421,6 +431,17 @@ const STATUS_SCRIPT = `
       if (v.creditNote) { noteEl.hidden = false; noteEl.textContent = v.creditNote; }
       else { noteEl.hidden = true; noteEl.textContent = ''; }
     }
+
+    // WHAT THE PAGE PROMISES STOPS WHEN THE TAPE DOES -- the same rule the
+    // server rendered with, see stillComing in views.mjs. A job that fails
+    // mid-poll is the common case, because the page is opened while the job is
+    // running and left open; without this it would keep telling somebody to
+    // close the page and come back for a tape that had already died.
+    var coming = v.status !== 'failed' && v.status !== 'cancelled';
+    ['waitnote', 'waitspec'].forEach(function (wid) {
+      var waitEl = document.getElementById(wid);
+      if (waitEl) waitEl.hidden = !coming;
+    });
 
     if (v.status === 'awaiting-selection') location.href = '/j/' + id + '/select';
     if (v.status === 'done') location.href = '/j/' + id + '/result';
@@ -2095,10 +2116,20 @@ export function statusPage({ view, account = null, labels = {} }) {
   ${/* THE MOST USEFUL SENTENCE ON A PAGE NOBODY WANTS TO SIT ON. The job is a
        queue entry and a worker claims it, so closing the browser changes
        nothing -- but the page never said so, and the honest reading of a live
-       progress page is "stay here". Static, so the poller never touches it. */''}
-  <p class="sub">A few minutes, most of them in the middle phase. You can close this page and
+       progress page is "stay here".
+
+       BOTH LINES BELONG TO A TAPE THAT IS STILL COMING, and until 2026-09-09
+       they were rendered unconditionally with a comment claiming the poller
+       never touched them. So a job that had stopped sat there telling the
+       customer to close the page and come back for a tape that was already
+       dead -- on the screen a first-time customer meets after uploading the
+       wrong photo, which is the commonest mistake there is. They exist in
+       every state and hide, rather than being rendered conditionally, because
+       the poller has to be able to bring them back: see the alert and the
+       credit note below, which carry the same idiom for the same reason. */''}
+  <p class="sub" id="waitnote"${stillComing(view.status) ? '' : ' hidden'}>A few minutes, most of them in the middle phase. You can close this page and
   come back &mdash; the tape carries on without you.</p>
-  <p class="hint">Fifteen seconds of tape, 375 frames.</p>
+  <p class="hint" id="waitspec"${stillComing(view.status) ? '' : ' hidden'}>Fifteen seconds of tape, 375 frames.</p>
 
   ${''/* Both surfaces ALWAYS exist, hidden while empty: the poller repaints
         them, and a job that fails MID-POLL would otherwise never show its

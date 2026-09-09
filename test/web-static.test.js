@@ -2268,6 +2268,44 @@ test('the page says the tape survives a closed tab', () => {
     'the page never tells anybody they are allowed to leave');
 });
 
+test('a tape that has stopped stops telling you to wait for it', () => {
+  // THE SCREEN A FIRST-TIME CUSTOMER MEETS AFTER UPLOADING THE WRONG PHOTO,
+  // which is the commonest mistake there is. Above the sentence explaining
+  // that the job had stopped sat two lines rendered unconditionally -- "you
+  // can close this page and come back, the tape carries on without you", and
+  // "Fifteen seconds of tape, 375 frames" -- with a comment on them saying the
+  // poller never touches them. So the page told somebody whose tape had just
+  // died to go away and wait for it, and some of them will. Found on the live
+  // site 2026-09-09 by uploading a photograph of a wristwatch.
+  const tagOf = (html, id) => (html.match(new RegExp('<p[^>]*id="' + id + '"[^>]*>')) || [''])[0];
+
+  // Asserted FIRST, so this cannot pass by the copy being deleted outright:
+  // the sentence is the most useful one on the page while a tape is coming.
+  const running = statusPage({ view: elevenStepView() });
+  for (const id of ['waitnote', 'waitspec']) {
+    const tag = tagOf(running, id);
+    assert.ok(tag, `the running page carries no #${id} for the poller to hide`);
+    assert.ok(!/\shidden/.test(tag), `#${id} is hidden while the tape is still being made`);
+  }
+
+  for (const status of ['failed', 'cancelled']) {
+    const stopped = statusPage({ view: { ...elevenStepView(), status } });
+    for (const id of ['waitnote', 'waitspec']) {
+      const tag = tagOf(stopped, id);
+      assert.ok(tag, `the ${status} page carries no #${id} at all`);
+      assert.ok(/\shidden/.test(tag),
+        `a ${status} tape still tells the customer to wait for it: ${tag}`);
+    }
+  }
+
+  // AND IT MUST SURVIVE A FAILURE MID-POLL, which is the common case: the page
+  // is loaded while the job runs and left open. The alert and the credit note
+  // are repainted rather than rendered once for exactly this reason.
+  const script = (running.match(/<script>[\s\S]*?<\/script>/) || [''])[0];
+  assert.match(script, /waitnote/, 'the poller cannot hide a wait note it never names');
+  assert.match(script, /waitspec/, 'the poller cannot hide a spec line it never names');
+});
+
 test('the photo you chose is shown back to you, and can be taken away again', () => {
   // YOU CANNOT SEE WHAT YOU ARE ABOUT TO SPEND 21 CREDITS ON. Step 1 named the
   // file and showed nothing, so a wrong photo -- the one before the one you
