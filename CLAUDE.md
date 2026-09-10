@@ -7,7 +7,7 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-09) — READ §83 FIRST, THEN §82, §81, §80 AND §79. **NOTHING GATES A LAUNCH AND THE GATE HAS NOW BEEN WALKED BY A PERSON.** THEN §78, §77, §76, §75 AND §74.
+## START HERE (2026-09-10) — **§84 IS THE LAUNCH: THE TAPE IS ON FOUR PLATFORMS AND THE YOUTUBE CHANNEL IS CONVERTED; NO CODE CHANGED.** THEN §83 FIRST, THEN §82, §81, §80 AND §79. **NOTHING GATES A LAUNCH AND THE GATE HAS NOW BEEN WALKED BY A PERSON.** THEN §78, §77, §76, §75 AND §74.
 
 **THE BOX RUNS `413dd49`** — §83, and local and `origin/supabase-identity-slice` are on
 it too.
@@ -11871,6 +11871,93 @@ whether `420bf2b`'s refund rule stays), and the Hetzner disk backup toggle. **An
 buildable thing nobody has asked for is now worth more than it was**: telling a customer on
 the result page what date their tape carries (§77C) -- the detail is legible now, and the
 customer still has to squint at a corner to find it.
+
+---
+
+### 84. THE FIRST PUBLIC POSTS, ON FOUR PLATFORMS, AND THE YOUTUBE CHANNEL CONVERTED (2026-09-09/10)
+
+**No code changed and nothing was deployed.** Two sessions of marketing work, all of it
+the owner clicking and this session handing him each value; the box is still at `413dd49`.
+The memory file `launch-state-2026-09-08.md` carries the per-platform detail and
+`youtube-channel-reshape-2026-09-09.md` the channel. This is the record.
+
+#### A -- Where the product now exists
+
+| Platform | Handle | State |
+|---|---|---|
+| TikTok | `@timestamptapes` | first tape posted 2026-09-09 19:49; **0 views after 20 h, no status tag** |
+| YouTube | `@PaulGanganapalli` (his portfolio channel, CONVERTED) | the 16:9 reel as trailer; the Amalfi Short **160 views overnight** from a 3-subscriber channel |
+| Instagram | `@timestamptapes` (his dormant `ro_cky7214`, renamed) | Creator account; the Reel; a pinned four-card introduction carousel |
+| X | `@timestamptapes` (his empty account, renamed) | profile complete; the Amalfi tape, site in the first reply |
+
+**THE 160 AGAINST THE 0 IS THE FINDING.** Same file, same day: YouTube's Shorts feed
+tested it on strangers within hours; TikTok, on a day-old account with the "Your brand"
+promotional label, showed it to nobody and marked nothing. The plan is the second post,
+and if that is also at zero after 24 h, the third goes up without the promotional label
+as the one variable.
+
+#### B -- Rulings, so they are not re-derived per post
+
+- **Location = the place the tape shows**, never where he is. **AI label ON** everywhere
+  it exists (TikTok, Instagram, YouTube's altered-content question); the mp4's Art. 50
+  tags are not C2PA, so no platform auto-labels. **Disclose post content = "Your brand"**
+  on TikTok when the caption names the product, never "Branded content". **Audience
+  controls OFF. Everyone. No added sound** -- the bed is the artefact, the promotional
+  label limits him to the commercial library anyway, and the tape's audio becomes an
+  "original sound" others can reuse. **Not made for kids.** Comments, Duet, Stitch on.
+- **X: caption on the post, the site in the first reply**, no hashtags.
+- **Instagram captions cannot carry a clickable link**; "link in bio" is the mechanism.
+- **Boost / paid promotion declined**, twice: no organic signal to put money behind, and
+  every paid click costs a $0.75 free tape on top.
+- **The YouTube channel was converted, not duplicated, at the owner's insistence** after
+  the case for a separate brand channel (two audiences; unofficial real-brand spec ads
+  beside a paid product) was made and set aside. Name and handle stay; the thirteen spec
+  ads stay; no "Spec commercials" playlist (skipped for good).
+- **Directories, checked on 2026-09-10 rather than remembered:** There's An AI For That is
+  **$49 one-time** for a permanent basic listing (worth it, his call, pending);
+  **Futurepedia is $497** with no free tier (no). §77B/§82F called both "worth real
+  effort" before either had a price attached. Product Hunt waits for a week of tapes,
+  Hacker News for the ffmpeg write-up, Reddit for the account to age.
+- **A cold email offering "NSFW-capable Seedance" and free credits** (Gmail sender, no
+  company, no URL, hours after the channel description went live) is scraped outreach;
+  the offer is disqualifying on its own for a product that names its processors. Archive,
+  do not reply. His email is public in the channel description now, so expect more.
+
+#### C -- Assets built (all gitignored, `build/banner/` and `build/igpost/`)
+
+- `youtube-banner-12.0.jpg` 2560x1440, text inside YouTube's 1546x423 safe area, from the
+  12.0 s frame of the 1080p hero tape scaled 1.72x and cropped so the face sits left and
+  the words right; `x-header-1500x500.jpg` cut from it. **The 14 s ending frame failed
+  first: the face sits above the mobile strip.** The face is horizontally centred in
+  EVERY frame (the arc keeps the person in the picture), so a banner from a tape is
+  always a crop, never a scale.
+- `youtube-avatar-tape.png` (his face from the tape's last frame, used on YouTube) and
+  `youtube-avatar-ts-800.png` (the lime tile, used on TikTok, Instagram and X).
+- `build/igpost/card-1..4.png`, 1080x1350: the tape + wordmark, how it works, the
+  before/after pair, the ask. Instagram's grid trims 4:5 to 3:4 top-aligned and cut the
+  first card's wordmark to "IMESTAMP" on the profile tile; a wider-margin card was
+  rendered and **the owner chose to keep the posted one -- do not raise it again.**
+- `build/banner/make.sh` and `build/igpost/make.sh` are ffmpeg drawtext over the site's
+  own palette and fonts (`anton.ttf`, Inter TTFs converted from the woff2 with fontTools).
+
+#### D -- Things that will bite
+
+- **YouTube Studio's Customisation page has two tabs now, Profile and Home tab.**
+  "Branding", "Basic info" and "Layout" are the old names and the owner could not find
+  them. Reading his screen over computer-use (Chrome at read tier, screenshots only) is
+  what got him unstuck; it works and is cheap.
+- **Instagram's username and name are changed in Accounts Centre**, not on the web Edit
+  Profile page; the bio link can only be added from the phone app. A blank
+  `instagram.com/challenge/` page is the identity check failing to render after a Gmail
+  login link; close the tab.
+- **TikTok's "Content check lite" errored and then hung.** It is optional; post without it.
+- **YouTube's upload defaults cannot default the altered-content answer**; it is asked
+  per upload. Everything else (description, tags, Public, category) defaulted correctly,
+  proved on the Short.
+- **`grep -c` at the end of a pipeline exits 1 on zero matches** and makes a green suite
+  read red; `node --test` summary lines begin with a Unicode info mark, not `#`.
+- **The chat-rendered image is smaller than the file.** An image saved from the chat and
+  uploaded as a banner failed YouTube's minimum; paste the file path into the dialog.
 
 ---
 
