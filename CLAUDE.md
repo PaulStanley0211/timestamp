@@ -7,7 +7,9 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-10) — **§84 IS THE LAUNCH: THE TAPE IS ON FOUR PLATFORMS AND THE YOUTUBE CHANNEL IS CONVERTED; NO CODE CHANGED.** THEN §83 FIRST, THEN §82, §81, §80 AND §79. **NOTHING GATES A LAUNCH AND THE GATE HAS NOW BEEN WALKED BY A PERSON.** THEN §78, §77, §76, §75 AND §74.
+## START HERE (2026-09-10, evening) — **§85 IS THE LAUNCH PLAN: A PRODUCT HUNT DATE (TUE 22 SEPT, 09:01 BERLIN), PINTEREST LIVE, AND THE RESEARCH THAT OVERTURNED THE OBVIOUS TARGETS. NO CODE CHANGED.** THEN §84, §83, §82, §81, §80 AND §79. **NOTHING GATES A LAUNCH AND THE GATE HAS BEEN WALKED BY A PERSON.** THEN §78, §77, §76, §75 AND §74.
+
+**§85 IS MARKETING AND ACCOUNTS, NOT CODE — the box, local and `origin/supabase-identity-slice` are all still on `413dd49` plus docs, and the suite is untouched at 2215 / 2211 / 0 / 3.** Its one finding worth reading even if you skip the rest: **the communities that love the VHS look ban AI content in their written rules**, so five obvious subreddits are refusals (r/OldSchoolCool, r/nostalgia, r/VHS, r/LiminalSpace, r/InternetIsBeautiful), and **Pinterest — which was on nobody’s list of 67 — is now live and claimed.** Every asset lives in gitignored `build/ph/`, `build/dir/` and `build/pin/`.
 
 **THE BOX RUNS `413dd49`** — §83, and local and `origin/supabase-identity-slice` are on
 it too.
@@ -11975,3 +11977,231 @@ is hosted on the provider's own domain.
 ~~Face detection at intake~~ — **no longer deferrable**, and as of 2026-09-07 it is BUILT and switched OFF: `scripts/safety/face-detect-aws.mjs`, §74. It was deferred for a CLI Paul ran on his own photos. The product takes uploads from strangers, so it is required, along with the consent gate, retention limits and takedown path. **The gap between "built" and "running" is one AWS agreement**, and until it closes a customer can still upload anything at all and be charged for a tape of a stranger.
 
 **A second paid provider.** `fixtureProvider` is a genuinely different implementation exercised by the same conformance test, which is what makes the interface an abstraction rather than a wrapper with optimism. Replicate would buy vendor-risk insurance, not interface validation.
+
+---
+
+### 85. THE LAUNCH PLATFORMS: A PRODUCT HUNT DATE, AND THE RESEARCH THAT OVERTURNED THE OBVIOUS TARGETS (2026-09-10, evening)
+
+**NO CODE CHANGED AND NOTHING WAS DEPLOYED.** The box, local and
+`origin/supabase-identity-slice` are all still at `413dd49` plus the two docs commits;
+suite untouched at 2215 / 2211 / 0 / 3. Everything below is accounts, research and
+assets, and every asset lives in **gitignored `build/`** on purpose.
+
+The session was meant to be "post the next tape" and the owner redirected it twice:
+first to launch platforms rather than social posts, then to *"which platforms are best
+for my tool"* rather than the directory list. Both redirections were right and the
+second one produced the most useful finding in this section.
+
+#### A -- PRODUCT HUNT: THE ACCOUNT EXISTS AND THE DATE IS TUESDAY 22 SEPTEMBER
+
+`producthunt.com/@paulstanley` (#10230261), created this evening, verified from
+outside: name "Paul Stanley Ganganapalli", headline **"Founder of Timestamp"**, the
+ffmpeg bio, his face from the Times Square tape, LinkedIn and `@timestamptapes` linked.
+
+**LAUNCH: TUESDAY 22 SEPTEMBER 2026, 09:01 Europe/Berlin (= 00:01 PT).** He pushed
+three times to go sooner -- today, then Friday, then Saturday -- and then **did his own
+research and pulled it back himself.**
+
+**HIS RESEARCH BEAT MY ADVICE AND THE CORRECTION IS THE POINT.** I told him warm-up was
+"marginal, do not wait for it". That was wrong. Checked against Product Hunt's own
+pages: **they document no minimum account age anywhere**, but they DO document that
+accounts flagged as **brand or company accounts** are blocked from posting, commenting
+and voting, and that an unrestricted account needs a real first and last name, a clear
+photo of the person, and a bio that reads as an individual. **His account passes that by
+luck of how it was set up** -- had he used the lime logo and "Timestamp" as the name he
+would likely have been flagged. The widely-repeated "wait one week" figure is NOT in
+PH's docs; it is consistent across third-party guides and is not worth testing with a
+one-shot launch. The 22nd gives twelve days and lands on the strongest weekday.
+
+**The one hard argument against launching same-day, for whoever meets this again:** the
+24-hour cycle starts at 00:01 PT, so launching at 18:00 Berlin gives you 15 hours
+against everyone else's 24. That is arithmetic, not taste.
+
+**THE KIT IS BUILT, in gitignored `build/ph/`:** `make.sh` (five composed 1270x760
+gallery cards in the site's palette, a 240x240 static and animated-GIF thumbnail),
+`shot.mjs` (CDP captures of the live landing and pricing pages and the offline order-form
+preview, at exactly 1270x760), `video.sh` (the launch video), and `copy.md` -- every
+form field at PH's real limits, read off their own page rather than remembered: tagline
+36 of 60, description 492 of 500, three launch tags, thumbnail square 240x240 under 3 MB
+with GIFs animating on hover, at least two gallery images at 1270x760, **video is a
+YouTube link only**, schedule up to a month ahead. Plus the first comment, the answers to
+the comments that will come, and the day-of watch list.
+
+**THE LAUNCH VIDEO IS 21 SECONDS AND ITS AUDIO IS DELIBERATELY NOT THE PRODUCT'S.** The
+source photograph for 2.5s, a hard cut, the full 16:9 Times Square tape, then the lime
+end card. **The bed is lifted +11 dB to -15.9 LUFS.** The render pipeline bans `loudnorm`
+because a synthesised bed's level is known a priori and -27 LUFS is the spec -- that
+ruling is about the PRODUCT. This is a marketing asset played once in a browser, where
+-27 LUFS is inaudible and the hiss and capstan whine are half of what is being sold. A
+fixed gain, not loudnorm, so it stays predictable. The Art. 50 disclosure tags were
+asserted to have survived the re-encode rather than assumed.
+
+**A DEFECT IN THE FLAGSHIP ASSET, KNOWN AND SHIPPED ANYWAY.** That tape's burnt-in stamp
+reads `14 JUL 2002 18:16` over a plainly night-time Times Square; mid-July in New York,
+18:16 is broad daylight. That is exactly §83C's defect, and the fix only reaches future
+renders -- this tape is from 5 September. Re-rendering would give a different tape rather
+than the one he picked as his strongest. Recommendation given and taken: ship it.
+
+**A DAILY WARM-UP REMINDER IS SCHEDULED** because he asked for one and said he would
+forget: routine `trig_01H3p4J6ZtCQarEL9q5zTsmy`, 08:00 UTC (10:00 Berlin), first fire
+11 September. It counts down, names the day's task, and changes its message on 19 Sept
+(build the launch page), 21 Sept (be at the keyboard 09:00-13:00) and after 23 Sept
+(disable me). **It does not disable itself** -- that is at `claude.ai/code/routines`.
+
+#### B -- THE 67-PLATFORM LIST, SORTED AND PRICED
+
+§82F sorted it; this session priced fourteen of them and re-checked liveness. Written up
+in gitignored `build/dir/tracker.md`, with every paste-ready field in `build/dir/submit.md`.
+
+**26 of the 67 are worth doing, 5 carry all the weight, 9 are dead.**
+
+**Worth an hour, all free:** Future Tools (`futuretools.io/submit-a-tool`, the best free
+one -- no queue fee, no badge demand, reviewed by hand, consumer audience), Microlaunch,
+TinyLaunch, Aixploria, and Toolify (free queue, real traffic, heaviest form on the list --
+300 words plus use cases).
+
+**Worth money, one item: There's An AI For That, $49** one-time. The only directory whose
+visitors are ordinary people searching rather than makers hunting backlinks. Their $437
+newsletter tier and $2,000 PPC floor are refusals. **Futurepedia is $497 with no free
+tier and was declined.**
+
+**REFUSED, AND THE REASON IS STRUCTURAL RATHER THAN TASTE.** Fazier, dang.ai and Startup
+Fame give a free listing **only if you put their badge on timestamptapes.com** -- that is
+a directory buying your domain authority with a page nobody visits, and it means editing
+the live site for their benefit. BetaList has no free option any more (~$29-39, plan
+shown only at the final step) and curates *pre-launch* products, so you would pay to be
+told you are the wrong stage. OpenTools hides its price behind a signup wall. Peerlist is
+a network for developers and designers. **AppSumo, PitchGround, Dealify, StackSocial and
+SaasGang are lifetime-deal marketplaces against a $0.75 marginal cost -- permanent
+refusal, and correct anyone who proposes them.**
+
+#### C -- THE FINDING THAT MATTERS MOST: THE COMMUNITIES THAT LOVE THE LOOK BAN THE TOOL
+
+Full write-up in gitignored `build/dir/platforms.md`. The owner asked for platforms where
+his AUDIENCE is rather than where tools get listed, and the answer inverts the obvious
+targets.
+
+**Five subreddits that look perfect are refusals, each on a written rule:**
+
+| Subreddit | Members | The rule |
+|---|---|---|
+| **r/OldSchoolCool** | 19.6M | Rule 1: nothing from 2000 or later. Rule 6: real people, real photographs. **Posting a synthetic 1999 tape there is passing off a fake memory to 19 million people, not a rules technicality** |
+| **r/nostalgia** | 1.6M | Rule 4 bans posts to websites; Rule 9 bans personal social media |
+| **r/VHS** | 117K | Rule 4: "No AI Generated Content" |
+| **r/LiminalSpace** | 1.2M | Rule 7 bans AI, Rule 4 bans self-promotion, Rule 5 bans people in images |
+| **r/InternetIsBeautiful** | 16.6M | Rule 10 bans AI; **Rule 5 bans freemium services by name** |
+
+Rules came from archived snapshots dated Oct 2025 - Jan 2026. **Re-read the sidebar on
+the day.**
+
+**THE RULE THE WHOLE EXERCISE PROVES: the closer a community is to loving the VHS
+aesthetic, the more likely it bans AI; the closer it is to loving AI video, the less
+likely it holds a customer. The buyers are in an algorithmic feed, not a community.**
+
+**r/aivideo (392K) is the only safe Reddit door**, verbatim: *"SELF PROMOTION FOR CONTENT
+IS ABSOLUTELY FINE IN THE COMMENTS OF YOUR OWN VIDEO"*, and *"ANYONE CAN SUBMIT, EVEN NEW
+ACCOUNTS"* -- no karma or age gate. **But Rule 5 bans deepfakes and this product renders a
+real, identifiable person**: his own face only, named in the title, tools named, one video
+a day, link only in his own comment, and a resubmitted removal is an instant ban.
+
+**Skip Bluesky** -- 10.4M monthly users and **shrinking 52% over 18 months**, with an
+audience hostile to AI art. Skip Snapchat and Lemon8 (no discovery surface). **Facebook
+nostalgia groups: message ONE admin first, never batch-post** -- nothing about them could
+be verified from outside and admins ban instantly with no appeal.
+
+**Two worth a separate decision. Etsy** is the only channel that reaches people already
+holding a wallet; AI digital goods are allowed **with disclosure** and no "handmade"
+claim; and **gifting is the one use case with natural repeat demand** -- you want one tape
+of yourself, but "my dad in 2003, for his birthday" recurs annually. **Garbage Day**
+(79K subscribers, reads reader replies twice a week) is an open door, but its author
+writes sceptically about AI slop, so the only angle that survives contact is the
+anti-slop one: the look is hand-built in ffmpeg *precisely because* asking a model for
+"VHS 2003" returns clean footage with a nostalgic mood.
+
+#### D -- PINTEREST IS LIVE, AND IT WAS ON NOBODY'S LIST OF 67
+
+`pinterest.com/timestamptapes`, a free **business** account on
+`support@timestamptapes.com`. **631M monthly users, 42% Gen Z, and it is a visual SEARCH
+engine rather than a feed**: 96% of top searches are unbranded, so people find you by
+typing "y2k aesthetic" rather than by following you; a Pin lasts months where a post
+lasts a day; **and it is the only platform whose entire model is sending people to your
+own site**, so linking your product is the intended use rather than a violation.
+
+Set up: the lime tile, the 114-character bio, **the Imprint field pointing at
+`/impressum` rather than retyping the address**, two-factor on, and **phone and
+retail-location left blank on purpose** -- both would publish his home address a second
+time.
+
+**THE TOGGLE THAT WOULD HAVE KILLED IT SILENTLY:** Profile visibility carries "hide your
+profile and boards from search engines". Both toggles are OFF. Left on, the Pins still
+work inside Pinterest and every bit of the search traffic the platform exists for never
+arrives.
+
+**CLAIMED BY DNS TXT, chosen over the meta tag so no code change or deploy was needed:**
+`pinterest-site-verification=c0f97ba0f80c7ac7cdf0d69127947d34` added at the Cloudflare
+apex as a **third** record. **The real risk in that step is overwriting the SPF record**,
+which is what makes `support@` forward; verified on the authoritative nameserver
+afterwards that SPF and the Google Search Console record both survived. Pinterest
+normalises the website field to `http://` whatever is typed -- harmless, the box answers
+308 to https, measured rather than assumed.
+
+**THE PINTEREST TAG WAS DECLINED AND SHOULD STAY DECLINED.** It is ad-conversion tracking
+and he runs no ads. Installing it would cost a hole in the hash-based CSP (which admits
+no third-party script at all today), a new processor on `/privacy`, and extra cookies on
+a site whose privacy page says it sets exactly three -- which is why it needs no cookie
+banner. Three of the site's better properties traded for analytics on ads nobody is
+buying. Revisit only if he ever buys Pinterest ads.
+
+**Five public boards, named for what people search rather than for the product:** Y2K
+aesthetic · VHS and camcorder · 2000s nostalgia · Places in 2003 · Before and after.
+
+**TEN PINS AT 1000x1500 IN `build/pin/`, AND THE DESIGN RULE IS THE INTERESTING PART.**
+They carry **no logo and no lime panel**; six of the ten have nothing on them but a
+burnt-in date stamp in the tape's own OSD face. **A Pin that looks like an advertisement
+is scrolled past; one that looks like the aesthetic is SAVED, and a save is what makes it
+keep being found for months. The Pin's LINK does the selling, not the image.** Three
+posted on the day, 2-3 a day thereafter -- all ten at once from a new account reads as
+spam. Per-Pin titles and descriptions are keyword-written for search in
+`build/pin/pinterest.md`; do not shorten them.
+
+**Every Pin is marked "AI modified" on purpose.** Pinterest classifies AI content anyway
+by reading image metadata, the mp4s already carry Art. 50 disclosure, and **a
+self-applied label is a disclosure where a platform-applied one after silence is a
+credibility problem.** The cost is real -- viewers can choose "show fewer AI Pins" -- and
+it was taken knowingly. **Expect nothing for two to three weeks**; Pinterest indexes new
+accounts slowly and that is not failure.
+
+#### E -- Things that will bite
+
+- **A CDP CLIP IS IN DOCUMENT COORDINATES, SO A CLIP AT y=0 AFTER A SCROLL CAPTURES THE
+  TOP OF THE PAGE.** §80C recorded this and it caught me again in `build/ph/shot.mjs`:
+  three of nine captures came back as identical 17 kB rectangles of flat ground. Under a
+  device-metrics override the default capture IS the viewport, so **take no clip at all**.
+- **`vstack` and `hstack` DEFAULT TO TWO INPUTS.** A three-row contact sheet needs
+  `vstack=inputs=3` or ffmpeg refuses with "More input link labels specified for filter
+  'vstack' than it has inputs".
+- **THE SHELL'S CWD PERSISTS BETWEEN TOOL CALLS**, so a `cd build/ph` leaves every later
+  relative path resolving from there. §74F already records this; it fired again.
+- **A `$` IN AN ffmpeg `drawtext` INSIDE A SHELL SCRIPT NEEDS ESCAPING** or the price card
+  reads "from 12 dollars" because somebody worked around it rather than escaping it.
+- **THE COPY DEFECT CLASS FROM §76E RECURRED IN A DRAFT and was caught before shipping:**
+  prose written in a codebase whose comments spell an em dash as `--` will carry `--` into
+  rendered output where nothing converts it. Read rendered marketing copy as a reader,
+  not as a diff.
+
+#### F -- What is left
+
+**HIS, in order:** three more Pins tomorrow and the last four the day after; the five free
+directory forms (one hour, Future Tools first); the **$49 There's An AI For That
+decision**; five minutes of Product Hunt warm-up daily, now reminded automatically; and
+**19 September, when the launch page gets built and scheduled**.
+
+**Then 22 September, 09:01 Berlin: launch, and at the keyboard until about 13:00** --
+the first four hours decide the ranking and every comment wants an answer within minutes.
+**Hacker News last**, after Product Hunt, and only with the engineering framing; it needs
+the ffmpeg write-up drafted first, which was offered and not yet taken up.
+
+**Unchanged and older:** the Times Square tape still to go out on the four social
+accounts, the launch video still to be uploaded to YouTube (Product Hunt takes a YouTube
+link only), fal's usage page for the 2026-09-02 refusals, and the Hetzner disk backup
+toggle.
