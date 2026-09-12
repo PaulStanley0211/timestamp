@@ -7,9 +7,9 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-12, afternoon) -- **§89 FIRST: THE FIRST OUTSIDE PROFESSIONAL SAID THE SITE'S COPY "REEKS OF MACHINE". IT DID. REWRITTEN IN THE OWNER'S OWN VOICE, DEPLOYED AT `12920f0`, VERIFIED BY BYTES.** THEN §88.
+## START HERE (2026-09-12, afternoon) -- **§89 FIRST: THE FIRST OUTSIDE PROFESSIONAL SAID THE SITE'S COPY "REEKS OF MACHINE". IT DID. REWRITTEN IN THE OWNER'S OWN VOICE, DEPLOYED AT `12920f0` (PUBLIC PAGES) AND `9a72e56` (SIGNED-IN PAGES, §89G), VERIFIED BY BYTES.** THEN §88.
 
-**The box, local and `origin/supabase-identity-slice` are all on `12920f0`; suite 2224 / 2221 / 0 / 3, guards 7/7.** Matt Muir of Web Curios replied to the one pitch the owner wrote himself: a no on editorial grounds, and the advice that the copy was AI-written and wordy. Measured against the live pages it was: eight comma-triads, zero contractions, the product defined by what it is not, one 62-word disclosure sentence. **Nineteen lines, three Google descriptions and the unsent Product Hunt draft were rewritten to the owner's own pitch as the voice sample**, he read every line aloud, and it shipped the same afternoon. **The design was not what Matt was pointing at and was not touched.**
+**The box, local and `origin/supabase-identity-slice` are all on `9a72e56`; suite 2225 / 2221 / 0 / 3, guards 7/7.** Matt Muir of Web Curios replied to the one pitch the owner wrote himself: a no on editorial grounds, and the advice that the copy was AI-written and wordy. Measured against the live pages it was: eight comma-triads, zero contractions, the product defined by what it is not, one 62-word disclosure sentence. **Nineteen lines, three Google descriptions and the unsent Product Hunt draft were rewritten to the owner's own pitch as the voice sample**, he read every line aloud, and it shipped the same afternoon. **The design was not what Matt was pointing at and was not touched.**
 
 **Three things worth carrying:** a guard that anchors on a sentence breaks in every place that sentence is pinned, so grep the tests for the literal before rewording prose (§89C); a copy deploy is invisible to the CSP fingerprint and is proved by stripping the live page (§89C); and gstack's browse binary runs on this machine again, so §55F is stale (§89D). **Still his: the two-line thank-you to Matt, in his words.** Offered and not taken: the same rewrite on the signed-in pages, and `/impeccable critique /` against the new copy.
 
@@ -12966,9 +12966,54 @@ launch video onto YouTube before 16-17 Sept, the Product Hunt page on 19 Sept, l
 22 Sept at 09:01 Berlin. TikTok's average watch time on the Tokyo tape against Times Square's
 1.79 s is still the number to read.
 
-**AGENT-BUILDABLE, offered and not taken up:** the same rewrite on the signed-in pages (the
-order form, status, result and every error message still speak the old "It is" register, and a
-paying customer reads those most); `/impeccable critique /` for a scored list of what a
-designer would change, to be run against the NEW copy rather than the old; and `/impeccable
-init` to bring PRODUCT.md up to the current record. **Not a redesign:** the look was chosen
-six days ago, is not what Matt was pointing at, and ten days before launch is the wrong week.
+**AGENT-BUILDABLE, offered and not taken up:** `/impeccable critique /` for a scored list of
+what a designer would change, to be run against the NEW copy rather than the old; and
+`/impeccable init` to bring PRODUCT.md up to the current record. **Not a redesign:** the look
+was chosen six days ago, is not what Matt was pointing at, and ten days before launch is the
+wrong week. ~~The same rewrite on the signed-in pages~~ **taken up and shipped the same
+afternoon, §89G.**
+
+#### G -- The signed-in pages, the same afternoon (`9a72e56`, deployed)
+
+**2225 / 2221 / 0 / 3 with one new guard; pushed and deployed; local, origin and the box all
+on `9a72e56`.** The owner asked for the same pass on the pages a customer reads after signing
+in. They were in better shape than the landing: the phase rows and the eleven step
+descriptions were already short and stay as they are. What moved is narrower, seventeen
+lines: em dashes doing the work of full stops, "you are" and "there is" where a person says
+"you're" and "there's", two negatives ("nothing is thrown away", "not this row"), and
+**two sentences that printed a literal `--` on the page** (`/account` and `/onboarding`),
+the §76E defect in prose rather than in a description. All seventeen read aloud by him.
+
+**The guard:** no rendered page may carry `--` in its visible text (scripts, styles and tags
+stripped; entities left alone). Written first; it went red naming onboarding and quoting
+the sentence. **The account page was not in `renderedPages()` at all**, which is how its
+`--` had been invisible to every sweep since the page was built (§23's rule, wearing a fifth
+costume); it is in the list now and nothing else went red when it joined. Two pins moved,
+both asserted with the escaped apostrophe (`you&#39;ve got`) because the lines go through
+`h()`. **Sabotage:** a ` -- ` put back into each of the two sentences turned the guard red
+naming its page, exit code read, `views-auth.mjs` restored byte-identical from a copy.
+
+**Left alone, on purpose:** the consent checkbox (legal, guarded), the credit note (derived
+from the ledger), the 480p and 1080p cards, the refusal messages the pipeline writes ("That
+photo does not look like a photo of a person" is what the owner saw on the live gate, §82A;
+a contraction there touches the pipeline and its tests for nothing), and the sign-in five,
+which are not signed-in pages.
+
+**Verified the §83D way**, because nothing here is reachable without a session:
+`docker compose exec -T web grep -cF` for three new sentences (1, 1, 1) and two old ones
+(0, 0) inside the running web container, `COPY . .` fresh, web healthy at 18 s, 0 restarts,
+0 FATAL; from outside, health ok, six public pages 200, `/videos` and `/account` 303, and
+the morning's landing copy still served.
+
+**Two things that bit:**
+
+- **The full-suite run had one red, the landing-band pixel sweep, at `Page.captureScreenshot
+  got no answer in 15000ms`** (§80's residual). It ran straight after the sabotage's two
+  Chrome-spawning `web-static` runs, which is §78F's own warning; alone it was green in 32 s,
+  on a page this commit does not touch. Recorded, not weakened.
+- **The §71 `build/shot-*.mjs` scripts capture whatever is at `127.0.0.1:3400`**, the static
+  preview server (launch config `preview`), not the dev server. Run against nothing, every
+  one "succeeded" and produced Chrome's connection-refused page, **twelve PNGs of identical
+  byte size per width**. A screenshot script's success line is not evidence of the page;
+  identical file sizes across different pages are the tell. Start `preview`, re-render the
+  `build/preview-*.html` files, then shoot.
