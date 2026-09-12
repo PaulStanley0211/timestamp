@@ -383,6 +383,52 @@ test('a documented lookOverride merges its values and not its documentation', ()
 });
 
 // ---------------------------------------------------------------------------
+// the fields a composer reads
+// ---------------------------------------------------------------------------
+
+test('a place that states its own white balance still carries it after validation', () => {
+  // THE PASS-THROUGH GUARD, and unlike the `passersby` one in
+  // test/compose-prompt.test.js this field was already over the edge it guards.
+  // validatePlace returns a FIXED SHAPE, so a field a preset writes and this
+  // function does not name reads back `undefined` for ever -- and
+  // compose/prompt.mjs has documented `whiteBalanceK` as the escape hatch since
+  // it was written ("a preset that needs something else sets `whiteBalanceK`
+  // and this defers to it"). It reaches the delivered prompt on the live path,
+  // as `White balance ${kelvin}K, held across every shot`, so the hatch being
+  // shut is a scene unable to state its own colour temperature at all.
+  const stated = validatePlace(aPlace({ whiteBalanceK: 5600 }), { id: 'p1', baseLook: base });
+  assert.equal(stated.whiteBalanceK, 5600,
+    'the value was set in the preset and lost on the way through the validator');
+
+  const silent = validatePlace(aPlace(), { id: 'p1', baseLook: base });
+  assert.equal(silent.whiteBalanceK, undefined,
+    'a place that never stated a colour temperature came back carrying one');
+});
+
+test('a white balance that is not a plausible colour temperature is refused', () => {
+  // A LOST OR AN EXTRA DIGIT IS THE FAILURE THIS EXISTS FOR. 3900 is a scene;
+  // 390 and 39000 are typos, and either goes into the prompt verbatim as
+  // "White balance 39000K, held across every shot" -- an instruction no model
+  // can obey, that no assertion downstream can see, and that costs a paid
+  // render to notice. The bounds are a sanity check and not a taste one:
+  // roughly candlelight at the bottom and the bluest sky at the top, so every
+  // real scene passes and a dropped or doubled digit does not.
+  for (const bad of ['5600', null, true, NaN, Infinity, 3900.5, 390, 39000, 0, -3900]) {
+    assert.throws(
+      () => validatePlace(aPlace({ whiteBalanceK: bad }), { id: 'p1', baseLook: base }),
+      PresetError,
+      `whiteBalanceK ${JSON.stringify(bad)} was accepted`,
+    );
+  }
+  for (const good of [1000, 2800, 3900, 5600, 20000]) {
+    assert.equal(
+      validatePlace(aPlace({ whiteBalanceK: good }), { id: 'p1', baseLook: base }).whiteBalanceK,
+      good,
+      `whiteBalanceK ${good} is a real colour temperature and was refused`,
+    );
+  }
+});
+// ---------------------------------------------------------------------------
 // the templates
 // ---------------------------------------------------------------------------
 

@@ -24,7 +24,7 @@ import { getOutfit, getPlace, loadCatalog } from '../scripts/catalog/catalog.mjs
 import { scanText } from '../scripts/catalog/schema.mjs';
 import { LENS_OVERRIDES, NEUTRAL_PLACE } from '../scripts/expand/local.mjs';
 import {
-  BASE_NEGATIVES, COMPOSED_BAN_GROUPS, DEFAULT_ERA, MOTION_NEGATIVES, SUBJECT,
+  BASE_NEGATIVES, CAMCORDER_MOVES, COMPOSED_BAN_GROUPS, DEFAULT_ERA, MOTION_NEGATIVES, SUBJECT,
   composeMotionPrompt, composeStillPrompt, composeReferencePrompt, REFERENCE_SUBJECT,
 } from '../scripts/compose/prompt.mjs';
 
@@ -801,6 +801,50 @@ test('a place that declares passersby still carries the flag after validation', 
     'the flag was set in the preset and lost on the way through the validator');
   assert.notEqual(getPlace(catalog, 'kuechentisch-fruehstueck').passersby, true,
     'a place that never declared passersby came back with them');
+});
+
+test('the camera move is the caller\'s to set and never the place\'s', () => {
+  // THE OTHER HALF OF THE PASS-THROUGH FINDING ABOVE, SETTLED THE OTHER WAY.
+  // `whiteBalanceK` is now carried through validatePlace because the prompt
+  // genuinely needs it; `place.cameraMove` is not, because this mechanism has
+  // been superseded where it mattered. So the read is gone rather than wired
+  // up, and this is the guard that stops it being reintroduced as a preset
+  // field nobody validates.
+  //
+  // The explicit parameter stays: it is the live, caller-facing seam, and it
+  // is the one this composer's own signature has always documented.
+  const walked = composeMotionPrompt({ place, outfit, cameraMove: 'walk' }).prompt;
+  assert.ok(walked.includes(CAMCORDER_MOVES.walk), 'the caller asked to walk and the prompt drifts');
+
+  const declaring = { ...place, cameraMove: 'walk' };
+  const ignored = composeMotionPrompt({ place: declaring, outfit }).prompt;
+  assert.ok(ignored.includes(CAMCORDER_MOVES.drift),
+    'a place set the camera move through a field no validator checks');
+  assert.ok(!ignored.includes(CAMCORDER_MOVES.walk),
+    'a place set the camera move through a field no validator checks');
+});
+
+test('no camcorder-move sentence reaches the reference prompt', () => {
+  // THE SHOT LIST OWNS THE CAMERA ON THIS PATH, and that is a measured ruling
+  // rather than a tidy-up. CAMCORDER_MOVES.drift reads "the operator standing
+  // in one place and breathing" -- which is verbatim what this function's own
+  // camera clause used to say, and what the comment above that clause records
+  // the model obeying exactly on the first direct run. It was replaced by a
+  // camera that walks ahead of the subject; the local that fed the old clause
+  // outlived it by a few commits.
+  //
+  // THE CLAUSE THAT REPLACED IT IS ASSERTED FIRST, AND ON PURPOSE: an absence
+  // is satisfied by an empty string, a stubbed composer or a renamed constant,
+  // so a test that only asserts one can pass having proved nothing. Prove the
+  // camera is described, then prove it is not described this way.
+  for (const arc of ['three', 'six']) {
+    const { prompt } = composeReferencePrompt({ place, outfit, arc });
+    assert.match(prompt, /The camera keeps ahead of them throughout/,
+      `${arc}: the clause that replaced the camcorder move is gone too`);
+    for (const [name, move] of Object.entries(CAMCORDER_MOVES)) {
+      assert.ok(!prompt.includes(move), `${arc}: the "${name}" camcorder move is back in the reference prompt`);
+    }
+  }
 });
 
 test('something besides the subject is moving in every tape', () => {

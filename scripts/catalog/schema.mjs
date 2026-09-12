@@ -319,6 +319,40 @@ function assertOptionalBoolean(raw, key, { kind, id }) {
   return value;
 }
 
+/** The bounds a scene's colour temperature has to sit inside to be a scene.
+ *
+ *  A SANITY CHECK AND NOT A TASTE ONE: roughly candlelight at the bottom and
+ *  the bluest open sky at the top, so every real interior and every real
+ *  daylight passes. What it is here to catch is a dropped or a doubled digit
+ *  -- 390 or 39000 where 3900 was meant -- because that number is interpolated
+ *  straight into the prompt and there is no assertion downstream that can see
+ *  it. The first thing to notice would be a paid render coming back the wrong
+ *  colour. */
+const KELVIN_RANGE = Object.freeze({ min: 1000, max: 20000 });
+
+/** An optional colour temperature in Kelvin, absent-means-absent, and REFUSED
+ *  rather than coerced when it is anything else.
+ *
+ *  `undefined` is returned for a place that states none, because the composer's
+ *  own `Number.isFinite` test is what then falls back to the climate table --
+ *  a zero or a NaN standing in for "not stated" would be finite enough to beat
+ *  that fallback and quiet enough never to be noticed. */
+function assertOptionalKelvin(raw, key, { kind, id }) {
+  const value = raw[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isInteger(value)
+    || value < KELVIN_RANGE.min || value > KELVIN_RANGE.max) {
+    throw new PresetError(
+      `${kind} "${id}" field "${key}" must be a whole number of Kelvin between ${KELVIN_RANGE.min} `
+      + `and ${KELVIN_RANGE.max}, got ${JSON.stringify(value)}. It is written into the prompt as it `
+      + 'stands, so a dropped or an extra digit is a render in the wrong colour and nothing before '
+      + 'that render can tell.',
+      { kind, id, key },
+    );
+  }
+  return value;
+}
+
 /** Every dotted leaf path in a partial LookProfile override. Arrays are leaves,
  *  because mergeLook() replaces an array wholesale rather than merging into it
  *  -- a preset saying "these tears" means instead of, never as well as. */
@@ -439,10 +473,19 @@ export function validatePlace(raw, { id, baseLook } = {}) {
     //
     // CARRIED EXPLICITLY, AND THAT IS THE POINT: this function returns a FIXED
     // SHAPE, so a field written into a preset and not named here is read back
-    // `undefined` for ever. `whiteBalanceK` and `cameraMove` are both read by
-    // compose/prompt.mjs and neither is carried below, so both of those
-    // branches are already dead for every place loaded through the catalog.
+    // `undefined` for ever. That note used to end by observing that
+    // `whiteBalanceK` and `cameraMove` were both read by compose/prompt.mjs
+    // and neither was carried -- true when it was written, and the line below
+    // is half of the fix. The other half was to stop reading `cameraMove`
+    // there at all: see the camera clause in composeReferencePrompt, which
+    // replaced that whole mechanism on the live path.
     passersby: assertOptionalBoolean(raw, 'passersby', { kind, id }),
+    // THE SCENE'S OWN COLOUR TEMPERATURE, when the climate is too coarse to
+    // state it -- a neon crossing at night and a kitchen at dawn are both
+    // `mild` and `indoor` to the compatibility check and nothing like each
+    // other to a camera. Absent means absent, and the composer falls back to
+    // the climate table.
+    whiteBalanceK: assertOptionalKelvin(raw, 'whiteBalanceK', { kind, id }),
     lookOverride: assertLookOverride(raw.lookOverride ?? {}, baseLook, { kind, id }),
   };
   return Object.freeze(place);

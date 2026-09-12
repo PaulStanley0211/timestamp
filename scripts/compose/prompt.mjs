@@ -90,9 +90,33 @@ export const CAMCORDER_MOVES = Object.freeze({
  *
  * The skill's rule is that a scene has ONE colour temperature and says so --
  * "warm light" is a mood, 3900K is an instruction. This is a first
- * approximation off the preset's `climate`; a preset that needs something
- * else (a tungsten stairwell, a fluorescent swimming hall) sets
- * `whiteBalanceK` and this defers to it.
+ * approximation off the preset's `climate`; a preset that needs something else
+ * sets `whiteBalanceK` and this defers to it.
+ *
+ * THAT DEFERRAL ONLY STARTED WORKING ON 2026-09-12. validatePlace returns a
+ * fixed shape and had never carried `whiteBalanceK`, so the sentence above
+ * described a capability no place could reach: every scene took the table,
+ * whatever it wrote in its own file. The two examples this comment used to
+ * name -- a tungsten stairwell and a fluorescent swimming hall -- were both
+ * retired from the catalogue before the field they were cited to justify was
+ * ever carried through.
+ *
+ * AND THE TABLE IS NARROWER THAN THE SCALE IT IS KEYED ON, WHICH IS A SEPARATE
+ * AND STILL-OPEN PROBLEM. CLIMATES is [cold, cool, mild, warm, indoor] and
+ * this has two of those five, so `cool`, `mild` and `indoor` all miss and fall
+ * through to `warm`. Measured against the seven shipped places on 2026-09-12:
+ * five of seven are handed 3900K, including two night scenes whose own `light`
+ * fragment says "cold white" -- Times Square (`cool`) and Tokyo (`mild`) --
+ * while `cold: 6000` is now unreachable, because no shipped place is `cold`.
+ *
+ * FILLING THE THREE GAPS IS A LOOK CHANGE AND IS NOT MADE HERE. It would move
+ * the stated colour temperature of four of the seven live places at once, and
+ * what those numbers should be is a judgement about how the tapes should look
+ * rather than a defect with a correct answer -- the owner's call, and one that
+ * wants a paid render beside it. What this file can honestly do is stop the
+ * per-place override being impossible, which is the line below plus the
+ * carry-through in validatePlace. A place that the table gets wrong can now
+ * say so itself.
  */
 export const WHITE_BALANCE_K = Object.freeze({ warm: 3900, cold: 6000 });
 
@@ -355,7 +379,15 @@ export function composeMotionPrompt({ place, outfit, segment = 1, totalSegments 
     throw new TypeError(`segment must be an integer in 1..${totalSegments}, got ${JSON.stringify(segment)}`);
   }
 
-  const move = CAMCORDER_MOVES[cameraMove ?? place.cameraMove] ?? CAMCORDER_MOVES.drift;
+  // THE CALLER'S TO SET, AND NOBODY ELSE'S. This read `cameraMove ??
+  // place.cameraMove` until 2026-09-12, and the second half of that had never
+  // once been reachable: validatePlace returns a fixed shape and has never
+  // carried a `cameraMove`, so every place loaded through the catalog answered
+  // `undefined` and every tape drifted. Removed rather than wired up, because
+  // the path that matters went the other way -- see the camera clause in
+  // composeReferencePrompt, which replaced this mechanism outright after
+  // measuring what it produced.
+  const move = CAMCORDER_MOVES[cameraMove] ?? CAMCORDER_MOVES.drift;
   const kelvin = Number.isFinite(place.whiteBalanceK)
     ? place.whiteBalanceK
     : (WHITE_BALANCE_K[place.climate] ?? WHITE_BALANCE_K.warm);
@@ -439,7 +471,10 @@ export const ARCS = Object.freeze(['six', 'three']);
 export const DEFAULT_ARC = 'three';
 
 export function composeReferencePrompt({
-  place, outfit, placePhoto = false, era = DEFAULT_ERA, seconds = 15, cameraMove = null, arc = DEFAULT_ARC,
+  // NO `cameraMove` HERE, DELIBERATELY. It was accepted and ignored: the shot
+  // list and the camera clause below own the camera on this path, and a
+  // parameter a function cannot act on is a capability that does not exist.
+  place, outfit, placePhoto = false, era = DEFAULT_ERA, seconds = 15, arc = DEFAULT_ARC,
 } = {}) {
   requirePreset(place, 'place', ['id', 'label', 'timeOfDay', 'motionHint',
     ...['scene', 'light', 'lens', 'framing'].map((f) => `prompt.${f}`)]);
@@ -447,7 +482,6 @@ export function composeReferencePrompt({
   if (!isNonEmptyString(era)) throw new TypeError('era must be a non-empty string');
   if (!ARCS.includes(arc)) throw new TypeError(`arc must be one of ${ARCS.join(', ')}, got ${JSON.stringify(arc)}`);
 
-  const move = CAMCORDER_MOVES[cameraMove ?? place.cameraMove] ?? CAMCORDER_MOVES.drift;
   const kelvin = Number.isFinite(place.whiteBalanceK)
     ? place.whiteBalanceK
     : (WHITE_BALANCE_K[place.climate] ?? WHITE_BALANCE_K.warm);
