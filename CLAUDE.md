@@ -19,6 +19,8 @@ Warm, grainy, quiet.
 
 **NEXT is dated and unchanged: the launch video onto YouTube before 16-17 Sept** (Product Hunt takes a link, not a file), **the Product Hunt page on 19 Sept, launch Tuesday 22 Sept at 09:01 Berlin**, five minutes of warm-up daily, follow-ups on the 18th and 19th. **Still his: the two-line thank-you to Matt in his own words; two or three friends' waist-up photographs, which is the binding constraint; the 513 Instagram follows; and the $49 There's An AI For That decision.**
 
+**AND §91 IS THE RULING ON GOING OUT FOR MORE OUTREACH LEADS: NOT YET, and the reason is the reply clock rather than the size of the list.** The 46 messages are a test of the WORDING as much as of the list, and one reply out of 46 after a day is an unfinished measurement; another fifty now means learning the wording is wrong with 96 contacts burned instead of 46. **Three items in the list he already has are unworked and cost minutes each**, and the one genuine gap is TikTok and Instagram creators -- the platforms the nostalgia audience actually lives on, and the ones the research tool could not reach -- at about a pound through Apify, waiting on his yes since the 11th.
+
 ## (the banner below is 2026-09-12, afternoon)
 
 ## START HERE (2026-09-12, afternoon) -- **§89 FIRST: THE FIRST OUTSIDE PROFESSIONAL SAID THE SITE'S COPY "REEKS OF MACHINE". IT DID. REWRITTEN IN THE OWNER'S OWN VOICE, DEPLOYED AT `12920f0` (PUBLIC PAGES) AND `9a72e56` (SIGNED-IN PAGES, §89G), VERIFIED BY BYTES.** THEN §88.
@@ -13226,3 +13228,65 @@ the verdict was read, both files restored from a `cp` copy and compared with
 declined in the design. One place authored well beats two that drift, and
 neither is where a person is actually stopped. The order form is where the
 refusal happens and where somebody is standing when it does.
+
+---
+
+### 91. MORE OUTREACH LEADS IS NOT THE NEXT MOVE, AND WHY (2026-09-12, evening)
+
+**No code and nothing deployed.** The owner asked whether to go out and find
+more leads. The answer given and accepted is recorded here so it is not
+re-argued in three days, which is the week it would otherwise come back.
+
+#### A -- THE 46 ARE A TEST OF THE WORDING, NOT ONLY OF THE LIST
+
+They went out on 11 and 12 September (§87). Cold replies land over three to
+seven days, so **one reply out of 46 -- Matt Muir's no, §89 -- is an unfinished
+measurement rather than a result.** The rate becomes readable around 15-16
+September, which is also when the launch video is due.
+
+**That is the whole argument, and it is about cost rather than patience.**
+Sending another fifty before the first batch reports means finding out the
+wording is wrong with **96 contacts burned instead of 46**, on a list of people
+who can only be cold-mailed once. The messages are personalised one at a time
+from the owner's own Gmail, so a second wave inside one week also raises the
+spam risk on the address every reply has to come back to.
+
+#### B -- THE LIST HE HAS IS NOT EMPTY, and all three items cost minutes
+
+- **Kat Marie's Instagram DM** (`@kvtmvrie`, profile confirmed live), written
+  and never sent.
+- **The seven check-first contacts.** Their contact could not be confirmed
+  because YouTube started bot-blocking this machine mid-round, and bypassing
+  that check was refused rather than worked around (§87C). Each needs a minute
+  on the creator's own channel.
+- **The seven held back**, two of them behind the parked body-shape fix
+  (§76C), the rest on fit.
+
+#### C -- THE ONE REAL GAP IS TIKTOK AND INSTAGRAM, AND IT COSTS ABOUT A POUND
+
+**The 46 skew heavily to YouTube channels and newsletters**, and that is an
+artefact of the tooling rather than a judgement: agent-reach could not reach
+TikTok, Instagram, X or Reddit without its browser extension connected and
+logged in, and TikTok is not one of its platforms at all (§86G). Using the
+owner's own logged-in session was advised against, because it puts
+`@timestamptapes` at risk of being flagged.
+
+**So the creators most likely to care are precisely the ones nobody has
+searched.** §81F's correction says the demonstrated audience for AI nostalgia
+video is on Instagram and TikTok, not on the platforms the list is full of. The
+no-login route is an Apify keyword scrape --
+`memo23/tiktok-search-scraper` (~$0.0005 a result, follower counts included) and
+`toolzerhub/instagram-user-search-scraper` (~$0.003 a profile, **its email
+add-on left OFF**) -- under a dollar for both, and it has been waiting on the
+owner's yes since 2026-09-11.
+
+#### D -- AND THE CONSTRAINT UNDERNEATH ALL OF IT IS STILL FACES
+
+Every creator who says yes needs a tape. Every tape costs $0.75 and a real
+person who has consented. **There is one face**, and 264 credits is about five
+more 720p tapes of the same man. A hundred more leads does not change that
+number; two friends' photographs do.
+
+**Follow-ups are unchanged: one each, non-repliers only, from 18 September for
+round 1 and 19 September for round 2.** Expect rate cards from the sponsored
+channels; the answer is always credits to test, never a paid feature.
