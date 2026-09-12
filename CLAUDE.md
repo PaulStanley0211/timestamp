@@ -9,9 +9,11 @@ Warm, grainy, quiet.
 
 ## START HERE (2026-09-12, afternoon) -- **§89 FIRST: THE FIRST OUTSIDE PROFESSIONAL SAID THE SITE'S COPY "REEKS OF MACHINE". IT DID. REWRITTEN IN THE OWNER'S OWN VOICE, DEPLOYED AT `12920f0` (PUBLIC PAGES) AND `9a72e56` (SIGNED-IN PAGES, §89G), VERIFIED BY BYTES.** THEN §88.
 
-**The box, local and `origin/supabase-identity-slice` are all on `9a72e56`; suite 2225 / 2221 / 0 / 3, guards 7/7.** Matt Muir of Web Curios replied to the one pitch the owner wrote himself: a no on editorial grounds, and the advice that the copy was AI-written and wordy. Measured against the live pages it was: eight comma-triads, zero contractions, the product defined by what it is not, one 62-word disclosure sentence. **Nineteen lines, three Google descriptions and the unsent Product Hunt draft were rewritten to the owner's own pitch as the voice sample**, he read every line aloud, and it shipped the same afternoon. **The design was not what Matt was pointing at and was not touched.**
+**The box is on `9a72e56`; local and `origin/supabase-identity-slice` carry three docs commits on top (`013d9b4` and after), no served byte. Suite 2225 / 2221 / 0 / 3, guards 7/7.** Matt Muir of Web Curios replied to the one pitch the owner wrote himself: a no on editorial grounds, and the advice that the copy was AI-written and wordy. Measured against the live pages it was: eight comma-triads, zero contractions, the product defined by what it is not, one 62-word disclosure sentence. **Nineteen public lines, three Google descriptions and the unsent Product Hunt draft were rewritten to the owner's own pitch as the voice sample (§89A-F), then seventeen signed-in lines the same way (§89G)**; he read every line aloud, and both shipped the same afternoon. **The design was not what Matt was pointing at and was not touched.**
 
-**Three things worth carrying:** a guard that anchors on a sentence breaks in every place that sentence is pinned, so grep the tests for the literal before rewording prose (§89C); a copy deploy is invisible to the CSP fingerprint and is proved by stripping the live page (§89C); and gstack's browse binary runs on this machine again, so §55F is stale (§89D). **Still his: the two-line thank-you to Matt, in his words.** Offered and not taken: the same rewrite on the signed-in pages, and `/impeccable critique /` against the new copy.
+**AND THE NUMBER §88 WAS AIMED AT IS IN (§89H): TikTok average watch went 1.79 s to 2.47 s on the face-first opening; watched-to-the-end stayed at ~1%.** The opening is fixed and the middle is not, because nothing in the clip tells a stranger it was one photograph. **The next test is the reveal cut** (the photo for 0.7 s, a hard cut, the tape) and `build/social/face-first.sh` does it now with `--photo` and `--gain`, proved on three runs. One variable per post, midnight Berlin from now on, a tape every two days, friends' photographs this week. Instagram is follower-gated (13 views; 14 followers, 513 follows still not trimmed) and YouTube Shorts is bursty (37); TikTok is the instrument.
+
+**Three things worth carrying:** a guard that anchors on a sentence breaks in every place that sentence is pinned, so grep the tests for the literal before rewording prose (§89C); a copy deploy is invisible to the CSP fingerprint and is proved by stripping the live page, or by grepping the running container for pages that need a session (§89C, §89G); and a screenshot script's success line is not evidence of the page, identical file sizes across pages are the tell (§89G). Also: gstack's browse binary runs on this machine again, so §55F is stale (§89D). **Still his: the two-line thank-you to Matt, in his words; the 513 Instagram follows; two or three friends' waist-up photographs.** Offered and not taken: `/impeccable critique /` against the new copy, and `/impeccable init` for PRODUCT.md.
 
 ## (the banner below is 2026-09-12, late the previous night)
 
@@ -12358,7 +12360,7 @@ Square with it** -- a near-duplicate. Optional: TikTok's own on-screen text in t
 second ("this is one photo of me"), added in-app so the file stays clean elsewhere.
 
 **Parked product idea:** every customer who posts their tape hits the same 1.8 s wall. A
-"face-first cut for sharing" download on the result page would give it to them. Not now.
+"face-first cut for sharing" download on the result page would give it to them. Not now. **§89H: the reveal cut is the test that decides it; if completion moves from ~1% to 5%+, this gets built.**
 
 #### F -- Instagram and quality
 
@@ -12837,7 +12839,7 @@ check that only looks afterwards passes vacuously on a source that never had one
 posted cut is lifted **+11 dB to -16.5 LUFS** with the video stream COPIED, so the
 picture takes no second generation. Fixed gain, never `loudnorm`, for the reason
 `bed.mjs` already gives. Same decision as §85A's launch video; **it is a marketing asset,
-not a change to the render contract.** Not folded into the script yet.
+not a change to the render contract.** ~~Not folded into the script yet.~~ **Folded in as `--gain`, with the photo pre-roll, §89H.**
 
 #### J -- What is left
 
@@ -12851,7 +12853,7 @@ from 18 September (round 1) and 19 September (round 2).
 **NEW, AND SMALL:** the Tokyo tape is posted on YouTube (`3Xemf4pXPeI`, AI badge verified
 **signed out**, link clickable in the description), TikTok, Instagram and X. **The number
 to read is TikTok's average watch time against Times Square's 1.79 s** -- that single
-figure is what this whole section was aimed at. The owner's Instagram profile still shows
+figure is what this whole section was aimed at. **READ THE NEXT DAY, §89H: 2.47 s, up from 1.79; watched-to-the-end 1.2%, unchanged. The opening is fixed, the middle is not.** The owner's Instagram profile still shows
 **14 followers / 513 following** from the renamed personal account, which is what every
 reel viewer lands on.
 
