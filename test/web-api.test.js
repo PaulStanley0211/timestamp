@@ -525,7 +525,7 @@ test('the free text is not behind a disclosure any more', async () => {
     // And the outfit step keeps ITS disclosure -- this change is about the
     // place step only, so an assertion that passed by deleting every <details>
     // on the page would be measuring the wrong thing.
-    assert.ok(html.includes('Or describe what you are wearing'),
+    assert.ok(html.includes("Or describe what you're wearing"),
       'the outfit step lost its own aside, which was not the ask');
   });
 });
@@ -957,7 +957,8 @@ test('a balance between the two prices warns about the dear one only', async () 
       '480p is still affordable, so the button must not be dead');
     assert.ok(html.includes('why--q-720p-a-4x3'), 'the 720p 4:3 warning is rendered');
     assert.ok(!html.includes('why--q-480p-a-4x3'), 'and the 480p 4:3 one is not, because it is affordable');
-    assert.ok(html.includes('a 720p 4:3 tape costs ~152 CR and you have 100 CR'));
+    // The apostrophe is asserted ESCAPED: the line goes through h().
+    assert.ok(html.includes('A 720p 4:3 tape costs ~152 CR and you&#39;ve got 100 CR'));
     // AND THE WARNING FOLLOWS THE SHAPE. 480p at 4:3 costs 51 and is affordable
     // at 100 CR; the same tier at 9:16 costs 68 and is also affordable -- but
     // 720p at 9:16 costs 203, so the warning has to exist for a pair that the

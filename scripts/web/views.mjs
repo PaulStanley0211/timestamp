@@ -708,7 +708,7 @@ export const INLINE_SCRIPT_HASHES = Object.freeze(
  */
 export const RESOLUTION_COPY = Object.freeze({
   '480p': 'Cheaper. Slightly softer, because it sits just under the tape’s own resolution.',
-  '720p': 'The native fit — nothing is thrown away.',
+  '720p': 'The native fit. Everything the tape can hold.',
   '1080p': 'Nothing gained over 720p: the tape discards everything above its own raster.',
 });
 
@@ -1667,7 +1667,7 @@ export function homePage({
     const credits = r.creditsByAspect?.[a.id];
     if (!Number.isFinite(credits) || balance.credits >= credits) return '';
     return `<span class="why why--${h(qualitySlug(r.id))}-${h(aspectSlug(a.id))}">${
-      h(`Not enough credits — a ${r.id} ${a.id} tape costs ~${credits} CR and you have ${balance.credits} CR.`)
+      h(`Not enough credits. A ${r.id} ${a.id} tape costs ~${credits} CR and you've got ${balance.credits} CR.`)
     }</span>`;
   })).join('');
 
@@ -1701,7 +1701,7 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
 <form id="tape" method="post" action="/api/jobs" enctype="multipart/form-data">
 
   <section class="panel panel--anchor">
-    ${stepHead(1, 'Your photo', 'Uploaded once, kept in your library — the person in every tape.')}
+    ${stepHead(1, 'Your photo', 'Uploaded once, kept in your library. The person in every tape.')}
     <label class="drop" for="photo">
       <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp" required>
       <span class="plus">+ Add photo</span>
@@ -1726,7 +1726,7 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
   </section>
 
   <section class="panel panel--choice" id="look">
-    ${stepHead(2, 'The look', 'Only what is on the body — the place carries everything else.')}
+    ${stepHead(2, 'The look', "Only what's on the body. The place carries everything else.")}
     <div class="looks">${lookCards}</div>
     ${/* THE BOX IS OUT OF ITS DISCLOSURE (2026-09-05), and that is what makes a
          five-card menu honest rather than narrow.
@@ -1753,8 +1753,7 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
          already-selected radio, passing every markup test ever written. Typing
          is therefore read as the only available way to say "none of these". */''}
     <div class="aside">
-      <p class="hint">Or describe what you are wearing — anything you type here is
-      used instead of the card above.</p>
+      <p class="hint">Or describe what you're wearing. Anything you type here wins over the card above.</p>
       <input type="text" name="outfitText" maxlength="200" autocomplete="off" spellcheck="false"
              aria-label="Describe what you are wearing"
              ${/* THE PLACEHOLDER NAMES SOMETHING THAT IS NOT A CARD, on purpose.
@@ -1785,8 +1784,8 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
          it rides on is unchanged; what changed is that its condition is now
          true when the page arrives. No JavaScript, exactly as before. */''}
     <div class="ownplace">
-      <p class="hint">A photograph of the place &mdash; your actual back garden, the kitchen
-      you remember. Used as a second reference alongside your face.</p>
+      <p class="hint">A photo of the place: your actual back garden, the kitchen you remember.
+      It goes in as a second reference next to your face.</p>
       ${/* §43D CLOSED. This was a bare native "Choose File" sitting directly
            across from step 1's designed dropzone, and it was left that way
            deliberately: .drop hides its real input at opacity 0 and names the
@@ -1801,7 +1800,7 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
         <span class="plus">+ Add a photo of the place</span>
         <span class="chosen-name" id="place-photo-name"></span>
       </label>
-      <p class="hint or-describe">Or describe it, if you have no photograph of it.</p>
+      <p class="hint or-describe">Or describe it, if you don't have a photo.</p>
       <input type="text" name="placeText" maxlength="200" autocomplete="off" spellcheck="false"
              aria-label="Describe the place"
              placeholder="my grandmother&#39;s kitchen" value="${h(values.place)}">
@@ -1814,8 +1813,7 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
          block and moves the carousel dot, with no JavaScript anywhere. It is
          the way BACK now rather than the way in, because a radio group cannot
          be cleared any other way. */''}
-    <p class="hint escape">No photograph of it, and nothing in mind? Start from one of
-      these instead &mdash; or come back to
+    <p class="hint escape">Nothing in mind? Start from one of these, or come back to
       <label class="linky" for="pl-own">your own place</label> at any point.</p>
 
     ${/* TWO CARDS IN ONE SLOT, AND EXACTLY ONE OF THEM IS EVER IN THE RAIL
@@ -1869,9 +1867,9 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
 
     <p class="eyebrow">Quality</p>
     <div class="quality">${qualityCards}</div>
-    <p class="hint">Every option delivers the same file &mdash; the frame above decides its size,
-    not this row. What changes is how much detail exists before the tape, and the tape
-    works at 576 lines on its short edge, so above that there is nothing left to keep.</p>
+    <p class="hint">Every option comes back as the same file; the frame above decides its size.
+    This row decides how much detail goes in before the tape, and the tape keeps 576 lines,
+    so anything above that is lost anyway.</p>
 
     <label class="check">
       <input type="checkbox" id="consent" name="consent" value="yes" required>
@@ -1900,7 +1898,7 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
     <button type="submit" class="record" id="record"${brokeEntirely ? ' disabled' : ''}>&#10685; Record the tape</button>
     </div>
     ${brokeEntirely
-    ? `<p class="reason">${h(`Not enough credits — the cheapest tape costs ~${cheapest} CR and you have ${balance.credits} CR.`)}</p>`
+    ? `<p class="reason">${h(`Not enough credits. The cheapest tape costs ~${cheapest} CR and you've got ${balance.credits} CR.`)}</p>`
     : `<p class="reason" id="reason">Upload a photo first</p>${
   creditWarnings ? `
     <p class="reason">${creditWarnings}</p>` : ''}`}
@@ -1932,7 +1930,7 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
     : '<p class="hint"><a class="linky" href="/videos">My videos</a></p>'}` : `
   <div class="empty">
     <p class="title">The shelf is empty</p>
-    <p>Pick a photo, a look, and a place above &mdash; your first tape lands here.</p>
+    <p>Pick a photo, a look and a place above, and your first tape lands here.</p>
   </div>`}
 </section>
 </main>
@@ -2042,7 +2040,7 @@ export function videosPage({ account = null, balance = null, tapes = [], retenti
 <main class="videos">
   <p class="eyebrow eyebrow--osd">The shelf</p>
   <h1 class="headline">My videos</h1>
-  <p class="sub">Every tape you have made. Press play to watch one here, or download it.</p>
+  <p class="sub">Every tape you've made. Press play to watch one here, or download it.</p>
   <p class="hint">${h(Number.isFinite(retentionDays) && retentionDays > 0
     ? `Finished tapes are kept for ${retentionDays} days. Download the ones you want to keep.`
     : 'Every finished recording lands here.')}</p>
@@ -2050,7 +2048,7 @@ export function videosPage({ account = null, balance = null, tapes = [], retenti
   ${tapes.length ? `<div class="shelf">${tapes.map(videoTile).join('')}</div>` : `
   <div class="empty">
     <p class="title">No videos yet</p>
-    <p>Make your first tape and it lands here &mdash; <a class="linky" href="/">start one</a>.</p>
+    <p>Make your first tape and it lands here. <a class="linky" href="/">Start one</a>.</p>
   </div>`}
 </main>
 `;
@@ -2141,7 +2139,7 @@ export function statusPage({ view, account = null, labels = {} }) {
        the poller has to be able to bring them back: see the alert and the
        credit note below, which carry the same idiom for the same reason. */''}
   <p class="sub" id="waitnote"${stillComing(view.status) ? '' : ' hidden'}>A few minutes, most of them in the middle phase. You can close this page and
-  come back &mdash; the tape carries on without you.</p>
+  come back. The tape carries on without you.</p>
   <p class="hint" id="waitspec"${stillComing(view.status) ? '' : ' hidden'}>Fifteen seconds of tape, 375 frames.</p>
 
   ${''/* Both surfaces ALWAYS exist, hidden while empty: the poller repaints
@@ -2373,7 +2371,7 @@ export function resultPage({ view, account = null, labels = {}, tapes = [], rete
            meets the content, not only in file metadata a browser never shows.
            The file-side half is the provenance tags in scripts/audio/mix.mjs.
            It stays VISIBLE and it stays on this page. */''}
-      <p class="fine">Made with AI &mdash; a generative model built this scene from your photograph. It did not happen.</p>
+      <p class="fine">Made with AI. A generative model built this scene from your photo. It did not happen.</p>
     </div>
   </div>
   ${earlier.length ? `

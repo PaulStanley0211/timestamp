@@ -283,6 +283,11 @@ function renderedPages() {
       }],
     })],
     ['videos-empty', videosPage({ account: { email: 'a@b.com' }, retentionDays: 30, tapes: [] })],
+    // The account page was missing from this list until 2026-09-12, which is
+    // how a literal "--" in its prose survived every sweep here (§23's rule).
+    ['account', accountPage({
+      account: { email: 'a@b.com' }, balance: { credits: 43 }, csrf: 'x', cheapest: { id: '480p', credits: 21 },
+    })],
     ['error', errorPage({ status: 404, title: 'Not found' })],
     ['auth-unavailable', authUnavailablePage()],
     ['identity-unavailable', identityUnavailablePage()],
@@ -477,8 +482,8 @@ test('a field sits on the ground inside a card, outlined from the token; a banne
   // both ways: "A field inside a card recesses to the ground; a field on the
   // ground lifts to the card." Steps 2 and 3 are the arc's light panels --
   // transparent, so their surface IS the ground -- and each carries a free-text
-  // field: "Or describe what you are wearing", "Or describe it, if you have no
-  // photograph of it." Recessed there, a field is ground on ground with nothing
+  // field: "Or describe what you're wearing", "Or describe it, if you don't have
+  // a photo." Recessed there, a field is ground on ground with nothing
   // to say it is a field but a 1px line at 0.14 alpha. Its own sibling the slim
   // dropzone already lifts for exactly this reason.
   const open = /\n\.panel--choice\s*\{([^}]*)\}/.exec(css);
@@ -692,6 +697,28 @@ test('no page promises the still-approval gate that direct mode deleted', () => 
     for (const claim of PRE_APPROVAL) {
       assert.ok(!claim.test(html),
         `${name} still promises a pre-approval gate (${claim}); the paid path is direct and approves nothing`);
+    }
+  }
+});
+
+test('no page prints a literal double hyphen in its visible text', () => {
+  // THE §76E DEFECT, ON A PAGE INSTEAD OF IN A DESCRIPTION. Comments in this
+  // codebase spell an em dash "--" because the character is avoided there, and
+  // the habit reaches prose that is rendered: /account and /onboarding both
+  // shipped a bare "--" in a sentence a customer reads (found 2026-09-12).
+  // Nothing turns it into a dash on the way out. The sweep reads what a person
+  // sees: scripts, styles and tags stripped, entities left alone (an &mdash;
+  // is not a double hyphen, and neither is a job id's single one).
+  for (const [name, html] of renderedPages()) {
+    const visible = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ');
+    const hit = /--/.exec(visible);
+    if (hit) {
+      const at = hit.index;
+      const around = visible.slice(Math.max(0, at - 40), at + 40).replace(/\s+/g, ' ');
+      assert.fail(`${name} prints a literal "--" in its text: ...${around}...`);
     }
   }
 });

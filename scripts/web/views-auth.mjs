@@ -364,8 +364,8 @@ export function onboardingPage({ account = null, consentText = '', csrf = '', er
   <section class="panel">
     <p class="eyebrow">One more thing</p>
     <h1 class="headline">Confirm before you continue</h1>
-    <p class="sub">Your account is open, but this service still needs the same agreement
-    everyone gives before their first photo -- and yours was not on file.</p>
+    <p class="sub">Your account is open, but we still need the same agreement everyone
+    gives before their first photo, and yours wasn't on file.</p>
 
     ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
 
@@ -428,15 +428,15 @@ export function accountPage({ account, balance = null, csrf = '', error = null, 
   ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
 
   <h2 class="subhead subhead--osd">Your data</h2>
-  <p class="sub">One JSON document: your account record, your credit history, and the
-  order details of every tape on your shelf. The tapes themselves are on the shelf --
-  download any of them there.</p>
+  <p class="sub">One JSON file: your account record, your credit history and the order
+  details of every tape on your shelf. The tapes themselves stay on the shelf; download
+  any of them there.</p>
   <p><a class="go" href="/api/account/export" download>Export your data</a></p>
 
   <h2 class="subhead subhead--osd">Delete this account</h2>
-  <p class="sub">Your photo, your tapes, your credit history and your sign-in are deleted
-  together, immediately, everywhere this service keeps them. There is no undo and nothing
-  to restore from. If a tape is still rendering, cancel it first.</p>
+  <p class="sub">Your photo, your tapes, your credit history and your sign-in all go at once,
+  everywhere this service keeps them. There's no undo. If a tape is still rendering, cancel
+  it first.</p>
 
   ${/* THE ONE-WAY DOOR IN A NARROW COLUMN, so the field and the button read as
        one control and the button cannot stretch to the width of the prose. */''}
