@@ -7,6 +7,18 @@ Warm, grainy, quiet.
 
 ---
 
+## START HERE (2026-09-12, late) -- **§88 FIRST: THE TAPE SHOWED THE BACK OF THE SUBJECT'S HEAD FOR SEVEN OF FIFTEEN SECONDS BECAUSE OUR OWN PROMPT SAID "CAMERA FOLLOWING A STEP BEHIND". FIXED, DEPLOYED, AND MEASURED AT ONE SECOND.** THEN §87 AND §86.
+
+**The box, local and `origin/supabase-identity-slice` are all on `ba1da9c`; suite 2224 / 2221 / 0 / 3, guards 7/7.** Two commits: `db79ea0` puts the camera in front of the subject, timecodes the beats, lets a place declare that strangers cross behind it, and adds micro-motion; `ba1da9c` carries `whiteBalanceK` through the validator and deletes the dead `cameraMove` branch. **Both were proved on a real 720p 9:16 Tokyo tape the same night: back down from ~7s to ~1s, features legible from second 1 instead of second 12, people in the street, no black bars.**
+
+**THE ONE FINDING WORTH READING IF YOU SKIP THE REST IS §88H's FIRST BULLET: a guard can pass against the very defect it was written for.** The camera test matched `/behind\s+them/` and the broken line said "a step **behind and** swinging round" -- adverbial, no pronoun -- so it went GREEN when the real defect was restored. Only the sabotage found it. **And two sabotage harnesses reported false passes the same session**, one by not closing a file before running the test and one by decoding node's output as cp1252 so the `✖` marks never matched, while `returncode` had been 1 throughout. **Drive a sabotage off the exit code.**
+
+**§88D is a correction to this file: Wan's lack of a `negative_prompt` was believed on a note written about SEEDANCE** and never re-checked after the 2026-09-02 supplier change. Read off fal's schema page now and settled -- there is none, so the ~40 composed negatives really are inert and **everything in a prompt must be phrased as something to render.**
+
+**NEXT is dated and unchanged: the launch video onto YouTube before 16-17 Sept, the Product Hunt page on 19 Sept, launch Tuesday 22 Sept at 09:01 Berlin.** The Tokyo tape is posted on all four surfaces; **the number to read is TikTok's average watch time against Times Square's 1.79 s.** **The binding constraint is still faces, not platforms** -- 264 credits is five more tapes of the same man until a friend sends a photograph.
+
+## (the banner below is 2026-09-12, earlier)
+
 ## START HERE (2026-09-12) — **§87 FIRST: FORTY-SIX OUTREACH MESSAGES WENT OUT IN TWO DAYS, AND FOUR OF THE RESEARCH AGENTS' QUOTES DID NOT EXIST IN THE CAPTIONS THEY CAME FROM. NO CODE CHANGED, NOTHING DEPLOYED.** THEN §86.
 
 **The box, local and `origin/supabase-identity-slice` are still on `413dd49` plus docs; the suite is untouched at 2215 / 2211 / 0 / 3.** The owner asked for "around 50" creators after the first eight, so four research agents ran in parallel and **46 messages went to 46 outlets and creators**, each one handed over for him to paste and send himself. **The two gitignored files are the record:** `build/dir/outreach-send.md` (8) and `build/dir/outreach-send-2.md` (41, plus 7 check-first and 7 held back), both with a log table.
@@ -12599,3 +12611,241 @@ because Product Hunt takes a link and not a file, the Product Hunt page built an
 constraint is still faces, not platforms:** every tape costs $0.75 and needs a real person who
 has consented, so launch week wants photographs from two or three friends rather than more
 tapes of the same man.
+
+
+---
+
+### 88. THE CAMERA WAS BEHIND THE SUBJECT BECAUSE THE PROMPT SAID SO (2026-09-12)
+
+**2215 / 2211 -> 2224 / 2221 pass / 0 fail / 3 skipped.** Two commits, `db79ea0` (this
+work) and `ba1da9c` (the chip it spawned), both test-first, every guard sabotage-verified
+and restored from a `cp` copy, all seven `guards.yml` steps run verbatim and COUNTED 7/7
+before each commit and the message guard re-run after. **PUSHED AND DEPLOYED: local,
+`origin/supabase-identity-slice` and the box are all at `ba1da9c`.**
+
+**THE OWNER FOUND IT THE WAY HE HAS FOUND EVERY PICTURE DEFECT IN THIS PROJECT: BY
+WATCHING HIS OWN TAPE.** His words -- *"every minute he is roaming here and there ...
+showing his back, not the face"*, and *"each and every second should be very dramatic"*.
+
+#### A -- WHAT THE TAPE MEASURED, BEFORE
+
+Job delivered 2026-09-12, Tokyo, read one frame per second off the delivered file the
+§53 way:
+
+| | |
+|---|---|
+| Hard cuts | **0** -- one continuous take, the three-beat arc behaving as designed |
+| Seconds in frame | **15 of 15** -- §53's absence problem is genuinely gone |
+| Seconds showing his BACK | **~4s to ~10s, a solid 7-second block, about 45%** |
+| Features legible from | **~12s**, landing at 14-15s |
+| Shape | **4:3** -- he took the default, so it delivered matted with black bars |
+
+**HE WAS RIGHT AND THE MEASUREMENT SAID EXACTLY WHERE: the middle.**
+
+#### B -- THE CAUSE WAS OUR OWN PROMPT, FOR THE THIRD TIME
+
+`beatsThree[0]` read, verbatim:
+
+> `Wide. Walking in at the near edge and looking around the whole place -- <motionHint> --
+> camera **following a step behind** and swinging round to stay with them.`
+
+Beat 2 then said *"camera moving round to keep them in frame"* -- an orbit, which is the
+profile and three-quarter-back at 6-10s. Beat 3, *"Turning back toward the lens"*, is why
+the face only arrived at 12s.
+
+**The model did exactly what it was told. That is the third time on this project that
+"read the prompt before blaming the model" has been the answer** (the first two are §17's
+`Nothing dramatic happens` and §19's `deep focus`).
+
+#### C -- FOUR CHANGES, AND ALL OF THEM ARE PHRASED POSITIVELY
+
+1. **The camera leads.** `camera ahead of them and moving backwards at their pace,
+   keeping them turned toward the lens`, on BOTH arcs, plus one sentence on the camera
+   clause: *"The camera keeps ahead of them throughout, leading them through the place."*
+   A person filming a friend walks backwards in front of them, which is also
+   period-honest.
+2. **Timecoded beats**, `Shot 1: 0-5s.` and so on, **derived by `beatWindows(seconds,
+   count)` and never written down** -- a shorter runtime drops the middle beat, so a
+   hardcoded 0-5/5-10/10-15 would hand the model a budget that does not add up to the
+   clip it is making, and the count is not knowable until after the slice.
+3. **Strangers, gated per place.** `Exactly one person in frame` was **not** Tokyo's
+   preset -- it was one line in the composer applying to every place, which is why Times
+   Square was deserted too. A place now declares `passersby: true` and only then do
+   strangers cross, *"further back going about their own business, none of them near the
+   lens"*. Set on Tokyo, Times Square, the space centre and the Amalfi harbour; the
+   kitchen, the living room and the garden keep the one-person line. Tokyo's scene also
+   lost the word `empty` so the scene and the flag agree.
+4. **Micro-motion**, the fourth layer: *"Everything in shot is alive: their clothes
+   moving as they move, and the place going on behind them."* Clothes rather than hair,
+   because `hair` is banned vocabulary under rule 1.
+
+**WHY THE ONE-PERSON LINE IS GATED RATHER THAN LOOSENED.** It is a GUARD -- it is what
+stops the model putting a second face in a tape whose entire product is the first one,
+and identity is the failure no downstream check can catch. A busy crossing earns its way
+out of it; a kitchen table does not.
+
+#### D -- WAN HAS NO NEGATIVE CHANNEL, AND THAT WAS BELIEVED ON STALE EVIDENCE UNTIL TODAY
+
+This file has asserted it since §74D. **The note it came from was written about
+SEEDANCE** -- `fal.mjs`'s header says "Seedance 2.0 has no `negative_prompt` parameter",
+and `config/models.json`'s copy of the claim sits in the
+`bytedance/seedance-2.0/image-to-video` entry. **Nobody re-checked it when the product
+moved to Wan on 2026-09-02**, and the Wan entry records it nowhere.
+
+**Read off fal's own schema page on 2026-09-12 and now settled.** The endpoint accepts
+`prompt`, `resolution`, `aspect_ratio`, `duration`, `audio`, `enable_prompt_expansion`,
+`enable_thinking`, `seed`, `enable_safety_checker`, `reference_image_urls`,
+`reference_video_urls`, `reference_audio_urls`, `file_url`, `web_url`. **No
+`negative_prompt`.** So the ~40 composed negatives genuinely never reach the model, and a
+prohibition written into the prompt is its own subject in the conditioning.
+
+**OUR OWN COUNTER-EXAMPLE IS THE REASON TO TAKE THIS SERIOUSLY:** the screen clause
+(*"never on a television screen, in a mirror..."*) is a prohibition, and §60H records the
+six-beat arc putting the reference photograph on a television anyway.
+
+**`reference_video_urls` AND `reference_audio_urls` EXIST AND ARE UNUSED.** Recorded
+because nobody has looked at what they would buy.
+
+#### E -- THE FIXED-SHAPE TRAP, LIVE IN A SECOND PLACE
+
+**`validatePlace` returns a FIXED SHAPE**, so a field a preset writes and that function
+does not name reads back `undefined` for ever -- the `entriesOf` trap this file already
+records for `credits.mjs`. Found while adding `passersby`: **`whiteBalanceK` and
+`cameraMove` are both read by `compose/prompt.mjs` and neither survived the validator**,
+so both branches were dead for every place the catalog has ever loaded.
+
+`passersby` is carried explicitly and **has its own test against the real catalog**,
+because a unit test of the composer cannot see a validator that dropped the field.
+
+**The chip spawned off it, `ba1da9c`, settled the other two and they settled
+differently:** `whiteBalanceK` is carried through with a 1000-20000 K range check (it
+reaches the delivered prompt and a dropped digit is a render in the wrong colour that
+nothing before the render can catch), and the dead `cameraMove` branch was deleted. Its
+own finding: **five of the seven shipped places are handed 3900K, including Times Square
+and Tokyo, whose light fragments say "cold white"** -- `CLIMATES` has five values and the
+table has two, so `cool`, `mild` and `indoor` all miss. **No shipped place sets one yet**,
+so nothing looks different today; the lever now exists.
+
+#### F -- WHAT THE TAPE MEASURED, AFTER
+
+Same place, same method, 720p 9:16, the outfit typed into the free-text box:
+
+| | before | after |
+|---|---|---|
+| Seconds showing his back | **~7** | **~1** |
+| Face legible | ~7 of 15 | **~13 of 15** |
+| Face arrives at | **second 12** | **second 1** |
+| Shape | 4:3, matted | **9:16 full-bleed** |
+| Strangers in the street | none | **yes, all at a distance, none near the lens** |
+| Hard cuts | 0 | 0 |
+
+Stamp `31 JUL 2004 23:42` -- a July night at 23:42 against a night street, so §83C's
+scene-aware clock is holding. His verdict: *"this time I liked it. I liked it so much."*
+
+**THE BODY READ DIFFERENTLY TOO, AND WITHOUT TOUCHING THE PROMPT.** He asked to look
+"very slim and fit"; `slim` is a BANNED person word and was refused, with the reason
+(every adjective about the person competes with the photograph, which is the only thing
+making it look like him). What was offered instead is §74E's actual root cause: **a
+waist-up photograph** so the model has evidence of a build rather than inventing an
+average one, and **a fitted outfit written into the free-text box**, since the shipped
+outfits say "worn loose" and "oversized" and there is no negative channel. Both are the
+customer's to do and neither needs code. The outfit line used is in
+`build/dir/outreach-send-2.md`'s sibling notes and in this session's transcript; it was
+checked through `moderateText` first and came back with zero flags.
+
+#### G -- THE SKILL BUNDLE THE OWNER BROUGHT, AND WHY NONE OF IT IS INSTALLED
+
+Four skills in a zip (`character-builder`, `cinema-director-v3`, `banana-pro-director-30`,
+`story-bible-builder`). All markdown, no executables, no URLs, no credential access --
+checked before reading.
+
+**DO NOT INSTALL THEM.** `cinema-director-v3` targets **Seedance**, which this product
+left on 2026-09-02 because ByteDance refuses every reference image containing a real
+person; its spine is built on prohibitions Wan cannot take (§88D), and its house
+vocabulary -- 8K photoreal, theatrical grain, anamorphic, cinematic -- fails §14's own
+test by name. Its description would also fire on our work and steer it back to Seedance.
+The character-sheet skills solve §76C's already-refused problem. **`reference_video_urls`
+aside, the whole bundle was worth exactly two ideas**, both taken: timecoded beats, and
+the rule that every visible body gets an action in every beat -- which is the conclusion
+§53 reached independently.
+
+**The precedent for this is §14**, which mined a Seedance skill for its 63-degree FOV
+anchor and refused everything else.
+
+#### H -- Things that will bite
+
+- **A GUARD CAN PASS AGAINST THE VERY DEFECT IT WAS WRITTEN FOR.** The first camera test
+  matched `/behind\s+them/`, and the shipped line reads *"a step **behind and** swinging
+  round"* -- adverbial, no pronoun. **It went green when the real defect was put back.**
+  Only the sabotage found it. It now enumerates the constructions that mean the lens is
+  behind the subject, and deliberately does NOT catch the six-beat prop shot's "with them
+  just behind **it**".
+- **TWO SABOTAGE HARNESSES REPORTED FALSE PASSES IN ONE SESSION, AND NEITHER WAS THE
+  GUARD'S FAULT.** The first wrote the mutated file without closing it, so the test ran
+  against the original. The second decoded `node --test` output as **cp1252**, mangling
+  the `✖` marks so no failure ever matched -- while `returncode` had been `1` the whole
+  time. **Drive a sabotage off the EXIT CODE, and pass `encoding='utf-8'`.**
+- **`subprocess.run(['bash', ...])` ON WINDOWS PICKS UP WSL BASH**, which fails with
+  `execvpe(/bin/bash)` and looks exactly like the guard firing. Run the shell step from
+  the Bash tool and let python do only the mutation.
+- **A PYTHON STRING CANNOT END IN A BACKSLASH**, raw or not, so an anchor like
+  `'-map_metadata 0 \'` is a syntax error. Match without the trailing continuation.
+- **`sed` ATE A BACKSLASH AND THE WHOLE `&&` CHAIN SHORT-CIRCUITED**, so the sabotage
+  never ran and the check printed a result anyway. §42G's rule, unchanged and still
+  cheap: **print the mutated line and confirm it changed.**
+- **A GREP FOR AN OLD PHRASE WILL HIT THE COMMENT THAT EXPLAINS IT.** Verifying the
+  deploy, `grep -c "camera following a step behind"` inside the running worker returned
+  **1** -- line 541, a `//` comment describing the defect. Grep with `-n` and look.
+- **THE CSP-HASH FINGERPRINT PROVES NOTHING FOR A CHANGE LIKE THIS.** §82D's instrument
+  covers `views.mjs` only; nothing here touched a served byte, so the header was
+  byte-identical either way. **The check that worked is §83D's: the bytes inside the
+  running worker, and better still, `docker compose exec -T worker node` composing a real
+  Tokyo prompt and printing it.**
+- **THE OWNER'S IP NOW ROTATES WITHIN MINUTES.** It moved `89.246.99.41` -> `.42` between
+  two checks about two minutes apart, so §75B's `/32` rule cannot hold; it is
+  **`89.246.99.0/24`** now. The diagnostic is unchanged and is two lines: a SILENT ssh
+  timeout while `https://timestamptapes.com/api/health` answers fast is the firewall, and
+  `curl https://api.ipify.org` gives the address to paste.
+- **`accounts-cli.mjs` STILL PRINTS A STALE COST.** A 300-credit grant reported
+  `~$31.00 of provider spend`; the real figure at $0.75 a tape is about **$10.50**. It
+  derives from `resolutions.480p.estimatedUSDPer15s`, still Seedance's $2.07 (§82E).
+  **Do not fix that number without the owner -- it feeds `creditCost`.**
+
+#### I -- `build/social/face-first.sh` EXISTS NOW
+
+§86E's cut, which had only ever been done by hand, is a script:
+`face-first.sh <tape.mp4> <out.mp4> <cold-open-start-seconds> [crf]`. It takes the tail
+from where the subject turns to the lens, plays it first, then the whole tape; carries
+`-map_metadata 0`; and **re-probes the output, refusing and deleting it if the Art. 50
+disclosure did not survive**. It asserts the tag is PRESENT on the input first, because a
+check that only looks afterwards passes vacuously on a source that never had one.
+
+**Sabotage-verified in all four directions**, including the one that matters: **dropping
+`-map_metadata 0` proves nothing, because ffmpeg copies global metadata by default** --
+`-map_metadata -1` is the mutation that strips it (§70F's ruling, confirmed again).
+
+**THE BED IS INAUDIBLE IN A FEED AND THAT IS WORTH KNOWING.** A delivered tape is
+**-27.3 LUFS** by spec -- texture, not dialogue -- which on a phone is nothing. The
+posted cut is lifted **+11 dB to -16.5 LUFS** with the video stream COPIED, so the
+picture takes no second generation. Fixed gain, never `loudnorm`, for the reason
+`bed.mjs` already gives. Same decision as §85A's launch video; **it is a marketing asset,
+not a change to the render contract.** Not folded into the script yet.
+
+#### J -- What is left
+
+**UNCHANGED AND DATED:** the launch video onto YouTube **before 16-17 Sept** (Product
+Hunt takes a link, not a file), the **Product Hunt page built and scheduled 19 Sept**,
+and **launch Tuesday 22 Sept, 09:01 Berlin**. The daily warm-up reminder is running.
+
+**FROM §87:** Kat Marie's Instagram DM, the seven check-first contacts, and follow-ups
+from 18 September (round 1) and 19 September (round 2).
+
+**NEW, AND SMALL:** the Tokyo tape is posted on YouTube (`3Xemf4pXPeI`, AI badge verified
+**signed out**, link clickable in the description), TikTok, Instagram and X. **The number
+to read is TikTok's average watch time against Times Square's 1.79 s** -- that single
+figure is what this whole section was aimed at. The owner's Instagram profile still shows
+**14 followers / 513 following** from the renamed personal account, which is what every
+reel viewer lands on.
+
+**THE BINDING CONSTRAINT IS STILL FACES, NOT PLATFORMS.** 264 credits remain, about five
+more 720p tapes, and every one of them is the same man until a friend sends a photograph.
