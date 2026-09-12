@@ -7,6 +7,26 @@ Warm, grainy, quiet.
 
 ---
 
+## START HERE (2026-09-12) — **§87 FIRST: FORTY-SIX OUTREACH MESSAGES WENT OUT IN TWO DAYS, AND FOUR OF THE RESEARCH AGENTS' QUOTES DID NOT EXIST IN THE CAPTIONS THEY CAME FROM. NO CODE CHANGED, NOTHING DEPLOYED.** THEN §86.
+
+**The box, local and `origin/supabase-identity-slice` are still on `413dd49` plus docs; the suite is untouched at 2215 / 2211 / 0 / 3.** The owner asked for "around 50" creators after the first eight, so four research agents ran in parallel and **46 messages went to 46 outlets and creators**, each one handed over for him to paste and send himself. **The two gitignored files are the record:** `build/dir/outreach-send.md` (8) and `build/dir/outreach-send-2.md` (41, plus 7 check-first and 7 held back), both with a log table.
+
+**THE ONE FINDING WORTH CARRYING: a research agent's quote is a claim, not evidence.** Every hook quote was re-checked with `grep -F` against the saved caption file, and in round 1 **three quotes attributed to Artturi Jalli and one to Dan Kieft were not there at all**. All 41 of round 2's survived the same check, which is what makes the first result a real catch rather than one bad agent. **Ask any research agent for the file path beside every quote, then grep it.**
+
+**Two "free" listings were refused mid-flight and both will recur:** Neatorama's suggest page has **no form on it any more** (and no published email, only data-broker addresses), and **Launch Llama's free tier ends in a demand to embed their badge** on timestamptapes.com or pay $39 — the backlink-farm pattern already refused three times, and their badge is an external `img` this site's CSP blocks anyway. **Never fill in a "Deals" field:** a lifetime deal against a $0.75 marginal cost is unbounded liability.
+
+**What is outstanding is small:** Kat Marie's Instagram DM, the seven check-first contacts (YouTube started bot-blocking this machine and that was treated as a stop, not a puzzle), and **follow-ups from 18 September for round 1 and 19 September for round 2**, one each, non-repliers only. **Expect rate cards** from the sponsored channels; the answer is always credits to test.
+
+**NEXT, and the owner has already chosen it: the Tokyo tape**, 9:16, an outfit other than the checked shirt, **cut face-first** (§86E — on TikTok the average viewer left after 1.79 s because every tape opens on the back of the subject's head). He said he wants to "try something new" with it and has not yet said what. **Then the dated run: the launch video onto YouTube before 16–17 Sept** (Product Hunt takes a link, not a file), **the Product Hunt page on 19 Sept**, **launch Tuesday 22 Sept at 09:01 Berlin**. **The binding constraint is faces, not platforms** — photographs from two or three friends are worth more than any further platform work.
+
+## (the banner below is 2026-09-11)
+
+## START HERE (2026-09-11) — **§86 FIRST: THE FREE DIRECTORIES DRIED UP, THE FEEDS TOOK OFF (~860 VIEWS ON ONE TAPE IN A DAY), THE FIRST RETENTION NUMBER (1.79 s) AND ITS FREE FIX, AND AN OUTREACH LIST. NO CODE CHANGED.** THEN §85.
+
+**The box, local and `origin/supabase-identity-slice` are still on `413dd49` plus docs; suite untouched at 2215 / 2211 / 0 / 3.** The owner set the next session's order himself: **(1) outreach** from `build/dir/creators.md` -- the two newsletters first, then the five nostalgia creators, then the reviewers; **(2) the Tokyo tape** in 9:16, cut face-first (§86E) and posted around midnight Berlin on YouTube, Instagram (Share to Threads on), TikTok and X; **(3) later**, the TikTok and Instagram creator search (§86G). **The single most useful finding is §86E: on TikTok the average viewer left after 1.79 s because every tape opens on the back of the subject's head.**
+
+## (the banner below is 2026-09-10, evening)
+
 ## START HERE (2026-09-10, evening) — **§85 IS THE LAUNCH PLAN: A PRODUCT HUNT DATE (TUE 22 SEPT, 09:01 BERLIN), PINTEREST LIVE, AND THE RESEARCH THAT OVERTURNED THE OBVIOUS TARGETS. NO CODE CHANGED.** THEN §84, §83, §82, §81, §80 AND §79. **NOTHING GATES A LAUNCH AND THE GATE HAS BEEN WALKED BY A PERSON.** THEN §78, §77, §76, §75 AND §74.
 
 **§85 IS MARKETING AND ACCOUNTS, NOT CODE — the box, local and `origin/supabase-identity-slice` are all still on `413dd49` plus docs, and the suite is untouched at 2215 / 2211 / 0 / 3.** Its one finding worth reading even if you skip the rest: **the communities that love the VHS look ban AI content in their written rules**, so five obvious subreddits are refusals (r/OldSchoolCool, r/nostalgia, r/VHS, r/LiminalSpace, r/InternetIsBeautiful), and **Pinterest — which was on nobody’s list of 67 — is now live and claimed.** Every asset lives in gitignored `build/ph/`, `build/dir/` and `build/pin/`.
@@ -12205,3 +12225,377 @@ the ffmpeg write-up drafted first, which was offered and not yet taken up.
 accounts, the launch video still to be uploaded to YouTube (Product Hunt takes a YouTube
 link only), fal's usage page for the 2026-09-02 refusals, and the Hetzner disk backup
 toggle.
+
+---
+
+### 86. THE FREE DIRECTORIES DRIED UP, THE FEEDS TOOK OFF, AND THE FIRST RETENTION NUMBER (2026-09-10 evening -> 2026-09-11)
+
+**No code changed and nothing was deployed.** Marketing, accounts and measurement. Every
+working file is in gitignored `build/dir/` (tracker.md, submit.md, platforms.md,
+creators.md) and `build/social/`. Memory: `launch-state-2026-09-08.md`.
+
+#### A -- Four of the five "free" directories are no longer free
+
+Re-checked one by one rather than trusted from §85:
+
+| Directory | What it is today |
+|---|---|
+| **Future Tools** | free; **SUBMITTED** 10 Sept (7 short fields, category Generative Video, pricing Freemium). Hand review by Matt Wolfe, no ETA, do not resubmit. The "Thank you for signing up" email is the NEWSLETTER welcome (the form has an opt-in box), not an approval |
+| **Microlaunch** | `/submit` 307s to `/premium#pricing`; $39 minimum; skip |
+| **Aixploria** | its own FAQ: "We no longer offer free listings"; $99 / $299 / $499; skip |
+| **Toolify** | the `/submit-tool` URL in §85 is dead -- that was the two days of Cloudflare 502s. The real form is `/submit` and its FAQ says "It costs $99 to list a tool"; skip |
+| **TinyLaunch** | free Standard launch **SCHEDULED Mon 12 Oct**, both add-ons None, $0, pending review. Free slots were "Free full" on 14/21/28 Sept and 5 Oct |
+
+**TinyLaunch's flow is a sequence of upsells and each one was declined:** a $39 Premium
+("skip the queue", which is worthless when you already hold a free slot), a $279 "110
+directories" service (names G2 and SourceForge -- the wrong-buyer pile), a $9 "AI
+Visibility Audit", and a full-screen interstitial whose PAID button is black and labelled
+"Yes, launch Monday + guaranteed backlink" above a plain white "Continue with free launch".
+**The free tier's backlink needs a top-3 finish AND their badge embedded on
+timestamptapes.com** -- the backlink-farm pattern already refused. Expect no backlink;
+SEO is not this product's channel. The owner first chose 21 Sept (the day before Product
+Hunt); the date picker showed it was premium-only, which settled it. Lesson: **confirm a
+free slot exists before arguing about which date.**
+
+**There's An AI For That, re-checked 11 Sept:** Website Only is **$49 one-time**,
+"100 - 1,000 estimated clicks" (their own figure), published in 1-2 days, editable free.
+**The page pre-selects the $437 package** -- switch it before paying. Refund only if they
+refuse to publish. The "$100 PPC bonus" requires the tool to launch there FIRST, so it does
+not apply. A free route exists but is a lottery (a monthly X thread, one tool picked).
+~220 tools already come back for "photo to video". **Recommended as a small bounded bet;
+the owner's decision is still open.** Futurepedia ($497) stays declined.
+
+**The seam is finished.** Last week 13% of the 67-row list was dead; this week the
+survivors paywalled. The hour it would have taken belongs in tapes.
+
+#### B -- Accounts made, and one skipped
+
+- **Hacker News `paulstanley`**, created 11 Sept, `about` and email (`support@`) set --
+  verified from outside, but only after a cache-busting query: HN serves logged-out visitors
+  a cached profile for a while. **Nothing about Timestamp until after Product Hunt.** HN
+  colours new accounts green for about two weeks, so the Show HN goes up **24-29 Sept, a
+  weekday, 15:00-17:00 Berlin**, with the ffmpeg write-up (not yet drafted). Never ask
+  anyone to upvote.
+- **Threads**, created off the Instagram account. The owner declined copying Instagram's
+  follows. **Only new reels go there, through Instagram's "Share to Threads" switch -- no
+  backfill of Amalfi or Times Square.** The four intro cards (`build/igpost/card-1..4.png`)
+  are an optional pinned first post.
+- **Tumblr: skipped for now.** The aesthetic fits, but the audience is widely reported as
+  hostile to AI art and it sends little traffic. Revisit only with a steady supply of tapes.
+- **Reddit r/aivideo: rules could NOT be verified from here** -- the Browser pane refuses
+  reddit.com and old.reddit.com, and logged-out requests redirect to a login. The owner reads
+  the sidebar himself before posting; §85C's rules are archived snapshots.
+
+#### C -- The second reel, and the numbers
+
+The 9:16 Times Square tape, downloaded from **My Videos** (1080x1920, 375 frames, 15.000 s,
+19 Mbit/s, Art. 50 tags intact), stamped **`27 NOV 2005 18:37`** -- a November evening, so
+stamp and picture agree -- went out around **00:00 Berlin, which is 6 pm US East / 3 pm US
+West**, on all four surfaces. **Caption matched to the stamp: "me in Times Square, November
+2005"**, not 2003. YouTube Short `J5Eik-2IBa4`, AI badge verified signed-out. X: caption on
+the post, "Made from one photograph." plus the URL as the first reply.
+
+| | Amalfi | Times Square (by 11 Sept afternoon) |
+|---|---|---|
+| YouTube Shorts | 160 overnight | **303** |
+| TikTok | 0 | **364** -- 1 like, **avg watch 1.79 s, 1.4% watched to the end**, 0 followers |
+| Instagram | 52 | **192** |
+
+**~860 views on one tape in a day, from accounts a week old.** Warmer accounts and a
+stronger place both changed at once; Tokyo (another famous city at night) separates them.
+
+**THE SHOWCASE FILES ARE WEB ENCODES -- NEVER POST ONE.** `/showcase/tape-9x16.mp4` measures
+**540x960 at 1.8 MB**, about a tenth of the delivered tape. `/showcase/tape-16x9.mp4` is a
+404 (the hero is served under another name). The 16:9 Times Square tape is local at
+`out/jobs/20260905-221822-a32b2a/timestamp.mp4`.
+
+#### D -- The TikTok label: what was tested, and what the answer turned out to be
+
+Posted with "Disclose post content / Your brand" OFF on the reasoning that the caption did
+not name the product. It went 0 -> 4. **That reasoning was thin and was corrected:** TikTok
+defines "Your brand" as promoting your own business, product or service, and a brand
+account posting its product's output is promotional whether or not the caption says so.
+The owner turned it ON. **The post then reached 364 with the label on, so the label was
+never the suppressor -- a cold new account was.** The theory floated the night before
+(post tapes from a personal handle, since the personal YouTube channel did 160) is dead.
+**Keep posting from @timestamptapes, label on.** Editing a live post may reset its
+distribution.
+
+#### E -- THE RETENTION FINDING, AND THE FREE FIX
+
+A strip of frames from the delivered tape shows **the back of his head for the first ~12.9
+seconds; the face turns to the lens only in the last second.** The three-beat arc ends on
+the face on purpose (§53, §60H) -- right for a keepsake, wrong for a feed that decides in
+one second. **1.79 s average watch time is that decision, measured.**
+
+**The fix needs no re-render: a face-first social cut.** The last 1.56 s (frames 336-374,
+from where he faces the lens) as a cold open, then the whole tape -- 16.56 s, 414 frames,
+built with ffmpeg's `trim`/`concat` and **`-map_metadata 0` so the Art. 50 tags survive**
+(verified). Example: `build/social/times-square-face-first.mp4` (55 MB; over the 30 MB
+limit for sending to a phone). It loops cleanly on TikTok: the ending face leads into the
+opening face. **Make one for every tape before posting, from Tokyo on. Do NOT repost Times
+Square with it** -- a near-duplicate. Optional: TikTok's own on-screen text in the first
+second ("this is one photo of me"), added in-app so the file stays clean elsewhere.
+
+**Parked product idea:** every customer who posts their tape hits the same 1.8 s wall. A
+"face-first cut for sharing" download on the result page would give it to them. Not now.
+
+#### F -- Instagram and quality
+
+- The Instagram bio link is live. **No URL in an Instagram caption** -- it is not tappable;
+  "link in bio" at most, or as the first comment.
+- **@timestamptapes on Instagram shows 14 followers / 513 following** -- the legacy of the
+  renamed personal account. It reads as a follow-for-follow bot on the profile every reel
+  viewer lands on. Worth trimming.
+- **Amalfi was 480p, Times Square 720p.** Quality matters less than the first second, but
+  with a face-first opening, 720p's detail lands where people judge.
+
+#### G -- The outreach list (agent-reach), and what it could not reach
+
+Built with the `agent-reach` skill -- YouTube via yt-dlp, the open web via Exa, pages via
+Jina Reader -- into **`build/dir/creators.md`**, with three message drafts (newsletter tip,
+AI-tool reviewer, nostalgia creator) and the rules. **Email addresses were deliberately not
+compiled**; each entry says where the contact lives, one personal message each.
+
+- **Newsletters that ASK for tips:** **Generated** (John Biggs, AI-video craft -- "Want to
+  submit a tip about your work or product? Email…"; best fit for the ffmpeg story) and **The
+  Rundown AI's Supertools** (free "Recommend a Tool": name, URL, category, one sentence --
+  all four written; the newsletter feature itself is paid). **Theoretically Media** works on
+  paid terms only. **CreatorStack** pays for every tool and takes no review copies -- a tip
+  is fine, never offer credits.
+- **AI-tool reviewers on YouTube, all posted in the last two weeks:** AI with Nicole 21K,
+  Mira AI 33K, Artturi Jalli 20K, Parker Prompts 130K, Curious Refuge 274K, Dan Kieft 293K,
+  Jyothi Nandyal 64K.
+- **Nostalgia creators on camera, all active this month:** Angie Cocuzza @acooz31 38.8K,
+  CassDamm 31.9K, annalise @niknok123 22.4K, Nikita Anngelina 16.9K (travel + nostalgia),
+  Gracey Shyann 8.5K. Maybe: Johnny2000 (quiet on YouTube since 1 Aug), Shaina Helm
+  (Instagram @imstuckin.1999).
+- **agent-reach could NOT reach TikTok, Instagram, X or Reddit** -- they need its OpenCLI
+  browser extension connected with the owner logged in, and it was not; TikTok is not an
+  agent-reach platform at all. Using the owner's own logged-in session was advised against:
+  it puts @timestamptapes at risk of being flagged. **Parked, owner's go-ahead:** Apify
+  no-login scrapers -- TikTok `memo23/tiktok-search-scraper` (~$0.0005/result, creator
+  follower counts included) and Instagram `toolzerhub/instagram-user-search-scraper`
+  (~$0.003/profile; leave its email add-on off). Under $1 for both.
+- **Rules:** never make a tape of a creator from their photos -- they upload their own or
+  nothing happens; never ask for a positive review or ask them to hide free credits; one
+  follow-up at most. Germany is strict about unsolicited marketing email: one personal note
+  to a published business contact is the low-risk form, bulk lists are not.
+
+#### H -- Credits for marketing tapes
+
+The owner has **31 credits**: a 480p tape is 21 in any shape, 720p is 46. Buying packs from
+his own shop costs Stripe fees and VAT; **an operator grant costs only the provider spend
+(~$0.75 at 480p, ~$1.50 at 720p) when a tape is actually made.** The command takes the
+account ID, not the email, and needs `--root=/data`:
+
+```
+cd /opt/timestamp && docker compose exec -T web node scripts/auth/accounts-cli.mjs list --root=/data
+docker compose exec -T web node scripts/auth/accounts-cli.mjs grant ACCOUNT_ID 300 --reason="owner marketing tapes" --root=/data
+```
+
+**Not run** -- it changes a live balance and needs the owner's yes. It prints a stale
+estimated cost (Seedance's $2.07); ignore it.
+
+#### I -- Parked idea: a Seedance 2.5 ad
+
+The owner's idea. **Seedance refuses any real face** (§55A, tested on 2.0 and 2.5), so it
+can only make faceless shots: a cassette into a VCR, a CRT switching on, a dated tape spine,
+as text-to-video, run through our own look with `npm run look` rather than asking a model
+for VHS, ending on a real tape. ~$3. In `build/dir/tracker.md` under PARKED IDEAS.
+
+#### J -- Things that will bite
+
+- **The Browser pane refuses reddit.com and old.reddit.com outright.** Reddit, Tumblr and
+  Feedspot also refuse curl.
+- **A scripted click on There's An AI For That's FAQ landed on a Google sign-in page.**
+  Navigate away; never touch a login page. Read collapsed FAQ answers from `textContent`
+  instead of clicking.
+- **YouTube's channel `/videos` page no longer parses** with the `videoRenderer` walk.
+  `yt-dlp --playlist-end 1 --print "%(upload_date)s | %(title)s" CHANNEL_URL/videos` is
+  reliable; search results via `yt-dlp --dump-json "ytsearch12:..."` carry
+  `channel_follower_count`.
+- **Python printing an emoji to this console crashes (cp1252).** `PYTHONIOENCODING=utf-8`.
+- **The Bash heredoc broke on this very section**, exactly as §31 onward warns -- the edit
+  was written as a script file and run instead.
+
+#### K -- What is next, in the owner's order
+
+1. **Outreach** from `build/dir/creators.md`: Generated tip and Rundown Supertools first,
+   then the five nostalgia creators, then the reviewers (add credits first so their accounts
+   can be topped up for 720p).
+2. **The Tokyo tape:** Tokyo at night, **9:16**, an outfit other than the checked shirt,
+   480p on the current 31 credits or 720p after a grant. The owner sends the file; read the
+   stamp for the caption, make the face-first cut, post around midnight Berlin on YouTube,
+   Instagram with Share to Threads, TikTok and X. Then compare its watch time with 1.79 s.
+3. **Later:** the TikTok and Instagram creator search (§86G).
+
+**Dated items that have not moved:** the launch video (`build/ph/launch-video.mp4`) onto
+YouTube **by 16-17 Sept** (Product Hunt takes a YouTube link, not a file); build and schedule
+the Product Hunt page **19 Sept**; launch **Tue 22 Sept, 09:01 Berlin**. **Open decisions:**
+the $49 TAAFT listing; trimming Instagram's 513 follows. **Older and unchanged:** fal's usage
+page for the 2026-09-02 refusals; the Hetzner disk backup toggle.
+
+
+---
+
+### 87. FORTY-SIX OUTREACH MESSAGES, AND THE FOUR QUOTES THAT DID NOT EXIST (2026-09-11/12)
+
+**No code changed, nothing was deployed, and the suite is untouched at 2215 / 2211 / 0 / 3.**
+The box, local and `origin/supabase-identity-slice` are all still on `413dd49` plus docs.
+Everything below is outreach: research, drafting, verification, and the owner sending each
+message himself, one at a time.
+
+**THE DURABLE RECORD IS TWO GITIGNORED FILES:** `build/dir/outreach-send.md` (round 1, eight
+messages) and `build/dir/outreach-send-2.md` (round 2, forty-one messages plus the check-first
+and held-back lists). Both carry a log table with the date each went out. **The research notes
+behind them live in the session scratchpad (`creators2/*/results.md`) and will not survive**, so
+what matters is in those two files and in this section.
+
+#### A -- What went out
+
+| | Written | Sent | Dropped for cause | Left |
+|---|---|---|---|---|
+| Round 1, from `build/dir/creators.md` | 8 | **8** | 0 | 0 |
+| Round 2, at the owner's ask for "around 50" | 41 | **38** | 2 | 1 |
+
+**46 messages to 46 outlets and creators, over two days.** Round 1: the two newsletters that
+invite tips, three nostalgia creators, three AI-video reviewers. Round 2: seven newsletters and
+blogs, thirteen 2000s/Y2K creators, six camcorder and digicam creators, fifteen AI-video
+reviewers. **Four parallel research agents found them** (YouTube through yt-dlp, the open web
+through WebFetch and WebSearch), and every one of their findings was then re-checked by hand
+before it reached an inbox.
+
+**Also produced: seven "check first" names** whose contact could not be confirmed (see §87C),
+and **seven held back on purpose** -- Kelly G and annalise until the body-shape fix ships
+(§76C), EMDOLL (linktree only, and her latest video is about a hard stretch), CassDamm (a grief
+and true-crime channel), mel_loves_her_cat (weak fit, inferred handle), Simonalisa (a duplicate
+across two research lanes), and Mira AI (a good fit who publishes no contact anywhere).
+
+#### B -- THE RESEARCH AGENTS' QUOTES HAD TO BE VERIFIED, AND FOUR OF THEM DID NOT EXIST
+
+Every message names one specific moment from one of the person's own videos, because that line
+is what earns a reply. **Every quote was checked with `grep -F` against the caption file the
+agent had saved.** In round 1 that check did real work: **three quotes attributed to Artturi
+Jalli and one to Dan Kieft were nowhere in the captions** and were dropped before sending. The
+surviving details for both were re-read in context and rewritten.
+
+In round 2 all 41 hook quotes were verified the same way and **all 41 were present**, which is
+what makes the first result meaningful rather than a fluke of one agent.
+
+**THE RULE: a research agent's quote is a claim, not evidence.** Ask for the caption file path
+alongside every quote, then grep it. A fabricated quote in a cold email to a creator is worse
+than no email at all, and nothing downstream catches it.
+
+**A second-order version of the same rule:** the captions are YouTube's automatic ones and they
+garble names -- Wan 3.0 comes out as "1", Seedance as "SeaDance" and "Seance", Tuscan as
+"Tuskin". So a verified quote is not automatically a quotable one. Where the wording was
+mangled, the message paraphrases and does not use quotation marks.
+
+#### C -- THE CONTACTS, AND WHERE THE LINE WAS DRAWN
+
+**Every address used is one the person published themselves**, in their channel description or a
+video description, read back out of the saved metadata. **YouTube's "View email address" button
+was never used** -- it is captcha-gated, and getting past it is not something to do on somebody's
+behalf.
+
+**YouTube then rate-limited this machine outright** (HTTP 429, then "Sign in to confirm you're
+not a bot"). One research agent got past an earlier block by switching yt-dlp's player client;
+**when the block reached the verification pass, it was treated as a stop rather than a puzzle**.
+That is why seven contacts went to a check-first list instead of into a message: four camcorder
+creators and three nostalgia creators who answer through a manager or agency. Each takes the
+owner a minute on the creator's own channel.
+
+**THREE ADDRESSES ARE PUBLISHED OBFUSCATED AND MUST BE TYPED AS ONE WORD:** Isa does AI writes
+`contact @ isadoesai.com`, Creating with Conor writes `contact: inquiries (at) creatingwithconor
+com`, Roboverse writes `for inquiries: roboverse (at) youripartnerships.com`. Each was read
+verbatim out of the saved description before it was handed over, because a reassembled address
+is a guess.
+
+**ROBOVERSE SHARES ITS DOMAIN WITH A BIGGER CHANNEL.** `youripartnerships.com` also carries
+Youri van Hofwegen (320K, "Everything AI", `yvh@`), so Roboverse (136K) is very likely the same
+person's second channel rather than a management company. One warm reply covers both, and van
+Hofwegen is the natural follow-up rather than a fresh cold email.
+
+**HANDLES WERE CONFIRMED BY PAGE TITLE BEFORE SENDING**, after the owner twice could not find a
+profile from a handle alone: `@nikki_el` is "nicole elizabeth gegg", `@szandramayer`,
+`@daisy.lunaa` (whose **TikTok is `@daisy.luna`, one 'a'**), `@joober.s` is "joobers",
+`@kvtmvrie` is Kat Marie. Instagram search regularly fails to surface accounts the searcher does
+not follow; pasting the URL works.
+
+#### D -- TWO "FREE" LISTINGS THAT WERE NOT, AND BOTH ARE WORTH REMEMBERING
+
+1. **Neatorama's suggestion page has no form on it any more.** The page still says "please use
+   the form below" and there is nothing below it. They publish no email either; the only address
+   findable is on data-broker sites, which is not a published contact, so it was refused and the
+   outlet was skipped.
+2. **Launch Llama's free listing ends in a badge-embed demand.** "Add the Launch Llama badge to
+   your site", or $39 instead. That is the backlink-farm pattern already refused from Fazier,
+   dang.ai and Startup Fame -- and **their badge is an external `img`, which this site's CSP
+   (`img-src 'self' data:`) blocks outright**, so it would render as a broken image to every
+   visitor. The $39 upsell appears **four times in one flow**, including a full-screen
+   interstitial whose paid button is styled as the primary action and whose free one is plain
+   text ("702 startups are waiting in the free queue ahead of you"). **"Choose Free" is the way
+   through**, and the submission was abandoned at the badge step.
+
+**AND THE ONE THAT DOES NOT CHANGE: never add a "deal".** Launch Llama offers a Deals field for
+discounts and lifetime deals. A lifetime deal against a **$0.75 marginal cost per tape** is
+unbounded liability, which is the standing refusal from §77B and §82F, and it now has a second
+front door.
+
+#### E -- THE RULES THAT HELD, so they are not re-argued
+
+- **Send from the personal Gmail, not `support@`.** The apex SPF names only Cloudflare, so mail
+  claiming to be from `timestamptapes.com` through Google's servers fails authentication and
+  lands in spam -- on the one email you most want read. The messages say "I built this on my
+  own", which a personal address supports and a support address undercuts.
+- **WHEN AN OUTLET ASKS FOR YOUR OWN WORDS, DO NOT DRAFT IT.** Web Curios' contact page says AI
+  projects are fine "just tell me, in your own words", and that AI-written pitches get answered
+  "in slightly-pissy fashion". The owner wrote that one himself from a list of facts. Same
+  reasoning, one layer over, as the blind check: the question names the answer.
+- **Every creator message says it is AI in the first lines.** The camcorder lane films on real
+  old cameras and Wesley Anna has posted "anti-AI is the new virtue signal" while disclosing her
+  own use; disclosure up front is the only version that survives contact with that audience.
+- **Never make a tape of a creator from their own photographs**, never ask for a positive review,
+  and never ask anyone to hide that credits were free. Offers are credits to test and nothing
+  else; several of these channels run on sponsorships and will reply with a rate card.
+- **The prices quoted to a reviewer were read out of the config**, not from memory: $12 buys 92
+  credits, a tape is 21 credits at 480p and 46 at 720p **in every frame shape** (§66).
+
+#### F -- Things that will bite
+
+- **The Gmail connector was invalidated**, so drafts could not be created in the owner's inbox
+  and the whole flow was copy-and-paste. Reconnecting it is a claude.ai connector setting.
+- **A trailing `grep -c` with no matches exits 1**, which makes a clean verification run report
+  as failed. §82G already records this; it recurred.
+- **`cat > /dev/null` at the head of a command chain hangs the whole thing**, because it waits on
+  a stdin that never closes. One verification run had to be killed with TaskStop.
+- **THE HEREDOC ATE THIS VERY SECTION.** A 150-line `cat >> CLAUDE.md <<'EOF'` died with
+  "unexpected EOF while looking for matching quote". It was written with the Write tool to the
+  scratchpad and appended with `cat` instead. §31 onward has said this since 2026-08-28.
+- **The Edit tool refuses HTML-escaped text.** A memory write failed because the match string was
+  written `&lt;$1` where the file holds `<$1`.
+- **A message that names a video from 2021 or 2022 must say so by its title**, not imply it is
+  recent. Three camcorder creators' best hooks are years old; the wording names the video and
+  claims nothing about when.
+
+#### G -- What is left
+
+**Outstanding from this work:** Kat Marie's Instagram DM (`@kvtmvrie`, profile confirmed, held
+to the next day only because four DMs had already gone out), and the seven check-first names.
+**Follow-ups are one each, non-repliers only, from 18 September for round 1 and 19 September for
+round 2.** When somebody says yes to credits, ask which email they signed up with and grant on
+the box (§86H); a 720p tape costs about $1.50 of provider spend.
+
+**Expect:** rate cards from Malva AI, AI Zayan, Gracey Shyann, AI with Nicole and the four
+managed nostalgia creators; and possible bounces from `zoetryai.com` (certificate error),
+`isadoesai.com` and `creatingwithconor.com` (both parking pages), all three of which had live
+mail records when checked.
+
+**Next, in the owner's own order:** the Tokyo tape -- 9:16, an outfit other than the checked
+shirt, cut face-first (§86E) -- then the launch video onto YouTube **before 16-17 September**
+because Product Hunt takes a link and not a file, the Product Hunt page built and scheduled on
+**19 September**, and the launch itself **Tuesday 22 September at 09:01 Berlin**. **The binding
+constraint is still faces, not platforms:** every tape costs $0.75 and needs a real person who
+has consented, so launch week wants photographs from two or three friends rather than more
+tapes of the same man.
