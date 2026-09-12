@@ -674,7 +674,9 @@ test('no page promises the still-approval gate that direct mode deleted', () => 
   const pages = renderedPages();
   const landing = pages.find(([name]) => name === 'landing');
   assert.ok(landing, 'the landing is missing from renderedPages(), so this sweep proves nothing');
-  assert.ok(/run through a real tape chain/.test(landing[1]),
+  // The anchor is the grade card's own sentence (reworded 2026-09-12, the
+  // owner's register); "separately" keeps it distinct from the FAQ's version.
+  assert.ok(/The tape look I built separately in ffmpeg/.test(landing[1]),
     'the landing no longer explains the tape chain -- this test is asserting an absence against the wrong page');
 
   // Any claim that the customer sees or approves something BEFORE the video is
@@ -1010,7 +1012,10 @@ test('the hero carries one action and the free-grant sentence, and the landing p
   assert.ok(hero, 'no lime hero');
   assert.equal((hero[1].match(/class="hero-cta"/g) ?? []).length, 1, 'the hero carries exactly one action');
   assert.match(hero[1], /21 free credits with a new account\. One tape, no card\./, 'the free-grant line is missing or typed differently');
-  assert.match(hero[1], /Upload one photo of your face, choose a place and an outfit, and get back a tape that looks like it was found in a drawer\./);
+  // The subline reads the way the owner writes, not the way a model does
+  // (2026-09-12, Matt Muir's note): "pick", "you get back", and no second
+  // "drawer" on a screen whose manifesto already says it.
+  assert.match(hero[1], /Upload one photo of your face, pick a place and an outfit, and you get back a tape that looks like somebody filmed you on a camcorder\./);
   assert.match(hero[1], /class="ruler"[\s\S]*>REC<[\s\S]*>00:15</, 'the counter ruler is missing or does not run to fifteen');
   assert.match(hero[1], /<nav class="hero-nav"[\s\S]*href="#places">Places<[\s\S]*href="\/pricing">Pricing<[\s\S]*data-signin>Sign in<[\s\S]*class="navpill"/, 'the nav is not inside the hero, or lost a link');
   assert.doesNotMatch(html, /\$\d/, 'a dollar price reached the landing; the pack prices live on the pricing page');
@@ -1051,8 +1056,12 @@ test('the landing asks six questions, states three facts as quotations, reads a 
     facts: { photoDays: 7, jobDays: 30, imageProcessor: null, qualities: ['480p', '720p'], shapes: ['4:3', '16:9', '9:16'], frames: 375, fps: 25 },
   });
   assert.equal((html.match(/<details class="faq-row">/g) ?? []).length, 6, 'six questions');
-  assert.match(html, /sent to fal\.ai, the AI provider that generates the tape, and to nobody else/);
-  assert.match(html, /deleted after 7 days and the finished tape after 30 days/);
+  // "nobody else" is the promise and stays; the sentence around it is the
+  // owner's register now. The apostrophe is asserted ESCAPED, because the
+  // answer goes through h() and a bare quote here would pass against markup
+  // that had stopped escaping.
+  assert.match(html, /goes to fal\.ai, the AI service that makes the video\. That&#39;s it, nobody else\./);
+  assert.match(html, /deleted after 7 days and the tape after 30, and you can delete either sooner/);
   assert.match(html, /4:3, 16:9 and 9:16 at 480p and 720p/);
   assert.match(html, /a tape costs the same in every shape/);
   assert.equal((html.match(/<figure class="fact /g) ?? []).length, 3, 'three fact cards');
@@ -1068,7 +1077,7 @@ test('the landing asks six questions, states three facts as quotations, reads a 
   assert.doesNotMatch(createStylesheet({ places: PLACES_FIXTURE, outfits: [] }).css, /\.flip\b/,
     'the flip counter rule survives its element');
   assert.equal((html.match(/class="foot-mark"/g) ?? []).length, 1, 'the giant word appears once');
-  assert.match(html, /run through a real tape chain/, 'the grade card lost the sentence the still-approval sweep anchors on');
+  assert.match(html, /The tape look I built separately in ffmpeg/, 'the grade card lost the sentence the still-approval sweep anchors on');
   // THE MANIFESTO SENTENCE CARRIES NO NUMBER (2026-09-08, the owner's call).
   // The hero above it already says "Fifteen seconds of 2003" and every tape's
   // burnt-in date is derived from its own seed anyway -- real tapes on this

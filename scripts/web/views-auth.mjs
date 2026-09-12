@@ -745,7 +745,7 @@ export function pricingPage({
    */
   const RETURNED = Object.freeze({
     done: 'Thank you. Your credits will appear on your balance shortly, once the payment clears.',
-    cancelled: 'Nothing was charged. The bundle is still here whenever you want it.',
+    cancelled: `Nothing was charged. The pack's still here whenever you want it.`,
   });
   const key = String(checkout ?? '');
   const returned = Object.hasOwn(RETURNED, key) ? RETURNED[key] : null;
@@ -799,7 +799,7 @@ export function pricingPage({
 <main class="pricing">
   <section class="lime pricing-hero">
     <h1 class="pricing-t">Credits, not subscriptions.</h1>
-    <p class="lede">A tape costs credits, credits come in packs, and tax is added at checkout.</p>
+    <p class="lede">A tape costs credits and credits come in packs. Tax is added at checkout.</p>
     ${balanceLine ? `<p class="balance">${h(balanceLine)}</p>` : ''}
     ${returned ? `<p class="notice">${h(returned)}</p>` : ''}
   </section>
@@ -812,14 +812,17 @@ export function pricingPage({
   ${faq(faqItems({ freeCredits: free?.creditsPerPeriod ?? null, photoDays, jobDays, imageProcessor, qualities, shapes, sameInEveryShape }))}
 
   <section class="pricing-foot">
-    <p class="hint">Prices are before tax. VAT or sales tax is added at checkout where it
-    applies, at the rate for the country you are in, and the total is shown to you before
-    you pay.</p>
-    <p class="hint">There is no payment form here and there is not one anywhere else either.
-    Checkout is hosted by the payment provider on their own domain, and this application
-    never sees a card number.</p>
-    <p class="hint">Nothing here renews and nothing is a subscription. When you want more
-    tapes you buy another bundle, including a second one the same size.</p>
+    ${/* THE FOOT SAYS WHAT HAPPENS, NOT WHAT DOES NOT (2026-09-12). It used to
+         open two of its three paragraphs on a negative ("there is no payment
+         form here and there is not one anywhere else", "nothing here renews
+         and nothing is a subscription"), which is the shape a reader clocks
+         as machine-written. Stripe is named because /privacy already names
+         it and "the payment provider" was a circumlocution. */''}
+    <p class="hint">Prices are before tax. VAT or sales tax gets added at checkout where it
+    applies, at your country's rate, and you'll see the total before you pay.</p>
+    <p class="hint">Checkout happens on Stripe's own pages. Your card number goes to them and
+    never touches this site.</p>
+    <p class="hint">Nothing renews. When you want more tapes, you buy another pack.</p>
   </section>
 </main>
 `;
