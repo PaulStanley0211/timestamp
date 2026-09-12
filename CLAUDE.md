@@ -13017,3 +13017,61 @@ the morning's landing copy still served.
   byte size per width**. A screenshot script's success line is not evidence of the page;
   identical file sizes across different pages are the tell. Start `preview`, re-render the
   `build/preview-*.html` files, then shoot.
+
+#### H -- The Tokyo tape's first day, the retention number, and the strategy (2026-09-12, evening)
+
+**The number §88J said to read is in, and the fix worked on the axis it was aimed at.** Same
+platform, same age, one change (the face in the first frame instead of the back of a head):
+
+| TikTok | Times Square (10 Sept) | Tokyo (12 Sept, posted ~05:30 Berlin) |
+|---|---|---|
+| Views | 364 | **858** |
+| Average watch time | 1.79 s | **2.47 s** |
+| Watched to the end | 1.4% | **1.2%** |
+| Likes | 1 | 6 |
+
+**The opening got better and the middle did not.** Average watch is the clean comparison
+(per viewer, independent of reach) and it rose 38%; completion stayed at ~1%, so the drop is
+spread through the clip rather than sitting at the first frame. A stranger sees a man on a
+Tokyo street on old tape, gives it two and a half seconds, and has been given no reason to
+stay: nothing in the clip says "this was one photograph". Elsewhere the same file did **37**
+on YouTube Shorts (Times Square: ~300 in its first day, Amalfi 160 overnight) and **13** on
+Instagram (52, 192, 13 across the three tapes, with the best tape last), so platform variance
+swamps views and Instagram is follower-gated: `@timestamptapes` has 14 followers and still
+follows 513, flagged three times now and still not trimmed.
+
+**The owner's own theory, that 05:30 Berlin was the wrong hour, is half right and does not
+touch the finding.** It is the middle of the night for Europe and for his 14 Instagram
+followers, so it plausibly explains half of Instagram's 13; it is 23:30 New York and 20:30
+Los Angeles, and the "bad" hour out-reached the midnight post on TikTok (858 against 364).
+And the hour cannot move a per-viewer number: whoever saw the clip left after 2.47 s. **One
+hour from now on, midnight Berlin, so timing stops being a variable.**
+
+**The strategy agreed, small enough to survive ten days:** one number (TikTok average watch
+and completion) and one variable per post; the reveal cut as the next test (the photograph
+for ~0.7 s, a hard cut, the tape: the clip becomes a before-and-after and the viewer has a
+reason to stay); a tape every two days at midnight Berlin, cuts made in one sitting; TikTok
+first, Shorts second and not read as a signal, Instagram posted and ignored until it has
+followers, X for launch week; two or three friends' waist-up photographs THIS week, because
+five more tapes of the same man is diminishing and launch week wants five different people;
+no boosting, no directories, no redesign, no prompt changes for social; one line per post in
+a table (platform, hour, cut, views at 24 h, average watch, completion). **If the reveal cut
+moves completion from ~1% to 5% or more, it is the standard cut and the "cut for sharing"
+download on the result page (parked in §86E) has its evidence.**
+
+**`build/social/face-first.sh` carries the reveal now.** `--photo FILE` prepends the
+photograph for `--photo-seconds` (default 0.7) at the tape's own raster, `--fit cover`
+(fills and crops) or `contain` (letterboxed on the product's `#0B0A09` surround), with
+silent audio under it; `--gain DB` folds the feed lift into the same pass (a delivered tape
+is -27 LUFS by spec and inaudible in a feed; the posted cuts used 11), a fixed gain and
+never `loudnorm` for `bed.mjs`'s reason. The tape stays input 0 so `-map_metadata 0` still
+carries the Art. 50 tags, which the script asserts on the way in and refuses to leave
+without on the way out. Proved on three runs: cover on a 1080x1920 tape with the gain (443
+frames = 375 + 50 + 18 exactly, +10.8 dB measured, -4 dB peak, no clipping), contain on the
+16:9 hero (468 = 375 + 75 + 18), and the old no-photo path unchanged (425); the disclosure
+survived all three; the first frame is the photograph upright (ffmpeg autorotates from
+EXIF) and the frame at 0.9 s is the face-first hook. The command for the next tape:
+
+```bash
+bash build/social/face-first.sh --photo path/to/the-photo.jpg --gain 11 path/to/timestamp.mp4 build/social/next-reveal.mp4 <second-they-face-the-lens> 26
+```
