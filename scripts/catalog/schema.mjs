@@ -302,6 +302,23 @@ function requireStringArray(raw, key, { kind, id }) {
   return value.map((v) => v.trim());
 }
 
+/** An optional boolean, absent-means-false, and REFUSED rather than coerced
+ *  when it is neither. A preset that writes "true" as a string, or "yes", is
+ *  an authoring mistake that a truthiness test would silently accept -- and
+ *  the field this exists for decides whether strangers may appear in somebody
+ *  else's tape, so a quiet yes is the wrong direction to fail in. */
+function assertOptionalBoolean(raw, key, { kind, id }) {
+  const value = raw[key];
+  if (value === undefined) return false;
+  if (typeof value !== 'boolean') {
+    throw new PresetError(
+      `${kind} "${id}" field "${key}" must be true or false, got ${JSON.stringify(value)}`,
+      { kind, id, key },
+    );
+  }
+  return value;
+}
+
 /** Every dotted leaf path in a partial LookProfile override. Arrays are leaves,
  *  because mergeLook() replaces an array wholesale rather than merging into it
  *  -- a preset saying "these tears" means instead of, never as well as. */
@@ -414,6 +431,18 @@ export function validatePlace(raw, { id, baseLook } = {}) {
     prompt,
     negatives: requireStringArray(raw, 'negatives', { kind, id }),
     motionHint: requireString(raw, 'motionHint', { kind, id }),
+    // WHETHER STRANGERS BELONG IN THIS PLACE. Default false, because the
+    // composer's one-person line is a guard -- it is what stops the model
+    // putting a second face in a tape whose whole product is the first one --
+    // and a place has to earn its way out of it. A busy crossing does; a
+    // kitchen table does not.
+    //
+    // CARRIED EXPLICITLY, AND THAT IS THE POINT: this function returns a FIXED
+    // SHAPE, so a field written into a preset and not named here is read back
+    // `undefined` for ever. `whiteBalanceK` and `cameraMove` are both read by
+    // compose/prompt.mjs and neither is carried below, so both of those
+    // branches are already dead for every place loaded through the catalog.
+    passersby: assertOptionalBoolean(raw, 'passersby', { kind, id }),
     lookOverride: assertLookOverride(raw.lookOverride ?? {}, baseLook, { kind, id }),
   };
   return Object.freeze(place);

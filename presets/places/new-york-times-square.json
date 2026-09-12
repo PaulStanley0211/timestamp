@@ -4,6 +4,8 @@
   "label": "Times Square, at night",
   "climate": "cool",
   "timeOfDay": "night",
+  "_passersby_comment": "Times Square with nobody in it is the one thing nobody has ever seen. Strangers stay away from the lens; the composer writes that clause, not this file.",
+  "passersby": true,
   "prompt": {
     "_comment": "The billboards are the light source and the era at once: in 2003 they were painted panels and early video screens stacked up the wedge, not one wraparound LED skin, and a 2003 holiday tape of the square is nothing but them. The police kiosk on the island and the cart under its umbrella are what put a person somewhere specific in the square rather than in front of a backdrop.",
     "scene": "Times Square in New York at night, the wedge of buildings above the crossing stacked with lit billboards and glowing screens, yellow cabs waiting at the lights, a police kiosk on the traffic island, a hot-dog cart under a red and white umbrella, wet pavement and crosswalk stripes holding every light",

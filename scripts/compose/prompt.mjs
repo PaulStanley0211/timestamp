@@ -114,6 +114,26 @@ export function shotCountFor(seconds) {
   return 6;
 }
 
+/**
+ * The window each beat owns, as [start, end] pairs that tile [0, seconds].
+ *
+ * A shot list with no time budget lets the model decide how long each beat
+ * runs, and on the 2026-09-12 Tokyo tape it spent twelve of fifteen seconds
+ * getting to the beat that shows the subject's features. The timecoded-beat
+ * idea is the one genuinely transferable thing in the cinema-director skill
+ * the owner brought on the same day -- most of which targets Seedance, which
+ * this product left on 2026-09-02.
+ *
+ * DERIVED, NEVER WRITTEN DOWN. A shorter runtime drops the middle beats
+ * (`chosen` below), so a hardcoded 0-5/5-10/10-15 would hand the model a
+ * budget that does not add up to the clip it is being asked for -- and the
+ * count is not knowable until after the slice.
+ */
+export function beatWindows(seconds, count) {
+  const edge = (i) => Math.round((seconds * i / count) * 10) / 10;
+  return Array.from({ length: count }, (_, i) => [edge(i), edge(i + 1)]);
+}
+
 /** The only reference to the person, anywhere in this module. */
 export const SUBJECT = 'The person in the reference image';
 
@@ -465,7 +485,7 @@ export function composeReferencePrompt({
   // changes is that it is now the ONLY one, and that the tape ends on the
   // person who paid for it.
   const beatsSix = [
-    'Wide. Walking in at the near edge, camera following a step behind and swinging round to catch up with them.',
+    'Wide. Walking in at the near edge, camera ahead of them and moving backwards at their pace, keeping them turned toward the lens.',
     `Wide. The whole place, camera panning slowly across it -- ${place.motionHint} -- and holding at the far side.`,
     `Close. ${propSentence}, with them just behind it in the same frame, camera pushing in and steadying.`,
     `Medium. ${place.prompt.moment ?? DEFAULT_MOMENT}, camera moving round to keep them in frame.`,
@@ -482,12 +502,28 @@ export function composeReferencePrompt({
   // below. Fewer cuts and longer holds is also what a home recording actually
   // looks like. Judged the same evening (section 60H) and made the default;
   // six stays reachable by name for the next comparison.
+  // THE CAMERA LEADS (2026-09-12). The owner watched a Tokyo tape and counted
+  // seven seconds of his own back, and the prompt was the reason: beat 1 said
+  // "camera following a step behind" and beat 2 orbited round to his side, so
+  // the model walked him away from the lens and only brought him round at the
+  // end. Measured on the delivered file -- in frame for all fifteen seconds,
+  // back to the lens from about 4s to about 10s, features legible only from
+  // 12s. The camera is a person here (see the clause below), and a person
+  // filming a friend walks backwards in front of them.
+  //
+  // SAID POSITIVELY, LIKE EVERYTHING ELSE ON THIS PATH. This endpoint has no
+  // `negative_prompt` parameter -- read off fal's own schema page on
+  // 2026-09-12, which also settled that our ~40 composed negatives never reach
+  // it -- so "never from behind" would be the word "behind" in the
+  // conditioning and nothing else. Our own screen clause is the counter-
+  // example worth remembering: it is phrased as a prohibition and the six-beat
+  // arc still put the reference photograph on a television.
   const beatsThree = [
     `Wide. Walking in at the near edge and looking around the whole place -- ${place.motionHint} -- `
-      + 'camera following a step behind and swinging round to stay with them.',
-    `Medium. ${place.prompt.moment ?? DEFAULT_MOMENT}, camera moving round to keep them in frame, `
-      + 'picking up exactly where the shot before left them.',
-    'Medium close. Turning back toward the lens and holding there, camera lifting to meet them and settling on them.',
+      + 'camera ahead of them and moving backwards at their pace, keeping them turned toward the lens.',
+    `Medium. ${place.prompt.moment ?? DEFAULT_MOMENT}, camera holding its place in front of them and `
+      + 'easing round to their near side, picking up exactly where the shot before left them.',
+    'Medium close. Looking straight down the lens and holding there, camera lifting to meet them and settling on them.',
   ];
 
   const beats = arc === 'three' ? beatsThree : beatsSix;
@@ -495,6 +531,7 @@ export function composeReferencePrompt({
   const chosen = wanted >= beats.length
     ? beats
     : [beats[0], ...beats.slice(1, wanted - 1), beats[beats.length - 1]];
+  const windows = beatWindows(seconds, chosen.length);
 
   const lines = [
     `${REFERENCE_SUBJECT}, wearing ${outfit.wardrobe}.`,
@@ -503,22 +540,46 @@ export function composeReferencePrompt({
     // change from the first direct run, whose camera clause said the operator
     // stood in one place and breathed -- and the model obeyed it exactly.
     'Somebody came along with a camera and is walking with them: hand-held at 63°, chest height, '
-      + `${chosen.length} shots cut in camera, real speed throughout. ${SNAPSHOT_RULE}.`,
+      + `${chosen.length} shots cut in camera, real speed throughout. ${SNAPSHOT_RULE}. `
+      // "leading them rather than trailing them" was the first draft and it
+      // broke this path's own rule: with no negative channel, "rather than
+      // trailing" is just the word "trailing" in the conditioning.
+      + 'The camera keeps ahead of them throughout, leading them through the place.',
     `Lens: ${place.prompt.lens}.`,
     `Light: ${place.prompt.light}. White balance ${kelvin}K, held across every shot.`,
     '',
-    ...chosen.map((beat, i) => `Shot ${i + 1}: ${beat}`),
+    ...chosen.map((beat, i) => {
+      const [from, to] = windows[i];
+      return `Shot ${i + 1}: ${from}-${to}s. ${beat}`;
+    }),
     '',
     `Period: ${era}. Vehicles, packaging, signage, appliances and the cut of every garment are `
       + 'consistent with it, and nothing visible was manufactured later.',
-    'Exactly one person in frame, and it is the same place, the same wardrobe and the same light '
-      + 'in every shot.',
+    // WHY THIS LINE IS GATED RATHER THAN LOOSENED (2026-09-12). The owner
+    // asked for a busy street, and the deserted crossing was never Tokyo's
+    // preset -- it was this line, applying to every place, which is why Times
+    // Square was empty too. But it is also a GUARD: it is what stops the model
+    // putting a second face in a tape whose entire product is the first one,
+    // and identity is the thing no downstream check can catch. So a place has
+    // to declare itself a thoroughfare (`passersby`, default false), and even
+    // then the strangers are held at a distance and off the lens.
+    place.passersby
+      ? 'One person close to the camera and it is the same one throughout; strangers cross further '
+        + 'back going about their own business, none of them near the lens. The same place, the '
+        + 'same wardrobe and the same light in every shot.'
+      : 'Exactly one person in frame, and it is the same place, the same wardrobe and the same light '
+        + 'in every shot.',
     // THE PERSON IS NEVER A PROP. On the living-room tape the model painted
     // the reference photograph onto the television, in a different shirt: it
     // treats "the person" as something it may draw anywhere a face fits. Said
     // in words, on both arcs.
     'They appear only in the flesh: never on a television screen, in a mirror, in a photograph '
       + 'or on a poster.',
+    // THE FOURTH MOTION LAYER. We carried three -- the subject's action, the
+    // place's own motionHint, and the camera -- and a held frame with a still
+    // figure in it is the thing that reads as dead footage. Clothes, because
+    // hair is banned vocabulary here (rule 1) and fabric does the same job.
+    'Everything in shot is alive: their clothes moving as they move, and the place going on behind them.',
     ...(arc === 'three'
       ? ['One continuous moment: the same spot, the same posture and the same light carried across '
         + 'every cut, each shot picking up where the last one left off, at the unhurried pace of '

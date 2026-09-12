@@ -4,9 +4,11 @@
   "label": "Tokyo, at night",
   "climate": "mild",
   "timeOfDay": "night",
+  "_passersby_comment": "a wide crossing at night is a thoroughfare; the card is empty because a generated crowd invents faces, but the tape wants the street alive behind the subject. Strangers stay away from the lens; the composer writes that clause, not this file.",
+  "passersby": true,
   "prompt": {
     "_comment": "Two light sources that do not match -- the cold white of the signboards from above and the warm shopfronts at ground level -- is the same trick the kitchen preset plays with a bulb and a window, and it is what makes a night street read as real rather than lit for a shoot. The wet asphalt is doing the work a second light would: every sign appears twice.",
-    "scene": "a wide crossing in Tokyo at night, the buildings around it faced with lit signboards and one big glowing screen, white crosswalk stripes across empty wet asphalt, a lit drinks vending machine and a phone box on the corner, a bicycle with a front basket leaning on a pole, a tangle of overhead lines above the traffic light",
+    "scene": "a wide crossing in Tokyo at night, the buildings around it faced with lit signboards and one big glowing screen, white crosswalk stripes across wet asphalt, a lit drinks vending machine and a phone box on the corner, a bicycle with a front basket leaning on a pole, a tangle of overhead lines above the traffic light",
     "light": "the signboards and the screen are the main source, cold white with red and pink spilling down the fronts, warm light from the shopfronts at ground level, the sky above gone to black",
     "lens": "wide from the kerb across the crossing, the far corner going soft behind the signs, every light drawing a hard point, a little barrel bend at the edges",
     "framing": "chest-up on the kerb beside the vending machine, the crossing and the lit corner behind",

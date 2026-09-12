@@ -491,7 +491,16 @@ test('the reference prompt keeps the anti-slop work the still prompt earned', ()
   const { prompt } = composeReferencePrompt({ place, outfit });
   assert.match(prompt, /off centre/i, 'the snapshot rule rides along');
   assert.ok(prompt.includes(place.prompt.moment), 'the place own moment is still performed');
-  assert.match(prompt, /^Shot \d+: (Wide|Medium|Close)/m, 'and every shot states its size');
+  // The size moved one clause to the right on 2026-09-12, when the beats
+  // gained their timecodes; it is still there and still on every shot, which
+  // is what this line was ever asserting. Widened from "some shot states its
+  // size" to "every shot does" at the same time, because a regex with /m was
+  // satisfied by one matching line out of six.
+  const sized = prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
+  assert.ok(sized.length > 0, 'there are no shot lines at all');
+  for (const line of sized) {
+    assert.match(line, /^Shot \d+: [\d.]+-[\d.]+s\. (Wide|Medium|Close)/, `shot does not state its size: ${line}`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -709,5 +718,97 @@ test('the person appears only in the flesh, never on a screen, in a mirror or in
     const { prompt } = composeReferencePrompt({ place, outfit, arc });
     assert.match(prompt, /never on a television screen, in a mirror, in a photograph or on a poster/,
       `${arc}: the prompt does not keep the person off the props`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// the 2026-09-12 arc rewrite -- the owner watched a Tokyo tape and counted
+// seven seconds of his own back. The cause was not the model: beat 1 said
+// "camera following a step behind", beat 2 orbited to his side, and nothing
+// gave the model a time budget, so it spent twelve of fifteen seconds before
+// his face arrived. Four changes, one test each. Every one of them is phrased
+// POSITIVELY in the prompt: this endpoint has no negative_prompt parameter
+// (read off fal's schema page 2026-09-12), so a prohibition becomes a list of
+// things to render -- which is how our own screen clause failed on six beats.
+
+test('the camera leads the subject and is never placed behind them', () => {
+  for (const arc of ['six', 'three']) {
+    const { prompt } = composeReferencePrompt({ place, outfit, arc });
+    assert.match(prompt, /ahead of them/i, `${arc}: nothing puts the camera in front`);
+    // THE FIRST VERSION OF THIS GUARD PASSED AGAINST THE VERY DEFECT IT WAS
+    // WRITTEN FOR, and the sabotage is the only reason anybody found out. It
+    // matched /behind\s+them/, and the shipped line read "camera following a
+    // step behind AND swinging round" -- adverbial, no pronoun after it. So it
+    // enumerates the constructions that actually mean "the lens is behind the
+    // subject" instead. Note what it must NOT catch: the six-beat prop shot
+    // says "with them just behind IT", which is the subject behind an object
+    // and entirely legitimate.
+    const LENS_BEHIND = /\b(?:a step behind|following behind|from behind|behind\s+(?:them|him|her|the subject))\b/i;
+    for (const sentence of prompt.split(/(?<=[.!?])\s+/)) {
+      if (!/camera/i.test(sentence)) continue;
+      assert.doesNotMatch(sentence, LENS_BEHIND,
+        `${arc}: a camera clause puts the lens behind the subject: ${sentence.trim()}`);
+    }
+  }
+});
+
+test('every shot carries a timecode, and the timecodes tile the whole runtime', () => {
+  // Hardcoding 0-5/5-10/10-15 would be a lie on any tape that is not fifteen
+  // seconds: a shorter runtime drops the middle beat, and the model would be
+  // handed a budget that does not add up to the clip it is making.
+  for (const seconds of [15, 12, 6]) {
+    for (const arc of ['six', 'three']) {
+      const { prompt } = composeReferencePrompt({ place, outfit, seconds, arc });
+      const shots = prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
+      const codes = shots.map((l) => {
+        const m = l.match(/^Shot \d+: (\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)s\./);
+        assert.ok(m, `${arc} @${seconds}s: shot has no timecode: ${l}`);
+        return [Number(m[1]), Number(m[2])];
+      });
+      assert.equal(codes[0][0], 0, `${arc} @${seconds}s: the tape starts at zero`);
+      assert.equal(codes.at(-1)[1], seconds, `${arc} @${seconds}s: the last beat ends at the runtime`);
+      for (let i = 1; i < codes.length; i += 1) {
+        assert.equal(codes[i][0], codes[i - 1][1],
+          `${arc} @${seconds}s: a gap between beat ${i} and beat ${i + 1}`);
+      }
+    }
+  }
+});
+
+test('strangers appear only in a place that declares it has them', () => {
+  // The empty street was never Tokyo's preset -- it was one line in this
+  // composer applying to every place, which is why Times Square was deserted
+  // too. Gated, because strangers crossing a kitchen are a defect.
+  const street = getPlace(catalog, 'tokyo-night');
+  const indoors = getPlace(catalog, 'kuechentisch-fruehstueck');
+
+  const busy = composeReferencePrompt({ place: street, outfit }).prompt;
+  assert.match(busy, /strangers/i, 'a street place renders nobody but the subject');
+
+  const quiet = composeReferencePrompt({ place: indoors, outfit }).prompt;
+  assert.doesNotMatch(quiet, /strangers/i, 'strangers reached a place that never asked for them');
+  assert.match(quiet, /Exactly one person in frame/,
+    'the one-person guard is gone from the places that still need it');
+});
+
+test('a place that declares passersby still carries the flag after validation', () => {
+  // THE PASS-THROUGH GUARD, and it is not hypothetical: validatePlace returns
+  // a FIXED SHAPE, and `whiteBalanceK` and `cameraMove` are both read by this
+  // composer and both silently dropped by it, so those two branches are dead
+  // for every place loaded through the catalog. This test exists so that
+  // `passersby` does not quietly join them.
+  assert.equal(getPlace(catalog, 'tokyo-night').passersby, true,
+    'the flag was set in the preset and lost on the way through the validator');
+  assert.notEqual(getPlace(catalog, 'kuechentisch-fruehstueck').passersby, true,
+    'a place that never declared passersby came back with them');
+});
+
+test('something besides the subject is moving in every tape', () => {
+  // "Each and every second should be engaging" -- a held frame with one still
+  // figure in it is the thing that reads as dead. The cinema-director skill
+  // names four motion layers and we carried three; this is the fourth.
+  for (const arc of ['six', 'three']) {
+    const { prompt } = composeReferencePrompt({ place, outfit, arc });
+    assert.match(prompt, /clothes moving as they move/i, `${arc}: nothing names micro-motion`);
   }
 });
