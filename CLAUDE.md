@@ -7,6 +7,20 @@ Warm, grainy, quiet.
 
 ---
 
+## START HERE (2026-09-12, evening) -- **§90 FIRST: AN ACCOUNT REFUSED ITS FREE TAPE AT THE GLOBAL CEILING NOW READS WHY. BUILT, DEPLOYED AT `d6ea4f8`, PROVED BY THE BYTES INSIDE THE RUNNING CONTAINER.** THEN §89 AND §88.
+
+**The box, local and `origin/supabase-identity-slice` are all on `d6ea4f8`. Suite 2227 / 2224 / 0 / 3, guards 7/7 counted before the commit and again after it.** When `freeTape.globalCeiling` is reached, signup still succeeds on purpose -- `reserveFreeTape` returns rather than throws so that "no free credits" never becomes "you cannot create an account" -- and the account opens at zero with a delta-zero ledger row. **Nothing anywhere said so**, so that person met the ordinary arithmetic, *"the cheapest tape costs ~21 CR and you've got 0 CR"*, which is true and explains nothing because they never had credits to run out of. That is §26 finding 4 in another costume: a balance the button refuses, with no reason on the page. **497 free tapes remain, so nobody meets the new sentence for a long while; it fires on the day a post works, which is the day you would least want to be debugging it.**
+
+**THE ONE THING WORTH CARRYING: it is keyed on the account's own ledger row and never on the global counter, and any later credit retires it.** The row is that account's history and the counter is the world's -- raise the ceiling tomorrow and the counter flips while the same person still sits at zero having been given nothing, and the counter would be true for everyone at once including those who got a tape and spent it. The ledger is append-only, so a rule of "the withheld row exists" would go on telling a customer who has since bought two packs that the free tapes ran out; **"no positive delta anywhere" is the durable spelling of "has never been given any credits".** The reason string is **exported from `accounts.mjs` now rather than spelled twice** -- a drifted literal fails no test and throws nothing, it just goes silent on the one page it exists for.
+
+**AND A TEST THAT PASSES TRIVIALLY IS NOT EARNED UNTIL A SABOTAGE PROVES IT BINDS (§90C).** The stale-case test was green before the feature existed, because a negative assertion cannot fail against a page that never renders the sentence. Reducing the rule to the naive "row exists" check turned it red, and that is what earned it. **A sabotage also silently failed to apply again** -- a backslash inside a Python pattern -- and only the occurrence count caught it; §42G is unchanged and still cheap.
+
+**THE POST LOG EXISTS: `build/social/post-log.md`, gitignored.** Every tape posted, what changed about it, and TikTok's two per-viewer numbers, with the three posts so far backfilled and Sunday's reveal-cut row already written and waiting on four numbers. **Tokyo went 858 -> 1010 views the same evening and all three of its TikTok figures were read mid-flight**, so the 24-hour reading is due at 05:30 on the 13th and that row is to be OVERWRITTEN rather than added to.
+
+**NEXT is dated and unchanged: the launch video onto YouTube before 16-17 Sept** (Product Hunt takes a link, not a file), **the Product Hunt page on 19 Sept, launch Tuesday 22 Sept at 09:01 Berlin**, five minutes of warm-up daily, follow-ups on the 18th and 19th. **Still his: the two-line thank-you to Matt in his own words; two or three friends' waist-up photographs, which is the binding constraint; the 513 Instagram follows; and the $49 There's An AI For That decision.**
+
+## (the banner below is 2026-09-12, afternoon)
+
 ## START HERE (2026-09-12, afternoon) -- **§89 FIRST: THE FIRST OUTSIDE PROFESSIONAL SAID THE SITE'S COPY "REEKS OF MACHINE". IT DID. REWRITTEN IN THE OWNER'S OWN VOICE, DEPLOYED AT `12920f0` (PUBLIC PAGES) AND `9a72e56` (SIGNED-IN PAGES, §89G), VERIFIED BY BYTES.** THEN §88.
 
 **The box is on `9a72e56`; local and `origin/supabase-identity-slice` carry three docs commits on top (`013d9b4` and after), no served byte. Suite 2225 / 2221 / 0 / 3, guards 7/7.** Matt Muir of Web Curios replied to the one pitch the owner wrote himself: a no on editorial grounds, and the advice that the copy was AI-written and wordy. Measured against the live pages it was: eight comma-triads, zero contractions, the product defined by what it is not, one 62-word disclosure sentence. **Nineteen public lines, three Google descriptions and the unsent Product Hunt draft were rewritten to the owner's own pitch as the voice sample (§89A-F), then seventeen signed-in lines the same way (§89G)**; he read every line aloud, and both shipped the same afternoon. **The design was not what Matt was pointing at and was not touched.**
@@ -13077,3 +13091,138 @@ EXIF) and the frame at 0.9 s is the face-first hook. The command for the next ta
 ```bash
 bash build/social/face-first.sh --photo path/to/the-photo.jpg --gain 11 path/to/timestamp.mp4 build/social/next-reveal.mp4 <second-they-face-the-lens> 26
 ```
+
+---
+
+### 90. AN ACCOUNT THAT NEVER GOT A FREE TAPE IS TOLD SO (2026-09-12, evening)
+
+**2225 -> 2227 tests / 2224 pass / 0 fail / 3 skipped.** One commit, `d6ea4f8`,
+test-first, both halves sabotage-verified and restored byte-identical with `cmp`,
+all seven `guards.yml` steps run verbatim and COUNTED 7/7 before the commit and
+again after it so the message itself was scanned. **Pushed and DEPLOYED; local,
+`origin/supabase-identity-slice` and the box are all on `d6ea4f8`.**
+
+It closes the gap the marketing plan has carried since 2026-09-07, the last
+agent-buildable thing on that list, and it is the only one of the four commits
+the box pulled that changes a served byte.
+
+#### A -- THE DEFECT WAS SILENCE, NOT A BUG, AND EVERY LINE OF CODE WAS BEHAVING
+
+`freeTape.globalCeiling` is a lifetime count across every account that has ever
+existed. Reaching it does not fail a signup, **on purpose**: `reserveFreeTape`'s
+own header says an exception there would turn "no free credits" into "you cannot
+create an account", which converts a spending decision into an outage. So the
+account opens at zero and `createAccount` records the fact as a delta-zero
+ledger row reading `grant:signup:withheld-global-ceiling`.
+
+**Nothing anywhere then said so.** The only thing that person ever saw was the
+ordinary arithmetic under the Record button -- *"Not enough credits. The cheapest
+tape costs ~21 CR and you've got 0 CR."* -- which is true, and explains nothing
+at all to somebody who never had any credits to run out of. **That is §26
+finding 4 in another costume**: a visible balance the button refuses, with no
+reason given, which is the exact failure that forced the free grant off 16
+credits in the first place.
+
+**AND IT FIRES AT THE WORST AVAILABLE MOMENT.** Nothing errors when the ceiling
+is reached, nothing is logged as a problem, and the config's own comment says
+reaching it "is not an error state to be recovered from". So the first person to
+meet it is arriving from a post that is working, on their first visit, and the
+product reads as broken.
+
+The page now says, in place of the arithmetic:
+
+> The free tapes have all been claimed, so there wasn't one left for this
+> account. You can buy credits any time.
+
+The existing "See the plans" link stays under it. Everyone else gets the
+arithmetic, unchanged.
+
+#### B -- THE RULE IS THE ACCOUNT'S OWN LEDGER ROW, AND IT HAS TWO HALVES
+
+**NEVER THE GLOBAL COUNTER.** `freeTapeState().exhausted` is the world's fact and
+the row is this account's. Raise the ceiling tomorrow and the counter flips while
+the same person is still sitting at zero having been given nothing; and the
+counter is true for every account at once, including the ones that got their
+tape and spent it. Keyed on the row, the sentence stays true for exactly the
+people it is about.
+
+**AND ANY LATER CREDIT RETIRES IT.** The ledger is append-only, so the withheld
+row is there for ever. A rule of "the row exists" would go on telling a customer
+who has since bought two packs that the free tapes ran out, which is irrelevant
+and slightly insulting. **"No positive delta anywhere in the ledger" is the
+durable spelling of "has never been given any credits"**, and it stops being
+true at the same instant that stops being true.
+
+**A COMPOSED SENTENCE OR NULL, never a flag the page words itself.** That is the
+rule `creditNoteFor` beside it was already written to -- one author for money
+copy -- so `balanceOf` gains one field and `views.mjs` only chooses between two
+strings. The failed-lookup stand-in returns `null` rather than guessing: a
+balance lookup that just threw is not evidence about why a balance is nought,
+and the wrong explanation is worse here than none.
+
+**THE REASON STRING IS EXPORTED FROM `accounts.mjs` NOW** as `WITHHELD_REASON`,
+rather than spelled by hand in two modules. That is the same reasoning
+`OWNERS_DIR` three lines above it already carries: **a drifted literal fails no
+test and throws nothing, it just goes silent on the one page it exists for.**
+Both ends are pinned to the literal by two independent tests --
+`auth-free-tape.test.js` on what `createAccount` writes, `web-api.test.js` on
+what the page reads -- so the two cannot part company quietly.
+
+#### C -- A TEST THAT PASSES TRIVIALLY IS NOT EARNED UNTIL A SABOTAGE PROVES IT
+
+Two tests. The first went **RED for the right reason** before any code existed:
+*"the page never says why this account has no credits"*. It asserts the button is
+genuinely disabled FIRST, so a page that failed to refuse at all cannot satisfy
+its negative assertions while proving nothing -- §35E's rule.
+
+**The second was green from the moment it was written**, because it is a negative
+assertion and nothing rendered the sentence yet. TDD calls that suspect and it
+is: the honest answer is not to delete it but to prove it binds. **Reducing the
+rule to the naive "the withheld row exists" check turned it red**, which is
+exactly the implementation a careless reading produces. Sabotage B, making the
+view discard the composed sentence, turned the first one red.
+
+Both driven off the **exit code** (§88H), both mutations confirmed landed before
+the verdict was read, both files restored from a `cp` copy and compared with
+`cmp` -- never `git checkout --` (§37F).
+
+#### D -- Things that will bite
+
+- **A SABOTAGE SILENTLY FAILED TO APPLY AGAIN, and only the occurrence count
+  caught it.** A Python pattern written with `\$` inside a triple-quoted string
+  keeps the backslash, so it matched nothing and the harness reported "before: 0,
+  after: 0" against a file it had not touched. §42G's rule is unchanged and still
+  cheap: **print the count, or the mutated line, and confirm it changed before
+  believing any sabotage result.** The retry matched a plain identifier with no
+  escapes in it, which is the shape to reach for first.
+- **`homePage` RENDERS NO REFUSAL WITHOUT `resolutions` AND `aspects`.**
+  `brokeEntirely` is `cheapest !== null && balance.credits < cheapest`, and
+  `cheapest` is reduced from the OFFERED resolutions -- so a bare call with a
+  zero balance renders "Upload a photo first" and looks like the feature is dead.
+  Pass at least one available resolution and aspect when rendering that page
+  offline.
+- **`build/preview-home.mjs` CARRIES THE 4/3 SURCHARGE PRICES §66 DELETED** --
+  `creditsByAspect` 21/28/28 at 480p and 46/61/61 at 720p, a week after every
+  shape started costing the same. Scratch tooling and gitignored, the same class
+  as the retired place ids in `build/preview-pages.mjs` (§71E), but anybody
+  reading that preview sees prices the live site has not charged since
+  2026-09-05. **Read a price off `config/credits.json`, never off a preview
+  harness.**
+- **PRODUCT HUNT BLOCKS gstack's HEADLESS BROWSER WITH A CLOUDFLARE 403**, every
+  attempt, returning a "Performing security verification" interstitial rather
+  than the board. The in-app Claude Browser pane loads the same URL normally and
+  `get_page_text` returns the whole launch board. Switch driver; do not try to
+  work around the 403.
+- **THE DEPLOY IS INVISIBLE TO THE CSP FINGERPRINT** -- no inline script changed,
+  so §82D's hash set came back byte-identical, which is the expected result and
+  not evidence. And the page needs a session, so stripping the live page cannot
+  reach it either. **The check is the bytes inside the running container**, and
+  it was run in both directions: `grep -c` returned 0 and 0 before the pull and
+  1, 1, 2 after it (§83D, §89G).
+
+#### E -- Deliberately not built
+
+**The pricing page's free rung and the onboarding page**, both offered and both
+declined in the design. One place authored well beats two that drift, and
+neither is where a person is actually stopped. The order form is where the
+refusal happens and where somebody is standing when it does.
