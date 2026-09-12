@@ -7,6 +7,14 @@ Warm, grainy, quiet.
 
 ---
 
+## START HERE (2026-09-12, afternoon) -- **§89 FIRST: THE FIRST OUTSIDE PROFESSIONAL SAID THE SITE'S COPY "REEKS OF MACHINE". IT DID. REWRITTEN IN THE OWNER'S OWN VOICE, DEPLOYED AT `12920f0`, VERIFIED BY BYTES.** THEN §88.
+
+**The box, local and `origin/supabase-identity-slice` are all on `12920f0`; suite 2224 / 2221 / 0 / 3, guards 7/7.** Matt Muir of Web Curios replied to the one pitch the owner wrote himself: a no on editorial grounds, and the advice that the copy was AI-written and wordy. Measured against the live pages it was: eight comma-triads, zero contractions, the product defined by what it is not, one 62-word disclosure sentence. **Nineteen lines, three Google descriptions and the unsent Product Hunt draft were rewritten to the owner's own pitch as the voice sample**, he read every line aloud, and it shipped the same afternoon. **The design was not what Matt was pointing at and was not touched.**
+
+**Three things worth carrying:** a guard that anchors on a sentence breaks in every place that sentence is pinned, so grep the tests for the literal before rewording prose (§89C); a copy deploy is invisible to the CSP fingerprint and is proved by stripping the live page (§89C); and gstack's browse binary runs on this machine again, so §55F is stale (§89D). **Still his: the two-line thank-you to Matt, in his words.** Offered and not taken: the same rewrite on the signed-in pages, and `/impeccable critique /` against the new copy.
+
+## (the banner below is 2026-09-12, late the previous night)
+
 ## START HERE (2026-09-12, late) -- **§88 FIRST: THE TAPE SHOWED THE BACK OF THE SUBJECT'S HEAD FOR SEVEN OF FIFTEEN SECONDS BECAUSE OUR OWN PROMPT SAID "CAMERA FOLLOWING A STEP BEHIND". FIXED, DEPLOYED, AND MEASURED AT ONE SECOND.** THEN §87 AND §86.
 
 **The box, local and `origin/supabase-identity-slice` are all on `ba1da9c`; suite 2224 / 2221 / 0 / 3, guards 7/7.** Two commits: `db79ea0` puts the camera in front of the subject, timecodes the beats, lets a place declare that strangers cross behind it, and adds micro-motion; `ba1da9c` carries `whiteBalanceK` through the validator and deletes the dead `cameraMove` branch. **Both were proved on a real 720p 9:16 Tokyo tape the same night: back down from ~7s to ~1s, features legible from second 1 instead of second 12, people in the street, no black bars.**
@@ -12849,3 +12857,118 @@ reel viewer lands on.
 
 **THE BINDING CONSTRAINT IS STILL FACES, NOT PLATFORMS.** 264 credits remain, about five
 more 720p tapes, and every one of them is the same man until a friend sends a photograph.
+
+---
+
+### 89. THE FIRST OUTSIDE OPINION SAID THE COPY "REEKS OF MACHINE", AND IT WAS RIGHT (2026-09-12, afternoon)
+
+**2224 / 2221 / 0 / 3, unchanged: no test added, four pins moved and two anchors re-pointed.
+One commit, `12920f0`, test-first, two sabotages caught and restored byte-identical, guards 7/7
+counted before and after the commit message. PUSHED AND DEPLOYED: local, origin and the box are
+all on `12920f0`.** The gstack upgrade (1.72 to 1.84.1) landed in the same session.
+
+**Matt Muir of Web Curios answered the one pitch the owner wrote himself (§87E), within fifteen
+hours.** A no on editorial grounds (paid services are out of scope for Curios, appealable by
+nobody) and one sentence of unasked-for advice: *"The AI copy you've used all over the site
+cheapens it, imho, aside from making it needlessly wordy; I'd rewrite it all so it doesn't reek
+of machine."* **It is the first unprompted opinion from a professional who owed this product
+nothing, which is the class of signal §76C has been waiting for.** "Cute idea" is faint praise
+and should be read as such; the reply, the warmth and the time he spent are the signal.
+
+#### A -- The diagnosis, made against the live pages and not against a feeling
+
+The landing and pricing pages were fetched and stripped to what a reader sees. Four habits,
+all mechanical: **eight comma-triads across two pages** ("choose a place and an outfit, and get
+back a tape"; "your garden, your kitchen or the street you grew up on"; "the account, the
+photograph, the tapes and the credit history"); **not one contraction anywhere**; **the product
+defined by what it is not** ("It is not a filter", "There is no payment form here and there is
+not one anywhere else either", "Nothing here renews and nothing is a subscription"); and
+**sentences written for completeness rather than for a reader**, the worst being the photo
+disclosure at 62 words in one sentence with four subordinate clauses. Every full-stopped
+fragment heading ("Exactly fifteen seconds." "Any shape. Any place.") was the fifth, smaller one.
+
+**The facts were never the problem and were protected by name:** "375 frames at 25 a second,
+PAL, because a 2003 tape was", the ffmpeg specifics, the manifesto line. Specific detail that
+is hard to fabricate is a human signal; a rewrite that sanded it off would read worse while
+feeling like progress.
+
+#### B -- The voice sample was his own pitch
+
+The rewrite was matched to the message the owner wrote Matt: short paragraphs, "the AI" rather
+than "the model", contractions, a parenthetical list where a triad stood, the why in a
+"because" clause, no hype. **Nineteen lines on the site, three Google descriptions and the
+unsent Product Hunt description and first comment** (`build/ph/copy.md`, 487 of 500
+characters). The owner read every before/after aloud and said go. **Every line he did not
+change was left as it was.** Rulings, so they are not re-argued: "your face" stays in the hero
+subline because asking for a waist-up photograph is the parked body-shape decision
+(§76C); "Credits, not subscriptions." stays as the pricing heading because one negative on a
+page is a human amount and twelve was the problem; the three fact cards stay three, because
+they are the testimonial slot awaiting real quotes (§69A).
+
+**The one reply that was refused: the thank-you to Matt.** An AI-written reply to the man who
+just said the copy reeks of machine is the single worst available move. It is two lines, in the
+owner's words, and it is still his to send. Web Curios is marked closed in
+`build/dir/outreach-send-2.md`.
+
+#### C -- What the tests taught, and one thing the deploy did
+
+- **An anti-vacuity anchor pins a phrase, and the phrase was in two places.** The
+  still-approval sweep asserts the grade paragraph is PRESENT before sweeping for the refund
+  promise (§35E's rule), anchored on `run through a real tape chain`; the six-questions test
+  carried the same literal a second time. Rewording the sentence turned both red, correctly.
+  Both now anchor on `The tape look I built separately in ffmpeg`, and "separately" is what
+  keeps it distinct from the FAQ's version. **When a guard anchors on prose, grep the tests
+  for the literal before rewording the prose.**
+- **A pin on a contraction is asserted ESCAPED.** The FAQ answers go through `h()`, so the pin
+  reads `That&#39;s it, nobody else`; a bare apostrophe in the regex would pass against markup
+  that had stopped escaping.
+- **The FAQ and /privacy are held together by PURPOSES, not wording** (web-legal asserts the
+  processor's name, "illegal or abusive" and "shows a face"), which is what let the sentence
+  be reshaped at all. "nobody else" survives in both.
+- **A copy deploy cannot be verified by the CSP fingerprint.** No script changed, so §82D's
+  hash set was identical before and after by construction. The proof was the §83D class: the
+  live pages fetched with a cache-busting query, stripped, and every new sentence grepped
+  present and every old one absent. `COPY . .` ran without `CACHED`, web healthy at 17 s, 0
+  restarts, 0 FATAL.
+- **Sabotage driven off exit codes, per §88H:** "nobody else" removed and the grade sentence
+  altered each returned exit 1 from web-static, the mutation confirmed landed before the
+  verdict was read, the file restored from a copy and compared with `cmp`.
+
+#### D -- Two tools re-measured, and one that ran degraded
+
+- **gstack's `browse.exe` RUNS on this machine again.** §55F recorded it blocked by Application
+  Control on 2026-09-02; on 2026-09-12 it answered `--help` normally. The block was not
+  permanent. `/design-review` is available again.
+- **Impeccable's `detect.mjs` is regex-only here** (no htmlparser2) and cannot see HTML inside
+  `.mjs` template literals, which is where every served page lives. Its hits were all scratch:
+  the design mockups under `docs/superpowers/design/` and old `out/jobs/*/review` pages. An
+  undercount by construction, not a clean bill.
+- **Impeccable's context loader reports PRODUCT.md as predating its current schema** (no
+  Positioning / Evidence sections) and offers `init`; not run. A newer Impeccable (4.3.1) is
+  available; not installed, because it only takes effect next session.
+
+#### E -- Things that will bite
+
+- **The Edit tool writes LF into this CRLF file** (§59C) and did so on every touched file;
+  cosmetic, git normalises on commit.
+- **A `--` in a description is refused by a test (§76E); a real em dash is not.** The landing
+  description carried one and it went anyway, because it was the AI cadence Matt named.
+- **The Gmail connector is still invalidated** (§87F), so a mail the owner mentions has to be
+  pasted. He pasted Matt's reply twice before his own pitch; ask for the SENT item by name.
+- **Two sessions, two scratchpads.** The session was restarted mid-deploy; the old scratchpad's
+  `strip.mjs` still existed at its absolute path and was copied across. Name scratch files by
+  absolute path when a session might restart.
+
+#### F -- What is left
+
+**HIS:** the two-line thank-you to Matt, in his words. Then the dated run, unchanged: the
+launch video onto YouTube before 16-17 Sept, the Product Hunt page on 19 Sept, launch Tuesday
+22 Sept at 09:01 Berlin. TikTok's average watch time on the Tokyo tape against Times Square's
+1.79 s is still the number to read.
+
+**AGENT-BUILDABLE, offered and not taken up:** the same rewrite on the signed-in pages (the
+order form, status, result and every error message still speak the old "It is" register, and a
+paying customer reads those most); `/impeccable critique /` for a scored list of what a
+designer would change, to be run against the NEW copy rather than the old; and `/impeccable
+init` to bring PRODUCT.md up to the current record. **Not a redesign:** the look was chosen
+six days ago, is not what Matt was pointing at, and ten days before launch is the wrong week.
