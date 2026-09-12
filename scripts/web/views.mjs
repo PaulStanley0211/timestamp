@@ -1897,8 +1897,15 @@ ${/* THE PAGE HAD NO <h1>. Not a styling oversight -- a missing subject, in the
     </dl>
     <button type="submit" class="record" id="record"${brokeEntirely ? ' disabled' : ''}>&#10685; Record the tape</button>
     </div>
+    ${''/* THE ARITHMETIC IS NOT ALWAYS THE ANSWER. An account withheld at the
+          free-tape ceiling sits at nought having never been given anything, so
+          "the cheapest tape costs ~21 CR and you've got 0" is true and explains
+          nothing at all. The server composes that sentence when it applies and
+          hands it over already written; this branch only chooses between them,
+          because money copy has one author. */}
     ${brokeEntirely
-    ? `<p class="reason">${h(`Not enough credits. The cheapest tape costs ~${cheapest} CR and you've got ${balance.credits} CR.`)}</p>`
+    ? `<p class="reason">${h(balance.withheldNote
+      ?? `Not enough credits. The cheapest tape costs ~${cheapest} CR and you've got ${balance.credits} CR.`)}</p>`
     : `<p class="reason" id="reason">Upload a photo first</p>${
   creditWarnings ? `
     <p class="reason">${creditWarnings}</p>` : ''}`}

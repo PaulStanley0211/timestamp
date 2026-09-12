@@ -120,6 +120,16 @@ export const ACCOUNTS_DIR = 'out/accounts';
  */
 export const OWNERS_DIR = 'out/owners';
 
+/**
+ * The ledger reason a signup writes when the global ceiling had nothing left to
+ * give it. Exported for the same reason `OWNERS_DIR` above is: the web layer
+ * reads this row to tell that person why their balance is nought, and two
+ * modules spelling the same string by hand is how an explanation quietly stops
+ * appearing on the one page it exists for. A drifted literal fails no test and
+ * throws nothing -- it just goes silent.
+ */
+export const WITHHELD_REASON = 'grant:signup:withheld-global-ceiling';
+
 /** Underscore-prefixed so it can never collide with an account id, which is 32
  *  lowercase hex characters and nothing else. */
 export const INDEX_DIR = '_index';
@@ -1156,7 +1166,7 @@ export async function createAccount({
   // when they read this account back and ask why it started empty.
   const opening = reservation.reserved
     ? { at, delta: PLANS[planId].creditsPerPeriod, jobId: null, reason: 'grant:signup' }
-    : { at, delta: 0, jobId: null, reason: 'grant:signup:withheld-global-ceiling' };
+    : { at, delta: 0, jobId: null, reason: WITHHELD_REASON };
 
   const account = attach({
     schemaVersion: SCHEMA_VERSION,

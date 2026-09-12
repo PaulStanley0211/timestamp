@@ -945,6 +945,75 @@ test('with no credits the button is disabled server-side and says why', async ()
 });
 
 /**
+ * REACHING THE FREE-TAPE CEILING IS NOT AN ERROR, BUT SAYING NOTHING ABOUT IT
+ * READS AS ONE. `freeTape.globalCeiling` is a lifetime count across every
+ * account that has ever existed, and when it is reached signup still succeeds
+ * on purpose -- `reserveFreeTape`'s own header says an exception there would
+ * turn "no free credits" into "you cannot create an account". The account opens
+ * at zero and `createAccount` writes a delta-zero row reading
+ * `grant:signup:withheld-global-ceiling`.
+ *
+ * Until this test, the only thing that person ever saw was the ordinary
+ * arithmetic -- "the cheapest tape costs ~51 CR and you've got 0 CR" -- which is
+ * true and explains nothing, because they never had any credits to run out of.
+ * That is the failure CLAUDE.md section 26 finding 4 already records in another
+ * costume: a balance the button refuses, with no reason on the page. It fires
+ * at the worst possible moment, on the first visit of somebody who arrived from
+ * a post that was working.
+ *
+ * THE ACCOUNT'S OWN LEDGER ROW IS THE FACT, NEVER THE GLOBAL COUNTER. Keyed on
+ * the row, this stays true after the ceiling is raised -- that account still
+ * never got a free tape -- and it cannot fire for somebody who got one and spent
+ * it. The second test pins that second half, and it is the half a naive
+ * implementation gets wrong.
+ */
+test('an account that never got a free tape is told so, not shown the arithmetic', async () => {
+  await withServer(async ({ base, cookieA, accountA }) => {
+    accountA.ledger.push({
+      at: '2026-09-12T00:00:00.000Z', delta: 0, jobId: null,
+      reason: 'grant:signup:withheld-global-ceiling',
+    });
+    const html = await (await get(base, '/', cookieA)).text();
+
+    // PRESENT FIRST. A page that failed to refuse at all would satisfy every
+    // negative assertion below while proving nothing.
+    assert.ok(/<button[^>]*class="record"[^>]*disabled/.test(html),
+      'the button is not disabled -- this page is not refusing, so the rest proves nothing');
+
+    assert.ok(html.includes('free tapes have all been claimed'),
+      'the page never says why this account has no credits');
+    assert.ok(html.includes('wasn&#39;t one left for this account'),
+      'the sentence does not reach the page through h(), or the wording moved');
+    assert.ok(!html.includes('Not enough credits'),
+      'the arithmetic line is still there, and it explains nothing to somebody who never had credits');
+    assert.ok(html.includes('/pricing'), 'and there is still a way to do something about it');
+  }, { credits: 0 });
+});
+
+/**
+ * The stale case, and the reason the rule is "no positive delta anywhere in the
+ * ledger" rather than "a withheld row exists". This account was withheld at
+ * signup, bought a pack later, and has now spent it. The withheld row is still
+ * in its ledger for ever, because the ledger is append-only -- so an
+ * implementation keyed on that row alone tells a paying customer that the free
+ * tapes ran out, which is both irrelevant and slightly insulting.
+ */
+test('a withheld account that has been given credits since gets the plain arithmetic', async () => {
+  await withServer(async ({ base, cookieA, accountA }) => {
+    accountA.ledger.push(
+      { at: '2026-09-01T00:00:00.000Z', delta: 0, jobId: null, reason: 'grant:signup:withheld-global-ceiling' },
+      { at: '2026-09-02T00:00:00.000Z', delta: 92, jobId: null, reason: 'grant:pack:starter' },
+      { at: '2026-09-03T00:00:00.000Z', delta: -92, jobId: 'j-1', reason: 'spend:tape' },
+    );
+    const html = await (await get(base, '/', cookieA)).text();
+
+    assert.ok(html.includes('Not enough credits'), 'the ordinary refusal has gone missing');
+    assert.ok(!html.includes('free tapes have all been claimed'),
+      'this account has been given credits since it was withheld; the ceiling sentence has gone stale');
+  }, { credits: 0 });
+});
+
+/**
  * A balance that covers 480p but not 720p is the interesting case: the button
  * stays live, and the reason that appears is the one for whichever option is
  * selected -- switched by the same CSS rule that styles the card, so it is right

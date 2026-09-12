@@ -117,6 +117,7 @@ import {
   resetPage, resetCompletePage, onboardingPage, accountPage,
 } from './views-auth.mjs';
 import { deleteAccountEverywhere, DeletionError } from '../auth/deletion.mjs';
+import { WITHHELD_REASON } from '../auth/accounts.mjs';
 import { createSessions, AuthUnavailableError } from './session-middleware.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
 import { createBilling } from '../billing/billing.mjs';
@@ -1584,6 +1585,41 @@ export function createServer({
     return null;
   }
 
+  /**
+   * Why this account has no credits, when the reason is not arithmetic.
+   *
+   * `freeTape.globalCeiling` is a lifetime count, and reaching it does not fail
+   * a signup -- `reserveFreeTape` returns rather than throws precisely so that
+   * "no free credits" never becomes "you cannot create an account". The account
+   * opens at zero and `createAccount` records the fact as a delta-zero row. So
+   * the page has a person in front of it whose balance is nought for a reason
+   * that no amount of subtraction will explain, and saying only "the cheapest
+   * tape costs ~21 CR and you've got 0" is how a working product reads as a
+   * broken one.
+   *
+   * IT IS KEYED ON THE ROW, NOT ON `freeTapeState().exhausted`. The row is this
+   * account's own history and the counter is the world's: raise the ceiling
+   * tomorrow and the counter flips, while this person is still sitting at zero
+   * having never been given anything. The counter would also be true for every
+   * account at once, including the ones that got their tape and spent it.
+   *
+   * AND ANY LATER CREDIT RETIRES IT. The ledger is append-only, so the withheld
+   * row is there for ever; a rule of "the row exists" would go on telling a
+   * customer who has since bought two packs that the free tapes ran out. "No
+   * positive delta anywhere" is the durable spelling of "has never been given
+   * any credits", and it stops being true the moment that stops being true.
+   *
+   * A COMPOSED SENTENCE OR NULL, never a flag the page words itself -- the same
+   * rule `creditNoteFor` above is written to, and for the same reason: one
+   * author for money copy.
+   */
+  function withheldNoteFor(account) {
+    const rows = Array.isArray(account?.ledger) ? account.ledger : [];
+    if (!rows.some((e) => e?.reason === WITHHELD_REASON)) return null;
+    if (rows.some((e) => (Number(e?.delta) || 0) > 0)) return null;
+    return `The free tapes have all been claimed, so there wasn't one left for this account. You can buy credits any time.`;
+  }
+
   function jobView(job, { account = null } = {}) {
     const step = nextStep(job);
     const finished = job.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length;
@@ -1717,6 +1753,10 @@ export function createServer({
         // and the meter says so in a different colour rather than showing a
         // sliver that looks like it might be enough.
         cheapest: await cheapestOffer(),
+        // A sentence or null. Null is the ordinary case and the pages fall back
+        // to the arithmetic; a sentence means the arithmetic would be a
+        // non-answer, because this account was never given anything to spend.
+        withheldNote: withheldNoteFor(account),
       };
     } catch (err) {
       if (err instanceof AuthUnavailableError) throw err;
@@ -1724,6 +1764,10 @@ export function createServer({
       return {
         credits: 0, planId: account?.plan ?? 'free', expiresAt: null,
         perPeriod: 0, cheapest: 0,
+        // The stand-in says nothing rather than guessing. A lookup that just
+        // failed is not evidence about why a balance is nought, and the wrong
+        // explanation is worse here than none.
+        withheldNote: null,
       };
     }
   }
