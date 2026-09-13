@@ -7,6 +7,14 @@ Warm, grainy, quiet.
 
 ---
 
+## START HERE (2026-09-13, evening) -- **§92 FIRST: POST 4 IS THE REVEAL CUT, HANDED OVER FOR MIDNIGHT; A STRATEGY MEMO EXISTS; THE NEXT SESSION STARTS WITH THE RESULT PAGE'S DATE LINE. NO CODE CHANGED, NOTHING DEPLOYED.** THEN §90, §89 AND §88.
+
+**The box, local and `origin/supabase-identity-slice` are on `d6ea4f8` plus docs commits; the suite is untouched at 2227 / 2224 / 0 / 3.** The owner rendered a fresh space centre tape (9:16, 720p) and it is what §88 promised on a daytime place: face toward the lens from the first second, strangers at a distance, the stamp `16 JUN 1999 11:46` legible and true to the scene. The reveal cut (his photograph for 0.7 s, a hard cut to his face at 13.0 s, then the tape) is at `build/social/space-centre-reveal.mp4` and goes up at **00:00 Berlin on the 14th**; its TikTok completion figure, read at 00:00 on the 15th, decides whether the reveal becomes the standard cut. **He offered the 5 September space centre tape first and it was refused on pixels**: 4:3 matted, the back of his head for eight seconds, the pre-fix stamp. **THE ONE THING WORTH CARRYING: `assets/test-photos/waist-up.jpg` IS THE WRISTWATCH** from §74A, never replaced, and the first reveal cut opened on a watch. The owner's real waist-up photograph is the WhatsApp image of 12 September in Downloads. §74F's rule again: look at a photo before cutting or rendering with it.
+
+**THE MEMO IS `build/marketing/2026-09-13-the-frame.md`, gitignored.** The owner brought an eleven-section "marketing interrogation" prompt; rather than run it cold, its questions were answered against the live pages and the record. Five moves before the 22nd: the photograph in front of the tape on every surface (the landing before/after becomes his photo against his tape, two files); two faces that are not his; sell tapes, not credits; tell them the date on the result page; name the gift. **HIS DECISION: the next session starts with the date line, test-first, then the tapes-not-credits copy.** Tokyo's row 3 is final at 1,050 views; its average watch and completion are still the 858-view readings and he was asked to re-read them.
+
+## (the banner below is 2026-09-12, evening)
+
 ## START HERE (2026-09-12, evening) -- **§90 FIRST: AN ACCOUNT REFUSED ITS FREE TAPE AT THE GLOBAL CEILING NOW READS WHY. BUILT, DEPLOYED AT `d6ea4f8`, PROVED BY THE BYTES INSIDE THE RUNNING CONTAINER.** THEN §89 AND §88.
 
 **The box, local and `origin/supabase-identity-slice` are all on `d6ea4f8`. Suite 2227 / 2224 / 0 / 3, guards 7/7 counted before the commit and again after it.** When `freeTape.globalCeiling` is reached, signup still succeeds on purpose -- `reserveFreeTape` returns rather than throws so that "no free credits" never becomes "you cannot create an account" -- and the account opens at zero with a delta-zero ledger row. **Nothing anywhere said so**, so that person met the ordinary arithmetic, *"the cheapest tape costs ~21 CR and you've got 0 CR"*, which is true and explains nothing because they never had credits to run out of. That is §26 finding 4 in another costume: a balance the button refuses, with no reason on the page. **497 free tapes remain, so nobody meets the new sentence for a long while; it fires on the day a post works, which is the day you would least want to be debugging it.**
@@ -13290,3 +13298,101 @@ number; two friends' photographs do.
 **Follow-ups are unchanged: one each, non-repliers only, from 18 September for
 round 1 and 19 September for round 2.** Expect rate cards from the sponsored
 channels; the answer is always credits to test, never a paid feature.
+
+---
+
+### 92. POST 4 IS THE REVEAL CUT, AND THE PROMPT WAS ANSWERED INSTEAD OF RUN (2026-09-13, evening)
+
+**No code changed, nothing was deployed, the suite is untouched at 2227 / 2224 / 0 / 3.**
+Three things happened: the fourth tape was made and cut, a marketing prompt the owner
+brought was turned into a memo grounded on the record, and one trap was found in the test
+photos.
+
+#### A -- The tape, and the one he offered first
+
+He asked to post the space centre tape he already had, the 5 September render on the box
+(§69B's 4:3 showcase tape). It was checked on pixels before answering: 4:3 matted (half of
+every frame black bar), the back of his head for roughly seconds 0 to 8 with the face
+arriving at 9, and the stamp `07 DEC 2000 13:44` faint over concrete, December for a sunlit
+field in a t-shirt. Every one of those is a fix that reached only future renders (§83, §88),
+and posting it as post 4 would have changed five things at once. **The 46 credits buy the
+measurement, not the place.** He ordered a fresh one.
+
+The new tape (9:16, 720p, his WhatsApp photo, the space centre) is what §88 promised on a
+daytime place: face toward the lens from second 1, strangers in the background and none near
+the lens, the stamp `16 JUN 1999 11:46` legible with its border and matching a sunlit late
+morning, 375 frames, 15.000 s, -27.2 LUFS, both Art. 50 tags. From 12.5 s to the end he is
+close and steady, so the cold open starts at 13.0 s. `face-first.sh --photo <the WhatsApp
+image> --gain 11 ... 13.0 26` produced 443 frames (18 + 50 + 375), 17.76 s, -16.4 LUFS,
+-4 dBFS peak, disclosure intact, 9.8 MB. Post log row 4 carries the tape; its numbers are
+due at 00:00 on the 15th. Tokyo's row 3 views are final at **1,050**; the average watch and
+completion are still the 858-view readings until he re-reads them.
+
+#### B -- `waist-up.jpg` IS THE WATCH
+
+Both candidate photographs were cut so his answer would only have to choose, and the strip
+of opening frames showed the first cut opening on **a wristwatch held in a hand**.
+`assets/test-photos/waist-up.jpg` (7.6 MB, 7 September) is §74A's own image: copied on the
+owner's say-so, never opened, never replaced. The WhatsApp image of 12 September in
+Downloads is the real waist-up photograph, and the tape's t-shirt print matches it exactly,
+which is what settled which file he had uploaded. **§74F's rule, met a second time: a photo
+a person names is not a photo you have seen.** The watch cut was deleted; a memory file
+records the trap.
+
+#### C -- The interrogation prompt, and what was done with it
+
+He shared an eleven-section "Rory Sutherland-style" marketing prompt and asked for
+thoughts, then whether it could produce a strategy. The read given: its questions are the
+right ones for this product (what is really being bought, what is over-explained, the small
+detail with outsized meaning), its mandated volume is not (exactly seven recommendations
+with eight sub-fields each fills every slot whether or not there is something to say), and
+run cold it would re-propose what is already ruled out (the nostalgia subreddits, lifetime
+deals, a 30-day plan against a launch in nine days) and produce copy in exactly the cadence
+Matt Muir named on Friday. **So it was answered rather than run**, against the stripped live
+pages, the session-gated pages rendered offline, the emails, PRODUCT.md and the pack
+config, and written as `build/marketing/2026-09-13-the-frame.md` (gitignored; ~2,600 words;
+checked for dashes and curly quotes, zero of each).
+
+What it argues, in one paragraph: the site sells a machine and the customer buys a portrait
+and a joke; the bottleneck is proof (every face is his) and category ("AI video tool" is the
+worst shelf, and "me in a decade I wasn't in" has gone viral twice under other names); the
+reframe is the reveal cut made general, a photograph that turned into a home video, with
+"made from one photograph" as the sentence people repeat. Five moves before the 22nd, each
+with the number that would read it: the photograph in front of the tape everywhere (the
+landing wipe becomes his photo against his tape, §62D's two-file swap, now that the consent
+argument no longer applies to his own face); two faces that are not his; sell tapes, not
+credits; tell them the date on the result page (§77C); name the gift. One launch-day line:
+the 500 free tapes as true scarcity in the first comment, never as a live counter. Plus a
+ten-item audit of what the site says by accident and the nine days laid out.
+
+**HIS DECISION: the next session starts with the result page's date line, test-first, then
+the tapes-not-credits copy.** Both are small.
+
+#### D -- Things that will bite
+
+- **A stamp crop that assumes full-bleed returns the black bar on a 4:3 tape.** The picture
+  in a matted 1080x1920 file ends at y=1365; the stamp sits at about y=1258..1365, x>=540.
+  §83E said this and it cost one round trip anyway.
+- **`-v error` suppresses `metadata=print`** (§56D, §64E, §74F), and it fired again on a
+  signalstats probe that printed nothing.
+- **The transcript search does not index everything.** The typed outfit line from the 12th
+  could not be recovered by searching earlier sessions; the status page's "Wearing" row is
+  where a typed outfit is shown back to the customer, and that is the answer to "what did I
+  type last time".
+- **`moderateText` takes `(text, { kind })`**, not a positional kind.
+- **Cutting with both candidate photographs before asking was cheap and is what found the
+  watch.** When a choice is between files already on the machine, produce both and look.
+- **The Bash heredoc broke on this very section**, as it did on §87 and §75. The script was
+  written to a file with the Write tool and run.
+
+#### E -- What is left
+
+**Tonight, his:** post 4 at 00:00 Berlin on the 14th, four surfaces, TikTok first; Tokyo's
+two remaining figures. **Next session:** the date line, then tapes-not-credits; read post 4
+at 00:00 on the 15th and decide the standard cut; post 5 at midnight on the 15th, a friend
+if a photograph has arrived. **Unchanged and dated:** the launch video onto YouTube before
+the 16th or 17th, the Product Hunt page on the 19th, launch Tuesday the 22nd at 09:01
+Berlin, follow-ups on the 18th and 19th. **Still his:** two or three friends' photographs,
+the two-line thank-you to Matt, the 513 Instagram follows, the $49 There's An AI For That
+decision, and three questions the memo ends on.
+
