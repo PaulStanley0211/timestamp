@@ -108,7 +108,7 @@ export function signupPage({ error = null, email = '', next = '', consentText = 
   <section class="panel">
     <p class="eyebrow">Create an account</p>
     <h1 class="headline">Start a shelf</h1>
-    <p class="sub">A free credit allowance to start, granted once when the account
+    <p class="sub">Your first tape is free, granted once when the account
     opens. No card, and nowhere on this site to type one.</p>
 
     ${error ? `<p class="alert" role="alert">${h(error)}</p>` : ''}
@@ -684,15 +684,30 @@ export function pricingPage({
       <p class="hint">Tax is added at checkout.</p>`;
 
   /**
+   * TAPES, NOT CREDITS (2026-09-14). A card's figure is what the rung GIVES:
+   * the free rung's is a tape, a pack's is its price, and in both the line
+   * beneath says what that buys in tapes. The credit count is the small
+   * print, because "21 credits" is a currency the visitor has to convert and
+   * "1 tape" is a thing they get. A rung whose credits buy no whole tape at
+   * the cheapest size falls back to the count, which is at least true.
+   */
+  const perTape = cheapest ? (cheapest.creditsByAspect?.['4:3'] ?? cheapest.credits) : null;
+  const tapesFor = (credits) => (perTape > 0 ? Math.floor(credits / perTape) : 0);
+  const tapeFigure = (credits) => {
+    const n = tapesFor(credits);
+    return n > 0 ? `${n} ${n === 1 ? 'tape' : 'tapes'}` : `${credits} credits`;
+  };
+
+  /**
    * FREE LEADS THE ROW SIGNED OUT AND IS ABSENT SIGNED IN. Its figure is the
-   * credit count, because that is what the rung actually gives; its action is
-   * the one thing a visitor without an account has come here to do.
+   * tape it gives; its action is the one thing a visitor without an account
+   * has come here to do.
    */
   const freeCard = free && !account ? `
     <section class="card tier tier--free">
       <p class="tier-name">${h(free.label)}</p>
-      <p class="price">${h(`${free.creditsPerPeriod} credits`)}</p>
-      <p class="per">when you sign up</p>
+      <p class="price">${h(tapeFigure(free.creditsPerPeriod))}</p>
+      <p class="per">${h(`${free.creditsPerPeriod} credits, when you sign up`)}</p>
       ${checks([buysLine(free.creditsPerPeriod), 'any shape', 'no card'])}
       <a class="record" href="/signup">Start free</a>
     </section>` : '';
@@ -703,8 +718,8 @@ export function pricingPage({
     <section class="${recommended ? 'lime' : 'card'} tier tier--paid${recommended ? ' tier--lime' : ''}">
       <p class="tier-name">${h(pack.label)}${recommended ? ' <span class="mark">Recommended</span>' : ''}</p>
       <p class="price">${h(`$${pack.priceUSD}`)}</p>
-      <p class="per">${h(`${pack.credits} credits`)}</p>
-      ${checks([buysLine(pack.credits), 'any shape', 'yours to download and keep', `photograph deleted after ${photoDays} days`])}
+      <p class="per">${h(buysLine(pack.credits))}</p>
+      ${checks([`${pack.credits} credits`, 'any shape', 'yours to download and keep', `photograph deleted after ${photoDays} days`])}
       ${buyForm(pack, recommended)}
     </section>`;
   }).join('');

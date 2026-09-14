@@ -1038,7 +1038,9 @@ test('the hero carries one action and the free-grant sentence, and the landing p
   const hero = /<header class="lime hero">([\s\S]*?)<\/header>/.exec(html);
   assert.ok(hero, 'no lime hero');
   assert.equal((hero[1].match(/class="hero-cta"/g) ?? []).length, 1, 'the hero carries exactly one action');
-  assert.match(hero[1], /21 free credits with a new account\. One tape, no card\./, 'the free-grant line is missing or typed differently');
+  // TAPES, NOT CREDITS (2026-09-14). The line leads with the thing a person
+  // gets; the credit count is the explanation, not the headline.
+  assert.match(hero[1], /Your first tape is free\. 21 credits with a new account, and no card\./, 'the free-grant line is missing or typed differently');
   // The subline reads the way the owner writes, not the way a model does
   // (2026-09-12, Matt Muir's note): "pick", "you get back", and no second
   // "drawer" on a screen whose manifesto already says it.
@@ -1046,7 +1048,11 @@ test('the hero carries one action and the free-grant sentence, and the landing p
   assert.match(hero[1], /class="ruler"[\s\S]*>REC<[\s\S]*>00:15</, 'the counter ruler is missing or does not run to fifteen');
   assert.match(hero[1], /<nav class="hero-nav"[\s\S]*href="#places">Places<[\s\S]*href="\/pricing">Pricing<[\s\S]*data-signin>Sign in<[\s\S]*class="navpill"/, 'the nav is not inside the hero, or lost a link');
   assert.doesNotMatch(html, /\$\d/, 'a dollar price reached the landing; the pack prices live on the pricing page');
-  assert.doesNotMatch(landingPage({ places: PLACES_FIXTURE, account: null }), /free credits with a new account/, 'a grant sentence was invented with no seam behind it');
+  // Scoped to the hero: the FAQ answers "Is it free?" in its own words whether
+  // or not it was handed a number, and this assertion is about the hero line
+  // never being invented without the pricing seam behind it.
+  const bareHero = /<header class="lime hero">([\s\S]*?)<\/header>/.exec(landingPage({ places: PLACES_FIXTURE, account: null }))?.[1] ?? '';
+  assert.doesNotMatch(bareHero, /first tape is free/, 'a grant sentence was invented with no seam behind it');
 });
 
 test('the showcase fills the hero, the stickers and the demo when present, and each slot falls back to a place when absent', () => {
@@ -1734,14 +1740,18 @@ test('the pricing page is three cards -- Free with a sign-up action, Starter, an
 
   const between = (a, b) => html.slice(html.indexOf(a), b ? html.indexOf(b) : undefined);
   const free = between('tier--free', 'tier--paid');
-  assert.match(free, /<p class="price">21 credits<\/p>\s*<p class="per">when you sign up<\/p>/, 'the free figure is the credit count');
+  // TAPES, NOT CREDITS (2026-09-14). The figure is what the rung gives, one
+  // tape; the credit count is beneath it, where the explanation goes.
+  assert.match(free, /<p class="price">1 tape<\/p>\s*<p class="per">21 credits, when you sign up<\/p>/, 'the free figure is the tape, with the credits beneath');
   assert.match(free, /<li>1 tape at 480p \(none in 16:9 or 9:16\)<\/li><li>any shape<\/li><li>no card<\/li>/, 'the free checks');
   assert.match(free, /<a class="record" href="\/signup">Start free<\/a>/, 'signed out, Free carries the sign-up action');
 
   const standard = between('tier--lime');
   assert.match(standard, /Standard/); assert.match(standard, /Recommended/, 'and it says so in words');
-  assert.match(standard, /<p class="price">\$19<\/p>\s*<p class="per">138 credits<\/p>/, 'price first, credits beneath');
-  assert.match(standard, /<li>6 tapes at 480p \(4 in 16:9 or 9:16\), or 3 tapes at 720p \(2 in 16:9 or 9:16\)<\/li><li>any shape<\/li><li>yours to download and keep<\/li><li>photograph deleted after 7 days<\/li>/);
+  assert.match(standard, /<p class="price">\$19<\/p>\s*<p class="per">6 tapes at 480p \(4 in 16:9 or 9:16\), or 3 tapes at 720p \(2 in 16:9 or 9:16\)<\/p>/, 'price first, what it buys beneath');
+  assert.match(standard, /<li>138 credits<\/li><li>any shape<\/li><li>yours to download and keep<\/li><li>photograph deleted after 7 days<\/li>/, 'the credit count is the small print');
+  // THE RULE, not the words: no card on this page leads with a credit count.
+  assert.doesNotMatch(html, /<p class="price">\d+ credits<\/p>/, 'a card leads with a credit count; the figure is a tape or a price');
 
   assert.match(css, /\.tiers\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/, 'three equal columns');
   assert.match(css, /\.tier--lime\s*\{[^}]*transform:\s*translateY\(/, 'the recommended card is not lifted');
@@ -1802,8 +1812,10 @@ test('the signup page does not promise a recurring free allowance, because there
 
   // PRESENT FIRST: the sentence about the free allowance must still exist, or
   // the absences below pass against a page that dropped the subject entirely.
-  assert.match(html, /free credit allowance/i,
-    'the signup page no longer mentions the free allowance at all');
+  // The sentence leads with the tape (2026-09-14): "a free credit allowance"
+  // is what a bank gives you; "your first tape is free" is what a person hears.
+  assert.match(html, /your first tape is free/i,
+    'the signup page no longer mentions the free tape at all');
   assert.match(html, /granted once/i,
     'the copy must say the grant happens once -- that is the true cadence');
 

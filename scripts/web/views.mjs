@@ -793,7 +793,7 @@ export function faqItems({
   // THE REGISTER IS THE OWNER'S, NOT A MODEL'S (2026-09-12). Contractions,
   // one idea per sentence, the why in a "because", and a parenthetical where
   // a comma-triad used to be. See the note above the hero subline.
-  const free = freeCredits ? `A new account gets ${freeCredits} credits, enough for one tape at 480p in any shape, and there's no card to enter.` : `A new account gets enough credits for one tape, and there's no card to enter.`;
+  const free = freeCredits ? `Your first tape is free: a new account gets ${freeCredits} credits, which is one tape at 480p in any shape, and there's no card to enter.` : `Your first tape is free: a new account gets enough credits for one, and there's no card to enter.`;
   // No pack price here: the landing prices nothing in dollars (spec §8); the
   // pricing page carries the packs.
   const packs = ' After that you buy credits in packs. The prices are on the pricing page.';
@@ -1261,8 +1261,13 @@ export function landingPage({
 
   const seconds = Math.round(frames / fps);
   const ticks = [1, 2, 3, 4, 5].map((k) => `00:${String(Math.round((k * seconds) / 5)).padStart(2, '0')}`);
+  // TAPES, NOT CREDITS (2026-09-14). The line leads with the thing a person
+  // gets and the credit count is the explanation, because "21 free credits"
+  // is a currency the visitor has to convert and "your first tape is free" is
+  // a thing they get. Same rule on the signup page, the FAQ and the pricing
+  // cards.
   const free = pricing?.freeCredits
-    ? `<p class="hero-fine">${h(`${pricing.freeCredits} free credits with a new account. One tape, no card.`)}</p>`
+    ? `<p class="hero-fine">${h(`Your first tape is free. ${pricing.freeCredits} credits with a new account, and no card.`)}</p>`
     : '';
 
   const body = `

@@ -1373,7 +1373,7 @@ test('the pricing page lists the plans in credits and marks the current one', as
     // 2026-09-04's row of two purchases. A priced plan still gets a card of its
     // own after the packs, and keeps the struck/ghost grammar.
     for (const label of ['Shelf', 'Archive']) assert.ok(anonHtml.includes(label), `${label} is missing`);
-    assert.match(anonHtml, /<p class="price">51 credits<\/p>\s*<p class="per">when you sign up<\/p>/, 'the free grant is the first card');
+    assert.match(anonHtml, /<p class="price">1 tape<\/p>\s*<p class="per">51 credits, when you sign up<\/p>/, 'the free grant is the first card, and its figure is the tape');
     assert.ok(anonHtml.includes('$10') && anonHtml.includes('$12'));
     assert.ok(!anonHtml.includes('Your plan'), 'nothing is marked for a signed-out visitor');
 
