@@ -30,7 +30,7 @@ import { resolveRaster } from '../scripts/render/pipeline.mjs';
 import { FAL_CAPABILITIES } from '../scripts/providers/fal.mjs';
 import {
   JOB_ID_RE, createJob, loadJob, saveJob, jobPaths,
-  setJobStatus, completeJob, failStep, beginStep,
+  setJobStatus, completeJob, failStep, beginStep, freezeResolved,
 } from '../scripts/render/job.mjs';
 
 const CFG = JSON.parse(fs.readFileSync(new URL('../config/render.json', import.meta.url), 'utf8'));
@@ -2734,6 +2734,44 @@ test('the result page says the tape is AI-generated', async () => {
     const html = await (await get(base, `/j/${job.jobId}/result`, cookieA)).text();
     assert.ok(html.includes('Made with AI'),
       'the result page must carry the AI disclosure line');
+  });
+});
+
+test('the result page tells the customer what date the tape is stamped', async () => {
+  // The burnt-in date is the product's best detail and the page never said
+  // it: the cassette label printed the ORDER date, in 2026, in the tape's own
+  // readout face. Compose freezes the stamp into `resolved.look.osd`, so the
+  // page reads it from there -- the label's date becomes the tape's, and a
+  // sentence under the heading says it in words, which is the line a person
+  // screenshots and captions with.
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA });
+    freezeResolved(job, { look: { osd: { enabled: true, dateText: '14 JUL 2002', timeText: '18:16' } } });
+    saveJob(job);
+    fs.writeFileSync(jobPaths(root, job.jobId).video, Buffer.alloc(2048, 7));
+    const html = await (await get(base, `/j/${job.jobId}/result`, cookieA)).text();
+    assert.ok(html.includes('The date in the corner reads 14 July 2002, 18:16.'),
+      'the page must say, in words, what the tape is stamped');
+    const label = /<span class="ldate">([^<]*)<\/span>/.exec(html)?.[1];
+    assert.equal(label, '14 JUL 2002',
+      'the cassette label carries the tape\'s own date, not the day the order was placed');
+  });
+});
+
+test('a tape that froze no stamp gets no date sentence, and its label keeps the order date', async () => {
+  // A job the tests seed never runs compose, so it has no frozen stamp. The
+  // page must not guess one: a wrong date on the one line built to be
+  // screenshotted is worse than no line. The label falls back to the order
+  // date it has always printed.
+  await withServer(async ({ base, root, app, accountA, cookieA }) => {
+    const job = seedJob(app, root, { status: 'done', owner: accountA });
+    fs.writeFileSync(jobPaths(root, job.jobId).video, Buffer.alloc(2048, 7));
+    const html = await (await get(base, `/j/${job.jobId}/result`, cookieA)).text();
+    assert.ok(html.includes('Make another'), 'the page rendered at all');
+    assert.ok(!html.includes('The date in the corner'),
+      'no frozen stamp, no sentence');
+    const label = /<span class="ldate">([^<]*)<\/span>/.exec(html)?.[1];
+    assert.match(label ?? '', /^\d{2}\.\d{2}\.\d{4}$/, 'the label falls back to the order date');
   });
 });
 

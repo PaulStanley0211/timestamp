@@ -729,6 +729,22 @@ export function stampDate(jobId) {
   return m ? `${m[3]}.${m[2]}.${m[1]}` : '';
 }
 
+const MONTH_WORDS = {
+  JAN: 'January', FEB: 'February', MAR: 'March', APR: 'April', MAY: 'May', JUN: 'June',
+  JUL: 'July', AUG: 'August', SEP: 'September', OCT: 'October', NOV: 'November', DEC: 'December',
+};
+
+/** `{ dateText: '14 JUL 2002', timeText: '18:16' }` -> `14 July 2002, 18:16`.
+ *  Null when there is no stamp or it is not in the shape burn-in.mjs writes,
+ *  so the page says a date in words or says nothing; it never guesses one. */
+export function stampWords(stamp) {
+  const m = /^(\d{2}) ([A-Z]{3}) (\d{4})$/.exec(String(stamp?.dateText ?? ''));
+  const month = m ? MONTH_WORDS[m[2]] : null;
+  if (!month) return null;
+  const time = /^\d{2}:\d{2}$/.test(String(stamp?.timeText ?? '')) ? `, ${stamp.timeText}` : '';
+  return `${Number(m[1])} ${month} ${m[3]}${time}`;
+}
+
 import { RETENTION_DEFAULTS } from '../safety/consent.mjs';
 
 /**
@@ -2298,6 +2314,17 @@ export function resultPage({ view, account = null, labels = {}, tapes = [], rete
   const labelSub = [labels.outfit ?? view.input?.outfit ?? null, runtime].filter(Boolean).join(' · ');
   const place = labels.place ?? view.input?.place ?? null;
 
+  // THE DATE ON THE PAGE IS THE DATE ON THE TAPE. The stamp compose froze
+  // into the job (`result.stamp`, read off `resolved.look.osd`) is what the
+  // corner of the picture actually reads; the label carries it in the readout
+  // face and one sentence under the heading says it in words, because that
+  // sentence is what a person screenshots and captions with. A job that froze
+  // no stamp gets no sentence and the label falls back to the order date, as
+  // it always printed: a guessed date here is worse than none.
+  const stamp = view.result?.stamp ?? null;
+  const dated = stampWords(stamp);
+  const labelDate = dated ? stamp.dateText : stampDate(view.jobId);
+
   /**
    * THE WINDOW THE WORDS PROMISE IS THE ONE THE PURGE ENFORCES, read from the
    * config `scripts/render/purge-cli.mjs` deletes by, and threaded in rather
@@ -2338,7 +2365,7 @@ export function resultPage({ view, account = null, labels = {}, tapes = [], rete
       <p class="label">
         <span class="lname">${h(place ?? '')}</span>
         <span class="lsub">${h(labelSub)}</span>
-        <span class="ldate">${h(stampDate(view.jobId))}</span>
+        <span class="ldate">${h(labelDate)}</span>
       </p>
     </div>
 
@@ -2349,6 +2376,7 @@ export function resultPage({ view, account = null, labels = {}, tapes = [], rete
            captioning the picture -- "Here it is" was the caption, and it is
            gone. */''}
       ${place ? `<h1 class="headline">${h(place)}</h1>` : ''}
+      ${dated ? `<p class="sub dated">The date in the corner reads ${h(dated)}.</p>` : ''}
       <p class="sub">${h(finished)} ${h(keep)}</p>
 
       <p class="actions">

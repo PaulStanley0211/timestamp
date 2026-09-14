@@ -1546,6 +1546,27 @@ export function createServer({
   }
 
   /**
+   * The date the tape is stamped with, or null if the job never froze one.
+   *
+   * `burn-in.mjs` derives it from the job's seed and the place's own clock,
+   * and compose freezes it into `resolved.look.osd` with everything else the
+   * render read. The page reads it from THERE rather than re-deriving it,
+   * because a tape made before the clock became scene-aware carries the date
+   * it was actually burnt with, and today's rule would name a different one.
+   * A block that is missing, disabled or not in the shape burn-in writes gives
+   * null, and the page then says nothing: a guessed date on the one line
+   * built to be screenshotted is worse than no line.
+   */
+  function frozenStamp(job) {
+    const osd = job.resolved?.look?.osd;
+    if (!osd || osd.enabled === false) return null;
+    const { dateText, timeText } = osd;
+    return typeof dateText === 'string' && dateText !== '' && typeof timeText === 'string'
+      ? { dateText, timeText }
+      : null;
+  }
+
+  /**
    * The failure sentence a customer sees. The raw `error.message` is written
    * for the operator -- a provider HTTP body, an ffmpeg stderr line, a guard
    * name -- and it stays in the manifest; what ships to a page or the status
@@ -1647,6 +1668,9 @@ export function createServer({
         // already ran; today's config answers for a job somebody might start
         // now. Null when nothing was frozen, and the page then says nothing.
         tape: frozenTape(job),
+        // The burnt-in date, from the same frozen block, so the result page
+        // can say what the tape reads instead of printing the order date.
+        stamp: frozenStamp(job),
         videoUrl: job.result?.videoPath ? `/api/jobs/${job.jobId}/video` : null,
         posterUrl: job.result?.posterPath ? `/api/jobs/${job.jobId}/poster` : null,
       },
