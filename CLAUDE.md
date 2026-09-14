@@ -7,6 +7,16 @@ Warm, grainy, quiet.
 
 ---
 
+## START HERE (2026-09-14) -- **§93 FIRST: THE RESULT PAGE SAYS WHAT DATE THE TAPE IS STAMPED. BUILT, DEPLOYED AT `72ed779`, PROVED BY THE BYTES IN THE RUNNING CONTAINER.** THEN §92 AND §90.
+
+**The box, local and `origin/supabase-identity-slice` are all on `72ed779`. Suite 2229 / 2225 / 1 / 3 under full load, the one red being the landing band sweep at its capture budget and green alone in 15 s (§80's residual); guards 7/7 counted before the commit and the message guard again after it.** The burnt-in date was the product's best detail and the page never said it: the cassette label printed the ORDER date, in 2026, in the tape's own readout face. Now `jobView` projects the stamp compose froze into `resolved.look.osd` as `result.stamp`, the label carries the tape's own date, and one sentence under the heading says it in words: *"The date in the corner reads 14 July 2002, 18:16."* A job that froze no stamp gets no sentence, because a guessed date on the one line built to be screenshotted is worse than none. **Read off the manifest, never re-derived**: a tape burnt before §83's scene-aware clock shows the date it actually carries.
+
+**THE ONE THING WORTH CARRYING IS THE ORDER OF PROOF, which is now routine and worked without a wrong turn:** red for the right reason, green, both whole test files, three sabotages each red on its own assertion and restored byte-identical, the full suite, the residual re-run alone, guards counted, commit, message guard again, push, then the deploy as three separate remote commands, and the proof being **`docker compose exec -T web grep -c` on the three new lines inside the running container** (1, 1, 1) rather than the CSP hash set, which came back identical because no script changed and so proves nothing here (§82D, §83D).
+
+**POST 4 IS UP** (§92): the space centre, the reveal cut, posted between 00:00 and 00:18 on the 14th; read its three TikTok figures at 00:00 on the 15th. **NEXT SESSION STARTS WITH the tapes-not-credits copy on the pricing page and the landing, then the gift line** (the memo, `build/marketing/2026-09-13-the-frame.md`). Still his: Tokyo's two remaining figures, two friends' photographs, the thank-you to Matt, the 513 Instagram follows, and replacing `assets/test-photos/waist-up.jpg`, which is the wristwatch.
+
+## (the banner below is 2026-09-13, evening)
+
 ## START HERE (2026-09-13, evening) -- **§92 FIRST: POST 4 IS THE REVEAL CUT, HANDED OVER FOR MIDNIGHT; A STRATEGY MEMO EXISTS; THE NEXT SESSION STARTS WITH THE RESULT PAGE'S DATE LINE. NO CODE CHANGED, NOTHING DEPLOYED.** THEN §90, §89 AND §88.
 
 **The box, local and `origin/supabase-identity-slice` are on `d6ea4f8` plus docs commits; the suite is untouched at 2227 / 2224 / 0 / 3.** The owner rendered a fresh space centre tape (9:16, 720p) and it is what §88 promised on a daytime place: face toward the lens from the first second, strangers at a distance, the stamp `16 JUN 1999 11:46` legible and true to the scene. The reveal cut (his photograph for 0.7 s, a hard cut to his face at 13.0 s, then the tape) is at `build/social/space-centre-reveal.mp4` and goes up at **00:00 Berlin on the 14th**; its TikTok completion figure, read at 00:00 on the 15th, decides whether the reveal becomes the standard cut. **He offered the 5 September space centre tape first and it was refused on pixels**: 4:3 matted, the back of his head for eight seconds, the pre-fix stamp. **THE ONE THING WORTH CARRYING: `assets/test-photos/waist-up.jpg` IS THE WRISTWATCH** from §74A, never replaced, and the first reveal cut opened on a watch. The owner's real waist-up photograph is the WhatsApp image of 12 September in Downloads. §74F's rule again: look at a photo before cutting or rendering with it.
@@ -13395,4 +13405,86 @@ the 16th or 17th, the Product Hunt page on the 19th, launch Tuesday the 22nd at 
 Berlin, follow-ups on the 18th and 19th. **Still his:** two or three friends' photographs,
 the two-line thank-you to Matt, the 513 Instagram follows, the $49 There's An AI For That
 decision, and three questions the memo ends on.
+
+---
+
+### 93. THE RESULT PAGE SAYS WHAT DATE THE TAPE IS STAMPED (2026-09-14)
+
+**2227 -> 2229 tests / 2225 pass / 1 fail / 3 skipped under full load; the one red is the
+landing band sweep at its 15-second capture budget, green alone in 15 s (§80B said halving
+the work could not be shown to have removed the stall, and it has not).** One commit,
+`72ed779`, test-first, three sabotages each red on its own assertion and restored from a
+copy with `cmp`, all seven `guards.yml` steps extracted fresh, run verbatim and COUNTED 7/7
+before the commit and the message guard again after it. **Pushed and DEPLOYED; local,
+`origin/supabase-identity-slice` and the box are all on `72ed779`.** This is the first of
+the memo's five moves (§92C) and the one the owner chose to start with.
+
+#### A -- What the page does now
+
+`jobView` (server.mjs) projects `result.stamp = { dateText, timeText }` through
+`frozenStamp(job)`, read off `resolved.look.osd` beside `frozenTape`; a block that is
+missing, disabled or not in the shape `burn-in.mjs` writes gives null. `resultPage`
+(views.mjs) turns it into words with `stampWords()` (`14 JUL 2002` + `18:16` -> `14 July
+2002, 18:16`), prints `<p class="sub dated">The date in the corner reads 14 July 2002,
+18:16.</p>` directly under the place heading, and the cassette label's `.ldate` span carries
+the tape's `dateText` in the readout face instead of the order date. **No stamp, no
+sentence, and the label falls back to the order date it always printed.**
+
+**READ, NEVER RE-DERIVED.** `deriveStamp(seed, scene)` is deterministic and the web layer
+could call it, but §83C made the clock scene-aware on 2026-09-09 and every tape rendered
+before that carries a date the old rule chose. The manifest has the truth for both; the
+function has it only for one.
+
+#### B -- What was measured
+
+The line sits at 249px under a heading at 163px with the next sentence at 312px, at 1440
+wide, in Inter at the body size, read off the real cascade; the label reads `14 JUL 2002` in
+TapeOSD. The Browser pane painted the phone capture and not the laptop one, so the numbers
+are the record and no screenshot is (§62E, §65E: measure when the pane will not paint).
+
+**The sabotage record**, each driven off the exit code (§88H): the projection replaced with
+`null` -> red, *"the page must say, in words, what the tape is stamped"*; the sentence made
+unconditional with a guessed date -> red on the fallback test, *"no frozen stamp, no
+sentence"*; the label pinned to the order date -> red, *"the cassette label carries the
+tape's own date"*. The fallback test had passed on its first run, as a negative assertion
+against a page that rendered nothing must, and the second sabotage is what earned it
+(§90C).
+
+#### C -- The deploy, and what proved it
+
+Three separate remote commands (§70F): `git pull` fast-forwarded four files; `docker
+compose up -d --build` showed `[worker 4/6] COPY . .` with no `CACHED` and the preflight
+re-ran (§82C); then the checks. Web `(healthy)` at 35 s, worker Up, 0 restarts on both, 0
+FATAL, HEAD `72ed779`. **The proof is `docker compose exec -T web grep -c` for the three new
+lines inside the running container, which answered 1, 1, 1.** From outside: health ok, eight
+public pages 200, `/videos` 303 to login, and the CSP hash set byte-identical to local at
+five hashes, which is the EXPECTED result for a change that touches no inline script and is
+therefore not evidence of the deploy (§83D).
+
+#### D -- Things that will bite
+
+- **THE BASH HEREDOC BROKE TWICE MORE**, once on a Python script with `'''` and once eating
+  `\n` in a replacement, exactly as §31 through §88 warn. Every edit in this session that
+  landed was a script written with the Write tool and run by name; the pattern in the
+  scratchpad (`green-date-line.py`, `sabotage.py`, `extract-guards.py`) is the one to copy.
+- **A `sleep` at the head of a probe command is blocked by the harness**, and the probe was
+  refused whole. The container was already healthy; poll with `curl --retry` (§71E) or run
+  the probe after the container check rather than sleeping first.
+- **The preview fixture in `build/preview-pages.mjs` now carries a stamp** (`14 JUL 2002`,
+  `18:16`) on its result view, alongside its retired place ids (§71E). Scratch, gitignored.
+- **`build/guards/` is wiped and re-extracted by `extract-guards.py` before every run**, so
+  §79's fourteen-passes trap cannot recur through that script; the count assertion stays.
+- **The cassette label's date changed meaning for every tape with a frozen stamp.** It reads
+  the tape's year, not the order's. The shelf tiles still show the order date, on purpose:
+  that is when you made it, and the label is what the object says.
+
+#### E -- What is left
+
+**Next session:** the tapes-not-credits copy on the pricing page and the landing (name the
+pins first; §89C), then the gift line, both from the memo. **His:** post 4's three TikTok
+figures at 00:00 on the 15th and Tokyo's two remaining ones; two friends' photographs; the
+thank-you to Matt; the 513 Instagram follows; replacing `assets/test-photos/waist-up.jpg`.
+**Dated and unchanged:** the launch video onto YouTube before the 16th or 17th, the Product
+Hunt page on the 19th, launch Tuesday the 22nd at 09:01 Berlin, follow-ups on the 18th and
+19th.
 
