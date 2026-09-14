@@ -7,6 +7,16 @@ Warm, grainy, quiet.
 
 ---
 
+## START HERE (2026-09-14, afternoon) -- **§94 FIRST: THE PRICING PAGE AND THE LANDING LEAD WITH TAPES, NOT CREDITS. DEPLOYED AT `6885e74`, PROVED ON THE LIVE PAGES.** THEN §93 AND §92.
+
+**The box, local and `origin/supabase-identity-slice` are all on `6885e74`. Suite 2229 / 2226 / 0 / 3, fully green under load this time; guards 7/7 counted before the commit and the message guard again after it.** Four sentences moved and no number did: the landing's free line opens "Your first tape is free. 21 credits with a new account, and no card."; the signup page drops "a free credit allowance", which is what a bank gives you; the FAQ's "Is it free?" opens on the tape; and on the pricing page the free card's figure is **1 tape** with the credits beneath, the pack cards keep their price and put what it buys beneath, and the credit count moves into the checks as the small print. **A new rule pins it: no card on the pricing page leads with a credit count.** Pack names are untouched, because renaming Starter and Standard means renaming the Stripe products too, and that is the owner's dashboard.
+
+**Because this copy is PUBLIC, the deploy proof was the live pages themselves** (§89C): stripped and grepped, seven new sentences present once each, three old ones absent, health ok, the CSP hash set identical as expected. **Two things worth carrying:** a whole-page anti-vacuity assertion can collide with a second sentence that legitimately says the same thing (the FAQ's fallback), so scope it to the element it is about; and an SSH command that sleeps on the remote side can be reset by the peer mid-sleep, and the answer is to run the check without the sleep once the site already answers.
+
+**Also today:** AI Zayan (469K) replied with a rate card, $1,400 for a dedicated video, and was declined with credits to test left on the table (§87G's prediction, §91D's rule). **NEXT: the gift line (one FAQ entry and one landing sentence), then the landing before/after as the owner's photograph against his tape, two files, which he sees before it ships.** Post 4's three TikTok figures are due at 00:00 on the 15th.
+
+## (the banner below is 2026-09-14)
+
 ## START HERE (2026-09-14) -- **§93 FIRST: THE RESULT PAGE SAYS WHAT DATE THE TAPE IS STAMPED. BUILT, DEPLOYED AT `72ed779`, PROVED BY THE BYTES IN THE RUNNING CONTAINER.** THEN §92 AND §90.
 
 **The box, local and `origin/supabase-identity-slice` are all on `72ed779`. Suite 2229 / 2225 / 1 / 3 under full load, the one red being the landing band sweep at its capture budget and green alone in 15 s (§80's residual); guards 7/7 counted before the commit and the message guard again after it.** The burnt-in date was the product's best detail and the page never said it: the cassette label printed the ORDER date, in 2026, in the tape's own readout face. Now `jobView` projects the stamp compose froze into `resolved.look.osd` as `result.stamp`, the label carries the tape's own date, and one sentence under the heading says it in words: *"The date in the corner reads 14 July 2002, 18:16."* A job that froze no stamp gets no sentence, because a guessed date on the one line built to be screenshotted is worse than none. **Read off the manifest, never re-derived**: a tape burnt before §83's scene-aware clock shows the date it actually carries.
@@ -13487,4 +13497,91 @@ thank-you to Matt; the 513 Instagram follows; replacing `assets/test-photos/wais
 **Dated and unchanged:** the launch video onto YouTube before the 16th or 17th, the Product
 Hunt page on the 19th, launch Tuesday the 22nd at 09:01 Berlin, follow-ups on the 18th and
 19th.
+
+---
+
+### 94. THE PRICING PAGE AND THE LANDING LEAD WITH TAPES, NOT CREDITS (2026-09-14, afternoon)
+
+**2229 / 2226 pass / 0 fail / 3 skipped, the whole suite green under full load.** One commit,
+`6885e74`, test-first: the pins rewritten and watched red on each old sentence, four
+sabotages each red on its own assertion and restored from a copy with `cmp`, guards 7/7
+counted before the commit and the message guard again after it. **Pushed and DEPLOYED;
+local, origin and the box are all on `6885e74`.** The memo's third move (§92C).
+
+#### A -- What moved, and what did not
+
+| Where | Was | Is |
+|---|---|---|
+| landing, under the button | 21 free credits with a new account. One tape, no card. | Your first tape is free. 21 credits with a new account, and no card. |
+| signup lede | A free credit allowance to start, granted once... | Your first tape is free, granted once... |
+| FAQ, "Is it free?" | A new account gets 21 credits, enough for one tape... | Your first tape is free: a new account gets 21 credits, which is one tape... |
+| pricing, free card | **21 credits** / when you sign up | **1 tape** / 21 credits, when you sign up |
+| pricing, pack cards | **$12** / 92 credits / ✓ 4 tapes at 480p... | **$12** / 4 tapes at 480p, or 2 tapes at 720p / ✓ 92 credits |
+
+The free card's figure comes from `tapeFigure()`, the credits divided by the cheapest tape
+at the default shape, which is the same divisor the comparison table and the balance
+sentence already use; a rung whose credits buy no whole tape falls back to the count. **No
+number moved, no price moved, and the checks still carry `buysLine` with its parenthetical
+for a world where the shapes cost differently** (§66A's two tests are untouched).
+
+**NOT DONE, on purpose:** the pack names. The memo wanted Starter and Standard renamed for
+what they hold. The Stripe checkout page prints Stripe's own product name beside the
+amount, so a card reading "Four tapes" that hands over to a page reading "Starter" is a
+worse mismatch than the generic names. Both change together or neither does, and the
+Stripe half is the owner's dashboard.
+
+#### B -- The guard, and the test that caught its own author
+
+**The rule pinned is the rule, not the words:** `assert.doesNotMatch(html,
+/<p class="price">\d+ credits<\/p>/)` on the pricing page, so a future card cannot lead
+with a credit count whatever the copy around it says. The moved pins are exact sentences,
+as they were before.
+
+**The hero's anti-vacuity assertion went red against correct code**, and it was the
+assertion's fault. It scanned the whole landing page for the new phrase when rendered with
+no pricing seam, to prove the hero line is never invented; but the FAQ answers "Is it
+free?" in its own words with or without a number, and its fallback now also says "your
+first tape is free". Scoped to the `<header class="lime hero">`, which is what it was
+always about. §43E's family: a structural assertion that reads more of the page than its
+subject.
+
+**The sabotage record**, driven off the exit code: the free figure back to the credit
+count -> red, *"the free grant is the first card, and its figure is the tape"*; the pack's
+line beneath the price back to the credit count -> red on three tests at once, including
+§66A's shape-count pair, which is the right blast radius; the hero line reverted -> red on
+the hero pin; the signup lede reverted -> red on the signup test.
+
+#### C -- The deploy, proved on the public pages
+
+Three separate remote commands (§70F). `COPY . .` fresh, preflight re-ran, both containers
+recreated, web `(healthy)` inside a minute, 0 restarts, 0 FATAL, HEAD `6885e74`. **This
+copy is public, so the proof is the live pages** (§89C): `/`, `/pricing` and `/signup`
+fetched with a cache-busting query and stripped to visible text, then grepped: seven new
+sentences present exactly once, three old ones absent, health ok, five public pages 200,
+the CSP hash set identical to local (expected; no inline script changed).
+
+#### D -- Things that will bite
+
+- **A REMOTE `sleep` INSIDE ONE SSH COMMAND CAN BE RESET BY THE PEER MID-SLEEP.** The first
+  container check died with "Connection reset by peer" during its 20-second wait. The site
+  already answered from outside, so the check re-ran without the sleep and passed. Put the
+  wait in `curl --retry` from here (§71E), not in the remote shell.
+- **THE SCREENSHOT SCRIPTS SHOOT THE DEV SERVER ON :3000** (`build/shot.mjs`,
+  `build/shot-pricing.mjs`), not the preview server on :3400 as §89G says of the
+  `build/shot-*` family; start `web` from the launch config first. Distinct file sizes
+  across the captures are the tell that they are real.
+- **`tapeFigure` lives inside `pricingPage`'s closure** beside `buysLine`, because it needs
+  `cheapest`; a second caller would have to be handed it.
+- **A rate card is answered with credits, never money** (§87G, §91D): AI Zayan, 469K,
+  $1,400 for a dedicated video, declined the same hour and logged in
+  `build/dir/outreach-send-2.md`.
+
+#### E -- What is left
+
+**Next:** the gift line (one FAQ entry, one landing sentence: you can make one of someone
+else, with their permission), then the landing before/after as the owner's photograph
+against his tape frame (`assets/landing/photo.jpg` and `tape.jpg`, §62D's two-file swap),
+rendered for him first. **His:** post 4's three TikTok figures at 00:00 on the 15th and
+Tokyo's two; two friends' photographs; the launch video onto YouTube before the 16th or
+17th; the thank-you to Matt; the 513 follows; `waist-up.jpg`.
 
