@@ -13,7 +13,7 @@ Warm, grainy, quiet.
 
 **Because this copy is PUBLIC, the deploy proof was the live pages themselves** (§89C): stripped and grepped, seven new sentences present once each, three old ones absent, health ok, the CSP hash set identical as expected. **Two things worth carrying:** a whole-page anti-vacuity assertion can collide with a second sentence that legitimately says the same thing (the FAQ's fallback), so scope it to the element it is about; and an SSH command that sleeps on the remote side can be reset by the peer mid-sleep, and the answer is to run the check without the sleep once the site already answers.
 
-**Also today:** AI Zayan (469K) replied with a rate card, $1,400 for a dedicated video, and was declined with credits to test left on the table (§87G's prediction, §91D's rule). **NEXT: the gift line (one FAQ entry and one landing sentence), then the landing before/after as the owner's photograph against his tape, two files, which he sees before it ships.** Post 4's three TikTok figures are due at 00:00 on the 15th.
+**Also today:** AI Zayan (469K) replied with a rate card, $1,400 for a dedicated video, and was declined with credits to test left on the table (§87G's prediction, §91D's rule). Malva AI (163K) replied in the evening: no paid track before January 2027 under an exclusivity agreement on photo-to-video tools, may test the free tape on their own account, wants no credits; logged, closed, no follow-up (§94D). **NEXT: the gift line (one FAQ entry and one landing sentence), then the landing before/after as the owner's photograph against his tape, two files, which he sees before it ships.** Post 4's three TikTok figures are due at 00:00 on the 15th.
 
 ## (the banner below is 2026-09-14)
 
@@ -13575,6 +13575,13 @@ the CSP hash set identical to local (expected; no inline script changed).
 - **A rate card is answered with credits, never money** (§87G, §91D): AI Zayan, 469K,
   $1,400 for a dedicated video, declined the same hour and logged in
   `build/dir/outreach-send-2.md`.
+- **A closed door is logged and left shut.** Malva AI (163K) answered the same evening: paid
+  placements for photo-to-video and prompt-to-video tools are off the table for them through
+  31 December 2026 under an exclusivity agreement, any look at Timestamp will be on their own
+  account and in their own time, the free tape is enough, and nothing further is needed. Not a
+  rate card and not a request, so there is nothing to answer; logged as closed and taken off
+  the 19 September follow-up list. The exclusivity is worth knowing: a sponsored AI-video
+  channel can be contractually shut to a whole category, which no rate card would have said.
 
 #### E -- What is left
 
