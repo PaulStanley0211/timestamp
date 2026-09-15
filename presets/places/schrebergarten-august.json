@@ -22,6 +22,33 @@
     "manicured lawn"
   ],
   "motionHint": "the hedge and the tablecloth move a little in the breeze, and a wasp turns slowly around the bottle",
+  "_scripts": "Three fifteen-second scripts, one picked per order by the scripted arc (compose/prompt.mjs). Each is three shots at five seconds, written around the objects already in this place, so what happens comes from where it is. Every shot names the person, the first has them turned toward the lens, the last keeps their whole head in frame and ends on them, and none names anybody holding the camera. Tests in compose-prompt.test.js hold every one of those.",
+  "scripts": [
+    {
+      "name": "The hose",
+      "shots": [
+        "Medium. They are watering along the hedge with the green hose, turned toward the lens, camera holding on them.",
+        "Wide. They swing the hose round and flick a spray of water toward the lens, the tablecloth moving in the breeze, camera stepping back.",
+        "Medium close. They laugh and shake the water off their hands, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The table",
+      "shots": [
+        "Medium. They are dropping into one of the white plastic chairs at the folding table, turned toward the lens, camera holding on them.",
+        "Medium. They pour a glass from the bottle of mineral water and swat at the wasp turning round it, camera easing round to stay in front of them.",
+        "Medium close. They raise the glass to the lens, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The bicycle",
+      "shots": [
+        "Medium. They are wheeling the bicycle off the fence, turned toward the lens, camera holding on them.",
+        "Wide. They ride a wobbly loop round the garden past the shed and the watering can, camera turning with them.",
+        "Medium close. They brake beside the lens and ring the bell at it, their whole head in frame, camera settling on them."
+      ]
+    }
+  ],
   "lookOverride": {
     "_comment": "Warm, bright, open air: the base grain is already right, so this only pushes the amber a little and opens the halation on the low sun through the hedge.",
     "grade": {

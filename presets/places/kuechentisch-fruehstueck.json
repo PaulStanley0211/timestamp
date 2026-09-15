@@ -22,6 +22,33 @@
     "open-plan living"
   ],
   "motionHint": "steam lifts off the cup, the net curtain breathes at the window, and the second hand moves on the clock",
+  "_scripts": "Three fifteen-second scripts, one picked per order by the scripted arc (compose/prompt.mjs). Each is three shots at five seconds, written around the objects already in this place, so what happens comes from where it is. Every shot names the person, the first has them turned toward the lens, the last keeps their whole head in frame and ends on them, and none names anybody holding the camera. Tests in compose-prompt.test.js hold every one of those.",
+  "scripts": [
+    {
+      "name": "The coffee",
+      "shots": [
+        "Medium. They are pouring coffee from the glass jug of the filter machine, turned toward the lens, camera holding on them.",
+        "Medium. They sit down at the wooden table with the cup and blow on it, steam lifting off it, camera easing round to stay in front of them.",
+        "Medium close. They raise the cup to the lens as if in a toast, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The radio",
+      "shots": [
+        "Medium. They are turning the dial on the radio on the counter, turned toward the lens, camera holding on them.",
+        "Wide. A song catches and they dance a few steps across the patterned lino, the net curtain breathing at the window, camera moving with them.",
+        "Medium close. They point at the lens and laugh, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The telephone",
+      "shots": [
+        "Medium. They are at the wooden table with a folded newspaper as the wired telephone on the wall starts to ring, turned toward the lens, camera holding on them.",
+        "Medium. They pick up the receiver and talk, laughing, the second hand moving on the clock, camera easing round to stay in front of them.",
+        "Medium close. They cover the receiver and mouth something to the lens, their whole head in frame, camera settling on them."
+      ]
+    }
+  ],
   "lookOverride": {
     "_comment": "A dim interior on a consumer CCD meant gain, and gain meant grain -- this is the reason the override mechanism exists at all. Amber up for the tungsten bulb, saturation down because gain washes colour out, halation open for the bulb itself.",
     "tape": {

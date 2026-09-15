@@ -466,20 +466,71 @@ export function composeMotionPrompt({ place, outfit, segment = 1, totalSegments 
  * composer refuses anything else by name, so a typo costs a line rather than
  * a render.
  */
-export const ARCS = Object.freeze(['six', 'three']);
-export const DEFAULT_ARC = 'three';
+export const ARCS = Object.freeze(['six', 'three', 'scripted']);
+// SCRIPTED SINCE 2026-09-15, at the owner's word and without a test tape: what
+// happens in a tape comes from where it is, rather than every place being
+// walked into. `three` stays reachable by name and was the default before.
+export const DEFAULT_ARC = 'scripted';
+
+/**
+ * The scripts a typed place or an uploaded photograph is told (2026-09-15).
+ *
+ * A menu place carries three of its own, written around its own objects. A
+ * place somebody typed or photographed has no objects this file knows, so
+ * these leave the activity to the model reading the `Place:` line -- the
+ * customer's own words, or the photograph itself. `{motionHint}` is filled
+ * from the place the expander built.
+ *
+ * Held to the same rules as every place script: the person named in every
+ * shot, turned to the lens in the first, whole head in frame in the last, a
+ * camera move in each, and nobody holding the camera.
+ */
+export const GENERAL_SCRIPTS = Object.freeze([
+  Object.freeze({
+    name: 'Doing what the place is for',
+    shots: Object.freeze([
+      'Medium. They are in the middle of whatever a person would naturally be doing in this place, turned toward the lens, camera holding on them.',
+      'Wide. They carry on with it -- {motionHint} -- camera easing round to stay in front of them.',
+      'Medium close. They turn to the lens with a laugh, their whole head in frame, camera settling on them.',
+    ]),
+  }),
+  Object.freeze({
+    name: 'Showing it off',
+    shots: Object.freeze([
+      'Medium. They are turned toward the lens, gesturing at the place around them as if showing it to a friend, camera holding on them.',
+      'Wide. They pick up something that belongs in this place and use it the way it is meant to be used -- {motionHint} -- camera holding in front of them.',
+      'Medium close. They hold it up to the lens, their whole head in frame, camera settling on them.',
+    ]),
+  }),
+  Object.freeze({
+    name: 'Caught mid-moment',
+    shots: Object.freeze([
+      'Medium close. They are caught laughing mid-conversation, turned toward the lens, their whole head in frame, camera holding on them.',
+      'Wide. They go back to whatever a person would naturally be doing in this place -- {motionHint} -- camera easing round to stay in front of them.',
+      'Medium close. They look straight down the lens and give a small wave, their whole head in frame, camera settling on them.',
+    ]),
+  }),
+]);
 
 export function composeReferencePrompt({
   // NO `cameraMove` HERE, DELIBERATELY. It was accepted and ignored: the shot
   // list and the camera clause below own the camera on this path, and a
   // parameter a function cannot act on is a capability that does not exist.
   place, outfit, placePhoto = false, era = DEFAULT_ERA, seconds = 15, arc = DEFAULT_ARC,
+  // Which of the three scripts, on the `scripted` arc. The pipeline derives it
+  // from the job id (this file imports nothing) and freezes the answer.
+  scriptIndex = 0,
 } = {}) {
   requirePreset(place, 'place', ['id', 'label', 'timeOfDay', 'motionHint',
     ...['scene', 'light', 'lens', 'framing'].map((f) => `prompt.${f}`)]);
   requirePreset(outfit, 'outfit', ['id', 'label', 'wardrobe']);
   if (!isNonEmptyString(era)) throw new TypeError('era must be a non-empty string');
   if (!ARCS.includes(arc)) throw new TypeError(`arc must be one of ${ARCS.join(', ')}, got ${JSON.stringify(arc)}`);
+  if (arc === 'scripted'
+    && !(Number.isInteger(scriptIndex) && scriptIndex >= 0 && scriptIndex < GENERAL_SCRIPTS.length)) {
+    throw new TypeError(
+      `scriptIndex must be an integer from 0 to ${GENERAL_SCRIPTS.length - 1}, got ${JSON.stringify(scriptIndex)}`);
+  }
 
   const kelvin = Number.isFinite(place.whiteBalanceK)
     ? place.whiteBalanceK
@@ -562,8 +613,20 @@ export function composeReferencePrompt({
     'Medium close. Looking straight down the lens and holding there, their whole head in frame, camera settling on them.',
   ];
 
-  const beats = arc === 'three' ? beatsThree : beatsSix;
-  const wanted = arc === 'three' ? Math.min(shotCount, beats.length) : shotCount;
+  // THE PLACE'S OWN SCRIPT, OR A GENERAL ONE. An uploaded photograph is told a
+  // general script even when the job borrowed a menu place, because the
+  // customer's own place is not the menu place's objects.
+  let script = null;
+  let beatsScripted = null;
+  if (arc === 'scripted') {
+    const own = !placePhoto && Array.isArray(place.scripts) ? place.scripts[scriptIndex] : null;
+    const chosenScript = own ?? GENERAL_SCRIPTS[scriptIndex];
+    script = { source: own ? 'place' : 'general', index: scriptIndex, name: chosenScript.name };
+    beatsScripted = chosenScript.shots.map((shot) => shot.replaceAll('{motionHint}', place.motionHint));
+  }
+
+  const beats = arc === 'scripted' ? beatsScripted : arc === 'three' ? beatsThree : beatsSix;
+  const wanted = arc === 'six' ? shotCount : Math.min(shotCount, beats.length);
   const chosen = wanted >= beats.length
     ? beats
     : [beats[0], ...beats.slice(1, wanted - 1), beats[beats.length - 1]];
@@ -583,7 +646,11 @@ export function composeReferencePrompt({
       // "leading them rather than trailing them" was the first draft and it
       // broke this path's own rule: with no negative channel, "rather than
       // trailing" is just the word "trailing" in the conditioning.
-      + 'The camera keeps ahead of them throughout, leading them through the place.',
+      + (arc === 'scripted'
+        // A script that sits down must not be told to travel; a script that
+        // walks says so in its own shot.
+        ? 'The camera stays in front of them throughout, keeping them turned toward the lens.'
+        : 'The camera keeps ahead of them throughout, leading them through the place.'),
     `Lens: ${place.prompt.lens}.`,
     `Light: ${place.prompt.light}. White balance ${kelvin}K, held across every shot.`,
     '',
@@ -624,9 +691,16 @@ export function composeReferencePrompt({
         + 'every cut, each shot picking up where the last one left off, at the unhurried pace of '
         + 'an ordinary day being recorded.']
       : []),
+    // No "same spot" or "same posture" here: a script crosses a square or sits down.
+    ...(arc === 'scripted'
+      ? ['One continuous moment: the same place, the same wardrobe and the same light carried across '
+        + 'every cut, each shot picking up where the last one left off, at the unhurried pace of '
+        + 'an ordinary day being recorded.']
+      : []),
   ];
 
   return {
+    ...(script ? { script } : {}),
     prompt: lines.join('\n'),
     // The still negatives ride along too: this path renders the composition
     // directly, so centring and a posed stance are exactly as available to it

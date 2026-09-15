@@ -25,6 +25,33 @@
     "sunset"
   ],
   "motionHint": "the umbrellas lift and settle in the breeze off the sea, the boats rock against the stones, and the light off the water crawls over the hulls and the cliff",
+  "_scripts": "Three fifteen-second scripts, one picked per order by the scripted arc (compose/prompt.mjs). Each is three shots at five seconds, written around the objects already in this place, so what happens comes from where it is. Every shot names the person, the first has them turned toward the lens, the last keeps their whole head in frame and ends on them, and none names anybody holding the camera. Tests in compose-prompt.test.js hold every one of those.",
+  "scripts": [
+    {
+      "name": "The gelato",
+      "shots": [
+        "Medium. They are walking along the terrace wall under the lemon trees with a paper cup of gelato, turned toward the lens, camera moving backwards ahead of them.",
+        "Wide. They sit on the edge of a fishing boat pulled up on the stones and dig in with the flat wooden spoon, the umbrellas lifting in the breeze, camera holding on them.",
+        "Medium close. They hold out a spoonful to the lens and laugh, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The water",
+      "shots": [
+        "Medium. They are picking their way down the pebbles to the water's edge, turned toward the lens, camera moving backwards ahead of them.",
+        "Wide. They wade in up to the knees and splash water toward the lens, the boats rocking against the stones, camera holding its place.",
+        "Medium close. They turn back to the lens, dripping and laughing, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The scooter",
+      "shots": [
+        "Medium. They are sitting on the scooter by the harbour, turned toward the lens, tilting its chrome mirror, camera holding on them.",
+        "Wide. They ride a slow loop along the harbour past the striped umbrellas and pull up again, camera turning with them.",
+        "Medium close. They lean off the scooter toward the lens and wave, their whole head in frame, camera settling on them."
+      ]
+    }
+  ],
   "lookOverride": {
     "_comment": "The most colour in the menu -- pastel walls, striped canvas, a deep blue sea -- so saturation sits above the base rather than below it, with only a small warm push because the light is already warm. Halation open for the sun off the water and the blown white walls. The least grain, level with the out-of-season beach: a bright flat scene shows every grain it is given.",
     "grade": {

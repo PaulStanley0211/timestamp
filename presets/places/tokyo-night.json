@@ -25,6 +25,33 @@
     "daylight"
   ],
   "motionHint": "the signboards flicker on and off in turn, a taxi crosses the far side of the crossing, and the wet asphalt holds and loses each light as it moves",
+  "_scripts": "Three fifteen-second scripts, one picked per order by the scripted arc (compose/prompt.mjs). Each is three shots at five seconds, written around the objects already in this place, so what happens comes from where it is. Every shot names the person, the first has them turned toward the lens, the last keeps their whole head in frame and ends on them, and none names anybody holding the camera. Tests in compose-prompt.test.js hold every one of those.",
+  "scripts": [
+    {
+      "name": "The light changes",
+      "shots": [
+        "Medium. They are waiting at the crossing, turned toward the lens, then stepping out onto the white stripes as the lights change, camera moving backwards ahead of them.",
+        "Wide. They cross the wet asphalt with strangers further back, looking up at the big glowing screen, camera moving backwards ahead of them.",
+        "Medium close. Reaching the far kerb, they turn to the lens and laugh, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The vending machine",
+      "shots": [
+        "Medium. They are pressing a button on the lit drinks vending machine, turned toward the lens as the can drops, camera holding on them.",
+        "Medium. They crack the can open and drink, the signboards flickering on and off in the background, camera easing round to stay in front of them.",
+        "Medium close. They raise the can to the lens, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The bicycle",
+      "shots": [
+        "Medium. They are unhooking the clear plastic umbrella from the bicycle leaning on the pole, turned toward the lens, camera holding on them.",
+        "Wide. They wheel the bicycle out and ride a slow loop across the crossing, the lights sliding over the wet asphalt, camera turning with them.",
+        "Medium close. They stop beside the lens and ring the bell at it, their whole head in frame, camera settling on them."
+      ]
+    }
+  ],
   "lookOverride": {
     "_comment": "Lit signboards are cooler than paper lanterns, so the warm push is smaller than the first draft of this preset carried, and halation is open nearly as far as Times Square: every sign and the vending machine's front are blown highlights on wet ground. The most grain in the menu, because the scene is dark without being flat.",
     "grade": {

@@ -82,7 +82,9 @@ import { buildAudioFilter, clampAudio } from '../audio/bed.mjs';
 import {
   muxedArgs, joinGraphs, fileLoudnessArgs, parseIntegratedLufs, lufsVerdict,
 } from '../audio/mix.mjs';
-import { composeStillPrompt, composeMotionPrompt, composeReferencePrompt, DEFAULT_ERA, DEFAULT_ARC } from '../compose/prompt.mjs';
+import {
+  composeStillPrompt, composeMotionPrompt, composeReferencePrompt, DEFAULT_ERA, DEFAULT_ARC, GENERAL_SCRIPTS,
+} from '../compose/prompt.mjs';
 import { deriveSeed } from '../compose/seed.mjs';
 import { loadCatalog, getPlace, getOutfit, checkCompatibility } from '../catalog/catalog.mjs';
 import { resolveFont } from '../preflight/doctor.mjs';
@@ -809,6 +811,9 @@ async function stepCompose(ctx) {
       // resume sends what the manifest describes. Absent means the composer's
       // default, which is what every web order gets.
       arc: job.input.arc ?? DEFAULT_ARC,
+      // Which of the three scripts, from the job's own id, the way the stamp is
+      // picked. The composer returns it as `script`, frozen with the prompt.
+      scriptIndex: deriveSeed(job.jobId, 'script', 0) % GENERAL_SCRIPTS.length,
     })
     : null;
   const stillPrompt = direct

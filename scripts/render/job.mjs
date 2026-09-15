@@ -549,15 +549,17 @@ function normalizeInput(input, jobId) {
       { code: 'BAD_INPUT', jobId });
   }
 
-  // THE SHOT ARC, when one was asked for: `six` (the vlog) or `three` (one
-  // continuous moment), see compose/prompt.mjs. It rides the input for the
-  // same reason `direct` does. Absent stays absent rather than becoming null,
-  // because every manifest written before 2026-09-04 has no arc and means the
-  // default. Validated here by name rather than against the composer's list:
-  // the job model sits below compose and must not import from it.
+  // THE SHOT ARC, when one was asked for: `six` (the vlog), `three` (one
+  // continuous moment) or `scripted` (the place's own script), see
+  // compose/prompt.mjs. It rides the input for the same reason `direct` does.
+  // Absent stays absent rather than becoming null, because every manifest
+  // written before 2026-09-04 has no arc and means the default. Validated here
+  // by name rather than against the composer's list: the job model sits below
+  // compose and must not import from it -- so a new arc has to be added here
+  // too, or a CLI order for it is refused before it composes.
   const arc = input.arc;
-  if (arc !== undefined && arc !== 'six' && arc !== 'three') {
-    throw new JobError(`input.arc must be six or three, got ${JSON.stringify(arc)}`,
+  if (arc !== undefined && arc !== 'six' && arc !== 'three' && arc !== 'scripted') {
+    throw new JobError(`input.arc must be six, three or scripted, got ${JSON.stringify(arc)}`,
       { code: 'BAD_INPUT', jobId });
   }
 

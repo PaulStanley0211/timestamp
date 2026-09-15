@@ -25,6 +25,33 @@
     "modern cars"
   ],
   "motionHint": "the screens flicker through their loops, cabs cross the far side of the square, and the wet ground holds and loses each light as they pass",
+  "_scripts": "Three fifteen-second scripts, one picked per order by the scripted arc (compose/prompt.mjs). Each is three shots at five seconds, written around the objects already in this place, so what happens comes from where it is. Every shot names the person, the first has them turned toward the lens, the last keeps their whole head in frame and ends on them, and none names anybody holding the camera. Tests in compose-prompt.test.js hold every one of those.",
+  "scripts": [
+    {
+      "name": "The hot-dog cart",
+      "shots": [
+        "Medium. They are at the hot-dog cart under the striped umbrella, taking a hot dog, turned toward the lens, camera holding on them.",
+        "Wide. They take a big bite as the screens flicker through their loops and cabs cross the far side of the square, camera easing round to stay in front of them.",
+        "Medium close. They hold the hot dog up to the lens and laugh, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The cab",
+      "shots": [
+        "Medium. They are at the kerb with one arm up, hailing a yellow cab, turned toward the lens, camera holding on them.",
+        "Wide. A cab pulls in and they open the back door, the wet ground holding every light, camera holding its place.",
+        "Medium close. They lean out of the open door toward the lens and wave, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The lights",
+      "shots": [
+        "Medium. They are stepping onto the crosswalk stripes as the lights change, turned toward the lens, camera moving backwards ahead of them.",
+        "Wide. They stop in the middle of the square and turn slowly with their arms out, the billboards and screens blazing above, camera holding in front of them.",
+        "Medium close. They turn back to the lens, laughing at the size of it, their whole head in frame, camera settling on them."
+      ]
+    }
+  ],
   "lookOverride": {
     "_comment": "The most light sources in the menu and every one of them a blown highlight on wet ground, so halation is open furthest here, level with Tokyo. Saturation above the base because the square IS its colour -- red and blue and white panels -- with only a small warm push, since the billboards are cooler than sodium. Grain near the top of the menu: a dark scene shot on a consumer camcorder at night was mostly grain.",
     "grade": {

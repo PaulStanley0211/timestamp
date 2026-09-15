@@ -24,8 +24,8 @@ import { getOutfit, getPlace, loadCatalog } from '../scripts/catalog/catalog.mjs
 import { scanText } from '../scripts/catalog/schema.mjs';
 import { LENS_OVERRIDES, NEUTRAL_PLACE } from '../scripts/expand/local.mjs';
 import {
-  ARCS, BASE_NEGATIVES, CAMCORDER_MOVES, COMPOSED_BAN_GROUPS, DEFAULT_ERA, DEFAULT_MOMENT, MOTION_NEGATIVES,
-  SUBJECT, composeMotionPrompt, composeStillPrompt, composeReferencePrompt, REFERENCE_SUBJECT,
+  ARCS, BASE_NEGATIVES, CAMCORDER_MOVES, COMPOSED_BAN_GROUPS, DEFAULT_ARC, DEFAULT_ERA, DEFAULT_MOMENT, GENERAL_SCRIPTS,
+  MOTION_NEGATIVES, SUBJECT, composeMotionPrompt, composeStillPrompt, composeReferencePrompt, REFERENCE_SUBJECT,
 } from '../scripts/compose/prompt.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -490,7 +490,11 @@ test('the reference prompt keeps the anti-slop work the still prompt earned', ()
   // now, and both are still checked against the catalog's own text.
   const { prompt } = composeReferencePrompt({ place, outfit });
   assert.match(prompt, /off centre/i, 'the snapshot rule rides along');
-  assert.ok(prompt.includes(place.prompt.moment), 'the place own moment is still performed');
+  // The moment is the three- and six-beat arcs' way of making something happen.
+  // The scripted default does it with the place's own script instead, which
+  // the written-scripts section below holds shot by shot.
+  const three = composeReferencePrompt({ place, outfit, arc: 'three' }).prompt;
+  assert.ok(three.includes(place.prompt.moment), 'the place own moment is still performed');
   // The size moved one clause to the right on 2026-09-12, when the beats
   // gained their timecodes; it is still there and still on every shot, which
   // is what this line was ever asserting. Widened from "some shot states its
@@ -605,11 +609,12 @@ test('the vlog shows the place, which is the half Paul said was missing', () => 
   const anyCase = `[${firstProp[0].toLowerCase()}${firstProp[0].toUpperCase()}]${firstProp.slice(1)}`;
   assert.match(prompt, new RegExp(anyCase), 'and a named object from this place, close');
 
-  // The default still shows the place -- the beach view is folded into the
-  // arrival, with the person in it, through the place's own motion hint.
-  const plain = composeReferencePrompt({ place, outfit }).prompt;
+  // The three-beat arc still shows the place -- the beach view is folded into
+  // the arrival, with the person in it, through the place's own motion hint.
+  // (The scripted default shows it through the objects its script uses.)
+  const plain = composeReferencePrompt({ place, outfit, arc: 'three' }).prompt;
   const first = plain.split('\n').find((l) => /^Shot 1: /.test(l));
-  assert.match(first, /wide/i, 'the default opens wide');
+  assert.match(first, /wide/i, 'the three-beat arc opens wide');
   assert.ok(first.includes(place.motionHint), 'and looks around the place as the preset describes it');
 });
 
@@ -690,20 +695,18 @@ test('the three-beat arc is one continuous moment with the person in every shot'
   assert.equal(short.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 2, 'five seconds is two beats');
 });
 
-test('the three-beat arc is the default, and six is still there by name', () => {
-  // JUDGED 2026-09-04, SAME PHOTO, SAME ROOM, SAME OUTFIT. Two seeds of the
-  // three-beat arc were one continuous moment each: walk in, look, cross to
-  // the sofa, sit, watch, turn to the lens. The six-beat seed lost the person
-  // for two seconds, put his face on the television twice, and jumped from
-  // the sofa to standing -- the same defects as the 2 September tape. The
-  // web app orders whatever the default is, so the default is the arc that
-  // connects; six stays reachable for the comparison that decided this.
+test('the scripted arc is the default, and three and six are still there by name', () => {
+  // SHIPPED 2026-09-15 AT THE OWNER'S WORD, WITHOUT A TEST TAPE. The web app
+  // orders whatever the default is, so this is what a customer's tape composes.
   const plain = composeReferencePrompt({ place, outfit }).prompt;
-  const three = composeReferencePrompt({ place, outfit, arc: 'three' }).prompt;
-  assert.equal(plain, three);
-  assert.equal(plain.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 3);
-  const six = composeReferencePrompt({ place, outfit, arc: 'six' }).prompt;
-  assert.equal(six.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 6);
+  const scripted = composeReferencePrompt({ place, outfit, arc: 'scripted' }).prompt;
+  assert.equal(plain, scripted);
+  // The three-beat arc was the default from the 2026-09-04 comparison (two
+  // seeds connected end to end, the six-beat seed lost the person and put his
+  // face on the television) until the scripts replaced it.
+  assert.equal(DEFAULT_ARC, 'scripted');
+  assert.equal(composeReferencePrompt({ place, outfit, arc: 'three' }).prompt.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 3);
+  assert.equal(composeReferencePrompt({ place, outfit, arc: 'six' }).prompt.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 6);
 });
 
 test('an arc this file has not written is refused, never defaulted', () => {
@@ -880,8 +883,10 @@ const everyReferencePrompt = () => {
   for (const arc of ARCS) {
     for (const pair of pairs) {
       for (const placePhoto of [false, true]) {
-        out.push({ label: `${arc} ${pair.place.id}+${pair.outfit.id}${placePhoto ? ' +photo' : ''}`,
-          prompt: composeReferencePrompt({ ...pair, arc, placePhoto }).prompt });
+        for (const scriptIndex of arc === 'scripted' ? [0, 1, 2] : [0]) {
+          out.push({ label: `${arc} ${pair.place.id}+${pair.outfit.id}${placePhoto ? ' +photo' : ''} #${scriptIndex}`,
+            prompt: composeReferencePrompt({ ...pair, arc, placePhoto, scriptIndex }).prompt });
+        }
       }
     }
     out.push({ label: `${arc} neutral+photo`,
@@ -938,4 +943,98 @@ test('the continuity line is not pinned to one time of day', () => {
   assert.ok(line, 'the three-beat arc still says it is one continuous moment');
   assert.doesNotMatch(line, /\b(?:morning|afternoon|evening|night)\b/i,
     `an early-morning kitchen is paced like another time of day: ${line}`);
+});
+
+// ---------------------------------------------------------------------------
+// the written scripts: what happens comes from where it is (2026-09-15)
+// ---------------------------------------------------------------------------
+
+/**
+ * The three-beat arc walked every tape in, whatever the place: "Walking in at
+ * the near edge and looking around the whole place", with the camera "leading
+ * them through the place". Right for a crossing; in a kitchen it produced
+ * fifteen seconds of wandering round a small room without ever sitting down.
+ * The `scripted` arc tells a menu place one of its own three scripts, and a
+ * typed or uploaded place one of three general ones that leave the activity to
+ * the model reading the place.
+ */
+const shotsOf = (prompt) => prompt.split('\n')
+  .filter((l) => /^Shot \d+: /.test(l))
+  .map((l) => l.replace(/^Shot \d+: \d+-\d+s\. /, ''));
+
+const LENS_BEHIND_ANY = /\b(?:a step behind|following behind|from behind|behind\s+(?:them|him|her|the subject))\b/i;
+
+test('a menu place is told its own script, the one the index picks', () => {
+  const tokyo = getPlace(catalog, 'tokyo-night');
+  for (let scriptIndex = 0; scriptIndex < 3; scriptIndex += 1) {
+    const { prompt, script } = composeReferencePrompt({ place: tokyo, outfit, arc: 'scripted', scriptIndex });
+    assert.deepEqual(script, { source: 'place', index: scriptIndex, name: tokyo.scripts[scriptIndex].name });
+    assert.deepEqual(shotsOf(prompt), tokyo.scripts[scriptIndex].shots,
+      `script ${scriptIndex} is not what the tape was told`);
+  }
+});
+
+test('an uploaded photograph and a place with no scripts are told a general script', () => {
+  const tokyo = getPlace(catalog, 'tokyo-night');
+  const withPhoto = composeReferencePrompt({ place: tokyo, outfit, arc: 'scripted', placePhoto: true, scriptIndex: 2 });
+  assert.deepEqual(withPhoto.script, { source: 'general', index: 2, name: GENERAL_SCRIPTS[2].name },
+    'a customer photograph of their own place was told Tokyo\'s script');
+
+  const neutral = composeReferencePrompt({ place: NEUTRAL_PLACE, outfit, arc: 'scripted', scriptIndex: 1 });
+  assert.deepEqual(neutral.script, { source: 'general', index: 1, name: GENERAL_SCRIPTS[1].name });
+  assert.ok(neutral.prompt.includes(NEUTRAL_PLACE.motionHint), 'the general script lost the place\'s own motion');
+  assert.doesNotMatch(neutral.prompt, /\{\w+\}/, 'a placeholder reached the model');
+});
+
+test('a script index the arc has not written is refused, never wrapped', () => {
+  for (const scriptIndex of [-1, 3, 1.5, '0']) {
+    assert.throws(() => composeReferencePrompt({ place, outfit, arc: 'scripted', scriptIndex }), TypeError,
+      `accepted script index ${JSON.stringify(scriptIndex)}`);
+  }
+});
+
+test('every written script obeys what the kitchen tape taught', () => {
+  const scripts = [
+    ...[...catalog.places.values()].flatMap((p) => (p.scripts ?? []).map((s) => [`${p.id} "${s.name}"`, s.shots])),
+    ...GENERAL_SCRIPTS.map((s) => [`general "${s.name}"`, s.shots]),
+  ];
+  assert.equal(scripts.length, catalog.places.size * 3 + 3, 'not every place carries three scripts');
+  for (const [label, shots] of scripts) {
+    assert.equal(shots.length, 3, `${label} is not three shots`);
+    shots.forEach((shot, i) => {
+      assert.match(shot, /\b(they|them|their)\b/i, `${label} shot ${i + 1} does not name the person`);
+      assert.match(shot, /\bcamera\b/i, `${label} shot ${i + 1} names no camera move`);
+      assert.doesNotMatch(shot, operatorWords, `${label} shot ${i + 1} names somebody near the camera`);
+      assert.doesNotMatch(shot, /\bhalf[- ]turn|\blift(?:s|ing)?\s+to\s+meet\b|disposable camera/i,
+        `${label} shot ${i + 1}: ${shot}`);
+      assert.doesNotMatch(shot, LENS_BEHIND_ANY, `${label} shot ${i + 1} puts the lens behind them`);
+    });
+    assert.match(shots[0], /\b(?:toward|to) the lens\b/i, `${label}: the first shot is not turned to the lens`);
+    assert.match(shots[2], /whole head in frame/, `${label}: the last shot does not keep their head in frame`);
+  }
+});
+
+test('every scripted prompt the catalog can produce keeps rule 1 and the look ban', () => {
+  const failures = [];
+  for (const pair of pairs) {
+    for (let scriptIndex = 0; scriptIndex < 3; scriptIndex += 1) {
+      for (const placePhoto of [false, true]) {
+        const { prompt } = composeReferencePrompt({ ...pair, arc: 'scripted', scriptIndex, placePhoto });
+        for (const hit of scanText(prompt, COMPOSED_BAN_GROUPS.prompt)) {
+          failures.push(`${pair.place.id}+${pair.outfit.id} #${scriptIndex}${placePhoto ? ' +photo' : ''}: "${hit.match}"`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(failures, []);
+});
+
+test('the scripted arc does not assume anybody is walking', () => {
+  const kitchen = getPlace(catalog, 'kuechentisch-fruehstueck');
+  const { prompt } = composeReferencePrompt({ place: kitchen, outfit, arc: 'scripted' });
+  assert.match(prompt, /stays in front of them/, 'the camera is not kept in front of them');
+  assert.doesNotMatch(prompt, /leading them through the place/, 'a kitchen is still told to be walked through');
+  const line = prompt.split('\n').find((l) => l.startsWith('One continuous moment'));
+  assert.ok(line, 'the scripted arc does not say it is one continuous moment');
+  assert.doesNotMatch(line, /same spot|same posture/, `a script that sits down or crosses a square is told not to: ${line}`);
 });

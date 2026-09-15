@@ -277,6 +277,7 @@ function explain(groups) {
 // ---------------------------------------------------------------------------
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isNonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
 
 function requireString(raw, key, { kind, id, maxWords = 90 }) {
   const value = raw[key];
@@ -307,6 +308,39 @@ function requireStringArray(raw, key, { kind, id }) {
  *  an authoring mistake that a truthiness test would silently accept -- and
  *  the field this exists for decides whether strangers may appear in somebody
  *  else's tape, so a quiet yes is the wrong direction to fail in. */
+/** How many written scripts a place carries, and how many shots each one is.
+ *  Three of each is the product: three shots at five seconds, and one of three
+ *  scripts picked per order so two people who choose the same place do not get
+ *  the same tape. The composer's script index is checked against the same
+ *  number, so the two cannot drift. */
+export const SCRIPTS_PER_PLACE = 3;
+export const SHOTS_PER_SCRIPT = 3;
+
+/** The written scripts, or undefined. Refused by name when present and wrong,
+ *  because a script that silently lost a shot would still compose -- one shot
+ *  short, and the tape would end wherever the model felt like ending it. The
+ *  vocabulary has already been checked by assertClean, which walks every
+ *  string in the raw preset, these included. */
+function assertOptionalScripts(raw, key, { kind, id }) {
+  const value = raw[key];
+  if (value === undefined) return undefined;
+  const refuse = (why) => {
+    throw new PresetError(`${kind} "${id}" field "${key}" ${why}`, { kind, id, key });
+  };
+  if (!Array.isArray(value) || value.length !== SCRIPTS_PER_PLACE) {
+    refuse(`must be a list of exactly ${SCRIPTS_PER_PLACE} scripts`);
+  }
+  return Object.freeze(value.map((script, i) => {
+    if (!isPlainObject(script)) refuse(`entry ${i + 1} is not an object`);
+    if (!isNonEmptyString(script.name)) refuse(`entry ${i + 1} has no name`);
+    const shots = script.shots;
+    if (!Array.isArray(shots) || shots.length !== SHOTS_PER_SCRIPT || !shots.every(isNonEmptyString)) {
+      refuse(`"${script.name}" must be exactly ${SHOTS_PER_SCRIPT} non-empty shots`);
+    }
+    return Object.freeze({ name: script.name, shots: Object.freeze([...shots]) });
+  }));
+}
+
 function assertOptionalBoolean(raw, key, { kind, id }) {
   const value = raw[key];
   if (value === undefined) return false;
@@ -486,6 +520,11 @@ export function validatePlace(raw, { id, baseLook } = {}) {
     // other to a camera. Absent means absent, and the composer falls back to
     // the climate table.
     whiteBalanceK: assertOptionalKelvin(raw, 'whiteBalanceK', { kind, id }),
+    // WHAT HAPPENS HERE (2026-09-15). Three written scripts, one picked per
+    // order by the `scripted` arc. Carried explicitly for the reason the two
+    // fields above are: an unnamed field reads back undefined, and every tape
+    // of this place would quietly fall back to a general script.
+    scripts: assertOptionalScripts(raw, 'scripts', { kind, id }),
     lookOverride: assertLookOverride(raw.lookOverride ?? {}, baseLook, { kind, id }),
   };
   return Object.freeze(place);

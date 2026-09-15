@@ -1,6 +1,6 @@
 # Place scripts: what happens in a tape comes from where it is
 
-**Date:** 2026-09-15 · **Status:** approved in conversation, awaiting the owner's read of this document · **Owner:** Paul
+**Date:** 2026-09-15 · **Status:** BUILT AND SHIPPED AS THE DEFAULT on 2026-09-15, at the owner's word, without the test tapes in section 8 · **Owner:** Paul
 **Supersedes:** `2026-09-15-hook-body-ending-design.md` (parked the same day)
 
 ## 1. The problem
@@ -26,12 +26,12 @@ no "nothing else happens", no afternoon) are a separate change and are assumed h
 | Typed places | **The video model chooses**, from the customer's own words |
 | Uploaded place photos | **The video model chooses**, from the photograph |
 | Shots and timing | **Unchanged**: three shots, 0-5 / 5-10 / 10-15 s |
-| Rollout | Behind its own name; the default only after the owner approves real tapes |
+| Rollout | **Shipped as the default straight away**, at the owner's word ("Don't test it... ship it"). The first real tapes are the test |
 
 ## 3. The `scripted` arc
 
-`ARCS` becomes `['six', 'three', 'scripted']`. `DEFAULT_ARC` stays `'three'` until section 8's
-approval; the flip is a one-line commit of its own. `--arc=scripted` on the render CLI,
+`ARCS` becomes `['six', 'three', 'scripted']`, and `DEFAULT_ARC` is `'scripted'` from the start: the
+owner chose to skip section 8 and ship. `--arc=scripted` on the render CLI,
 `input.arc` on the job, frozen at compose as the other arcs are.
 
 ### 3.1 What the prompt looks like
@@ -159,7 +159,7 @@ inherit that place's scripts**, or "my office" is quietly handed the kitchen's. 
 | Script | 0-5 s | 5-10 s | 10-15 s |
 |---|---|---|---|
 | **The sofa** | Medium. They are dropping onto the sofa and pulling the crocheted blanket over their knees, turned toward the lens, camera holding on them. | Medium. They flick through the channels and react to what comes on, the light from the television shifting across the room, camera easing round to stay in front of them. | Medium close. They turn to the lens and laugh, their whole head in frame, camera settling on them. |
-| **The tape** | Medium. They are pulling a black cassette box from the row on the wall unit, turned toward the lens, camera holding on them. | Medium. They crouch by the television and slide the cassette into the machine beneath it, the light from the screen shifting over them, camera holding in front of them. | Medium close. They sit back on the rug and turn to the lens, pleased with themselves, their whole head in frame, camera settling on them. |
+| **The cassette** | Medium. They are pulling a black cassette box from the row on the wall unit, turned toward the lens, camera holding on them. | Medium. They crouch by the television and slide the cassette into the machine beneath it, the light from the screen shifting over them, camera holding in front of them. | Medium close. They sit back on the rug and turn to the lens, pleased with themselves, their whole head in frame, camera settling on them. |
 | **The phone** | Medium. They are curled up on the sofa with the wired telephone from the side table, talking, turned toward the lens, camera holding on them. | Medium. They laugh into the receiver and wind the cord round a finger, the leaves of the rubber plant stirring by the lamp, camera easing round to stay in front of them. | Medium close. They hold the receiver out to the lens as if the call is for the viewer, their whole head in frame, camera settling on them. |
 
 ### The garden, in summer
@@ -207,7 +207,7 @@ Written first, watched failing, each guard sabotage-verified and restored from a
    the continuity line says neither "same spot" nor "same posture".
 8. `--arc=scripted` reaches the frozen manifest.
 
-## 8. Proving it on the model
+## 8. Proving it on the model (SKIPPED at the owner's word; kept as the check to run on the first real tapes)
 
 Claude cannot run paid commands; the owner runs them. 720p, 9:16, about $1.50 each.
 
@@ -227,8 +227,8 @@ Each is three separate remote commands (section 70F), proved by the bytes in the
 (section 83D):
 
 1. `ab670d0`, the wording fixes, whenever the owner says go. Independent of everything here.
-2. The `scripted` arc and the 21 scripts, with `DEFAULT_ARC` still `'three'`.
-3. The one-line flip, after section 8.
+2. The `scripted` arc and the 21 scripts, as the default, in the same deploy as `ab670d0`.
+3. Then: the first real tapes from the site read one frame per second against section 8's checks.
 
 ## 10. Out of scope
 

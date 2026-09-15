@@ -30,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { REPO_ROOT } from '../scripts/ffmpeg/run.mjs';
+import { deriveSeed } from '../scripts/compose/seed.mjs';
 import { resolveRaster } from '../scripts/render/pipeline.mjs';
 // The real offer list, so "a provider that does offer the raster" is the actual
 // provider rather than a hand-written stand-in that could drift from it.
@@ -1285,4 +1286,36 @@ test('the manifest records what the detector actually found', async () => {
   assert.equal(gate.faces, 3, 'the face count never reached the manifest');
   assert.equal(gate.largestFaceFraction, 0.184, 'the face size never reached the manifest');
   assert.equal(gate.confidence, 'verified');
+});
+
+test('a scripted job freezes which script it was told, picked from its own id', async () => {
+  // Three scripts per place, one per order, the same way the stamp is picked:
+  // deriveSeed on the job id, so a resume and a re-read of the manifest name the
+  // same one. The manifest is read months later to answer "what did we ask for".
+  const { job } = await runFake({ input: { direct: true, arc: 'scripted' }, provider: { maxClipSeconds: 15 } });
+  const frozen = job.resolved.referencePrompt;
+  assert.ok(frozen.script, 'the manifest does not say which script the tape was told');
+  assert.equal(frozen.script.index, deriveSeed(job.jobId, 'script', 0) % 3);
+  assert.equal(frozen.prompt.split('\n').filter((l) => /^Shot \d+: /.test(l)).length, 3);
+
+  // And a job that says nothing gets the scripted arc: the web app never sets
+  // an arc, so this is what a customer's order composes.
+  const { job: plain } = await runFake({ input: { direct: true }, provider: { maxClipSeconds: 15 } });
+  assert.ok(plain.resolved.referencePrompt.script, 'a customer order is not told a script');
+});
+
+test('the dry run quotes the same script the render will freeze', async () => {
+  const { provider } = makeProvider({ maxClipSeconds: 15 });
+  const plan = await dryRun({
+    provider,
+    input: {
+      place: { kind: 'preset', value: 'tokyo-night' },
+      outfit: { kind: 'preset', value: 'tshirt-jeans' },
+      direct: true,
+      arc: 'scripted',
+    },
+    deps: makeDeps(),
+  });
+  assert.ok(plan.referencePrompt.script, 'the dry run quoted no script');
+  assert.equal(plan.referencePrompt.script.source, 'place');
 });

@@ -459,3 +459,21 @@ test('BANNED is read from schema.mjs and nowhere else -- there is one word list 
     assert.ok(!src.includes(`'${BANNED[group][0]}', '${BANNED[group][1]}'`), `${group} looks copied into local.mjs`);
   }
 });
+
+test('an expanded place and a place from a photograph carry no written scripts', async () => {
+  // A typed place is built from the nearest menu place's skeleton, and a menu
+  // place carries three scripts written around its own objects. Inherited,
+  // "my office" would be handed the kitchen's coffee and radio. The video model
+  // chooses what happens for these (GENERAL_SCRIPTS in compose/prompt.mjs).
+  const typed = await expandPlace("my grandmother's kitchen", opts);
+  assert.equal(typed.scripts, undefined, 'a typed place inherited a menu place\'s scripts');
+  const photo = await placeFromPhoto('/jobs/x/input/place.jpg', opts);
+  assert.equal(photo.scripts, undefined, 'a place from a photograph inherited scripts');
+});
+
+test('a place from a photograph is never told that nothing in it changes', async () => {
+  // The model obeys "nothing" exactly (section 17's "Nothing dramatic happens"),
+  // and this hint is carried into the middle shot of every uploaded place.
+  const photo = await placeFromPhoto('/jobs/x/input/place.jpg', opts);
+  assert.doesNotMatch(photo.motionHint, /\bnothing\b/i, `the place is told nothing happens: ${photo.motionHint}`);
+});

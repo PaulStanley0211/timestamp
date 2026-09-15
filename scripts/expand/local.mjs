@@ -1129,7 +1129,9 @@ function placeFromPhotoDraft({ text, photoPath }) {
         eraProps: 'only what the second reference image already contains, and nothing added that was manufactured later than the period',
       },
       negatives: ['a different place', 'invented architecture', 'added furniture', 'rearranged objects', 'smartphone', 'modern signage'],
-      motionHint: 'the air moves a little and the light shifts, and nothing else in the place changes',
+      // Not "nothing else in the place changes" (2026-09-15): the model obeys
+      // "nothing" exactly, and this hint fills the middle shot of every upload.
+      motionHint: 'the air moves a little, the light shifts, and the place carries on around them exactly as it is',
       lookOverride: {},
     },
     dropped: [],

@@ -22,6 +22,33 @@
     "computer monitor"
   ],
   "motionHint": "light from the television shifts across the room as the picture changes, and the leaves of the plant stir in the draught from the window",
+  "_scripts": "Three fifteen-second scripts, one picked per order by the scripted arc (compose/prompt.mjs). Each is three shots at five seconds, written around the objects already in this place, so what happens comes from where it is. Every shot names the person, the first has them turned toward the lens, the last keeps their whole head in frame and ends on them, and none names anybody holding the camera. Tests in compose-prompt.test.js hold every one of those.",
+  "scripts": [
+    {
+      "name": "The sofa",
+      "shots": [
+        "Medium. They are dropping onto the sofa and pulling the crocheted blanket over their knees, turned toward the lens, camera holding on them.",
+        "Medium. They flick through the channels and react to what comes on, the light from the television shifting across the room, camera easing round to stay in front of them.",
+        "Medium close. They turn to the lens and laugh, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The cassette",
+      "shots": [
+        "Medium. They are pulling a black cassette box from the row on the wall unit, turned toward the lens, camera holding on them.",
+        "Medium. They crouch by the television and slide the cassette into the machine beneath it, the light from the screen shifting over them, camera holding in front of them.",
+        "Medium close. They sit back on the rug and turn to the lens, pleased with themselves, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The phone",
+      "shots": [
+        "Medium. They are curled up on the sofa with the wired telephone from the side table, talking, turned toward the lens, camera holding on them.",
+        "Medium. They laugh into the receiver and wind the cord round a finger, the leaves of the rubber plant stirring by the lamp, camera easing round to stay in front of them.",
+        "Medium close. They hold the receiver out to the lens as if the call is for the viewer, their whole head in frame, camera settling on them."
+      ]
+    }
+  ],
   "lookOverride": {
     "_comment": "The largest override in the menu, and every value has a reason. grainStrength 30 against base 20: a CCD at full gain in a room lit by a television. cbRedMid 0.1 for the tungsten lamp. saturation 0.74 because gain washes colour out rather than saturating it. headSwitchNoise 64 because the band sits in near-black here and at the base 58 it stops being visible at all.",
     "tape": {

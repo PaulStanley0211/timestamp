@@ -498,3 +498,67 @@ test('an authored moment is held to the same vocabulary as every other fragment'
     /smiling/,
     'person vocabulary must be refused inside a moment exactly as it is elsewhere');
 });
+
+// ---------------------------------------------------------------------------
+// the written scripts (2026-09-15)
+//
+// What happens in a tape comes from where it is. A menu place carries three
+// fifteen-second scripts written around its own objects, and one is picked per
+// order (compose/prompt.mjs, the `scripted` arc). CLAUDE.md section 88E is the
+// trap this guards: validatePlace returns a fixed shape, so a field it does not
+// name reads back undefined for ever and every tape silently falls back.
+// ---------------------------------------------------------------------------
+
+const aScript = (name = 'The table') => ({
+  name,
+  shots: [
+    'Medium. They are sitting down at the table, turned toward the lens, camera holding on them.',
+    'Medium. They pour a glass and drink, camera easing round to stay in front of them.',
+    'Medium close. They raise the glass to the lens, their whole head in frame, camera settling on them.',
+  ],
+});
+
+test('a place may carry three written scripts, and they survive validation', () => {
+  const scripts = [aScript('One'), aScript('Two'), aScript('Three')];
+  const place = validatePlace(aPlace({ scripts }), { id: 'p1' });
+  assert.deepEqual(place.scripts, scripts,
+    'validatePlace rebuilds the place key by key, so an unlisted field is dropped in silence');
+});
+
+test('a place without scripts has none', () => {
+  assert.equal(validatePlace(aPlace(), { id: 'p1' }).scripts, undefined);
+});
+
+test('a malformed script list is refused by name', () => {
+  const malformed = [
+    [aScript()],
+    [aScript(), aScript(), { name: 'x', shots: ['only one'] }],
+    [aScript(), aScript(), { name: '', shots: aScript().shots }],
+    [aScript(), aScript(), { name: 'x', shots: ['a', 'b', 7] }],
+    'not a list',
+  ];
+  for (const scripts of malformed) {
+    assert.throws(() => validatePlace(aPlace({ scripts }), { id: 'p1' }), /scripts/,
+      `accepted a malformed script list: ${JSON.stringify(scripts).slice(0, 80)}`);
+  }
+});
+
+test('a script is held to the same vocabulary as every other place fragment', () => {
+  const scripts = [aScript(), aScript(), {
+    name: 'x',
+    shots: ['Medium. They are smiling at the lens, camera holding on them.', aScript().shots[1], aScript().shots[2]],
+  }];
+  assert.throws(() => validatePlace(aPlace({ scripts }), { id: 'p1' }), /smiling/);
+});
+
+test('every shipped place carries exactly three scripts of three shots', () => {
+  const places = readPresets('places');
+  assert.ok(places.length > 0, 'no shipped places were read');
+  for (const { id, raw } of places) {
+    const place = validatePlace(raw, { id, baseLook: base });
+    assert.equal(place.scripts?.length, 3, `${id} does not carry three scripts`);
+    for (const script of place.scripts) {
+      assert.equal(script.shots.length, 3, `${id} "${script.name}" is not three shots`);
+    }
+  }
+});

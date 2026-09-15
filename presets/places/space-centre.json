@@ -26,6 +26,33 @@
     "modern electric vehicles"
   ],
   "motionHint": "heat shimmer wobbles the far masts, the rope barrier swings a little, and a coach pulls slowly through the car park at the edge of frame",
+  "_scripts": "Three fifteen-second scripts, one picked per order by the scripted arc (compose/prompt.mjs). Each is three shots at five seconds, written around the objects already in this place, so what happens comes from where it is. Every shot names the person, the first has them turned toward the lens, the last keeps their whole head in frame and ends on them, and none names anybody holding the camera. Tests in compose-prompt.test.js hold every one of those.",
+  "scripts": [
+    {
+      "name": "The rocket",
+      "shots": [
+        "Medium. They are at the rope barrier, pointing up at the white rocket, turned toward the lens, camera holding on them.",
+        "Wide. They step back across the lawn with one hand up against the sun to take the whole rocket in, camera tilting up the rocket and back down to them.",
+        "Medium close. They turn to the lens with a thumbs up, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The souvenir",
+      "shots": [
+        "Medium. They are coming away from the souvenir kiosk with a model rocket in a cardboard box, turned toward the lens, camera moving backwards ahead of them.",
+        "Medium. They tear the box open on the concrete path and hold the model rocket up against the real one across the lawn, camera holding on them.",
+        "Medium close. They fly the model rocket up past the lens, laughing, their whole head in frame, camera settling on them."
+      ]
+    },
+    {
+      "name": "The map",
+      "shots": [
+        "Medium. They are turning a folded visitor map the right way up, turned toward the lens, camera holding on them.",
+        "Wide. They give up on the map and set off along the path toward the rocket, pointing at it, camera moving backwards ahead of them.",
+        "Medium close. They stop at the rope barrier, turn to the lens and shrug with a laugh, their whole head in frame, camera settling on them."
+      ]
+    }
+  ],
   "lookOverride": {
     "_comment": "Midday sun on white paint and pale concrete: the brightest, flattest daylight in the menu, so saturation stays near the base, the warmth is barely pushed, and halation is open for the rocket's blown-out flank against the sky. Grain at the floor with the two beaches, for the same reason -- there is nothing dark here for it to hide in.",
     "grade": {
