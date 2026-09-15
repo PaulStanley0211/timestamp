@@ -44,7 +44,7 @@ ending 27%, each at least 2 s, and the body the rest. They always sum to the run
 Shot 1: 0-3s.  Medium close. They are {moment}, {hook}, their whole head in frame.
 Shot 2: 3-11s. Wide. They carry on with the whole place around them -- {motionHint} --
                still turned toward the lens, picking up exactly where the shot before left them.
-Shot 3: 11-15s. Medium close. They are {ending}, head and shoulders in frame, and the take ends on them.
+Shot 3: 11-15s. Medium close. They are {ending}, and the take ends on them.
 ```
 
 ### 2.3 The camera clause
@@ -53,12 +53,23 @@ Describes filming, not a person:
 
 ```
 Filmed hand-held at 63°, chest height, 3 shots cut in camera, real speed throughout.
-{SNAPSHOT_RULE}. The camera stays in front of them throughout, with them turned toward the lens.
+Set off centre rather than in the middle of the frame, and not quite level -- a snapshot taken
+in passing, not a photograph that was composed. The camera stays in front of them throughout,
+with them turned toward the lens.
 ```
+
+The shared `SNAPSHOT_RULE` says "a snapshot somebody took in passing". `story` carries its own
+wording without "somebody", because every "somebody" near the camera is an invitation to draw
+the person holding it.
 
 ### 2.4 The closing line
 
-Ends "at the real pace of somebody recording an ordinary day". No "afternoon".
+```
+One continuous moment: the same spot, the same wardrobe and the same light carried across every
+cut, each shot picking up where the last one left off, at the real pace of an ordinary day being recorded.
+```
+
+No "afternoon", no "somebody", and no "the same posture": the hook and the ending move them on purpose.
 
 ### 2.5 Unchanged
 
@@ -78,9 +89,9 @@ STORY_HOOKS = [
   'laughing at something just out of shot, then turning to the lens',
 ];
 STORY_ENDINGS = [
-  'looking straight down the lens and giving a small wave',
+  'looking straight down the lens and giving a small wave, head and shoulders in frame',
   'stepping toward the lens until their head and shoulders fill the frame',
-  'pointing at the lens and laughing',
+  'pointing at the lens and laughing, head and shoulders in frame',
 ];
 ```
 
@@ -107,6 +118,12 @@ owner's read:
 | Tokyo | waiting at the light with one hand resting on the bicycle's handlebar, half turned back at being called | waiting at the light with one hand resting on the bicycle's handlebar |
 | Living room | sunk back into the sofa and only half turning round, one arm along the back of it | sitting back in the sofa with one arm along the back of it |
 | Default (typed and uploaded places) | halfway through something ordinary, only half turned towards whoever is holding the camera, and not waiting for the picture to be taken | getting on with something ordinary, not waiting for the picture to be taken |
+
+**And the neutral place's motion hint**, which every uploaded place with no matching preset
+carries into its body shot: "the air moves a little and the light shifts, and nothing else
+happens" becomes "the light shifts and the things around them move a little, the way a real
+place does". "Nothing else happens" is §17's "Nothing dramatic happens" again, and the model
+obeys it.
 
 **These rewrites reach the current default arc too**, since `three` uses the moment in its
 second shot. That is deliberate: every removed phrase is one that produced a visible defect or
