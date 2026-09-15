@@ -7,6 +7,12 @@ Warm, grainy, quiet.
 
 ---
 
+## START HERE (2026-09-15) -- **§95 FIRST: WHAT HAPPENS IN A TAPE NOW COMES FROM WHERE IT IS. 21 WRITTEN SCRIPTS AND 3 GENERAL ONES, SHIPPED AS THE DEFAULT AT `590dab8` WITHOUT A TEST TAPE, AT THE OWNER'S WORD.** THEN §94.
+
+**The box, local and `origin/supabase-identity-slice` are all on `590dab8`. Suite 2255 / 2251 / 1 / 3 under full load, the one red being the landing band sweep's known 15 s timeout, green alone; guards 7/7 before the commit and the message guard after it.** Proved inside the running worker by composing a kitchen prompt there: default arc `scripted`, script "The coffee", the new camera clause, 7 of 7 places carrying three scripts. **THE FIRST REAL TAPES FROM THE SITE ARE THE TEST**, because the owner said "Don't test it... ship it": read one frame a second against the spec's section 8 checks. **Two commits:** `ab670d0` removed the wording that drew a camera operator's hand, a headless second and half-turned faces (read off tape `20260915-174157-9a4311`), and `590dab8` added the scripts. **And a correction worth carrying: the owner asked twice for "the workflow" and meant the generation itself; a wrapper edit around the tape (photo hook, split ending) was built by hand, shown, and rejected. Ask what layer "workflow" means before designing.**
+
+## (the banner below is 2026-09-14, afternoon)
+
 ## START HERE (2026-09-14, afternoon) -- **§94 FIRST: THE PRICING PAGE AND THE LANDING LEAD WITH TAPES, NOT CREDITS. DEPLOYED AT `6885e74`, PROVED ON THE LIVE PAGES.** THEN §93 AND §92.
 
 **The box, local and `origin/supabase-identity-slice` are all on `6885e74`. Suite 2229 / 2226 / 0 / 3, fully green under load this time; guards 7/7 counted before the commit and the message guard again after it.** Four sentences moved and no number did: the landing's free line opens "Your first tape is free. 21 credits with a new account, and no card."; the signup page drops "a free credit allowance", which is what a bank gives you; the FAQ's "Is it free?" opens on the tape; and on the pricing page the free card's figure is **1 tape** with the credits beneath, the pack cards keep their price and put what it buys beneath, and the credit count moves into the checks as the small print. **A new rule pins it: no card on the pricing page leads with a credit count.** Pack names are untouched, because renaming Starter and Standard means renaming the Stripe products too, and that is the owner's dashboard.
@@ -13591,4 +13597,41 @@ against his tape frame (`assets/landing/photo.jpg` and `tape.jpg`, §62D's two-f
 rendered for him first. **His:** post 4's three TikTok figures at 00:00 on the 15th and
 Tokyo's two; two friends' photographs; the launch video onto YouTube before the 16th or
 17th; the thank-you to Matt; the 513 follows; `waist-up.jpg`.
+
+---
+
+### 95. WHAT HAPPENS IN A TAPE COMES FROM WHERE IT IS (2026-09-15)
+
+**2229 / 2226 -> 2255 / 2251 pass / 0 fail / 3 skipped** (full load showed the landing band sweep's known timeout once, green alone). Two code commits, `ab670d0` and `590dab8`, both test-first, thirteen sabotages each red on its own assertion and restored byte-identical, guards 7/7. **Pushed and DEPLOYED at `590dab8`; proved by composing a prompt inside the running worker.** Specs: `docs/superpowers/specs/2026-09-15-place-scripts-design.md` (shipped) and `2026-09-15-hook-body-ending-design.md` (parked).
+
+#### A -- The tape that started it
+
+Tape `20260915-174157-9a4311` (the kitchen, 9:16, 720p), read one frame a second against the exact prompt frozen in its manifest on the box: **a hand holding a modern camera at 10-11 s**, from "Somebody came along with a camera and is walking with them" plus the kitchen moment's "by whoever picked the camera up"; **the head out of frame at 12 s**, from "camera lifting to meet them"; and a person walking round a small kitchen for fifteen seconds, from the three-beat arc's walk-in shot and "leading them through the place". **Wan has no negative channel (§88D), so a person named near the camera is a person the model may draw.** The owner reported it as "looks like Tokyo"; the attached file was the kitchen, and the Tokyo he saw was a different file.
+
+#### B -- `ab670d0`: the wording that drew what nobody asked for
+
+The camera clause says "Filmed hand-held on a camera moving with them"; the snapshot rule says "taken in passing"; both close shots state "their whole head in frame"; all seven place moments and `DEFAULT_MOMENT` lost "half turned" and every mention of a camera; `NEUTRAL_PLACE` is no longer told "nothing else happens"; the continuity line says "an ordinary day being recorded", not "an afternoon". Five tests sweep every reference prompt the catalog can produce.
+
+#### C -- `590dab8`: the `scripted` arc, now the default
+
+- **Each menu place carries three written scripts** (`scripts` in its JSON, three shots each, built around its own scene objects). One is picked per order by `deriveSeed(jobId, 'script', 0) % 3` in the pipeline and frozen with the prompt as `referencePrompt.script = { source, index, name }`.
+- **Typed places and uploaded photographs get `GENERAL_SCRIPTS`** in `compose/prompt.mjs`: the model chooses the activity from the `Place:` line, with `{motionHint}` filled from the expanded place. An uploaded photo gets a general script even on a job that borrowed a menu place.
+- **The scripted camera clause says "stays in front of them"** and its continuity line drops "same spot" and "same posture", because scripts sit down and cross squares.
+- `three` and `six` stay reachable with `--arc=`. Shots and timing (0-5 / 5-10 / 10-15 s) are unchanged.
+- The photo place's own motion hint lost "nothing else in the place changes".
+
+**Every script is held by tests** to: three shots, the person named in each, turned to the lens in the first, whole head in frame in the last, a camera move in each, no somebody/someone/whoever, no half turn, no "lifting to meet", no disposable camera, no lens-behind construction (§88H's regex). **A typed place carrying a menu place's scripts is refused by a test**, because the expander builds typed places from a skeleton.
+
+#### D -- Things that will bite
+
+- **THE FIXED-SHAPE TRAP, A FOURTH TIME.** `validatePlace` rebuilds the place key by key, so `scripts` had to be named there (§88E), and **`job.mjs` validates `input.arc` by name without importing the composer**, so `scripted` had to be added there too or every CLI order for it is refused before compose. Both have a sabotage-verified test.
+- **A script NAME is scanned for banned vocabulary too.** "The tape" failed the look ban ("tape"); the living room's script is "The cassette". A check that scans only the shots misses it, and the spec's own pre-check did.
+- **`dryRun` has no job id**, so it always quotes script 0; the render picks from the id.
+- **Old manifests are untouched**: the prompt is frozen at compose, so resuming a job composed before `590dab8` sends what it froze.
+- **A rejected idea, recorded so it is not rebuilt:** a "version for posting" wrapping the tape (photo with "One photo.", the whole tape, a photo-and-frame split with the site name). Built by hand from the kitchen tape, 18.6 s and 465 frames with the Art. 50 tags intact, and rejected by the owner: the shape belongs inside the generation.
+- **Also parked:** uneven 3/8/4 hook-body-ending timings with seed-picked hooks and endings (the owner chose "keep it simple").
+
+#### E -- What is next
+
+**Watch the first real tapes the site makes on the scripted arc**, one frame a second, against the spec's section 8: turned to the lens in the first second, the script's action happening in each shot, the person present every second, no camera or second person, whole head in frame at the end. The living room's "The cassette" asks for a video machine the preset scene does not show, and the space centre's "The rocket" tilts away from the person for a moment; those two are the likeliest to need rewording. **Still open and separate:** the jeans detail the expander glues onto any typed outfit containing "t-shirt" (`GARMENT_CLASSES.casual`), and a post-render picture check. Post 5 was the kitchen tape trimmed of 9.6-12.6 s; the Instagram plan used the Meta AI script only after its false claims were removed (no 02:17 AM stamp, no "keep original" outfit, first tape free rather than $12).
 
