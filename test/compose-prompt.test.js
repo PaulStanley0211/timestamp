@@ -24,8 +24,8 @@ import { getOutfit, getPlace, loadCatalog } from '../scripts/catalog/catalog.mjs
 import { scanText } from '../scripts/catalog/schema.mjs';
 import { LENS_OVERRIDES, NEUTRAL_PLACE } from '../scripts/expand/local.mjs';
 import {
-  BASE_NEGATIVES, CAMCORDER_MOVES, COMPOSED_BAN_GROUPS, DEFAULT_ERA, MOTION_NEGATIVES, SUBJECT,
-  composeMotionPrompt, composeStillPrompt, composeReferencePrompt, REFERENCE_SUBJECT,
+  ARCS, BASE_NEGATIVES, CAMCORDER_MOVES, COMPOSED_BAN_GROUPS, DEFAULT_ERA, DEFAULT_MOMENT, MOTION_NEGATIVES,
+  SUBJECT, composeMotionPrompt, composeStillPrompt, composeReferencePrompt, REFERENCE_SUBJECT,
 } from '../scripts/compose/prompt.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -855,4 +855,87 @@ test('something besides the subject is moving in every tape', () => {
     const { prompt } = composeReferencePrompt({ place, outfit, arc });
     assert.match(prompt, /clothes moving as they move/i, `${arc}: nothing names micro-motion`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// words that drew what nobody asked for (2026-09-15)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read one frame a second off tape 20260915-174157-9a4311 (the kitchen, 9:16,
+ * 720p) against the exact prompt it was sent. A hand holding a modern camera
+ * came into shot at 10-11s: the camera clause said "Somebody came along with a
+ * camera" and the kitchen's moment said "by whoever picked the camera up", so
+ * the prompt wrote a second person with a camera into the scene twice. Wan has
+ * no negative channel (section 88D), so nothing took that person back out. The
+ * head went out of frame at 12s, from "camera lifting to meet them": the model
+ * starts low on the chest and lifts. Every place's moment said "half turned",
+ * every uploaded place's body shot said "nothing else happens", and every tape
+ * was paced like an afternoon whatever its clock said.
+ */
+const operatorWords = /\b(?:somebody|someone|whoever)\b/i;
+
+const everyReferencePrompt = () => {
+  const out = [];
+  for (const arc of ARCS) {
+    for (const pair of pairs) {
+      for (const placePhoto of [false, true]) {
+        out.push({ label: `${arc} ${pair.place.id}+${pair.outfit.id}${placePhoto ? ' +photo' : ''}`,
+          prompt: composeReferencePrompt({ ...pair, arc, placePhoto }).prompt });
+      }
+    }
+    out.push({ label: `${arc} neutral+photo`,
+      prompt: composeReferencePrompt({ place: NEUTRAL_PLACE, outfit, arc, placePhoto: true }).prompt });
+  }
+  return out;
+};
+
+test('no reference prompt writes a camera operator into the scene', () => {
+  const all = everyReferencePrompt();
+  assert.ok(all.length > 20, 'the sweep reached the catalog');
+  for (const { label, prompt } of all) {
+    assert.doesNotMatch(prompt, operatorWords,
+      `${label}: a person is named near the camera, and the model may draw them: ${prompt.match(operatorWords)?.[0]}`);
+  }
+});
+
+test('the camera is never told to start low and lift to the person', () => {
+  for (const { label, prompt } of everyReferencePrompt()) {
+    assert.doesNotMatch(prompt, /\blift(?:s|ing)?\s+to\s+meet\b/i, `${label}: the camera lifts to meet them`);
+  }
+  // The lift lived in the medium close shot of both arcs, so that is where the
+  // frame has to be stated instead. Six ends on a wide, which has nothing to lift.
+  for (const arc of ARCS) {
+    const shots = composeReferencePrompt({ place, outfit, arc }).prompt.split('\n').filter((l) => /^Shot \d+: /.test(l));
+    const close = shots.filter((s) => /Medium close\./.test(s));
+    assert.ok(close.length > 0, `${arc}: the arc has no medium close shot to check`);
+    for (const shot of close) {
+      assert.match(shot, /whole head in frame/, `${arc}: a close shot does not keep their head in frame: ${shot}`);
+    }
+  }
+});
+
+test('no moment turns the person half away from the lens or names a camera', () => {
+  const moments = [...catalog.places.values()].map((p) => [p.id, p.prompt.moment]).filter(([, m]) => m);
+  assert.equal(moments.length, catalog.places.size, 'every shipped place authors its own moment');
+  moments.push(['DEFAULT_MOMENT', DEFAULT_MOMENT]);
+  for (const [id, moment] of moments) {
+    assert.doesNotMatch(moment, /\bhalf[- ]turn/i, `${id}: half turned away from the lens: ${moment}`);
+    assert.doesNotMatch(moment, /\bcamera\b/i, `${id}: the moment names a camera: ${moment}`);
+    assert.doesNotMatch(moment, operatorWords, `${id}: the moment names whoever is filming: ${moment}`);
+  }
+});
+
+test('a place with nothing authored is never told that nothing happens', () => {
+  assert.doesNotMatch(NEUTRAL_PLACE.motionHint, /\bnothing(?: else)? happens\b/i,
+    'the model obeys "nothing happens" exactly, which is section 17 again');
+});
+
+test('the continuity line is not pinned to one time of day', () => {
+  const kitchen = getPlace(catalog, 'kuechentisch-fruehstueck');
+  const { prompt } = composeReferencePrompt({ place: kitchen, outfit, arc: 'three' });
+  const line = prompt.split('\n').find((l) => l.startsWith('One continuous moment'));
+  assert.ok(line, 'the three-beat arc still says it is one continuous moment');
+  assert.doesNotMatch(line, /\b(?:morning|afternoon|evening|night)\b/i,
+    `an early-morning kitchen is paced like another time of day: ${line}`);
 });

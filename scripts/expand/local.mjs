@@ -149,7 +149,9 @@ export const NEUTRAL_PLACE = Object.freeze({
     eraProps: 'printed signage in a plain sans-serif, a plastic carrier bag, a glass bottle of mineral water with a foil label, a small grey mobile phone with a monochrome screen',
   }),
   negatives: Object.freeze(['smartphone', 'flat-screen television', 'modern signage', 'recent model cars']),
-  motionHint: 'the air moves a little and the light shifts, and nothing else happens',
+  // Not "and nothing else happens" (2026-09-15): the model obeys that exactly,
+  // and every uploaded place with no matching preset carried it into its middle shot.
+  motionHint: 'the air moves a little, the light shifts, and the place carries on around them',
   lookOverride: Object.freeze({}),
 });
 

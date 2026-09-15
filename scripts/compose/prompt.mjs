@@ -265,15 +265,14 @@ export const STILL_NEGATIVES = Object.freeze([
  *  Deliberately free of look, person and wardrobe vocabulary, because a place
  *  preset may override it and a place preset is held to all three. */
 export const DEFAULT_MOMENT =
-  'halfway through something ordinary, only half turned towards whoever is holding the camera, '
-  + 'and not waiting for the picture to be taken';
+  'halfway through something ordinary, and not waiting for the picture to be taken';
 
 /** Ridden along with every framing clause. The preset says how much is in frame
  *  and where it stands; this says the frame was not composed. Centring is the
  *  tell no amount of grain removes. */
 const SNAPSHOT_RULE =
   'Set off centre rather than in the middle of the frame, and not quite level -- '
-  + 'a snapshot somebody took in passing, not a photograph that was composed';
+  + 'a snapshot taken in passing, not a photograph that was composed';
 
 const isNonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
 
@@ -523,7 +522,7 @@ export function composeReferencePrompt({
     `Wide. The whole place, camera panning slowly across it -- ${place.motionHint} -- and holding at the far side.`,
     `Close. ${propSentence}, with them just behind it in the same frame, camera pushing in and steadying.`,
     `Medium. ${place.prompt.moment ?? DEFAULT_MOMENT}, camera moving round to keep them in frame.`,
-    'Medium close. Turning back toward the lens mid-gesture, camera lifting to meet them.',
+    'Medium close. Turning back toward the lens mid-gesture, their whole head in frame, camera steadying on them.',
     'Wide. One last look across the place with them still standing in it, camera drifting and settling on them.',
   ];
 
@@ -557,7 +556,10 @@ export function composeReferencePrompt({
       + 'camera ahead of them and moving backwards at their pace, keeping them turned toward the lens.',
     `Medium. ${place.prompt.moment ?? DEFAULT_MOMENT}, camera holding its place in front of them and `
       + 'easing round to their near side, picking up exactly where the shot before left them.',
-    'Medium close. Looking straight down the lens and holding there, camera lifting to meet them and settling on them.',
+    // NOT "LIFTING TO MEET THEM" (2026-09-15). The kitchen tape did exactly
+    // that: it started low on the chest and lifted, so for a second there was
+    // a shirt and no head. The frame is stated instead of the move.
+    'Medium close. Looking straight down the lens and holding there, their whole head in frame, camera settling on them.',
   ];
 
   const beats = arc === 'three' ? beatsThree : beatsSix;
@@ -570,10 +572,13 @@ export function composeReferencePrompt({
   const lines = [
     `${REFERENCE_SUBJECT}, wearing ${outfit.wardrobe}.`,
     `Place: ${scene}.`,
-    // THE CAMERA IS A PERSON HERE, NOT A POSITION. That is the biggest single
-    // change from the first direct run, whose camera clause said the operator
-    // stood in one place and breathed -- and the model obeyed it exactly.
-    'Somebody came along with a camera and is walking with them: hand-held at 63°, chest height, '
+    // THE CAMERA MOVES WITH THEM, AND NOBODY IS HOLDING IT. The first direct
+    // run's clause stood the operator in one place and the model obeyed; this
+    // one used to say "Somebody came along with a camera", and on 2026-09-15
+    // the kitchen tape drew that somebody -- a hand and a modern camera in shot
+    // at 10-11s. With no negative channel a person named near the camera is a
+    // person the model may draw, so the movement is kept and the person is not.
+    'Filmed hand-held on a camera moving with them, at 63°, chest height, '
       + `${chosen.length} shots cut in camera, real speed throughout. ${SNAPSHOT_RULE}. `
       // "leading them rather than trailing them" was the first draft and it
       // broke this path's own rule: with no negative channel, "rather than
@@ -617,7 +622,7 @@ export function composeReferencePrompt({
     ...(arc === 'three'
       ? ['One continuous moment: the same spot, the same posture and the same light carried across '
         + 'every cut, each shot picking up where the last one left off, at the unhurried pace of '
-        + 'somebody recording an afternoon.']
+        + 'an ordinary day being recorded.']
       : []),
   ];
 

@@ -35,7 +35,7 @@
     "framing": "waist-up, three-quarters to the camera",
 
     "_moment": "OPTIONAL, and the highest-value optional field there is. What is HAPPENING -- not what is in frame. Leave it out and the composer uses a generic floor, which works; write one that belongs to this place and it works far better. A brief with no action in it is a portrait brief, and the model answers it with a portrait: squared to the camera, arms hanging, waiting to be photographed. That pose survives the tape chain untouched and is a large part of why a frame reads as generated. Describe hands, shoulders and direction of travel; never the face.",
-    "moment": "halfway through something ordinary, half turned towards whoever is holding the camera",
+    "moment": "halfway through something ordinary",
 
     "_eraProps": "Three or four objects that date the frame by existing. This is where the era lives. A payphone, a wired telephone, a roof box, a wall clock with hands.",
     "eraProps": "three or four objects that could only be from 1999 to 2005"
