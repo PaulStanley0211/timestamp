@@ -1,6 +1,6 @@
 # Hook, body, ending: every generated tape has a shape
 
-**Date:** 2026-09-15 · **Status:** approved in conversation, awaiting the owner's read of this document · **Owner:** Paul
+**Date:** 2026-09-15 · **Status:** PARKED the same day at the owner's word ("keep it simple"), superseded by `2026-09-15-place-scripts-design.md` · **Owner:** Paul
 
 ## 1. The problem
 
