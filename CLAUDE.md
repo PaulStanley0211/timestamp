@@ -7,6 +7,22 @@ Warm, grainy, quiet.
 
 ---
 
+## START HERE (2026-09-18) -- **THE LAUNCH VIDEO IS STILL THE ONLY THING WITH A DEADLINE ON IT, AND IT IS OVERDUE. READ THE BANNER BELOW THIS ONE FIRST.** Then §96.
+
+**The box, local and `origin/supabase-identity-slice` are all on `37df1a2`** -- the 09-17 banner's "the box is still `590dab8`" is true of that day and stale now. **Suite 2258 / 2254 / 1 / 3**, the one red being the landing band sweep's known 15 s timeout under load and green alone in 19 s; guards 7/7 counted, message guard after the commit. **Nothing about the launch changed:** the Product Hunt page is built on the **19th**, launch is **Tuesday 22 September, 09:01 Berlin**, and `build/ph/launch-video.mp4` still must not go up as it is.
+
+**§96 IS ONE COMMIT AND IT IS COSMETIC BY DESIGN: the landing's eight sections now arrive as you scroll to them, staggered per row.** The owner brought animejs.com and asked which of its animations suit the site; three of the nine map onto something we have, **and none of the library shipped.** The reason is in our own CSP and is worth knowing before anybody proposes a JS dependency again: **`script-src` is the inline hash list with no `'self'`, so an external script file is refused by the browser outright and silently** (§96E). **Two findings came out of building it that a string test could never have reached** -- a transition declared on the hidden state makes every section fade OUT before it fades in (caught at opacity 0.739 mid-flight), and **IntersectionObserver misses a jump entirely**, because ratio 0 below the fold to ratio 0 above it crosses no threshold and fires no callback: one jump to the bottom left nine of fourteen sections hidden (§96C, §96D). **The hiding is opt-in** -- the server ships the armed class on nothing -- so a refused script leaves the page exactly as it was, and that was verified on the live site rather than only in the suite.
+
+## (the banner below is 2026-09-17, and its launch-video half is LIVE)
+
+## START HERE (2026-09-17) -- **THE LAUNCH VIDEO WAS NOT UPLOADED, AND IT SHOULD NOT BE AS IT IS.** Read the memory file `launch-video-rebuild-2026-09-17` first.
+
+**No code changed on 16-17 Sept; the box is still `590dab8`.** `build/ph/launch-video.mp4` is built on the 5 Sept Times Square tape, from before the camera fix, and shows the back of the head for about six seconds after its title card. The plan: a new 16:9 Times Square tape (kitchen.jpeg on the Desktop, "a plain cream cotton t-shirt and dark blue jeans" typed in step 2, 720p), then a rebuild with `build/ph/video.sh`, then YouTube; it was due 17 Sept because the Product Hunt page is built on the 19th.
+
+**The scripted arc (`590dab8`) passed its first real tape**, `20260916-002414-16e091`, on all five section 8 checks. **The reveal cut is now the standard social cut, and it only works in a famous place:** TikTok average watch 3.49 s and 3.3% to the end at the space centre (both best ever), 1.49 s and 0.4% in the kitchen with a shirt matched to the photo (both worst). Every figure is in the gitignored `build/social/post-log.md`, with the first Reddit post (r/aivideo, 2.4k views; its real rules forbid linking the site). TikTok goes back to midnight Berlin.
+
+## (the banner below is 2026-09-15)
+
 ## START HERE (2026-09-15) -- **§95 FIRST: WHAT HAPPENS IN A TAPE NOW COMES FROM WHERE IT IS. 21 WRITTEN SCRIPTS AND 3 GENERAL ONES, SHIPPED AS THE DEFAULT AT `590dab8` WITHOUT A TEST TAPE, AT THE OWNER'S WORD.** THEN §94.
 
 **The box, local and `origin/supabase-identity-slice` are all on `590dab8`. Suite 2255 / 2251 / 1 / 3 under full load, the one red being the landing band sweep's known 15 s timeout, green alone; guards 7/7 before the commit and the message guard after it.** Proved inside the running worker by composing a kitchen prompt there: default arc `scripted`, script "The coffee", the new camera clause, 7 of 7 places carrying three scripts. **THE FIRST REAL TAPES FROM THE SITE ARE THE TEST**, because the owner said "Don't test it... ship it": read one frame a second against the spec's section 8 checks. **Two commits:** `ab670d0` removed the wording that drew a camera operator's hand, a headless second and half-turned faces (read off tape `20260915-174157-9a4311`), and `590dab8` added the scripts. **And a correction worth carrying: the owner asked twice for "the workflow" and meant the generation itself; a wrapper edit around the tape (photo hook, split ending) was built by hand, shown, and rejected. Ask what layer "workflow" means before designing.**
@@ -13634,4 +13650,64 @@ The camera clause says "Filmed hand-held on a camera moving with them"; the snap
 #### E -- What is next
 
 **Watch the first real tapes the site makes on the scripted arc**, one frame a second, against the spec's section 8: turned to the lens in the first second, the script's action happening in each shot, the person present every second, no camera or second person, whole head in frame at the end. The living room's "The cassette" asks for a video machine the preset scene does not show, and the space centre's "The rocket" tilts away from the person for a moment; those two are the likeliest to need rewording. **Still open and separate:** the jeans detail the expander glues onto any typed outfit containing "t-shirt" (`GARMENT_CLASSES.casual`), and a post-render picture check. Post 5 was the kitchen tape trimmed of 9.6-12.6 s; the Instagram plan used the Meta AI script only after its false claims were removed (no 02:17 AM stamp, no "keep original" outfit, first tape free rather than $12).
+
+---
+
+### 96. THE LANDING ARRIVES AS YOU REACH IT (2026-09-18)
+
+**2255 / 2251 -> 2258 / 2254 pass / 1 fail / 3 skipped, the one red being the landing band sweep at its 15 s capture budget under full load and green alone in 19 s (§80's residual, unchanged).** One commit, `37df1a2`, test-first, **six sabotages each restored byte-identical and compared**, all seven `guards.yml` steps extracted fresh, run verbatim and COUNTED 7/7, with the message guard re-run after the commit. **Pushed and DEPLOYED; local, `origin/supabase-identity-slice` and the box are all on `37df1a2`.**
+
+**THE OWNER BROUGHT animejs.com AND ASKED WHICH ANIMATIONS SUIT THE SITE.** The nine demos on that page were read, three mapped onto something this product actually has, and **none of the library shipped** -- see §96E, which is the finding that decided it. What shipped is the first of the three, in CSS.
+
+#### A -- What it does
+
+Thirteen elements on the landing arm below the fold and fade-and-lift into view as you reach them, and the members of a row stagger against each other: the two how-cards, the three fact cards, the six FAQ rows, at 0, 60, 120, 180, 240, 300 ms. `REVEAL_TARGETS` in `views.mjs` is the list, exported so the test reads the real thing rather than a copy (§90B's rule); `REVEAL_SCRIPT` is the sixth inline script and the sixth CSP hash.
+
+#### B -- THE HIDING IS OPT-IN, AND THAT IS THE WHOLE DESIGN
+
+A reveal is an opacity of 0 that something later has to undo, and the usual way it ships broken is the stylesheet doing the hiding while a script does the undoing: **the CSS always arrives and the script might not**, so a visitor whose script was refused meets a hero with six empty holes under it and nothing anywhere goes red. This site has killed an inline script by CSP before, silently, and that is its most repeated failure shape.
+
+So `views.mjs` ships the armed class on nothing, the script adds it, and every rule that hides is scoped under it -- **the same shape as `wipe--live`**, which is why the wipe's grip is drawn only once the range input exists. Script refused, old browser, reduced-motion preference: page exactly as it was. **The guard was verified on the live site after the deploy rather than only in the suite: the armed class appears ZERO times outside `<script>`.**
+
+**AND ONLY WHAT IS BELOW THE FOLD IS ARMED**, which is what makes an end-of-body script safe here. Hiding something a person is already looking at and fading it back is a flash, not a reveal. On a viewport tall enough to show everything this arms nothing at all, and that is the correct answer rather than a degraded one.
+
+#### C -- TWO THINGS A REAL BROWSER FOUND THAT NO STRING COULD
+
+1. **The transition was fading every section OUT before it could fade in.** Declaring `transition` on `.reveal--armed` means the moment the script adds that class the element transitions from its current opacity of 1 down to 0. Caught by probing computed style right after load: **the manifesto line at opacity 0.739 and translateY(3.6px), mid-flight downward.** The declaration moved to `.reveal--armed.reveal--in`, so arming snaps with nothing to animate and only the reveal moves.
+2. **`.band-in` was a target and had to stop being one.** A hidden band is text at opacity 0 over a photograph, which is exactly what the band's own contrast sweep measures: **seventeen runs at 1:1.** The fix is to leave the band alone rather than teach the sweep to scroll and wait -- and it is right on the merits anyway, because the band's mechanic is already the picture changing behind the rail, and two entrances compete for one moment. **Anything added to `REVEAL_TARGETS` that sits over a picture has the same problem.**
+
+#### D -- IntersectionObserver IS THE WRONG TOOL HERE, AND IT IS WHAT EVERYONE REACHES FOR
+
+**IO notifies on a CHANGE of intersection state.** A viewport that moves in one step -- End, a flick on a phone, or the `#places` link in the hero nav, which is an anchor straight down the page -- takes a section from ratio 0 below the fold to ratio 0 above it **without ever crossing the threshold**, so no callback fires at all and that section sits at opacity 0 until the visitor happens to scroll back up. Measured on the real page: **one jump to the bottom left nine of fourteen sections hidden.** Adding an "or already passed" test to the callback does nothing, because the callback is what never runs.
+
+A rAF-throttled `scroll` handler reading `getBoundingClientRect` has no such trap: it asks where things ARE rather than what changed. Thirteen rects on a scroll frame is nothing, the list shrinks as sections reveal, and the listeners take themselves off when it empties. A `load` listener rides with them because the script runs at the end of the body, before the tape and the place cards have loaded, and everything under them moves once they do.
+
+#### E -- WHY NONE OF anime.js SHIPPED, AND THE FINDING IS IN OUR OWN CSP
+
+**`server.mjs:606` builds `script-src` from `INLINE_SCRIPT_HASHES` and nothing else. There is no `'self'`.** Hash sources only cover INLINE scripts, so **a vendored library at `/js/anime.js` is refused by the browser outright, silently.** The two ways past it are to add `'self'` -- which changes the policy from "exactly these six scripts and nothing else" to "any script from our origin", the guarantee §28 item 7 deliberately built -- or to inline all 27 KB and re-hash it on every update. **Check this before proposing any third-party JS for this site.**
+
+The three effects worth taking from that page were scroll reveal, staggering and SVG line drawing (`stroke-dasharray`, the classic technique), and all three are reachable in CSS plus the observer-free sweep above. **Deliberately refused: `createDraggable` with a spring release on `figure.wipe`.** It is the most impressive demo they have and it maps exactly onto our drag-to-compare, but §62A chose the native `<input type="range">` over a custom div slider on purpose, and swapping it back walks over that and §16's focus work. **The SVG line is the one still worth building** and it needs art that does not exist, so it waits until after launch.
+
+#### F -- THE SABOTAGE THAT ESCAPED, AND THE TEST WAS WHAT WAS WRONG
+
+Five of six bound first time. The sixth -- arming everything, on screen or not -- **was not caught**, and §34F's ruling held again: *an escaped sabotage reveals a missing test rather than working code.* At 1440x900 no reveal target is above the fold when the script runs, so the on-screen assertion passed whether or not the rule existed. It has **its own test and its own 2400px-tall viewport** now, with an assertion that the viewport really does put the manifesto line on screen before the rule is asserted -- otherwise that test is vacuous in the same way. Re-run against it: CAUGHT.
+
+#### G -- THE DEPLOY, AND THE ONE TIME THE CSP FINGERPRINT IS REAL EVIDENCE
+
+§82D's instrument fingerprints `views.mjs` alone, so on most changes it comes back identical and proves nothing (§83D). **This change adds an inline script, so it is decisive: the live hash set went 5 -> 6 and is byte-identical to the set computed from the branch**, the new hash present and the other five unmoved, which also proves no existing script was disturbed. Compute the expected set from the branch AFTER the last commit, never from a number noted earlier (§72E).
+
+Three separate remote commands (§70F). `[worker 4/6] COPY . .` with **no `CACHED`** and the preflight re-ran, which is §82C's tell that the image is genuinely new. Web healthy inside a minute, **0 restarts on both containers, 0 FATAL**, seven public pages 200, `/videos` and `/account` 303, `X-Robots-Tag` still absent. **And the script was confirmed RUNNING on the live site** -- thirteen armed, all hidden, none on screen, `--i` restarting per row -- because a CSP-refused script arms nothing and says so nowhere.
+
+#### H -- Things that will bite
+
+- **THE BACKTICK TRAP FIRED, in a comment warning about being careful**, exactly as this file has said since 2026-08-21. `node --check` caught it in seconds, which is the whole argument for the rule.
+- **AND THE SAME EDIT BROKE A CSS COMMENT TWICE IN A DIFFERENT WAY.** Replacing a block that begins right after a `*/` and opening the replacement with more comment prose leaves an orphaned tail: the JS still parses, because it is all inside a template literal, so `node --check` reports nothing and the BROWSER is what would have choked. A comment-balance walk over `createStylesheet().css` catches it in one line and is worth running after any edit to a commented CSS block.
+- **THE IN-APP BROWSER PANE STARVES `requestAnimationFrame`** while reporting `visibilityState: "visible"` and `hidden: false`, because it is not compositing -- which is also why screenshots there time out (§62E, §65E). Anything rAF-throttled looks completely dead in it. Measure animation in the CDP browser-smoke suite; the pane is good for `getComputedStyle` reads and nothing that has to move.
+- **gstack's `browse.exe` IS BLOCKED BY WINDOWS APPLICATION CONTROL AGAIN** -- `Permission denied` from Git Bash, `ApplicationFailedException` from PowerShell. **§89D's note that it runs is stale.** The working route is the in-app pane, as §55F and §90D already record.
+- **A browser test that reads `/` must `signOut` first** or the session cookie renders the order form instead. Existing warning, unchanged, and the new tests follow it.
+- **The 14px lift changes `getBoundingClientRect`**, so any existing test measuring gaps between landing sections is in its blast radius. `the landing sections stand apart` was checked and still passes because both ends of each measured pair shift together or neither does.
+
+#### I -- What is left
+
+**Unchanged and dated, and it is still the thing with the deadline:** the launch video is NOT on YouTube, `build/ph/launch-video.mp4` should not go up as it is, and the Product Hunt page is built on the 19th for a launch on **Tuesday 22 September at 09:01 Berlin**. Read the memory file `launch-video-rebuild-2026-09-17`. **From this session:** the SVG line drawing on the how2 section, after launch, and the 520 ms duration and 60 ms stagger are two numbers in one rule if the owner wants them different once he has scrolled it himself.
 
