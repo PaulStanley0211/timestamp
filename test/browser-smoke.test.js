@@ -736,6 +736,118 @@ test('the landing sections stand apart, on the pixels rather than in the sheet',
   }
 });
 
+/**
+ * THE REVEAL, IN AN ENGINE, BECAUSE NO STRING CAN SEE ANY OF THIS.
+ *
+ * The sheet guard in web-static holds the one thing that would blank the page.
+ * Everything else about a scroll reveal lives where a string cannot reach it:
+ * whether the observer fires at all, whether the stagger resolves to different
+ * delays, and whether a section a visitor scrolled past is left sitting at
+ * opacity 0 above the viewport.
+ *
+ * THE JUMP IS THE INTERESTING HALF. IntersectionObserver reports the state at
+ * the moment it fires, so a viewport that moves in one step -- End, a fast
+ * flick on a phone, or the "Places" link in the hero nav, which is an anchor
+ * straight down the page -- hands the callback entries that say "not
+ * intersecting" for every section it flew past. Reveal only on isIntersecting
+ * and those sections stay hidden until the visitor happens to scroll back up.
+ * So this scrolls in ONE jump on purpose.
+ */
+test('the landing reveals every section it arms, even when the viewport jumps past them', { skip }, async () => {
+  const s = await session();
+  await s.signOut();
+  const page = await visit('/', LAPTOP);
+  assert.deepEqual(page.errors, [], `the landing: ${page.errors.join('; ')}`);
+
+  const atLoad = await page.evaluate(`(() => {
+    const armed = [...document.querySelectorAll('.reveal--armed')];
+    const fold = window.innerHeight;
+    return {
+      count: armed.length,
+      shown: armed.filter((e) => getComputedStyle(e).opacity !== '0').length,
+      onScreen: armed.filter((e) => e.getBoundingClientRect().top < fold).length,
+      order: [...document.querySelectorAll('.faq .faq-row.reveal--armed')]
+        .map((e) => e.style.getPropertyValue('--i')),
+    };
+  })()`);
+
+  // PRESENT BEFORE ABSENT: a page that armed nothing satisfies every
+  // assertion below it while proving the feature does not exist.
+  assert.ok(atLoad.count > 0, 'the landing armed nothing at all, so there is no reveal to test');
+  assert.equal(atLoad.shown, 0, `${atLoad.shown} of ${atLoad.count} armed sections were never actually hidden`);
+
+  // NOTHING ON SCREEN IS EVER ARMED. Hiding what a person is already looking
+  // at is a flash, not a reveal, and it is the one way this feature can make
+  // the page worse than it was.
+  assert.equal(atLoad.onScreen, 0,
+    `${atLoad.onScreen} armed sections were already on screen at load, so the visitor watched them vanish`);
+
+  // THE STAGGER IS AN INDEX WITHIN ITS OWN ROW. This is the half the script
+  // owns; the half the sheet owns is the delay it resolves to, read below
+  // once the rows are revealed and the declaration actually applies.
+  assert.ok(atLoad.order.length >= 3, `only ${atLoad.order.length} FAQ rows are armed, too few to show a stagger`);
+  assert.deepEqual(atLoad.order, atLoad.order.map((_, i) => String(i)),
+    `the FAQ rows are indexed ${atLoad.order.join(', ')} rather than from zero, so the stagger is not per-row`);
+
+  await page.evaluate('window.scrollTo(0, document.body.scrollHeight), true');
+  await new Promise((resolve) => { setTimeout(resolve, 1800); });
+
+  const atBottom = await page.evaluate(`(() => {
+    const armed = [...document.querySelectorAll('.reveal--armed')];
+    return {
+      stillHidden: armed.filter((e) => getComputedStyle(e).opacity !== '1').map((e) => e.className),
+      delays: [...document.querySelectorAll('.faq .faq-row.reveal--in')]
+        .map((e) => getComputedStyle(e).transitionDelay),
+    };
+  })()`);
+  assert.deepEqual(atBottom.stillHidden, [],
+    `these sections were still hidden after the page was scrolled past them: ${atBottom.stillHidden.join(' | ')}`);
+
+  // AND THE INDEX BECAME TIME. An --i the sheet never reads is a stagger that
+  // does not happen, and nothing else in the suite would notice.
+  const ms = atBottom.delays.map((d) => Number.parseFloat(d) * (d.trim().endsWith('ms') ? 1 : 1000));
+  assert.ok(ms.length >= 3, `only ${ms.length} FAQ rows were revealed, too few to show a stagger`);
+  assert.deepEqual(ms, [...ms].sort((a, b) => a - b), `the FAQ rows do not stagger in order: ${atBottom.delays.join(', ')}`);
+  assert.ok(ms[ms.length - 1] > ms[0],
+    `every FAQ row carries the same delay (${atBottom.delays[0]}), so the rows arrive together`);
+});
+
+/**
+ * NOTHING ALREADY ON SCREEN IS ARMED, which is the one way this feature can
+ * make the page worse than it was: hide what a person is looking at and fade
+ * it back, and they have watched a section vanish for no reason.
+ *
+ * THIS NEEDS ITS OWN VIEWPORT AND THAT IS THE WHOLE POINT. The same assertion
+ * inside the test above passes at 1440x900 whether or not the rule exists,
+ * because at laptop height no reveal target is above the fold when the script
+ * runs -- a sabotage that armed EVERYTHING was not caught there. A viewport
+ * tall enough to put the manifesto line on screen at load is what makes the
+ * assertion able to fail.
+ */
+test('the landing arms nothing that is already on screen', { skip }, async () => {
+  const s = await session();
+  await s.signOut();
+  const page = await visit('/', { width: 1440, height: 2400, mobile: false });
+  assert.deepEqual(page.errors, [], `the landing: ${page.errors.join('; ')}`);
+
+  const probe = await page.evaluate(`(() => {
+    const el = document.querySelector('.manifesto-line');
+    if (!el) return { found: false };
+    return {
+      found: true,
+      top: el.getBoundingClientRect().top,
+      fold: window.innerHeight,
+      armed: el.classList.contains('reveal--armed'),
+    };
+  })()`);
+
+  assert.ok(probe.found, 'the manifesto line is not on the landing page at all');
+  assert.ok(probe.top < probe.fold,
+    `this viewport does not put the manifesto line on screen (top ${probe.top}, fold ${probe.fold}), so the assertion below proves nothing`);
+  assert.equal(probe.armed, false,
+    'a section already on screen was armed, so the visitor watches it vanish before it fades back');
+});
+
 test('the frame row stays on one line wherever its panel is at full width', { skip }, async () => {
   // THE OWNER SAW 9:16 SITTING UNDER 4:3 AND 16:9 ON A LAPTOP (2026-09-08) and
   // asked for the three shapes in a straight line. It was not a narrow-screen

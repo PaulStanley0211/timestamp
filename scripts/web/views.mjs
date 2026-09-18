@@ -633,8 +633,129 @@ const WIPE_SCRIPT = `
 }());
 `;
 
+/**
+ * What the landing reveals on scroll, in document order, and the list lives
+ * here rather than in the script's body so the stylesheet guard in
+ * test/web-static.test.js can read the real thing instead of a copy. A literal
+ * spelled twice is a literal that drifts, and a drifted one here fails no test
+ * and throws nothing: it just quietly stops revealing a section.
+ *
+ * A row's selector matches several elements and they stagger against each
+ * other; a single element is a row of one and takes no delay.
+ *
+ * THE PLACE BAND IS NOT ON THIS LIST, and it was until the band's own contrast
+ * sweep in test/browser-smoke.test.js went red on it: seventeen runs of text
+ * reading 1:1, because a hidden .band-in is text at opacity 0 over a
+ * photograph and that is what the sweep measures. The fix is to leave the band
+ * alone rather than to teach the sweep to scroll and wait, and it is the right
+ * answer on the merits anyway -- the band's whole mechanic is the photograph
+ * changing behind the rail, so fading the rail in on top of that is two
+ * entrances competing for one moment. Anything added here that sits over a
+ * picture has the same problem.
+ */
+export const REVEAL_TARGETS = Object.freeze([
+  '.manifesto-line',
+  '.how2 .how-card',
+  '.facts3 .fact',
+  '.demo-tapes',
+  '.faq .faq-row',
+]);
+
+/**
+ * Sections arrive as you reach them, instead of the whole page being fully
+ * formed before anybody gets there.
+ *
+ * ONLY WHAT IS BELOW THE FOLD IS ARMED, and that is what makes this safe to
+ * run at the end of the body rather than in the head. Hiding something a
+ * person is already looking at and fading it back in is not a reveal, it is a
+ * flash; and anything on screen at load has been seen, so there is nothing
+ * left to reveal about it. The consequence worth knowing: on a very tall
+ * viewport this script arms nothing at all and the page behaves exactly as it
+ * did before, which is the correct answer rather than a degraded one.
+ *
+ * THE SCRIPT OWNS THE HIDING. The stylesheet hides nothing on its own, so a
+ * CSP refusal, an old browser with no IntersectionObserver, or a reduced-motion
+ * preference all leave the page as it is today rather than blank below the
+ * hero. That ordering is the whole reason this is a script that ADDS a class
+ * rather than a stylesheet that removes one.
+ *
+ * --i IS THE INDEX WITHIN ITS OWN ROW, not within the page, so the stagger
+ * restarts for each group and a row of six does not inherit a five-card head
+ * start from the row above it.
+ *
+ * A GEOMETRY SWEEP AND NOT AN IntersectionObserver, which is the opposite of
+ * what this feature is usually built with, so the reason is worth having.
+ * IntersectionObserver notifies on a CHANGE of intersection state. A viewport
+ * that moves in one step -- End, a flick on a phone, or the "Places" link in
+ * the hero nav, which is an anchor straight down the page -- takes a section
+ * from ratio 0 below the fold to ratio 0 above it without ever crossing the
+ * threshold, so no callback fires and that section stays at opacity 0 until
+ * the visitor happens to scroll back up. Measured on the real page: one jump
+ * to the bottom left NINE of fourteen sections hidden. Reading the geometry
+ * on a rAF-throttled scroll has no such trap, because it asks where things
+ * ARE rather than what changed. Fourteen rects on a scroll frame is nothing,
+ * the list shrinks as sections reveal, and the listeners take themselves off
+ * when it empties.
+ */
+const REVEAL_SCRIPT = `
+(function () {
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+  if (reduce && reduce.matches) return;
+
+  var fold = window.innerHeight || 0;
+  var armed = [];
+
+  ${JSON.stringify(REVEAL_TARGETS)}.forEach(function (selector) {
+    var i = 0;
+    Array.prototype.forEach.call(document.querySelectorAll(selector), function (el) {
+      if (el.getBoundingClientRect().top < fold) return;
+      el.style.setProperty('--i', String(i));
+      i += 1;
+      el.classList.add('reveal--armed');
+      armed.push(el);
+    });
+  });
+
+  if (!armed.length) return;
+
+  var queued = false;
+  var listen = { passive: true };
+
+  function sweep() {
+    queued = false;
+    // A SECTION REVEALS ONCE IT IS 12% INTO THE VIEWPORT, or anywhere above
+    // it. The second half is what makes a jump safe.
+    var line = (window.innerHeight || 0) * 0.88;
+    for (var k = armed.length - 1; k >= 0; k -= 1) {
+      if (armed[k].getBoundingClientRect().top >= line) continue;
+      armed[k].classList.add('reveal--in');
+      armed.splice(k, 1);
+    }
+    if (armed.length) return;
+    window.removeEventListener('scroll', schedule, listen);
+    window.removeEventListener('resize', schedule, listen);
+    window.removeEventListener('load', schedule, listen);
+  }
+
+  function schedule() {
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(sweep);
+  }
+
+  window.addEventListener('scroll', schedule, listen);
+  window.addEventListener('resize', schedule, listen);
+  // THE LATE LAYOUT SHIFT. This runs at the end of the body, so the tape and
+  // the place cards below it have not loaded yet and everything under them
+  // moves once they do. Without this a section that ends up on screen after
+  // the images land stays hidden until the visitor scrolls.
+  window.addEventListener('load', schedule, listen);
+  schedule();
+}());
+`;
+
 export const INLINE_SCRIPT_HASHES = Object.freeze(
-  [HOME_SCRIPT, STATUS_SCRIPT, BG_SCRIPT, SIGNIN_SCRIPT, WIPE_SCRIPT]
+  [HOME_SCRIPT, STATUS_SCRIPT, BG_SCRIPT, SIGNIN_SCRIPT, WIPE_SCRIPT, REVEAL_SCRIPT]
     .map((s) => crypto.createHash('sha256').update(s, 'utf8').digest('base64')),
 );
 
@@ -1451,7 +1572,8 @@ ${faq(faqItems({ freeCredits: pricing?.freeCredits ?? null, photoDays, jobDays, 
 
 <script>${BG_SCRIPT}</script>
 <script>${SIGNIN_SCRIPT}</script>
-<script>${WIPE_SCRIPT}</script>`;
+<script>${WIPE_SCRIPT}</script>
+<script>${REVEAL_SCRIPT}</script>`;
 
   return layout({
     title: 'Timestamp — one photograph, fifteen seconds of 2003',

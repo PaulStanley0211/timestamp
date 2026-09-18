@@ -2740,6 +2740,55 @@ body.page-landing { padding: 0 0 var(--s-8); }
 }
 @media (prefers-reduced-motion: reduce) { .wipe-grip { transition: none; } }
 
+/* SCROLL REVEAL, AND EVERY RULE HERE IS SCOPED UNDER A CLASS THE SERVER NEVER
+   SHIPS.
+
+   The landing is eight sections tall and every one of them used to arrive
+   fully formed before the visitor got there, so the page read as a static
+   poster rather than as something made. These rules fade and lift a section as
+   it comes into view, and stagger the members of a row so a set of cards
+   arrives dealt rather than dumped.
+
+   THE HIDING IS OPT-IN, WHICH IS THE WHOLE DESIGN. A reveal is an opacity of 0
+   that something later has to undo, and the classic way it ships broken is the
+   stylesheet doing the hiding while a script does the undoing: the CSS always
+   arrives and the script might not. views.mjs therefore ships reveal--armed
+   on nothing; REVEAL_SCRIPT adds it, and only to elements that are BELOW THE
+   FOLD when it runs, so the class is never applied to anything a person is
+   already looking at. Script refused by the CSP, class never added, page
+   exactly as it was. Same shape as wipe--live two rules up.
+
+   THE STAGGER IS ONE DECLARATION, not a rule per card. The script writes --i
+   as the item's index within its own row and the delay falls out of it, so a
+   row that grows a seventh card needs nothing here.
+
+   REDUCED MOTION IS BELT AND BRACES. The script already declines to arm
+   anything when the query matches, so this rule only catches somebody who
+   turns the preference on after the page has loaded -- at which point armed
+   sections that have not yet been scrolled to would otherwise stay hidden for
+   good.
+
+   THE TRANSITION IS ON THE REVEALED STATE, NOT ON THE ARMED ONE, and that is
+   a correctness rule rather than a preference. Declaring it on .reveal--armed
+   means the moment the script adds that class the element TRANSITIONS from its
+   current opacity of 1 down to 0 -- so every section below the fold spends
+   half a second fading OUT before it can fade back in, which is the exact
+   flash this feature is built to avoid. Measured in a real browser on the
+   first attempt: the manifesto line sat at opacity 0.739 and translateY(3.6px)
+   a moment after load, on its way down. With the transition here instead,
+   arming snaps to hidden with nothing to animate and only the reveal moves. */
+.reveal--armed { opacity: 0; transform: translateY(14px); }
+.reveal--armed.reveal--in {
+  opacity: 1;
+  transform: none;
+  transition: opacity 520ms cubic-bezier(0.22, 0.61, 0.36, 1), transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition-delay: calc(var(--i, 0) * 60ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal--armed { opacity: 1; transform: none; }
+  .reveal--armed.reveal--in { transition: none; }
+}
+
 /* THE FACTS: three cards; Task 3 owns .fact. */
 .facts3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-5); padding: var(--s-8) 0; }
 @media (max-width: 48rem) { .facts3 { grid-template-columns: 1fr; } }

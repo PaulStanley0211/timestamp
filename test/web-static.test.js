@@ -42,7 +42,7 @@ import {
 import {
   creditMeter, homePage, landingPage, statusPage, selectPage, resultPage, videosPage, errorPage,
   privacyPage, termsPage, impressumPage, faq, siteFooter, balanceSentence,
-  layout,
+  layout, REVEAL_TARGETS,
 } from '../scripts/web/views.mjs';
 import {
   loginPage, signupPage, pricingPage, authUnavailablePage, verifyPage, identityUnavailablePage,
@@ -2851,4 +2851,65 @@ test('a page given no metadata emits none of it, and an absent image does not cl
   assert.ok(!noImage.includes('og:image'), 'og:image was emitted with no image to point at');
   assert.match(noImage, /<meta name="twitter:card" content="summary">/, 'a card with no image must be the small one');
   assert.match(noImage, /<link rel="canonical" href="https:\/\/timestamptapes\.test\/pricing">/, 'the canonical url went missing');
+});
+
+/**
+ * THE BLANK-PAGE GUARD, and it is the whole reason scroll reveal gets a test
+ * in a file that otherwise refuses to assert on presentation.
+ *
+ * A reveal is an opacity of 0 that something later has to undo. The classic
+ * way it ships broken is that the hiding lives in the stylesheet and the
+ * undoing lives in a script: the CSS always arrives, the script might not, and
+ * a visitor whose script was refused meets a hero with six empty holes under
+ * it. Nothing throws and nothing goes red. This site has killed an inline
+ * script by CSP before, silently, and that is the product's most repeated
+ * failure shape -- so the hiding here is opt-in rather than default.
+ *
+ * `views.mjs` ships the armed class nowhere in the markup; the script adds it,
+ * and every rule that hides anything is scoped under it. Script refused, class
+ * never added, page exactly as it is today. Same shape as `wipe--live`, which
+ * is why the grip is drawn only once the range input exists.
+ *
+ * PRESENT BEFORE ABSENT. The two positive assertions run first on purpose: a
+ * negative assertion over a feature that does not exist yet passes while
+ * proving nothing, which is how a vacuous guard gets committed.
+ */
+test('the landing arms its reveal from the script and never from the markup', () => {
+  const { css } = createStylesheet({});
+  const html = landingPage({ places: [], account: null });
+
+  assert.match(css, /\.reveal--armed/, 'the stylesheet carries no reveal rule');
+  const scripts = html.match(/<script>[\s\S]*?<\/script>/g) ?? [];
+  assert.ok(
+    scripts.some((s) => s.includes('reveal--armed')),
+    'the landing ships no script that arms the reveal',
+  );
+
+  const markup = html.replace(/<script>[\s\S]*?<\/script>/g, '');
+  assert.ok(
+    !markup.includes('reveal--armed'),
+    'the server ships the armed class on an element, so a page whose script never runs is blank below the hero',
+  );
+
+  // AND NO RULE HIDES A TARGET ON ITS OWN. The two assertions above hold the
+  // MARKUP honest; this one holds the SHEET honest, which is the half that
+  // actually blanks a page. The target list is imported rather than repeated:
+  // a section added to the reveal in views.mjs is covered here the same day.
+  const rules = css.split('}').flatMap((chunk) => {
+    const at = chunk.lastIndexOf('{');
+    return at < 0 ? [] : [{ selector: chunk.slice(0, at).trim(), body: chunk.slice(at + 1) }];
+  });
+  const hides = /(?:^|[;{\s])(?:opacity\s*:\s*0(?![.\d])|visibility\s*:\s*hidden)/;
+
+  for (const target of REVEAL_TARGETS) {
+    const cls = target.slice(target.lastIndexOf('.'));
+    for (const rule of rules) {
+      if (!rule.selector.includes(cls)) continue;
+      if (rule.selector.includes('.reveal--armed')) continue;
+      assert.ok(
+        !hides.test(rule.body),
+        `"${rule.selector}" hides ${cls} without the armed class, so it stays hidden when the script does not run`,
+      );
+    }
+  }
 });
