@@ -2913,3 +2913,109 @@ test('the landing arms its reveal from the script and never from the markup', ()
     }
   }
 });
+
+/**
+ * THE DUPLICATE-NAME GUARD, and a repeated name is the one way a page
+ * transition fails totally and silently.
+ *
+ * A `view-transition-name` must be unique among the elements of a document.
+ * Two elements carrying one name is not a partial failure: the browser
+ * abandons the ENTIRE transition for that navigation -- every element in it --
+ * and the page flashes exactly the way it did before the feature existed. No
+ * exception, nothing in the network tab, and no stylesheet assertion can see
+ * it, because the SHEET is correct. It is the markup that collides with it.
+ *
+ * That is not hypothetical here. `/videos` renders one `<a class="tape">` per
+ * finished tape, so naming `.tape` -- the obvious way to make a tile grow into
+ * the player -- would kill the transition on the one page it was written for,
+ * and only for the accounts that own more than one tape. The names are
+ * therefore read out of the sheet rather than listed here, so a class named
+ * tomorrow is swept against every page the same day.
+ *
+ * WHY EVERY NAME IS A CLASS, WHICH IS WHAT MAKES THE COLLISION POSSIBLE. A
+ * per-tape name would have to ride on the element as
+ * `style="view-transition-name: tape-<id>"`, and `style-src 'self'` drops a
+ * style attribute wherever it appears, silently and totally. So names come
+ * from the stylesheet, the stylesheet can only address classes, and a class is
+ * exactly the thing that repeats.
+ *
+ * GROUPED BY NAME RATHER THAN BY CLASS, because two different classes handed
+ * the same name collide just as fatally as one class used twice.
+ *
+ * PRESENT BEFORE ABSENT, as above: the at-rule and the names are asserted to
+ * exist first, since a sweep over an empty list of names passes while proving
+ * nothing at all.
+ */
+test('every element named for a page transition appears at most once on a page', () => {
+  // COMMENTS COME OUT BEFORE ANYTHING IS PARSED. This splits on the closing
+  // brace, so a rule's "selector" is everything since the last one -- the
+  // whole comment block above it included -- and the comment above these rules
+  // names motion.dev and static.mjs, which a class pattern reads as .dev and
+  // .mjs. §43E's trap: a structural assertion that reads its own documentation.
+  const css = createStylesheet({}).css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  assert.match(
+    css,
+    /@view-transition\s*\{[^}]*navigation\s*:\s*auto/,
+    'the stylesheet opts no navigation into a view transition, so there is no page transition to guard',
+  );
+
+  const rules = css.split('}').flatMap((chunk) => {
+    const at = chunk.lastIndexOf('{');
+    return at < 0 ? [] : [{ selector: chunk.slice(0, at).trim(), body: chunk.slice(at + 1) }];
+  });
+
+  const named = new Map();
+  for (const rule of rules) {
+    const decl = /view-transition-name\s*:\s*([a-zA-Z0-9_-]+)/.exec(rule.body);
+    if (!decl || decl[1].toLowerCase() === 'none') continue;
+    const classes = [...rule.selector.matchAll(/\.([a-zA-Z0-9_-]+)/g)].map((m) => m[1]);
+    if (!classes.length) continue;
+    const seen = named.get(decl[1]) ?? new Set();
+    for (const cls of classes) seen.add(cls);
+    named.set(decl[1], seen);
+  }
+  assert.ok(named.size > 0, 'no rule names an element for the transition, so this sweep proves nothing');
+
+  // A SHELF WITH TWO TAPES ON IT, BECAUSE THE SHARED FIXTURE CANNOT EXPRESS
+  // THE COLLISION THIS GUARD EXISTS FOR. renderedPages() builds /videos with
+  // exactly one tape, so every repeatable element on it appears once and a
+  // name put on .tape passes the sweep -- which is precisely what happened the
+  // first time this was sabotaged (§34F: an escaped sabotage is a missing
+  // test, not working code). The extra page is built here rather than added to
+  // the shared fixture, so eleven other sweeps keep the sample they were
+  // written against.
+  const pages = [
+    ...renderedPages(),
+    ['videos with two tapes', videosPage({
+      account: { email: 'a@b.com' },
+      retentionDays: 30,
+      tapes: ['20260824-120000-abcdef', '20260825-130000-bcdefa'].map((jobId) => ({
+        jobId,
+        status: 'done',
+        place: 'a beach',
+        aspect: '4:3',
+        posterUrl: `/api/jobs/${jobId}/poster`,
+        videoUrl: `/api/jobs/${jobId}/video`,
+        href: `/j/${jobId}/result`,
+      })),
+    })],
+  ];
+
+  for (const [page, html] of pages) {
+    const counts = new Map();
+    for (const attr of html.matchAll(/class="([^"]*)"/g)) {
+      for (const cls of attr[1].split(/\s+/)) {
+        if (cls) counts.set(cls, (counts.get(cls) ?? 0) + 1);
+      }
+    }
+    for (const [name, classes] of named) {
+      const hits = [...classes].reduce((n, cls) => n + (counts.get(cls) ?? 0), 0);
+      assert.ok(
+        hits <= 1,
+        `the ${page} page carries ${hits} elements named "${name}" (.${[...classes].join(', .')}), `
+        + 'and a repeated view-transition-name makes the browser abandon the whole transition',
+      );
+    }
+  }
+});

@@ -1759,6 +1759,56 @@ test("the wordmark's record light is painted and does not blink, in a real casca
   }
 });
 
+test('the page transition is built by the browser, and the wordmark is what holds', { skip }, async () => {
+  // A STYLESHEET-TEXT ASSERTION CANNOT TELL A PARSED AT-RULE FROM A DROPPED
+  // ONE, and that is the whole reason this test exists beside the web-static
+  // one. An unknown at-rule is not an error: the browser skips to the matching
+  // brace and carries on, so a typo, a descriptor it does not know, or a
+  // browser too old leaves the sheet valid, every text assertion green, and
+  // the feature simply absent. This reads the CSSOM the browser actually
+  // built, where a dropped rule is a rule that is not there.
+  //
+  // AND THE SECOND HALF IS THE CASCADE. §60K: a later rule of equal
+  // specificity wins in the browser and is invisible to a grep of the sheet.
+  // Both public pages and both widths, because the masthead is the one thing
+  // every page shares and the wordmark is the only element in it that holds.
+  const s = await session();
+  await s.signOut();
+  for (const pathname of ['/', '/pricing']) {
+    for (const vp of [PHONE, LAPTOP]) {
+      const page = await visit(pathname, vp);
+      assert.deepEqual(page.errors, [], `${pathname} at ${vp.width}px: ${page.errors.join('; ')}`);
+      const r = await page.evaluate(`(() => {
+        let navigation = null;
+        for (const sheet of document.styleSheets) {
+          let rules;
+          try { rules = sheet.cssRules; } catch { continue; }
+          for (const rule of rules) {
+            if (rule.constructor.name === 'CSSViewTransitionRule') navigation = rule.navigation;
+          }
+        }
+        const marks = document.querySelectorAll('.wordmark');
+        return {
+          navigation,
+          marks: marks.length,
+          name: marks.length ? getComputedStyle(marks[0]).viewTransitionName : null,
+        };
+      })()`);
+      assert.equal(
+        r.navigation, 'auto',
+        `${pathname} at ${vp.width}px: the browser built no @view-transition rule (navigation ${r.navigation}), `
+        + 'so every navigation on the site still flashes',
+      );
+      assert.equal(r.marks, 1, `${pathname} at ${vp.width}px: ${r.marks} wordmarks on the page, and a repeated name abandons the transition`);
+      assert.notEqual(
+        r.name, 'none',
+        `${pathname} at ${vp.width}px: the wordmark resolves view-transition-name "${r.name}", `
+        + 'so it dissolves with the rest of the page instead of holding still',
+      );
+    }
+  }
+});
+
 // ---------------------------------------------------------------------------
 // reading pixels
 // ---------------------------------------------------------------------------

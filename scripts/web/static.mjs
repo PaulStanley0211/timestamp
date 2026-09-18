@@ -2789,6 +2789,58 @@ body.page-landing { padding: 0 0 var(--s-8); }
   .reveal--armed.reveal--in { transition: none; }
 }
 
+/* PAGE TRANSITIONS, AND THEY ARE THE ONE PIECE OF MOTION HERE THAT NEEDS NO
+   SCRIPT AT ALL.
+
+   Every link on this site used to replace the page in one hard cut, which on a
+   product whose subject is a continuous tape is the wrong punctuation. These
+   declarations make a same-origin navigation dissolve instead.
+
+   WHY THIS IS CSS RATHER THAN A LIBRARY. The idea came off motion.dev, whose
+   own magazine calls the View Transition API painful and ships animateView to
+   smooth it over. That pain is a SINGLE-DOCUMENT pain: a React app animating
+   between two in-app states has to keep both alive itself. This site is
+   server-rendered and multi-page, which is the one shape the browser does for
+   free -- and it had to be, because script-src is the inline-hash list with no
+   self, so a vendored library file is refused outright and in silence.
+
+   THE WORDMARK IS THE ONLY THING NAMED, and the name does two jobs. Between
+   pages of equal width it holds perfectly still while the page dissolves
+   behind it, which is what stops a crossfade reading as a slideshow. And the
+   five credential pages render in a 25rem column against everywhere else 44rem
+   (wrap--narrow, above), so on the way to sign in the word TRAVELS to its new
+   position instead of fading out of one place and into another.
+
+   WHY NOTHING ELSE IS NAMED, AND IT IS A CSP CONSEQUENCE RATHER THAN A TASTE.
+   A name must be unique within the document, and every name here has to be
+   handed out by this stylesheet, because style-src self drops a style
+   attribute wherever it appears. So the shelf cannot name its tiles -- there
+   are many of them and the only thing that tells them apart is a per-job id --
+   and clicking a tape therefore cannot grow it into the player, which is the
+   version everybody pictures. web-static sweeps every named class against
+   every rendered page for exactly this reason: two elements sharing one name
+   makes the browser abandon the whole transition, silently.
+
+   THE DURATION IS SHORTER THAN THE REVEAL ABOVE, ON PURPOSE. A reveal is
+   something arriving and can afford 520ms; a navigation is something a person
+   asked for, and every millisecond of it is latency they are paying for. */
+@view-transition { navigation: auto; }
+
+.wordmark { view-transition-name: wordmark; }
+
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 200ms; }
+
+::view-transition-group(wordmark) { animation-duration: 240ms; }
+
+/* Reduced motion turns the transition OFF rather than merely shortening it.
+   The at-rule is legal inside a conditional group rule and the browser honours
+   it there, so this leaves navigation behaving exactly as it did before any of
+   the above existed. */
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+}
+
 /* THE FACTS: three cards; Task 3 owns .fact. */
 .facts3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-5); padding: var(--s-8) 0; }
 @media (max-width: 48rem) { .facts3 { grid-template-columns: 1fr; } }
