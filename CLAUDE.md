@@ -7,9 +7,11 @@ Warm, grainy, quiet.
 
 ---
 
-## START HERE (2026-09-18) -- **THE LAUNCH VIDEO IS STILL THE ONLY THING WITH A DEADLINE ON IT, AND IT IS OVERDUE. READ THE BANNER BELOW THIS ONE FIRST.** Then §96.
+## START HERE (2026-09-18) -- **THE LAUNCH VIDEO IS STILL THE ONLY THING WITH A DEADLINE ON IT, AND IT IS OVERDUE. READ THE BANNER BELOW THIS ONE FIRST.** Then §97 and §96.
 
-**The box, local and `origin/supabase-identity-slice` are all on `37df1a2`** -- the 09-17 banner's "the box is still `590dab8`" is true of that day and stale now. **Suite 2258 / 2254 / 1 / 3**, the one red being the landing band sweep's known 15 s timeout under load and green alone in 19 s; guards 7/7 counted, message guard after the commit. **Nothing about the launch changed:** the Product Hunt page is built on the **19th**, launch is **Tuesday 22 September, 09:01 Berlin**, and `build/ph/launch-video.mp4` still must not go up as it is.
+**The box, local and `origin/supabase-identity-slice` are all on `71ee22b`** -- the 09-17 banner's "the box is still `590dab8`" is true of that day and stale now. **Suite 2260 / 2257 / 0 / 3, fully green under load this time**; guards 7/7 counted before the commit and the message guard again after it. **Nothing about the launch changed:** the Product Hunt page is built on the **19th**, launch is **Tuesday 22 September, 09:01 Berlin**, and `build/ph/launch-video.mp4` still must not go up as it is.
+
+**§97 IS THE SAME QUESTION AS §96 ASKED TWO DAYS RUNNING -- the owner brought motion.dev this time -- AND IT ENDED THE SAME WAY: none of the library shipped and the one idea worth taking was already native.** A same-origin navigation now dissolves instead of cutting, and the wordmark is the one thing that holds; because the five credential pages render in a 25rem column against everywhere else's 44rem, **the word travels the measured 152px to its new place on the way to sign in** rather than fading out of one and into another. Three declarations, no script, no CSP change. **Read §97E before probing anything that has to PAINT: a view transition is declined outright on a hidden document, and the in-app browser pane is hidden most of the time** -- the live site reported no transition and was perfectly correct, which was proved by re-running localhost with the pane hidden and watching an earlier `true` become `false` on byte-identical code. **And §97C is the durable guard:** two elements sharing a `view-transition-name` makes the browser abandon the whole transition silently, so naming `.tape` to grow a shelf tile into the player would have broken `/videos` for exactly the accounts that own more than one tape.
 
 **§96 IS ONE COMMIT AND IT IS COSMETIC BY DESIGN: the landing's eight sections now arrive as you scroll to them, staggered per row.** The owner brought animejs.com and asked which of its animations suit the site; three of the nine map onto something we have, **and none of the library shipped.** The reason is in our own CSP and is worth knowing before anybody proposes a JS dependency again: **`script-src` is the inline hash list with no `'self'`, so an external script file is refused by the browser outright and silently** (§96E). **Two findings came out of building it that a string test could never have reached** -- a transition declared on the hidden state makes every section fade OUT before it fades in (caught at opacity 0.739 mid-flight), and **IntersectionObserver misses a jump entirely**, because ratio 0 below the fold to ratio 0 above it crosses no threshold and fires no callback: one jump to the bottom left nine of fourteen sections hidden (§96C, §96D). **The hiding is opt-in** -- the server ships the armed class on nothing -- so a refused script leaves the page exactly as it was, and that was verified on the live site rather than only in the suite.
 
@@ -13710,4 +13712,79 @@ Three separate remote commands (§70F). `[worker 4/6] COPY . .` with **no `CACHE
 #### I -- What is left
 
 **Unchanged and dated, and it is still the thing with the deadline:** the launch video is NOT on YouTube, `build/ph/launch-video.mp4` should not go up as it is, and the Product Hunt page is built on the 19th for a launch on **Tuesday 22 September at 09:01 Berlin**. Read the memory file `launch-video-rebuild-2026-09-17`. **From this session:** the SVG line drawing on the how2 section, after launch, and the 520 ms duration and 60 ms stagger are two numbers in one rule if the owner wants them different once he has scrolled it himself.
+
+---
+
+### 97. A LINK IS A DISSOLVE, NOT A CUT (2026-09-18, later)
+
+**2258 / 2254 -> 2260 / 2257 pass / 0 fail / 3 skipped, and fully green under full load this time.** One commit, `71ee22b`, test-first, **five sabotage runs across three mutations, all caught, the sheet restored byte-identical each time**, all seven `guards.yml` steps extracted fresh, run verbatim and COUNTED 7/7 before the commit and again after it so the message itself was scanned. **Pushed and DEPLOYED; local, `origin/supabase-identity-slice` and the box are all on `71ee22b`.**
+
+The owner brought **motion.dev** and asked which one thing from it suits the site. That is the same question §96 answered about animejs.com two days earlier, and it has the same answer.
+
+#### A -- WHAT SHIPPED, AND IT IS THREE DECLARATIONS
+
+`@view-transition { navigation: auto; }` makes every same-origin navigation dissolve instead of cutting. `.wordmark { view-transition-name: wordmark; }` makes the word the one thing that holds. Two pseudo-element rules set the durations -- **200ms for the page and 240ms for the word, deliberately shorter than the reveal's 520ms one rule above it**: a reveal is something arriving and can afford the time, a navigation is something a person asked for and every millisecond of it is latency they are paying for.
+
+**THE WORDMARK DOES BETTER THAN HOLD, AND THIS IS THE PART WORTH HAVING.** Between pages of equal width it stands perfectly still while the page dissolves behind it, which is what stops a crossfade reading as a slideshow. But the five credential pages render in a **25rem** column (`wrap--narrow`) against everywhere else's **44rem**, so the word is in a different place on them. Measured at a 1024px viewport: **x=153 on `/pricing`, x=305 on `/login`, identical vertical position** -- so on the way to sign in the word TRAVELS 152px to its new home instead of fading out of one place and into another. Nobody designed that; it falls out of naming one element.
+
+**Reduced motion turns it OFF rather than shortening it.** `@view-transition { navigation: none; }` nested inside the media query -- legal inside a conditional group rule, and confirmed parsing rather than assumed (`CSSMediaRule(CSSViewTransitionRule)` out of a probe sheet before a line of it was written).
+
+#### B -- NONE OF THE LIBRARY SHIPPED, FOR §96E's REASON, AND THE HONEST VERSION OF WHY
+
+`server.mjs:565` builds `script-src` from `INLINE_SCRIPT_HASHES` and nothing else. **There is no `'self'`, so a vendored `/js/motion.js` is refused by the browser outright and in silence.** That is now the second consecutive session in which the CSP decided a library question; check it before proposing any JS dependency for this site.
+
+**BUT THE STRONGER ARGUMENT IS THAT WE WOULD NOT WANT IT HERE EVEN IF IT LOADED.** Motion's own magazine, linked from that front page, is titled *"A View Transition API for the rest of us"* and says the API "can animate the impossible, but using it can be painful"; `animateView()` exists to smooth that over. **The pain it smooths is a SINGLE-DOCUMENT pain** -- a React app animating between two in-app states has to keep both states alive itself, which is what `AnimatePresence` and the layout prop are for. A server-rendered multi-page site is the one shape where the browser already holds both documents and does the work, and the opt-in is one at-rule.
+
+Their eight numbered features map onto this product like this, and the mapping is the reason nothing else was taken: **scroll animation** is what §96 shipped yesterday, **timeline sequences / stagger** is already in that same rule, **native gestures** was deliberately answered with a native `<input type="range">` in §62A and swapping it back would walk over §16's focus work, and **exit animation, layout animation and motion values** are React concepts for a site that unmounts nothing.
+
+#### C -- THE DURABLE GUARD IS THE DUPLICATE NAME, AND THE SABOTAGE THAT PROVED IT ESCAPED FIRST
+
+**A `view-transition-name` must be unique among the elements of a document, and a repeat is not a partial failure: the browser abandons the ENTIRE transition for that navigation**, every element in it, with nothing thrown, nothing in the network tab, and a page that simply flashes the way it used to.
+
+**No stylesheet assertion can see it, because the SHEET is correct -- it is the markup that collides with it.** So `test/web-static.test.js` reads the names OUT of the sheet, groups them by name rather than by class (two different classes handed one name collide just as fatally), and sweeps every one against every rendered page.
+
+**THE TRAP IS REAL AND IT IS THE FIRST THING ANYBODY WILL REACH FOR.** `/videos` renders one `<a class="tape">` per finished tape, so naming `.tape` -- the obvious way to make a shelf tile grow into the player -- kills the transition on the one page it was written for, **and only for the accounts that own more than one tape**. Sabotage 3 did exactly that and **PASSED**, because `renderedPages()` builds `/videos` with a single tape and a sweep that cannot express the collision proves nothing. §34F's ruling again, third session running: **an escaped sabotage reveals a missing test rather than working code.** The sweep now runs over `renderedPages()` plus a shelf built locally with TWO tapes on it, built in the test rather than added to the shared fixture so eleven other sweeps keep the sample they were written against. Re-run: CAUGHT, naming the page and the count.
+
+**AND THE REASON EVERY NAME HERE IS A CLASS -- WHICH IS WHAT MAKES THE COLLISION POSSIBLE -- IS THE CSP.** A per-tape name would have to ride on the element as `style="view-transition-name: tape-<id>"`, and `style-src 'self'` drops a style attribute wherever it appears (§62B). So names come from the stylesheet, the stylesheet can only address classes, and a class is exactly the thing that repeats. **The shelf tile growing into the player is not available to this product**, and that is the version everybody pictures.
+
+#### D -- THE SECOND GUARD IS THAT THE AT-RULE PARSED AT ALL
+
+**An unknown at-rule is not an error: the browser skips to the matching brace and carries on.** So a typo, a descriptor it does not know, or a browser too old leaves the sheet valid, every text assertion green, and the feature simply absent -- which is also the property that makes this safe to ship four days before a launch, because anything that does not support it navigates exactly as the site did yesterday.
+
+`test/browser-smoke.test.js` therefore reads the CSSOM the browser actually built: it walks `document.styleSheets` for a rule whose constructor is `CSSViewTransitionRule` and asserts `rule.navigation === 'auto'`, then reads `getComputedStyle(wordmark).viewTransitionName` off the resolved cascade (§60K: a later rule of equal specificity wins in the browser and is invisible to a grep of the sheet). It also counts the wordmarks on the page, because one is what the whole thing rests on.
+
+#### E -- A VIEW TRANSITION IS DECLINED ON A HIDDEN DOCUMENT, AND THE PANE IS USUALLY HIDDEN
+
+**READ THIS BEFORE PROBING ANYTHING THAT HAS TO PAINT.** Neither test above proves that a real click transitions -- they prove the rule parsed and the name resolves. The probe that does is to register a `pageswap` listener on the old document (it fires before the navigation commits, and `event.viewTransition` is non-null only when the browser has committed to a transition), stash the result in `sessionStorage`, click a link, and read it back on the new page; `sessionStorage` survives a same-origin navigation. On localhost it returned **`hasViewTransition: true`** going from the landing to pricing.
+
+**THE SAME PROBE AGAINST THE LIVE SITE AFTER THE DEPLOY RETURNED `false`, AND THE LIVE SITE WAS PERFECTLY CORRECT.** `document.visibilityState` was `hidden`: the in-app Browser pane reports hidden whenever the user is not looking at it, and **Chrome declines a view transition on a hidden document**, which is right -- it does not animate what nobody can see. Confirmed rather than argued, by re-running the *localhost* probe with the pane hidden and watching an earlier `true` become `false` on byte-identical code:
+
+| | pane visible | pane hidden |
+|---|---|---|
+| localhost | true | **false** |
+| production | -- | false |
+
+The only variable is the pane. **This is §96H's family** -- that one recorded the pane starving `requestAnimationFrame` while reporting `visibilityState: "visible"`; this is the other state, where it reports `hidden` and a whole feature switches itself off. **`tabs_context` says in its last line whether the pane is displayed, and `mcp__ccd_view__show_pane` has no browser option, so an agent cannot front it** -- the owner has to open it, or the measurement has to be made somewhere that renders.
+
+#### F -- THE DEPLOY, AND WHY ITS USUAL INSTRUMENT PROVES NOTHING HERE
+
+Three separate remote commands (§70F). `[web 4/6] COPY . .` with **no `CACHED`** and the ffmpeg preflight re-ran, which is §82C's tell that the image is genuinely new; both containers recreated, web `(healthy)` at 15 seconds, **0 restarts on both**, **0 FATAL**, box at `71ee22b`.
+
+**§82D's CSP FINGERPRINT CAME BACK BYTE-IDENTICAL AND THAT IS THE EXPECTED RESULT RATHER THAN THE PROOF.** It fingerprints `views.mjs` alone; nothing here touched an inline script, so the six hashes would match whether or not the code shipped, and reading identity as success is §78E's trap exactly.
+
+**WHAT PROVED IT IS THE LIVE STYLESHEET, CAPTURED IN BOTH DIRECTIONS.** The sheet was fetched with a cache-busting query BEFORE the pull as well as after -- the half people skip -- and the six counts went `0 -> 2` for `@view-transition`, `0 -> 1` for `view-transition-name`, `::view-transition-old`, `::view-transition-group(wordmark)`, `navigation: auto` and `navigation: none`, with the file growing **138,743 -> 141,553 bytes**. Health `{"ok":true,"degraded":[]}`, eight public pages 200, `/videos` and `/account` 303, `X-Robots-Tag` still absent.
+
+#### G -- Things that will bite
+
+- **A CSS RULE PARSER THAT SPLITS ON `}` HANDS YOU THE PRECEDING COMMENT AS PART OF THE SELECTOR.** The reveal test's parser is reused here, and a class pattern run over its `selector` would have read `motion.dev` as a class named `dev` and `static.mjs` as `.mjs` -- §43E's trap, caught while writing the test rather than by it. **Strip comments before parsing anything structural**, which is what the test does on its first line.
+- **`mcp__ccd_view__show_pane` cannot show the BROWSER pane** -- its panes are diff, file, terminal, pr, tasks, plan and artifact. Nothing an agent can call fronts the browser.
+- **`$TMP_SCRATCH` is not set in this shell**, and Git Bash resolved the empty variable into `C:\Program Files\Git\...`, so a script invoked through it failed with a missing-file error that reads like the script was never written. Name the scratchpad path in full (§89E).
+- **Chrome's `pageswap` fires even when the transition is declined** -- the event is not the signal, `event.viewTransition` is. A probe that only checks the event fired reports success on a navigation that plainly cut.
+- **The sabotage backup was written next to the file it backed up**, `scripts/web/static.mjs.sabotage-backup`, which put an untracked file inside tracked territory where `git add` could have caught it. It was removed before the commit; put the copy in the scratchpad next time.
+
+#### H -- What is left
+
+**UNCHANGED AND STILL THE ONLY THING WITH A CLOCK ON IT:** the launch video is not on YouTube, `build/ph/launch-video.mp4` must not go up as it is, the Product Hunt page is built on the **19th**, and launch is **Tuesday 22 September at 09:01 Berlin**. Read the memory file `launch-video-rebuild-2026-09-17`.
+
+**FROM THIS SESSION, and neither is urgent:** the shelf tile growing into the player is refused by the CSP rather than deferred (§97C), so it needs a different mechanism entirely if it is ever wanted; and the two durations are two numbers in one rule if the owner wants them different once he has clicked around the live site himself.
 
